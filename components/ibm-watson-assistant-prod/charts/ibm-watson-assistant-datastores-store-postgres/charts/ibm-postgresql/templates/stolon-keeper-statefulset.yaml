@@ -1,0 +1,208 @@
+{{- if include "ibm-postgresql.licenseValidate" .  | required "License must be accepted by setting license key to true" }}
+{{- include "sch.config.init" (list . "ibmPostgres.sch.chart.config.values") -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.statefulSetName" (list . .sch.chart.components.keeper) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "" (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" "stolon-keeper" "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 4 }}
+    component: "stolon-keeper"
+{{- if include "ibm-postgresql.boolConvertor" (list .Values.keep . ) }}
+  annotations:
+    "helm.sh/resource-policy": keep
+{{- end }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 6 }}
+      component: "stolon-keeper"
+  serviceName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.keeperService) | quote }}
+  replicas: {{ .Values.keeper.replicas }}
+  podManagementPolicy: {{ .Values.keeper.podManagementPolicy }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "" (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" "stolon-keeper" "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 8 }}
+        component: "stolon-keeper"
+        stolon-cluster: {{ template "stolon.clusterName" . }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" "") | indent 8 }}
+    spec:
+      serviceAccountName:  {{ include "stolon.serviceAccountName" . | quote }}
+      terminationGracePeriodSeconds: 10
+      affinity:
+{{ include "ibm-postgresql.affinity"     (list . .Values.keeper.affinity (dict "kind" "StatefulSet" "component" "keeper")) | indent 8 }}
+{{ include "ibm-postgresql.antiAffinity" (list . "stolon-keeper") | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.postgresPodSecurityContext) | indent 8 }}
+{{- if .Values.keeper.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.keeper.nodeSelector | indent 8 }}
+{{- end }}
+
+{{- if .Values.keeper.tolerations }}
+      tolerations:
+{{ toYaml .Values.keeper.tolerations | indent 8 }}
+{{- end }}
+{{- if tpl .Values.global.image.pullSecret . }}
+      imagePullSecrets:
+      - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+{{- end }}
+      containers:
+      - name: keeper
+        image: {{ if tpl (.Values.global.dockerRegistryPrefix | toString ) .  }}{{ trimSuffix "/" (tpl (.Values.global.dockerRegistryPrefix | toString) . ) }}/{{ end }}{{ tpl (.Values.postgres.image.name | toString ) . }}:{{ .Values.postgres.image.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.postgresContainerSecurityContext) | indent 10 }}
+        command:
+          - "/bin/bash"
+          - "-ec"
+          - |
+            sh -x /home/stolon/update_user_entry.sh
+            echo $(whoami)
+            # Generate our keeper uid using the pod index
+            IFS='-' read -ra ADDR <<< "$(hostname)"
+            export STKEEPER_UID="keeper${ADDR[-1]}"
+            export POD_IP=$(hostname -i)
+            export STKEEPER_PG_LISTEN_ADDRESS=$POD_IP
+            export STOLON_DATA=/stolon-data
+          {{- if include "ibm-postgresql.boolConvertor" (list .Values.tls.enabled . ) }}
+            cp /etc/secrets/ssl/* /etc/secrets/ssl_copy/
+            chmod 0600 /etc/secrets/ssl_copy/*
+          {{- end }}
+            mkdir -p /stolon-data/postgres
+            chmod 700 -f /stolon-data/postgres
+            exec stolon-keeper --data-dir $STOLON_DATA
+        env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: STKEEPER_CLUSTER_NAME
+            value: {{ template "stolon.clusterName" . }}
+          - name: STKEEPER_STORE_BACKEND
+            value: {{ .Values.store.backend  | quote }}
+          {{- if eq .Values.store.backend "kubernetes" }}
+          - name: STKEEPER_KUBE_RESOURCE_KIND
+            value: {{ default "configmap" .Values.store.kubeResourceKind  | quote }}
+          {{- else }}
+          - name: STKEEPER_STORE_ENDPOINTS
+            value: {{ .Values.store.endpoints | quote }}
+          {{- end }}
+          - name: STKEEPER_PG_REPL_USERNAME
+            value: {{ tpl .Values.auth.pgReplUsername . | quote }}
+          - name: STKEEPER_PG_REPL_PASSWORDFILE
+            value: "/etc/secrets/stolon/pg_repl_password"
+          - name: STKEEPER_PG_SU_USERNAME
+            value: {{ tpl .Values.auth.pgSuperuserName . | quote }}
+          - name: STKEEPER_PG_SU_PASSWORDFILE
+            value: "/etc/secrets/stolon/pg_su_password"
+          - name: STKEEPER_DEBUG
+            value: {{ .Values.debug | quote }}
+        ports:
+          - containerPort: {{ .Values.ports.internalPort }}
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - exec pg_isready -h localhost -p {{ .Values.ports.internalPort }}
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+        readinessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - exec pg_isready -h localhost -p {{ .Values.ports.internalPort }}
+              #- psql -lqt | cut -d \| -f 1 | grep -qw postgres ; echo $? ;
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+        volumeMounts:
+        - name: {{ ( tpl ( .Values.dataPVC.name | toString )  . ) | quote }}
+          mountPath: /stolon-data
+        - name: stolon-secrets
+          mountPath: /etc/secrets/stolon
+{{- if include "ibm-postgresql.boolConvertor" (list .Values.tls.enabled . ) }}
+        - mountPath: /etc/secrets/ssl
+          name: certs
+          readOnly: false
+{{- end }}
+        resources:
+{{ toYaml .Values.keeper.resources | indent 10 }}
+{{- if and (semverCompare ">=1.16" (printf "%s.%s" ( regexReplaceAll "[^0-9]" ( .Capabilities.KubeVersion.Major | toString ) "" ) ( regexReplaceAll "[^0-9]" ( .Capabilities.KubeVersion.Minor | toString ) "" ))) (include "ibm-postgresql.boolConvertor" (list .Values.keeper.topologySpreadConstraints.enabled . )) }}
+      topologySpreadConstraints:
+      - maxSkew:            {{ tpl (.Values.keeper.topologySpreadConstraints.maxSkew           | toString ) .         }}
+        topologyKey:        {{ tpl (.Values.keeper.topologySpreadConstraints.topologyKey       | toString ) . | quote }}
+        whenUnsatisfiable:  {{ tpl (.Values.keeper.topologySpreadConstraints.whenUnsatisfiable | toString ) . | quote }}
+        labelSelector:
+          matchExpressions:
+          {{- $labels := include "sch.metadata.labels.standard" (list .) | fromYaml }}
+          {{- range $name, $value := $labels }}
+          - key: {{ $name | quote }}
+            operator: In
+            values:
+            - {{ $value | quote }}
+          {{- end }}
+          - key: "component"
+            operator: In
+            values:
+            - "stolon-keeper"
+{{- end }}
+      volumes:
+        - name: stolon-secrets
+          secret:
+{{- if not (tpl .Values.auth.authSecretName . ) }}
+            secretName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }}
+{{- else }}
+            secretName: {{ tpl .Values.auth.authSecretName . }}
+{{- end }}
+{{- if include "ibm-postgresql.boolConvertor" (list .Values.tls.enabled . ) }}
+        - name: certs
+          secret:
+  {{- if not (tpl .Values.tls.tlsSecretName . ) }}
+            secretName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.tlsSecret) | quote }}
+  {{- else }}
+            secretName: {{ tpl .Values.tls.tlsSecretName . }}
+  {{- end }}
+#            defaultMode: 0600
+{{- end }}
+{{- if include "ibm-postgresql.boolConvertor" (list .Values.persistence.enabled . ) }}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ ( tpl ( .Values.dataPVC.name | toString ) . ) | quote }}
+      spec:
+        accessModes:
+          - {{ ( tpl ( .Values.persistence.accessMode | toString ) . ) | quote }}
+        resources:
+          requests:
+            storage: {{ tpl ( .Values.persistence.size | toString ) . }}
+  {{- if include "ibm-postgresql.boolConvertor" (list .Values.persistence.useDynamicProvisioning . ) }}
+        # if present, use the storageClassName from the values.yaml, else use the default storageClass setup by kube Administrator
+        # setting storageClassName to nil means use the default storage class
+        storageClassName: {{ default nil ( tpl ( .Values.global.storageClassName | toString ) . ) | quote }}
+  {{- else }}
+        # bind to an existing pv.
+        # setting storageClassName to "" disables dynamic provisioning
+        storageClassName: {{ default "" ( tpl ( .Values.global.storageClassName | toString ) . ) | quote }}
+    {{- if tpl (.Values.dataPVC.selector.label | toString ) . }}
+        # use selectors in the binding process
+        selector:
+          matchExpressions:
+            - {key: {{ tpl ( .Values.dataPVC.selector.label | toString ) . }}, operator: In, values: [{{ tpl ( .Values.dataPVC.selector.value | toString ) . }}]}
+    {{- end }}
+  {{- end }}
+{{- else }}
+        - name: {{ ( tpl ( .Values.dataPVC.name | toString ) . ) | quote }}
+          emptyDir: {}
+{{- end }}
+{{ end }}

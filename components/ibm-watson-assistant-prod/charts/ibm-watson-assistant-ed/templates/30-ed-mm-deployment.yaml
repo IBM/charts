@@ -1,0 +1,388 @@
+{{- include "sch.config.init" (list . .Values.global.schConfigTemplate) -}}apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .Release.Name }}-ed-mm"
+  labels: &deployment_labels
+    <<: &primary_labels # Don't touch or extend these labels!
+      service:                     "conversation"
+      component:                   "ed"
+      slot:                        "{{ .Release.Name }}"
+    # Make sure the indent of other labels is the same as this comment's
+    tenant:                        "PUBLIC"
+    release:                       "{{ .Release.Name }}"
+    app.kubernetes.io/instance:    "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by:  "{{ .Release.Service }}"
+    app.kubernetes.io/name:        "ibm-watson-assistant"
+    helm.sh/chart:                 "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    icpdsupport/addOnName:         "assistant"
+    icpdsupport/app:               "ed"
+    icpdsupport/serviceInstanceId: "{{ .Values.global.zenServiceInstanceId | int64 }}"
+spec:
+  replicas: {{ include "assistant.ed.replicas" . }}
+  selector:
+    matchLabels: *primary_labels # Don't touch or extend!
+  strategy:
+    rollingUpdate:
+      # Ensure that a Deployment with a single instance is never
+      # unavailable during an upgrade.  This forces each new pod to
+      # become ready before an old one is stopped.
+      maxUnavailable: 0
+  
+  revisionHistoryLimit: 2
+  template:
+    metadata:
+      annotations:
+
+        productName:              "IBM Watson Assistant for IBM Cloud Pak for Data"
+        productID:                "ICP4D-addon-fa92c14a5cd74c31aab1616889cbe97a-assistant"
+        productVersion:           "1.4.2"
+        cloudpakName:             "IBM Cloud Pak for Data"
+        cloudpakId:               "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion:          "3.0.0"
+        productChargedContainers: "All"
+        productMetric:            "VIRTUAL_PROCESSOR_CORE"
+      labels:
+        <<: *deployment_labels
+        # Any pod-specific labels go below
+    spec:
+      {{- if tpl .Values.imagePullSecret . }}
+      imagePullSecrets:
+        - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+      {{- end }}
+
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+
+      initContainers:
+        - name: etcd-running
+          image: "{{ if tpl ( .Values.init.etcd.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.init.etcd.image.repository | toString ) . ) }}{{ end }}/{{ .Values.init.etcd.image.name }}:{{ .Values.init.etcd.image.tag }}"
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 2000
+            {{- end }}
+          imagePullPolicy: {{ .Values.init.etcd.image.pullPolicy | quote }}
+          command: [ "/scripts/etcd_running.sh" ]
+          volumeMounts:
+            - name: "init-scripts"
+              mountPath: /scripts
+            - name: global-etcd
+              mountPath: "/etc/secrets/etcd"
+              readOnly: true
+          resources:
+            {{ .Values.init.etcd.resources | toYaml | indent 12 | trim }}
+        - name: cos-running-check
+          image: "{{ if tpl ( .Values.init.cosRunning.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.init.cosRunning.image.repository | toString ) . ) }}{{ end }}/{{ .Values.init.cosRunning.image.name }}:{{ .Values.init.cosRunning.image.tag }}"
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 2000
+            {{- end }}
+          imagePullPolicy: {{ .Values.init.cosRunning.image.pullPolicy | quote }}
+          command: [ "/scripts/cos_ready.sh" ]
+          resources:
+            {{ .Values.init.cosRunning.resources | toYaml | indent 12 | trim }}
+          volumeMounts:
+            - name: "init-scripts"
+              mountPath: /scripts
+            - name: config
+              mountPath: /entities-distro
+              readOnly: true
+            - name: "cos-certificate"
+              mountPath: "/etc/secrets/cos/"
+              readOnly: true
+      containers:
+        - name: "mm-runtime"
+          image: "{{ if tpl ( .Values.runtime.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.runtime.image.repository | toString ) . ) }}{{ end }}/{{ .Values.runtime.image.name }}:{{ .Values.runtime.image.tag }}"
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 2000
+            {{- end }}
+          imagePullPolicy: {{ .Values.runtime.image.pullPolicy | quote }}
+          
+          ports:
+            - name: grpc
+              containerPort: 8033
+          
+          env:
+            - name: WKUBE_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: WKUBE_POD_IPADDR
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+  
+            # As the ED is not set to be visible outside k8s. The WKUBE_NODE_NAME, WKUBE_SERVICE_NAME and WKUBE_SERVICE_PORT_NAME are not defined.
+            
+            - name: KV_STORE
+              value: "etcd:/etc/secrets/etcd/etcd_connection"
+            - name: MM_SERVICE_NAME
+              # [*] set this to the logical service name. This is same as `$k8s_names.ed.service_name` and defined in _defaults.yml
+              value: "{{ .Release.Name }}-ed-mm"
+            - name: HEAP_SIZE
+              value: "800m"
+            - name: INTERNAL_GRPC_PORT
+              value: "5005"
+            - name: MM_SVC_GRPC_PORT
+              value: "8033"
+            
+            - name: MM_SVC_GRPC_CA_CERT_PATH
+              value: /entities-distro/entitiesdistro_certificate
+            - name: MM_SVC_GRPC_PRIVATE_KEY_PATH
+              value: /entities-distro/entitiesdistro_privatekey
+
+            - name: SHUTDOWN_TIMEOUT_MS
+              value: "90000"
+            
+          volumeMounts:
+            - mountPath: "/etc/secrets/etcd"
+              readOnly: true
+              name: global-etcd
+            - name: config
+              mountPath: /entities-distro
+              readOnly: true
+          
+          resources:
+            {{ .Values.runtime.resources | toYaml | indent 12 | trim }}
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8089
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 10
+          
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: 8089
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 2
+          
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /opt/watson/mmesh/stop.sh
+                  - wait
+        
+        
+        - name: ed-mm
+          image: "{{ if tpl ( .Values.mm.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.mm.image.repository | toString ) . ) }}{{ end }}/{{ .Values.mm.image.name }}:{{ .Values.mm.image.tag }}"
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 2000
+            {{- end }}
+          imagePullPolicy: {{ .Values.mm.image.pullPolicy | quote }}
+          
+          ## [*] add any required env entries, volume mounts etc. here
+          env:
+            - name: TOTAL_CAPACITY_MB
+              value: "512"
+            - name: DEFAULT_MODEL_SIZE_MB
+              value: "3"
+            - name: DATAGATEWAY_CONFIG
+              value: "{'type':'py4j','ob_base':'127.0.0.1:8081', 'local_base':'/downloads'}"
+            - name: SSL_CERT_FILE
+              value: /opt/clu/openentities/dynconfig/entitiesdistro_certificate
+            - name: SSL_KEY_FILE
+              value: /opt/clu/openentities/dynconfig/entitiesdistro_privatekey
+             
+            # Word embeddings
+            - name: WORDEMBEDDING_MODE
+              value: "CLU"
+            # Bases on the WORDEMBEDDING_MODE value, the key in WORD_EMBEDDINGS is selected and used.
+            - name: WORD_EMBEDDINGS
+              value: "{'mongo':{'mongodb_connection_file':'dynconfig/mongodb_connection_string', 'mongodb_certificate':'dynconfig/mongodb_certificate', 'embeddings_cache_size':8000}, 'clu':{'server_address': 'dns:///{{ .Release.Name }}-clu-embedding-service', 'port': 40021, 'hostname':'GrpcWordEmbeddingServer', 'cert': 'dynconfig/clu_embedding_service_certificate', 'dim': 100, 'wait_queue_timeout_ms': 100, 'embeddings_cache_size': 8000, 'query_interval': 0.01 }}"
+          ## Mount base model shared volume
+          volumeMounts:
+            - name: config
+              mountPath: /opt/clu/openentities/dynconfig
+              readOnly: true
+            - mountPath: /downloads
+              name: downloaded-model-data
+          
+          resources:
+            {{ .Values.mm.resources | toYaml | indent 12 | trim }}
+          readinessProbe:
+            exec:
+              command:
+                - "true"
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+          livenessProbe:
+            exec:
+              command:
+                - "true"
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+        
+        
+        - name: ob-py4j
+          image: "{{ if tpl ( .Values.py4j.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.py4j.image.repository | toString ) . ) }}{{ end }}/{{ .Values.py4j.image.name }}:{{ .Values.py4j.image.tag }}"
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 2000
+            {{- end }}
+          imagePullPolicy: {{ .Values.py4j.image.pullPolicy | quote }}
+
+          env:
+            - name: PRIMARY_OBJECTSTORE_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-clu-config-secret
+                  key: primary_objectstore_string
+            - name:  "CERTIFICATES_IMPORT_LIST"
+              value: "/etc/secrets/cos/ca.crt:cos-minio"
+          volumeMounts:
+            - name: config
+              mountPath: {{ if ge ( .Values.py4j.image.tag | trunc 8 | atoi) 20190129 }}/opt/watson/objectstore-py4j-bridge{{- else -}}/opt/watson/objecstore-py4j-bridge{{- end -}}/dynconfig
+              readOnly: true
+            - mountPath: /downloads
+              name: downloaded-model-data
+            - name: "cos-certificate"
+              mountPath: "/etc/secrets/cos/"
+              readOnly: true
+          resources:
+            {{ .Values.py4j.resources | toYaml | indent 12 | trim }}
+          readinessProbe:
+            exec:
+              command:
+                - python3
+                - {{ if ge ( .Values.py4j.image.tag | trunc 8 | atoi) 20190129 }}/opt/watson/objectstore-py4j-bridge{{- else -}}/opt/watson/objecstore-py4j-bridge{{- end -}}/healthcheck.py
+            initialDelaySeconds: 20
+            periodSeconds: 120
+            timeoutSeconds: 60
+          
+          livenessProbe:
+            exec:
+              command:
+                - python3
+                - {{ if ge ( .Values.py4j.image.tag | trunc 8 | atoi) 20190129 }}/opt/watson/objectstore-py4j-bridge{{- else -}}/opt/watson/objecstore-py4j-bridge{{- end -}}/healthcheck.py
+            # Offset this probe by 1 minute from the readiness probe
+            initialDelaySeconds: 30
+            periodSeconds: 120
+            timeoutSeconds: 60
+            failureThreshold: 2
+      
+      
+      # longer grace period to allow for model propagation
+      terminationGracePeriodSeconds: 90
+  
+      serviceAccountName: "{{ .Release.Name }}-litelinks-registrant"
+      
+      volumes:
+        - name: config
+          secret:
+            secretName: "{{ .Release.Name }}-clu-config-secret"
+        - name: global-etcd
+          secret:
+            secretName: "{{ .Release.Name }}-global-etcd"
+        - name: downloaded-model-data
+          emptyDir: {}
+        - name: "init-scripts"
+          configMap:
+            name: "{{ .Release.Name }}-ed-mm-init-scripts"
+            defaultMode: 0755
+        - name: "cos-certificate"
+          secret:
+            secretName:  "{{ include "assistant.cos.tls.secretName" . }}"
+            defaultMode: 420
+            items:
+            - key:  tls.cacrt
+              path: ca.crt
+
+
+        {{- if and (semverCompare ">=1.16" (printf "%s.%s" ( regexReplaceAll "[^0-9]" (.Capabilities.KubeVersion.Major | toString ) "" ) ( regexReplaceAll "[^0-9]" (.Capabilities.KubeVersion.Minor | toString ) "" ))) .Values.global.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+      - maxSkew:           {{ tpl ( .Values.global.topologySpreadConstraints.maxSkew           | toString ) . }}
+        topologyKey:       "{{ tpl ( .Values.global.topologySpreadConstraints.topologyKey       | toString ) . }}"
+        whenUnsatisfiable: "{{ tpl ( .Values.global.topologySpreadConstraints.whenUnsatisfiable | toString ) . }}"
+        labelSelector:
+          matchExpressions:
+          - key: "service"
+            operator: In
+            values:
+            - "conversation"
+          - key: "component"
+            operator: In
+            values:
+            - "ed"
+          - key: "slot"
+            operator: In
+            values:
+            - "{{ .Release.Name }}"
+        {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: beta.kubernetes.io/arch
+                  operator: In
+                  values: [ "amd64" ]
+        {{- if .Values.global.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.matchExpressions }}
+          {{- printf "\n%s" ( .Values.global.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.matchExpressions | toYaml | indent 16 ) }}
+        {{- end }}
+        {{- if (or (eq .Values.global.podAntiAffinity "Enable") (and (eq .Values.global.deploymentType "Production") (ne .Values.global.podAntiAffinity "Disable"))) }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: "service"
+                operator: In
+                values:
+                - "conversation"
+              - key: "component"
+                operator: In
+                values:
+                - "ed"
+              - key: "slot"
+                operator: In
+                values:
+                - "{{ .Release.Name }}"
+            topologyKey: "kubernetes.io/hostname"
+        {{- end }}

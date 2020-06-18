@@ -1,0 +1,247 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Name }}-create-slot"
+  labels: &job_labels
+    <<: &primary_labels # Don't touch or extend these labels!
+      service:                     "conversation"
+      component:                   "create-slot"
+      slot:                        "{{ .Release.Name }}"
+    # Make sure the indent of other labels is the same as this comment's
+    tenant:                        "PUBLIC"
+    release:                       "{{ .Release.Name }}"
+    app.kubernetes.io/instance:    "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by:  "{{ .Release.Service }}"
+    app.kubernetes.io/name:        "ibm-watson-assistant"
+    helm.sh/chart:                 "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    icpdsupport/addOnName:         "assistant"
+    icpdsupport/app:               "create-slot"
+    icpdsupport/serviceInstanceId: "{{ .Values.global.zenServiceInstanceId | int64 }}"
+spec:
+  activeDeadlineSeconds: 900 # After 15 minutes the job will fail and delete the pod
+  backoffLimit: 15
+  template:
+    metadata:
+      name: "{{ .Release.Name }}-create-slot"
+      annotations:
+
+        productName:              "IBM Watson Assistant for IBM Cloud Pak for Data"
+        productID:                "ICP4D-addon-fa92c14a5cd74c31aab1616889cbe97a-assistant"
+        productVersion:           "1.4.2"
+        cloudpakName:             "IBM Cloud Pak for Data"
+        cloudpakId:               "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion:          "3.0.0"
+        productChargedContainers: "All"
+        productMetric:            "VIRTUAL_PROCESSOR_CORE"
+      labels:
+        <<: *job_labels
+        # Any pod-specific labels go below
+    spec:
+      restartPolicy: Never 
+      serviceAccountName: "{{ .Release.Name }}-restricted"
+      {{- if tpl .Values.imagePullSecret . }}
+      imagePullSecrets:
+        - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+      {{- end }}
+
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+
+      initContainers:
+        - name: etcd-running
+          image: "{{ if tpl ( .Values.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.image.repository | toString ) . ) }}{{ end }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 2000
+            {{- end }}
+          command:
+            - "/bin/sh"
+            - "-c"
+            - |
+              set -e
+              
+              echo "Checking if ETCD is up and running and authorization is enabled"
+              # configure etcdctl
+              export ETCDCTL_API ETCDCTL_ENDPOINTS ETCDCTL_USER ETCDCTL_CACERT ETCDCTL_DIAL_TIMEOUT ETCDCTL_COMMAND_TIMEOUT
+              # use some defaults from the secrets mount unless already specified
+              ETCDCTL_API=${ETCDCTL_API:-3}
+              ETCDCTL_ENDPOINTS=${ETCDCTL_ENDPOINTS:-$(</etc/secrets/etcd/etcd_connection jq -r '.endpoints')}
+              ETCDCTL_USER=${ETCDCTL_USER:-$(</etc/secrets/etcd/etcd_connection jq -r '.userid + ":" + .password')}
+              ETCDCTL_CACERT=${ETCDCTL_CACERT:-'/etc/secrets/etcd/etcd_certificate'}
+              ETCDCTL_DIAL_TIMEOUT=${ETCDCTL_DIAL_TIMEOUT:-120s}
+              ETCDCTL_COMMAND_TIMEOUT=${ETCDCTL_COMMAND_TIMEOUT:-120s}
+              
+              while true ; do
+                echo etcdctl endpoint health
+                etcdctl endpoint health && break
+                echo "  command failed. Waiting 5 sec before next retry"
+                sleep 5
+              done
+              echo ""
+              echo "ETCD seems to be running. Checking if authorization is enabled"
+              while true ; do
+                echo ""
+                echo "Running (with correct credentials): etcdctl put /test \"test\""
+                if etcdctl put /test "test"; then
+                  echo "Running (with wrong credentials): etcdctl put /test \"test_wrong_creds\""
+                  if ETCDCTL_USER=${ETCDCTL_USER/:/:xxx} etcdctl put /test "test_wrong_creds"; then
+                    echo "  It seems that AUTHORIZATION is not enabled. The write command succeeded with invalid password. Retry in 5 sec"
+                    sleep 5
+                  else
+                    # Above command failed as expected. --> we are happy
+                    echo "  write command failed as expected"
+                    break
+                  fi
+                else 
+                  echo "  It seems test put failed -->etcd is not working correctly. Retry in 5 sec"
+                  sleep 5 
+                fi
+              done
+              echo "It seems ETCD is ready. Going to write config entries."
+          resources:
+            {{ .Values.resources | toYaml | indent 12 | trim }}
+          volumeMounts:
+            - name: global-etcd
+              mountPath: "/etc/secrets/etcd"
+              readOnly: true
+        
+      containers:
+        - name: conversation-create-slot
+          image: "{{ if tpl ( .Values.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.image.repository | toString ) . ) }}{{ end }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 2000
+            {{- end }}
+          command:
+            - "/bin/sh"
+            - "-c"
+            - |
+              set -e
+              set -o pipefail
+              # configure etcdctl
+              export ETCDCTL_API ETCDCTL_ENDPOINTS ETCDCTL_USER ETCDCTL_CACERT ETCDCTL_DIAL_TIMEOUT ETCDCTL_COMMAND_TIMEOUT
+              # use some defaults from the secrets mount unless already specified
+              ETCDCTL_API=${ETCDCTL_API:-3}
+              ETCDCTL_ENDPOINTS=${ETCDCTL_ENDPOINTS:-$(</etc/secrets/etcd/etcd_connection jq -r '.endpoints')}
+              ETCDCTL_USER=${ETCDCTL_USER:-$(</etc/secrets/etcd/etcd_connection jq -r '.userid + ":" + .password')}
+              ETCDCTL_CACERT=${ETCDCTL_CACERT:-'/etc/secrets/etcd/etcd_certificate'}
+              ETCDCTL_DIAL_TIMEOUT=${ETCDCTL_DIAL_TIMEOUT:-120s}
+              ETCDCTL_COMMAND_TIMEOUT=${ETCDCTL_COMMAND_TIMEOUT:-120s}
+              
+              ETCD_CHROOT=${ETCD_CHROOT:-$(</etc/secrets/etcd/etcd_connection jq -r '.root_prefix')}
+
+              function fail {
+                echo $1 >&2
+                exit 1
+              }
+
+              function retry {
+                local n=1
+                local max=5
+                local delay=3
+                while true; do
+                  "$@" && break || {
+                    if [[ $n -lt $max ]]; then
+                      ((n++))
+                      echo "Command $@ failed. Attempt $n of $max:"
+                      sleep $delay;
+                    else
+                      fail "The command $@ has failed after $n attempts."
+                    fi
+                  }
+                done
+              }
+              
+              etcdctl_getput() {
+                echo "Getting current value"
+                retry etcdctl get "$1"
+                echo "Setting key $1 to value $2"
+                retry etcdctl put "$1" "$2"
+              }
+              
+              etcdctl_append() {
+                echo "Updating key \"$1\""
+                MSG="$(etcdctl get "$1")
+              $2"
+                retry etcdctl put "$1" "${MSG}"
+              }
+              
+              etcdctl_getput ${ETCD_CHROOT}/bluegoat-master/voyager-master-slot-{{ .Release.Name }}/servicetable 0
+              etcdctl_getput ${ETCD_CHROOT}/voyager-nlu/voyager-nlu-slot-{{ .Release.Name }}/config/master.slot voyager-master-slot-{{ .Release.Name }}
+              etcdctl_getput ${ETCD_CHROOT}/bluegoat-master/voyager-master-slot-{{ .Release.Name }}/config/kubernetes.train-namespace {{ .Release.Namespace }}
+              etcdctl_getput ${ETCD_CHROOT}/bluegoat-master/voyager-master-slot-{{ .Release.Name }}/config/bluegoat.master.NLCLASSIFIER.config_secret {{ .Release.Name }}-clu-config-secret
+              etcdctl_getput ${ETCD_CHROOT}/bluegoat-master/voyager-master-slot-{{ .Release.Name }}/config/bluegoat.master.use_kubernetes true
+              etcdctl_getput ${ETCD_CHROOT}/bluegoat-master/voyager-master-slot-{{ .Release.Name }}/config/kubernetes.train-cpu-millis 1000,20000
+              etcdctl_getput ${ETCD_CHROOT}/bluegoat-master/voyager-master-slot-{{ .Release.Name }}/config/bluegoat.master.NLCLASSIFIER.logging_type none
+              etcdctl_getput ${ETCD_CHROOT}/bluegoat-master/voyager-master-slot-{{ .Release.Name }}/config/bluegoat.master.reaper_interval_secs 20
+              etcdctl_getput ${ETCD_CHROOT}/bluegoat-master/voyager-master-slot-{{ .Release.Name }}/config/bluegoat.master.app_start_min_interval 0.5
+              etcdctl_getput ${ETCD_CHROOT}/bluegoat-master/voyager-master-slot-{{ .Release.Name }}/config/bluegoat.master.tas_service_name tas-runtime-slot-{{ .Release.Name }}
+              etcdctl_getput ${ETCD_CHROOT}/bluegoat-master/voyager-master-slot-{{ .Release.Name }}/config/bluegoat.master.NLCLASSIFIER.use_tas true
+              etcdctl_getput ${ETCD_CHROOT}/bluegoat-master/voyager-master-slot-{{ .Release.Name }}/config/bluegoat.master.NLCLASSIFIER.createversion 20200601-152721-8-e382f0-wa_icp_1.4.2-icp
+              etcdctl_getput ${ETCD_CHROOT}/bluegoat-master/voyager-master-slot-{{ .Release.Name }}/config/bluegoat.master.NLCLASSIFIER.training_env_vars $'ICP_ENVIRONMENT=true\nKUBEDNS_SUFFIX=.{{ .Release.Namespace }}:50443\nKUBEDNS_PREFIX={{ .Release.Name }}-\nCERTIFICATES_IMPORT_LIST=/etc/secrets/cos/ca.crt:cos-minio\nSIREG_CERT_PATH=/opt/bluegoat/service/dynconfig/sireg_certificate\nWORDEMBEDDING_MODE=CLU\nCLU_EMBEDDING_SERVICE_ADDRESS=dns:///{{ .Release.Name }}-clu-embedding-service.{{ .Release.Namespace }}\n'
+              etcdctl_getput ${ETCD_CHROOT}/tas-runtime/tas-runtime-slot-{{ .Release.Name }}/config/sire_service_type grpc
+              etcdctl_getput ${ETCD_CHROOT}/tas-runtime/tas-runtime-slot-{{ .Release.Name }}/config/scaleup_rpm_threshold 850
+              declare -a mm_entries mm_instances
+              # ED entries
+                mm_entries+='{"name":"openentities","service_address":"{{ .Release.Name }}-ed-mm.{{ .Release.Namespace }}:8033","model_path":"output/openentities","cert_name":"entitiesdistro_certificate"},'
+              # TF MM entries
+              mm_instances+='{"mm_instances":['
+              mm_instances+=${mm_entries%?}
+              mm_instances+=']}'
+              etcdctl_getput ${ETCD_CHROOT}/tas-runtime/tas-runtime-slot-{{ .Release.Name }}/config/supporting.modelmesh ${mm_instances}
+              etcdctl_getput ${ETCD_CHROOT}/bluegoat-master/voyager-master-slot-{{ .Release.Name }}/config/bluegoat.master.objectstore_string "${PRIMARY_OBJECTSTORE_STRING}"
+              etcdctl_getput ${ETCD_CHROOT}/tas-runtime/tas-runtime-slot-{{ .Release.Name }}/config/objectstore "${PRIMARY_OBJECTSTORE_STRING}"
+              # Notice that all requered config keys has been created / updated
+              etcdctl_append "${ETCD_CHROOT}/voyager-nlu/voyager-nlu-slot-{{ .Release.Name }}"        "Entries created/updated by pod ${POD_NAME} on $(date --utc '+%Y-%m-%d %H:%M:%S %:z')"
+              etcdctl_append "${ETCD_CHROOT}/bluegoat-master/voyager-master-slot-{{ .Release.Name }}" "Entries created/updated by pod ${POD_NAME} on $(date --utc '+%Y-%m-%d %H:%M:%S %:z')"
+              etcdctl_append "${ETCD_CHROOT}/tas-runtime/tas-runtime-slot-{{ .Release.Name }}"        "Entries created/updated by pod ${POD_NAME} on $(date --utc '+%Y-%m-%d %H:%M:%S %:z')"
+              echo "End etcd key values"
+          env:
+          - name: "POD_NAME"
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: PRIMARY_OBJECTSTORE_STRING
+            valueFrom:
+              secretKeyRef:
+                name: "{{ .Release.Name }}-clu-config-secret"
+                key: primary_objectstore_string
+          resources:
+            {{ .Values.resources | toYaml | indent 12 | trim }}
+          volumeMounts:
+            - name: global-etcd
+              mountPath: "/etc/secrets/etcd"
+              readOnly: true
+      terminationGracePeriodSeconds: 30            # To get some time before retry. Remove once backoff limit is uncommented
+      volumes:
+        - name: global-etcd
+          secret:
+            secretName: "{{ .Release.Name }}-global-etcd"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: beta.kubernetes.io/arch
+                  operator: In
+                  values: [ "amd64" ]
+        {{- if .Values.global.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.matchExpressions }}
+          {{- printf "\n%s" ( .Values.global.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.matchExpressions | toYaml | indent 16 ) }}
+        {{- end }}

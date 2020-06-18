@@ -1,0 +1,203 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $name := .sch.chart.config.globalConfigMap -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $name) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | indent 4 }}
+data:
+  zeno_conf.json: |-
+    {
+      "production": true,
+      "training": false,
+      "streaming_training": false,
+      "tenant_id": "1",
+      "application_id": "1",
+      "window": {
+          "length": 10
+      },
+      "log_config": {
+          "logging_level": "debug",
+          "path": "./result",
+          "logging_type": {
+              "MidnightLogger": {
+                  "factory": "MidnightLogFactory",
+                  "class": "MidnightLogger",
+                  "backupCount": 30
+              }
+          }
+      },
+      "cache_config": {
+          "redis": {
+              "host": "127.0.0.1",
+              "port": "6379",
+              "password": null
+          }
+      },
+      "kafka_configuration": {
+          "kafkaservers": "kafka.:9092",
+          "always_use_kafka": false,
+          "stream_planes": {
+              "ingest": {
+                  "logs": {
+                      "raw_topic": "raw-logs",
+                      "topic": "normalized-logs",
+                      "partitions": 1,
+                      "replicas": 1
+                  },
+                  "metrics": {
+                      "raw_topic": "raw-metrics",
+                      "topic": "normalized-metrics",
+                      "partitions": 1,
+                      "replicas": 1
+                  },
+                  "k8s_configs": {
+                      "raw_topic": "raw-k8s-configs",
+                      "topic": "normalized-k8s-configs",
+                      "partitions": 1,
+                      "replicas": 1
+                  },
+                  "alerts": {
+                      "raw_topic": "raw-alerts",
+                      "topic": "normalized-alerts",
+                      "partitions": 1,
+                      "replicas": 1
+                  },
+                  "incidents": {
+                      "raw_topic": "raw-incidents",
+                      "topic": "normalized-incidents",
+                      "partitions": 1,
+                      "replicas": 1
+                  }
+              },
+              "preprocessing": {
+                  "logs": {
+                      "topic": "windowed-logs",
+                      "partitions": 1,
+                      "replicas": 1
+                  },
+                  "metrics": {
+                      "topic": "windowed-metrics",
+                      "partitions": 1,
+                      "replicas": 1
+                  }
+              },
+              "templatizer": {
+                  "topic": "derived-templates-logs",
+                  "partitions": 1,
+                  "replicas": 1
+              },
+              "correlation": {
+                  "topic": "derived-correlation",
+                  "sourceTimeWindow": 600,
+                  "timestampRounding": "30 S"
+              },
+              "forecast": {
+                  "topic": "derived-forecasts-metrics",
+                  "partitions": 1,
+                  "replicas": 1
+              },
+              "orchestration": {
+                  "topic": "orchestration",
+                  "partitions": 1,
+                  "replicas": 1
+              },
+              "anomaly": {
+                  "logs": {
+                      "topic": "normalized-alerts",
+                      "partitions": 1,
+                      "replicas": 1
+                  },
+                  "metrics": {
+                      "topic": "insight-anomalies-metrics",
+                      "partitions": 1,
+                      "replicas": 1
+                  }
+              },
+              "output": {
+                  "story": {
+                      "topic": "derived-stories",
+                      "partitions": 1,
+                      "replicas": 1
+                  },
+                  "anomaly": {
+                      "topic": "derived-correlated-anomalies",
+                      "partitions": 1,
+                      "replicas": 1
+                  }
+              }
+          }
+      },
+      "event_streams_configuration": {
+          {{- if .Values.global.kafka.strimzi.enabled }}
+          "sasl.mechanism": "SCRAM-SHA-512",
+          "sasl.mechanisms": "SCRAM-SHA-512",
+          "bootstrap.servers": {{ include "zeno.strimziBrokers" . | quote }},
+          "security.protocol": "SASL_SSL",
+          {{- else }}
+          "sasl.mechanism": "{{ .Values.global.kafka.sasl.mechanisms }}",
+          "sasl.mechanisms": "{{ .Values.global.kafka.sasl.mechanisms }}",
+          "bootstrap.servers": "{{- join "," .Values.global.kafka.bootstrap.servers -}}",
+          "security.protocol": "{{ .Values.global.kafka.security.protocol }}",
+          {{- end }}
+          "sasl.username": {{ include "zeno.kafkaUsername" . | quote }},
+          "ssl.ca.location": "{{ .Values.global.kafka.sasl.ca.location }}",
+          "api.version.request": "{{ .Values.global.kafka.api.version.request }}",
+          "broker.version.fallback": "{{ .Values.global.kafka.sasl.ca.location }}",
+          "log.connection.close" : "{{ .Values.global.kafka.log.connection.close }}"
+      },
+      "object_storage_config": {
+          "bucket":"metric-simulate-model",
+          "minio": {
+              "endpoint": "{{- include "zeno.minioEndpointTemplate" . -}}",
+              "access_key": ""
+          }
+      },
+      "api_config": {
+          "PORT": 5000,
+          "HOST": "0.0.0.0",
+          "RELOAD": false
+      },
+      "db_config": {
+          "AppPostgresqlDataSource": {
+              "type": "PostgresqlDataSource",
+              "params": {
+                  "db_config": {
+                      "dns": "elk.",
+                      "port": 5432,
+                      "db": "logprophet-postgresql",
+                      "user": "postgres",
+                      "password": ""
+                  }
+              }
+          },
+          "AppElasticsearchDataSource": {
+              "type": "ElasticSearchDataSource",
+              "params": {
+                  "db_config": {
+                      "dns": "{{ include "zeno.elasticsearchServiceTemplate" . }}",
+                      "port": {{ .Values.elasticsearch.httpsPort }},
+                      "index": "logprophet_app_20190319",
+                      "index_fav_pods": "logprophet_favourite_pods",
+                      "type": "anomaly",
+                      "type_fav_pods": "pods",
+                      "pool_size": 10
+                  }
+              }
+          },
+          "APITestElasticsearchDataSource": {
+              "type": "ElasticSearchDataSource",
+              "params": {
+                  "db_config": {
+                      "dns": "{{ include "zeno.elasticsearchServiceTemplate" . }}",
+                      "port": {{ .Values.elasticsearch.httpsPort }},
+                      "index": "logprophet_app_unittest",
+                      "index_fav_pods": "logprophet_favourite_pods_unittest",
+                      "type": "anomaly",
+                      "type_fav_pods": "pods"
+                  }
+              }
+          }
+      }
+    }

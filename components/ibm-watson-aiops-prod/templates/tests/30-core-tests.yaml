@@ -1,0 +1,75 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $name :=  .sch.chart.tests.coreTests -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $name) }}
+  annotations:
+{{ include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | trim | indent 4 }}
+    "helm.sh/hook": test-success
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 4 }}
+spec:
+{{ include "zeno.imagePullSecretTemplate" . | trim | indent 2 }}
+{{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim | indent 2 }}
+  affinity:
+{{ include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | trim | indent 4 }}
+  restartPolicy: Never
+  # In rough order of when they come up
+  initContainers:
+{{ include "zeno.initContainerReadiness.chatopsSlackIntegrator" . | indent 2 }}
+{{ include "zeno.initContainerReadiness.persistence" . | indent 2 }}
+{{ include "zeno.initContainerReadiness.similarIncidents" . | indent 2 }}
+{{ include "zeno.initContainerReadiness.topology" . | indent 2 }}
+{{ include "zeno.initContainerReadiness.chatopsOrchestrator" . | indent 2 }}
+{{ include "zeno.initContainerReadiness.alertLocalization" . | indent 2 }}
+{{ include "zeno.initContainerReadiness.qualityEvaluation" . | indent 2 }}
+{{ include "zeno.initContainerReadiness.eventGrouping" . | indent 2 }}
+  containers:
+  - name: {{ $name | quote }}
+    image: {{ include "zeno.imageName" (dict "root" . "service" .Values.coreTests) }}
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | trim | indent 4 }}
+    resources:
+{{ toYaml .Values.coreTests.resources | trim | indent 6 }}
+    envFrom:
+    - configMapRef:
+        name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.componentUrls) }}
+    - configMapRef:
+        name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.kafka) }}
+    - configMapRef:
+        name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.tls) }}
+    - secretRef:
+        name: {{ include .Values.mockServer.authSecret.nameTpl . }}
+    env:
+{{ include "zeno.kafkaEnvSecrets" . | indent 4 }}
+    - name: cluster
+      value: {{ .Values.global.clusterDomain }}
+    - name: keywords
+      value: "DVT"
+    - name: except
+      value: "examples"
+    - name: ENVIRONMENT
+      value: "PRODUCTION"
+    - name: TENANT_ID
+      value: "tenant_id"
+    - name: APPLICATION_ID
+      value: "topology_id"
+    - name: KAFKA_BROKER_URLS
+      value: {{ include "zeno.strimziBrokers" . | quote}}
+    - name: MOCK_SERVER_USERNAME
+      value: {{ .Values.mockServer.mockASMUsername }}
+    volumeMounts:
+{{ include "zeno.tlsVolumeMounts" . | indent 4 }}
+{{ include "zeno.kafkaConfigVolumeMount" . | indent 4 }}
+    - name: output-dir
+      mountPath: /output_dir
+  volumes:
+{{ include "zeno.tlsVolume" . | indent 2 }}
+{{ include "zeno.kafkaConfigVolume" . | indent 2 }}
+  - name: output-dir
+{{- if or (and .Values.global.persistence.enabled .Values.global.persistence.useDynamicProvisioning) (and .Values.coreTests.persistence.enabled .Values.coreTests.persistence.useDynamicProvisioning) }}
+    persistentVolumeClaim:
+      claimName: {{ include "sch.names.fullCompName" (list . $name) }}-pvc
+{{- else }}
+    emptyDir: {}
+  {{- end }}

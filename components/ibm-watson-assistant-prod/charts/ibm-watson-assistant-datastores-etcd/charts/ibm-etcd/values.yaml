@@ -1,0 +1,170 @@
+# Default values for etcd.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+global:
+  dockerRegistryPrefix: ""
+  imagePullSecret: ""
+  sch:
+    enabled: true
+  storageClassName:
+
+# nameOverride - Specifies the suffix in the kubernetes names after the {{ .Release.name }}. The default suffix ibm-wcd-etcd is used if the override is emptys.
+nameOverride: ""
+
+# if true, don't delete the datastore objects during a helm delete
+keep: true
+
+affinity: {}
+
+# affinityEtcd - Affinities for Etcd stateful set. Overrides the generated affinities if provided.
+#  Supports templated values like "{{- include "umbrella-chart.affinities" . -}}"
+#  Usage: e.g., generated podAntiAffinity, ...
+affinityEtcd: {}
+
+antiAffinity:
+  policy: "soft"
+  topologyKey: "kubernetes.io/hostname"
+
+backoffLimit:
+  credGen: 5
+  enableAuth: 5
+
+activeDeadlineSeconds:
+  credGen: 300
+  enableAuth: 300
+
+replicaCount: 5
+
+image:
+  name: opencontent-etcd-3
+  tag: 1.1.4
+  pullPolicy: IfNotPresent
+
+certgen:
+  image:
+    name: opencontent-icp-cert-gen-1
+    tag: 1.1.4
+    pullPolicy: IfNotPresent
+
+resources:
+  requests:
+    cpu: 1
+    memory: 2Gi
+  limits:
+    # cpu limits removed for WA ICP deployments
+    memory: 4Gi
+
+maxEtcdThreads: 2
+
+autoCompaction:
+  # Auto compaction retention for mvcc key value store in hour. 0 means disable auto compaction.
+  retention: "0"
+  # Interpret 'auto-compaction-retention' one of: 'periodic', 'revision'. 'periodic' for duration based retention, defaulting to hours if no time unit is provided (e.g. '5m'). 'revision' for revision number based retention.
+  mode: "periodic"
+
+auth:
+  enabled: true
+  existingRootSecret: ""
+
+rbac:
+  # Specifies whether RBAC resources should be created
+  create: true
+
+serviceAccount:
+  # serviceAccount.create - Specifies whether a ServiceAccount should be created
+  create: true
+  # The name of the ServiceAccount to use.
+  # serviceAccount.name - If not set and create is true, a name is generated (typically defaults to `{{ .Release.Name }}-ibm-etcd-serviceaccount`). Templates like `{{ .Values.global.serviceAccount.name }}` are supported.
+  name: ""
+
+persistence:
+  enabled: true
+
+  # useDynamicProvisioning - if enabled the dataPVC.storageClassName volumes will be dynamicaly created (if the storage class can be created automatically).
+  #  If disabled either dataPVC.selectot.label should be specify and then the PVC will bound to precreated PV based on labels or dataPVC.storageClassName should be empty and then cluster admin has to bound the PVC to existing PV manually
+  useDynamicProvisioning: true
+
+dataPVC:
+  accessMode: ReadWriteOnce
+  # name - name (prefix) of the created PVC
+  name: data
+
+  # selector - if you not using dynamic provisioning, you can use selectors to refine the binding process. You cannot specify a selector if your using dynamic provisioning.
+  selector:
+    # label - label that the PV should have to be boundable to created PVCs
+    label: ""
+    # value - value of the label that the PV should have to be boundable to created PVCs
+    value: ""
+
+  size: 1Gi
+
+tls:
+  enabled: true
+  existingTlsSecret: ""
+
+# Readiness probe
+readinessProbe:
+  initialDelaySeconds: 15
+  timeoutSeconds: 1
+  failureThreshold: 5
+  periodSeconds: 10
+  successThreshold: 1
+
+# Liveness probe
+livenessProbe:
+  initialDelaySeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 5
+  periodSeconds: 10
+  successThreshold: 1
+
+arch:
+  amd64: "2 - No prefrence"
+
+# metering - Configures annotations for metering service (if present in the cluster). Supports string templates or dictionary type.
+#metering: "{{ .Values.global.umbrellaChartMetering | toYaml }}"
+metering:
+  productName: "ibm-etcd"
+  productID: "ibm_etcd_1_0_0_Apache_2___00000"
+  productVersion: "1.0.0"
+  productMetric: "VIRTUAL_PROCESSOR_CORE"
+  productChargedContainers: "All"
+  cloudpakName: "IBM Cloud Pak for Data"
+  cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+  cloudpakVersion: "3.0.0"
+
+# clusterDomain - the suffix of all the cluster DNS names like service_name.service_namespace.svc.cluster.local.  Supports templated values like "{{ .Values.global.clusterDomain }}"
+clusterDomain: "cluster.local"
+
+podDisruptionBudget: {}
+
+hooks:
+  credential:
+    create:
+      weight: "3"
+    cleanup:
+      weight: "-5"
+  auth:
+    enable: true
+    weight: "9"
+
+etcdctlDialTimeout: "3s"
+
+# topologySpreadConstraints configures how the pods are distributed across multiple reziliency/failure zones.
+#  Requires kubernetes 1.16+ with enabled MZR support.
+#  See https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/ to get more info about topologyContraints.
+topologySpreadConstraints:
+  # topologySpreadConstraints.enabled - Specifies if the topology spread contraints should be added to etcd statefullset
+  enabled:           false
+  
+  # topologySpreadConstraints.maxSkew - How much the failure/availity zones can differ in number of pods.
+  maxSkew:           1
+  
+  # topologySpreadConstraints.topologyKey - Label of nodes defining failure zone;
+   #     the nodes with the same values of the label are consider to belong to the same failure zone.
+  topologyKey:       "failure-domain.beta.kubernetes.io/zone"
+  
+  # topologySpreadConstraints.whenUnsatisfiable - Specifies action in case new pod cannot be scheduled because of topology contraints.
+  #   Possible values are DoNotSchedule and ScheduleAnyway
+  whenUnsatisfiable: "ScheduleAnyway"

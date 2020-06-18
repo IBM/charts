@@ -1,0 +1,26 @@
+{{- if .Values.addon.networkPolicy.enabled }}
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $compName := include "gateway.get-name-or-use-default" (list . "gw-np-internal") -}}
+# This policy only allows traffic from pods in the current release, everything else is denied
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  podSelector:
+    matchLabels: # select pods in this release
+      release: {{ .Release.Name }}
+  ingress:
+  - from:
+    - podSelector: # allow traffic from pods in this release
+        matchLabels:
+          release: {{ .Release.Name }}
+{{- if .Values.addon.networkPolicy.additionalLabels }}
+    - podSelector:
+        matchLabels:
+{{ .Values.addon.networkPolicy.additionalLabels | toYaml | trimSuffix "\n" | indent 10 }}
+{{- end }}
+{{- end -}}

@@ -1,0 +1,32 @@
+{{- include "sch.config.init" (list . "ibmMongodb.sch.chart.config.values") -}}
+# A headless service to create DNS records
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+  {{- if .Values.serviceAnnotations }}
+{{ toYaml .Values.serviceAnnotations | indent 4 }}
+  {{- end }}
+{{- if include "ibm-mongodb.boolConvertor" (list .Values.keep . ) }}
+    "helm.sh/resource-policy": keep
+{{- end }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.server) | indent 4 }}
+{{- if .Values.extraLabels }}
+{{ toYaml .Values.extraLabels | indent 4 }}
+{{- end }}
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.headless) | quote }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: peer
+      port: {{ .Values.port }}
+{{- if .Values.metrics.enabled }}
+    - name: metrics
+      port: {{ .Values.metrics.port }}
+      targetPort: metrics
+{{- end }}
+  selector:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.server) | indent 4 }}

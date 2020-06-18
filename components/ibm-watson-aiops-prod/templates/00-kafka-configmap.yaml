@@ -1,0 +1,18 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $name := .sch.chart.config.kafka -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $name) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | indent 4 }}
+data:
+  {{- if .Values.global.kafka.strimzi.enabled }}
+  KAFKA_BROKER_URLS: {{ include "zeno.strimziBrokers" . | toStrings | toJson | quote }}
+  KAFKA_SASL_MECHANISM: "SCRAM-SHA-512"
+  {{- else }}
+  KAFKA_BROKER_URLS: {{ .Values.global.kafka.bootstrap.servers | toJson | quote }}
+  KAFKA_SASL_MECHANISM: {{ .Values.global.kafka.sasl.mechanisms | quote }}
+  {{- end }}
+  KAFKA_SASL_USERNAME: {{ include "zeno.kafkaUsername" . | quote }}
+  KAFKA_SSL_CERT_PATH: {{ .Values.global.kafka.sasl.ca.location }}

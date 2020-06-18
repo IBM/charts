@@ -1,0 +1,80 @@
+
+
+global:
+  image:
+    repository: ""
+  
+  # global.deploymentType Valid values are Development or Production. A Production deployment is scaled up i.e. a higher number of replicas.
+  deploymentType: "Development"
+  # global.podAntiAffinity Valid values are Default, Enable or Disable
+  podAntiAffinity: "Default"
+
+minio: 
+  clusterDomain: "{{ .Values.global.clusterDomain }}"
+  global:
+    # Change license to true to indicate have read and agree to license agreements : http://ibm.biz/oms-license & http://ibm.biz/oms-apps-license
+    license: true
+  arch:
+    amd64: "2 - No preference"
+    ppc64le: "0 - Do not use" # Because of the different image name it cannot work in mixed pod architecture environment. Thus disabling ppc64le.
+    s390x:   "0 - Do not use" # Because of the different image name it cannot work in mixed pod architecture environment. Thus disabling ppc64le.
+  
+  # Do not even think about changing to override nameOverride or fullnameOverride
+  nameOverride: "clu-minio"
+  
+  replicas: 4 # used only in distributed mode, 4 <= replicas <= 32
+  
+  persistence:
+    enabled: true # By default the minio should use PVC and store data persistently
+    size: 5Gi
+    useDynamicProvisioning: "{{ tpl ( .Values.global.persistence.useDynamicProvisioning | toString ) . }}"
+    
+  existingSecret: "{{ .Values.global.cos.auth.secretName }}"
+  
+  tls:
+    enabled: true
+    certSecret: "{{ .Values.global.cos.tls.secretName }}"
+
+  # Reducing CPU requests to reduce costs
+  resources:
+    requests:
+      memory: 1Gi
+      cpu: 75m
+    limits:
+      cpu: 4
+      memory: 1Gi
+
+  defaultBucket:
+    enabled: false
+
+  # if true, don't delete the datastore objects during a helm delete
+  keep: "{{ .Values.global.keepDatastores }}"
+
+  sse:
+    enabled: true
+    masterKeySecret: "{{ .Values.global.cos.sse.secretName }}"
+
+  metering:
+    productName:              "IBM Watson Assistant for IBM Cloud Pak for Data"
+    productID:                "ICP4D-addon-fa92c14a5cd74c31aab1616889cbe97a-assistant"
+    productVersion:           "1.4.2"
+    cloudpakName:             "IBM Cloud Pak for Data"
+    cloudpakId:               "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    cloudpakVersion:          "3.0.0"
+    productChargedContainers: "All"
+    productMetric:            "VIRTUAL_PROCESSOR_CORE"
+
+  affinity: '{{ include "assistant.minio.ibm-minio.affinities.nodeAffinity" . }}'
+  
+  antiAffinity:
+    policy: '{{- if or (eq .Values.global.podAntiAffinity "Enable") (and (eq .Values.global.deploymentType "Production") (ne .Values.global.podAntiAffinity "Disable")) -}} hard {{- else -}} soft {{- end -}}'
+
+  topologySpreadConstraints:
+    enabled:           "{{ tpl ( .Values.global.topologySpreadConstraints.enabled           | toString ) . }}"
+    maxSkew:           "{{ tpl ( .Values.global.topologySpreadConstraints.maxSkew           | toString ) . }}"
+    topologyKey:       "{{ tpl ( .Values.global.topologySpreadConstraints.topologyKey       | toString ) . }}"
+    whenUnsatisfiable: "{{ tpl ( .Values.global.topologySpreadConstraints.whenUnsatisfiable | toString ) . }}"
+
+  securityContext:
+    minio:
+      runAsUser: 10001
