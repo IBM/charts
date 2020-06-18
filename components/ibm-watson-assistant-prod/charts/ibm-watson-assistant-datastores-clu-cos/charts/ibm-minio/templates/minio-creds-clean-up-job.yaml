@@ -1,0 +1,80 @@
+{{- if include "ibm-minio.licenseValidate" .  | required "License must be accepted by setting license key to true" }}
+{{- include "sch.config.init" (list . "ibmMinio.sch.config.values") -}}
+{{- if not (include "ibm-minio.boolConvertor" (list .Values.keep . )) }}
+{{- if or (not (tpl (.Values.existingSecret | toString ) . )) (and (include "ibm-minio.boolConvertor" (list .Values.tls.enabled . )) (not (tpl (.Values.tls.certSecret | toString ) . ))) (and (include "ibm-minio.boolConvertor" (list .Values.sse.enabled . )) (not (tpl (.Values.sse.masterKeySecret | toString ) . ))) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.credsCleanup) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsCleanup (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" .sch.chart.components.credsCleanup "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsCleanup (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" .sch.chart.components.credsCleanup "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "ibm-minio.serviceAccountName" . | quote }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsPodSecurityContext) | indent 8 }}
+      affinity:
+{{ include "ibm-minio.affinity" (list . (dict "kind" "Job" "component" .sch.chart.components.credsCleanup)) | indent 8 }}
+      containers:
+      - name: delete-creds
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsContainerSecurityContext) | indent 10 }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.creds.image.name }}:{{ .Values.creds.image.tag }}
+        imagePullPolicy: {{ tpl ( .Values.creds.image.pullPolicy | toString ) . }}
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 100m
+          limits:
+            memory: 128Mi
+            cpu: 100m
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+{{- if not (tpl (.Values.existingSecret | toString ) . ) }}
+          {{- $secretName := include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) }}
+          if kubectl get   secret {{ $secretName | quote }} -n {{ .Release.Namespace }} ; then
+            echo "=>>>Deleting {{ $secretName }} ..."
+            kubectl delete secret -n {{ .Release.Namespace }} {{ $secretName | quote }}
+          else
+            echo "=>>>Secret   {{ $secretName }} does not exist (already deleted)"
+          fi
+{{- end }}
+{{- if and (include "ibm-minio.boolConvertor" (list .Values.tls.enabled . )) (not (tpl (.Values.tls.certSecret | toString ) . )) }}
+          {{- $secretName := include "sch.names.fullCompName" (list . .sch.chart.components.tlsSecret) }}
+          if kubectl get   secret {{ $secretName | quote }} -n {{ .Release.Namespace }} ; then
+            echo "=>>>Deleting {{ $secretName }} ..."
+            kubectl delete secret -n {{ .Release.Namespace }} {{ $secretName | quote }}
+          else
+            echo "=>>>Secret   {{ $secretName }} does not exist (already deleted)"
+          fi
+{{- end }}
+{{- if and (include "ibm-minio.boolConvertor" (list .Values.sse.enabled . )) (not (tpl (.Values.sse.masterKeySecret | toString ) . )) }}
+          {{- $secretName := include "ibm-minio.sse.masterKeySecret" . }}
+          if kubectl get   secret {{ $secretName | quote }} -n {{ .Release.Namespace }} ; then
+            echo "=>>>Deleting {{ $secretName }} ..."
+            kubectl delete secret -n {{ .Release.Namespace }} {{ $secretName | quote }}
+          else
+            echo "=>>>Secret   {{ $secretName }} does not exist (already deleted)"
+          fi
+{{- end }}
+{{- end }}
+{{- end }}
+{{ end }}

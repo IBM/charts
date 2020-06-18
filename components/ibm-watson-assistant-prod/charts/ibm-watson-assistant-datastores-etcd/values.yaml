@@ -1,0 +1,104 @@
+# Default values for etcd.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+global:
+  etcd:
+    # global.etcd.create - If set to true, the etcd cluster for watson assistant service is created during installation. Otherwise you have to provide your own etcd instance and the credentials.
+    create: true
+  imagePullSecret: "{{ tpl ( .Values.global.image.pullSecret | toString ) . }}"
+creds:
+  image:
+    repository: "{{ tpl .Values.global.dockerRegistryPrefix . }}"
+    name:       "conan-tools"
+    tag:        "20200421-1841"
+    pullPolicy: "IfNotPresent"
+  resources:
+    requests:
+      cpu:    10m
+      memory: 256Mi
+    limits:
+      cpu:    50m
+      memory: 256Mi
+
+arch:
+  amd64: "2 - No prefrence"
+
+config:
+  # Do not even think about changing this value.
+  nameOverride: "etcd3"
+
+  activeDeadline: 3600
+
+  backoffLimit:
+    enableAuth: 60
+
+  activeDeadlineSeconds:
+    credGen: 3600
+    enableAuth: 1800
+
+  replicaCount: 5
+
+  resources:
+    limits:
+      cpu: 4
+      memory: 256Mi
+    requests:
+      cpu: 15m
+      memory: 256Mi
+
+  # change this value to limit the number of threads ETCD will use, otherwise it will be set to node's
+  # number of cores. which will cause container killed by high CPU usage
+  maxEtcdThreads: 1
+
+  auth:
+    enabled: true
+    existingRootSecret: '{{ include "assistant.etcd.secretName" . }}'
+
+  # if true, use pod antiaffinity
+  antiAffinity:
+    policy: '{{- if or (eq .Values.global.podAntiAffinity "Enable") (and (eq .Values.global.deploymentType "Production") (ne .Values.global.podAntiAffinity "Disable")) -}} hard {{- else -}} soft {{- end -}}'
+
+  affinity: '{{ include "assistant.etcd.affinitiesEtcd.nodeAffinity" . }}'
+
+  persistence:
+    enabled: true
+    useDynamicProvisioning: "{{ tpl ( .Values.global.persistence.useDynamicProvisioning | toString ) . }}"
+
+  dataPVC:
+    accessMode: ReadWriteOnce
+    size: 10Gi
+
+  tls:
+    # Do not even think about changing this value.
+    enabled: "{{ .Values.global.etcd.tls.enabled }}"
+    existingTlsSecret: '{{ include "assistant.etcd.secretName" . }}'
+
+  # if true, don't delete the datastore objects during a helm delete
+  keep: "{{ .Values.global.keepDatastores }}"
+
+  clusterDomain: "{{ tpl .Values.global.clusterDomain . }}"
+
+  hooks:
+    auth:
+      enable: false
+  
+  metering:
+    productName:              "IBM Watson Assistant for IBM Cloud Pak for Data"
+    productID:                "ICP4D-addon-fa92c14a5cd74c31aab1616889cbe97a-assistant"
+    productVersion:           "1.4.2"
+    cloudpakName:             "IBM Cloud Pak for Data"
+    cloudpakId:               "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    cloudpakVersion:          "3.0.0"
+    productChargedContainers: "All"
+    productMetric:            "VIRTUAL_PROCESSOR_CORE"
+
+  # Enabling pod disruption budget
+  podDisruptionBudget:
+    maxUnavailable: 1
+
+  topologySpreadConstraints:
+    enabled:           "{{ tpl ( .Values.global.topologySpreadConstraints.enabled           | toString ) . }}"
+    maxSkew:           "{{ tpl ( .Values.global.topologySpreadConstraints.maxSkew           | toString ) . }}"
+    topologyKey:       "{{ tpl ( .Values.global.topologySpreadConstraints.topologyKey       | toString ) . }}"
+    whenUnsatisfiable: "{{ tpl ( .Values.global.topologySpreadConstraints.whenUnsatisfiable | toString ) . }}"

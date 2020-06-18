@@ -1,0 +1,78 @@
+{{- if include "ibm-minio.licenseValidate" .  | required "License must be accepted by setting license key to true" }}
+{{- include "sch.config.init" (list . "ibmMinio.sch.config.values") -}}
+{{- if or (include "ibm-minio.boolConvertor" (list .Values.defaultBucket.enabled . )) .Values.buckets }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.createBucket) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.createBucket (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" .sch.chart.components.createBucket "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded
+    "helm.sh/hook-weight": {{ .Values.postBucketCreationHookWeight | quote }}
+spec:
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.createBucket (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" .sch.chart.components.createBucket "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      restartPolicy: OnFailure
+{{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+{{- end }}
+      affinity:
+{{ include "ibm-minio.affinity" (list . (dict "kind" "Job" "component" .sch.chart.components.createBucket)) | indent 8 }}
+      serviceAccountName: {{ include "ibm-minio.serviceAccountName" . | quote }}
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.minioPodSecurityContext) | indent 8 }}
+      volumes:
+        - name: minio-configuration
+          projected:
+            sources:
+            - configMap:
+                name:  {{ include "sch.names.fullName" (list .) | quote }}
+            - secret:
+                name: {{ if (tpl (.Values.existingSecret | toString ) . ) }}{{ tpl (.Values.existingSecret | toString ) . }}{{ else }}{{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }}{{ end }}
+{{- if include "ibm-minio.boolConvertor" (list .Values.tls.enabled . ) }}
+        - name: cert-secret-volume-mc
+          secret:
+            secretName: {{ if (tpl (.Values.tls.certSecret | toString ) .) }}{{ tpl (.Values.tls.certSecret | toString ) . }}{{ else }}{{ include "sch.names.fullCompName" (list . .sch.chart.components.tlsSecret) | quote }}{{ end }}
+            items:
+            - key: tls.cacrt
+              path: CAs/public.crt
+        {{ end }}
+      containers:
+      - name: minio-mc
+        image:  {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.minioClient.image.name }}:{{ .Values.minioClient.image.tag }}
+        imagePullPolicy: {{ tpl ( .Values.minioClient.image.pullPolicy | toString ) . }}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.minioContainerSecurityContext) | indent 10 }}
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 100m
+          limits:
+            memory: 128Mi
+            cpu: 100m
+        command: ["/bin/sh", "/config/initialize"]
+        env:
+          - name: MINIO_ENDPOINT
+            value: {{ include "sch.names.fullCompName" (list . .sch.chart.components.service) }}.{{ .Release.Namespace }}.svc.{{ tpl ( .Values.clusterDomain | toString ) . }}
+          - name: MINIO_PORT
+            value: {{ .Values.service.port | quote }}
+        volumeMounts:
+          - name: minio-configuration
+            mountPath: /config
+{{- if include "ibm-minio.boolConvertor" (list .Values.tls.enabled . ) }}
+          - name: cert-secret-volume-mc
+            mountPath: {{ .Values.configPathmc }}certs
+          {{ end }}
+{{- end }}
+{{ end }}

@@ -1,0 +1,89 @@
+## Global Settings #############################################################
+global:
+  icpDockerRepo: "cp.icr.io/cp/cpd"
+  dockerRegistryPrefix: "cp.icr.io/cp/cpd"
+  image:
+    repository: cp.icr.io/cp/cpd
+    pullSecret: ""
+  sch:
+    enabled: true
+  affinity: {}
+  flink:
+    flinkConfig:
+      nameTpl: "flink.flinkConfigSecretName"
+flink:
+  existingServiceAccount: ""  # if a customer has an existing account, you can use that to create a secret; usually not populated by customer
+  arch: ""
+
+###############################################################################
+## Common image variables
+###############################################################################
+image:
+  repository: zeno-flink-core
+  pullPolicy: IfNotPresent
+  tag: f4e4efb.20-05-15-145235.master
+
+###############################################################################
+## Secret Gen Settings
+###############################################################################
+
+secretGen:
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 200m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+
+preInstallHookWeightAnchor: -10 # base hook weight; this is our weight "origin"
+
+###############################################################################
+## Flink Settings
+###############################################################################
+config: |
+  # Extra values for flink-conf.yaml go here
+
+# JobManager Settings
+jobmanager:
+  address: '{{ include "flink.jobmanagerAddressTemplate" . }}'
+  heap:
+    mb: 1024
+  # These limits are the bare minimum based on IBM testing.
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2048Mi
+    requests:
+      cpu: 100m
+      memory: 1280Mi
+  # For easy URL access during testing may use NodePort instead of ClusterIP,
+  # but for prod ensure we are using internal only.
+  service:
+    type: ClusterIP
+    port: 8081
+
+# TaskManager Settings
+taskmanager:
+  replicas: 1
+  # This dictates how much parallelism there will be per task manager
+  numberOfTaskSlots: 12
+  heap:
+    mb: 1024
+  # These limits are the bare minimum based on IBM testing.
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 2048Mi
+    requests:
+      cpu: 100m
+      memory: 1280Mi
+
+commonConfigMounts:
+  volumeMountTemplates: []
+  volumeTemplates: []
+
+# SSL Security Settings
+ssl:
+  # TODO issue1103 Enabled TLS
+  enabled: false

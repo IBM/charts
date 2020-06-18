@@ -1,0 +1,372 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .Release.Name }}-dialog"
+  labels: &deployment_labels
+    <<: &primary_labels # Don't touch or extend these labels!
+      service:                     "conversation"
+      component:                   "dialog"
+      slot:                        "{{ .Release.Name }}"
+    # Make sure the indent of other labels is the same as this comment's
+    tenant:                        "PUBLIC"
+    release:                       "{{ .Release.Name }}"
+    app.kubernetes.io/instance:    "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by:  "{{ .Release.Service }}"
+    app.kubernetes.io/name:        "ibm-watson-assistant"
+    helm.sh/chart:                 "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    icpdsupport/addOnName:         "assistant"
+    icpdsupport/app:               "dialog"
+    icpdsupport/serviceInstanceId: "{{ .Values.global.zenServiceInstanceId | int64 }}"
+spec:
+  replicas: {{ include "assistant.dialog.replicas" . }}
+  selector:
+    matchLabels: *primary_labels # Don't touch or extend!
+  strategy:
+    type: "RollingUpdate"
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge:       35%
+  revisionHistoryLimit: 4
+  template:
+    metadata:
+      annotations:
+
+        productName:              "IBM Watson Assistant for IBM Cloud Pak for Data"
+        productID:                "ICP4D-addon-fa92c14a5cd74c31aab1616889cbe97a-assistant"
+        productVersion:           "1.4.2"
+        cloudpakName:             "IBM Cloud Pak for Data"
+        cloudpakId:               "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion:          "3.0.0"
+        productChargedContainers: "All"
+        productMetric:            "VIRTUAL_PROCESSOR_CORE"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9080"
+        prometheus.io/scrape: "true"
+      labels:
+        <<: *deployment_labels
+        # Any pod-specific labels go below
+    spec:
+      {{- if tpl .Values.imagePullSecret . }}
+      imagePullSecrets:
+        - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+      {{- end }}
+
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+
+      initContainers:
+        - name: etcd-running
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 2000
+            {{- end }}
+          image: "{{ if tpl ( .Values.init.etcd.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.init.etcd.image.repository | toString ) . ) }}{{ end }}/{{ .Values.init.etcd.image.name }}:{{ .Values.init.etcd.image.tag }}"
+          imagePullPolicy: {{ .Values.init.etcd.image.pullPolicy | quote }}
+          command: [ "/scripts/etcd_running.sh" ]
+          resources:
+            {{ .Values.init.etcd.resources | toYaml | indent 12 | trim }}
+          volumeMounts:
+            - name: "init-scripts"
+              mountPath: /scripts
+            - name: global-etcd
+              mountPath: "/etc/secrets/etcd"
+              readOnly: true
+        - name: redis-running
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 2000
+            {{- end }}
+          image: "{{ if tpl ( .Values.init.redis.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.init.redis.image.repository | toString ) . ) }}{{ end }}/{{ .Values.init.redis.image.name }}:{{ .Values.init.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.init.redis.image.pullPolicy | quote }}
+          command: [ "/scripts/redis_running.sh" ]
+          env:
+            - name: "REDIS_HOST"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-dialog-redis"
+                  key: "hostname"
+            - name: "REDIS_PORT"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-dialog-redis"
+                  key: "port"
+            - name: "REDIS_PASSWORD"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-dialog-redis"
+                  key: "password"
+          resources:
+            {{ .Values.init.redis.resources | toYaml | indent 12 | trim }}
+          volumeMounts:
+            - name: "init-scripts"
+              mountPath: /scripts
+      containers:
+        - name: "dialog"
+          image: "{{ if tpl (.Values.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.image.repository | toString ) . ) }}{{ end }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 2000
+            {{- end }}
+          ports:
+            - name: "thrift"
+              containerPort: 8089
+            - name: "wlp-http"
+              containerPort: 9080
+
+          env:
+            - name:  "CLOUD_APP_GROUP"
+              value: "voyager"
+            - name:  "CLOUD_APP"
+              value: "conversation-dialog-{{ .Release.Name }}"
+            - name:  "CLOUD_AUTO_SCALE_GROUP"
+              value: "20200520-1238-a8233426-wa-icp-1.4.2-3"
+
+            - name:  "CLOUD_ENVIRONMENT"
+              value: "pprd"
+
+            # KUBERNETES SPECIFIC ENVIRONMENT VARIABLES
+            - name:  "WKUBE_POD_NAME"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "metadata.name"
+            - name:  "WKUBE_POD_IPADDR"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "status.podIP"
+            - name:  "WKUBE_NODE_IP"
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name:  "WKUBE_NODE_NAME"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "spec.nodeName"
+  
+            # As the Dialog is not set to be visible outside k8s. The WKUBE_SERVICE_NAME and WKUBE_SERVICE_PORT_NAME are not defined.
+
+            - name: "LL_REGISTRY"
+              value: "etcd:/etc/secrets/etcd/etcd_connection"
+
+            - name:  "LITELINKS_SERVICE_NAME"
+              value: "voyager-dialog-slot-{{ .Release.Name }}"
+
+#           - name:  "SERVICE_VERSION"
+#             value: "20200520-1238-a8233426-wa-icp-1.4.2-3"
+
+            - name: LL_PRIVATE_DOMAIN_ID
+              valueFrom:
+                configMapKeyRef:
+                   name: "{{ .Release.Name }}-config-litelinks"
+                   key: kubernetes_cluster_name
+
+            - name: "DIALOG_LL_KEYSTORE_PASS"
+              value: "w@ts0n16qa" 
+
+              # possible values for RUN_AS are WAR and JAR
+            - name: "RUN_AS"
+              value: "JAR"
+            - name: "LITELINKS_SSL_KEY_PATH"
+              value: "/etc/secrets/litelinks/litelinks_ssl_key.pem"
+            - name: "LITELINKS_SSL_KEY_CERTPATH"
+              value: "/etc/secrets/litelinks/litelinks_ssl_cert.pem"
+
+            # Dialog L2 cache settings
+            - name: "DIALOG_L2_CACHE"
+              value: "redis"
+
+  # insert DIALOG_L2_CACHE_ENCRYPTION_KEY only if L2 cache is used and if it is available
+      # REDIS_HOST and REDIS_PORT are static when used haproxy container or are taken from the secret otherwise
+            - name: "REDIS_HOST"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-dialog-redis"
+                  key: "hostname"
+            - name: "REDIS_PORT"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-dialog-redis"
+                  key: "port"
+            - name: "REDIS_PASSWORD"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-dialog-redis"
+                  key: "password"
+            - name: "REDIS_SLOT"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-dialog-redis"
+                  key: "slot"
+    
+            # Configuration of prometheus metrics
+            - name:  "PROMETHEUS_METRICS_PATH"
+              value: /metrics
+
+            # PagerDuty/Tip settings  - this PD monitoring is only for developers
+            #    these PD are not indended for health monitoring of the service and notifying SREs. !!!
+
+
+#            Sample list of additional dialog environment variables
+#             - name: CUSTOMER_INFO_MASK  # Specifies how user inputs (and other private data) are handled in Kibana logs
+#               # Permitted values:
+#               #  HideAllMask   --> input replaced by  ##PRIV_DATA##  ; default for all premium and dedicated environments (see plan/*.yaml)
+#               #  Xx0Mask       --> input replaced number by 0, letters by X depending on case --> default values if not specified (==> standard plans)
+#               #  FullInfoMask  --> input is completely logged.
+#            - name: CUSTOMER_INFO_FS_MASK # Specifies how user inputs (and other private data) are handled in container logs
+#               # Permitted values: and the meaning is the same as for CUSTOMER_INFO_MASK
+#               #   default is not specified (==> Xx0Mask) for all except dev environment (where we use FullInfoMask)
+#            - name: DIALOG_FEATURE_FRAMES # Enabled by default (not needed to specify)
+#            - name: DIALOG_FEATURE_EVENT_HANDLERS
+#            - name: DIALOG_FEATURE_MULTIMODALITY
+#            - name: DIRECT_OPENWHISK_HOST # may be we should add this for all slots
+#            - name: MAXIMAL_LENGTH_OF_CONVERSATION_ID      # Unit: Characters.          Default: 1024      Limit on conversation_id provided by user in (POST /message) calls.
+#            - name: MAXIMAL_LENGTH_OF_POST_MESSAGE         # Unit: Characters.          Default: 10485760  Can be turned off (using -1)
+#            - name: MAXIMAL_DIALOG_REQUEST_DURATION        # Unit: Miliseconds.         Default: 8000      Maximal time that Dialog request can take.
+#            - name: DIRECT_OPENWHISK_CALL_TIMEOUT          # Unit: Miliseconds.         Default: 6000      Maximal time that direct call To Cloud Fucntions can take.
+#            - name: DIRECT_OPENWHISK_CALLS_MAXIMAL_NUMBER  # Unit: count/paralel calls. Default: 25        Maximal number of dialog requests (POST /message) that can be performed simultanously in one container
+#            - name: DIRECT_OPENWHISK_SOCKET_TIMEOUT        # Unit: Miliseconds.         Default: 10000     Timeout of httpClient - setSocketTimeout()
+#            - name: DIRECT_OPENWHISK_CONNECTION_TIMEOUT    # Unit: Miliseconds.         Default: 10000     Timeout of httpClient - setConnectTimeout()
+#            - name: DIRECT_OPENWHISK_REQUEST_TIMEOUT       # Unit: Miliseconds.         Default: 10000     Timeout of httpClient - setConnectionRequestTimeout()
+            # Options from dialog.extra_var entry (defined in slot / plan / env files)
+            - name:  "BLOCKED_CALLOUT_IPS"
+              value: "{{ .Values.callouts.blockedRanges | js }}"
+            - name:  "ELEVATE_PLAN_FOR_ALL"
+              value: "true"
+            - name:  "MAX_DELTA_MEMORY_SIZE_BYTES"
+              value: "5242880"
+            - name:  "REDIS_CACHE_EXPIRY"
+              value: "{{ .Values.cache.expiry }}"
+            - name: "DATA_EXHAUST_SUGGESTION_LOGGING"
+              value: "false"
+
+          volumeMounts:
+            - name: logs
+              mountPath: "/watson/data"
+            - name: global-etcd
+              mountPath: "/etc/secrets/etcd"
+              readOnly: true
+            # Mount /etc/secrets/etcd_ll_migration is not defined since dialog.mounts.etcd_ll_migration and ll_mounts.etcd_ll_migration are empty (no name of secret to mount is provided)
+  
+            - mountPath: "/etc/secrets/litelinks"
+              readOnly: true
+              name: "secret-dialog-litelinks-ssl"
+
+          resources:
+            {{ .Values.resources | toYaml | indent 12 | trim }}
+          readinessProbe:
+            httpGet:
+              path: /dialog/api/v2/rest/health
+              port: wlp-http
+            initialDelaySeconds: 60
+            timeoutSeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 2
+
+          livenessProbe:
+            httpGet:
+              path: /dialog/api/v2/rest/health
+              port: wlp-http
+            initialDelaySeconds: 60
+            timeoutSeconds: 5
+            periodSeconds: 60
+            successThreshold: 1
+
+          lifecycle:
+            preStop:
+              exec:
+                command: ["bash", "-c", "curl -XPOST http://localhost:9080/dialog/api/v2/rest/litelinks/stop || true ; sleep 12"]
+      volumes:
+        - name: global-etcd
+          secret:
+            secretName: "{{ .Release.Name }}-global-etcd"
+        # Mount etcd-ll-migrations (/etc/secrets/etcd_ll_migration) is not defined since dialog.mounts.etcd_ll_migration and ll_mounts.etcd_ll_migration are empty (no name of secret to mount is provided)
+        - name: logs
+          # using a local disk on the node
+          emptyDir: {}
+
+  
+        - name: secret-dialog-litelinks-ssl
+          secret:
+            secretName: "{{ .Release.Name }}-dialog-litelinks-ssl"
+        - name: "init-scripts"
+          configMap:
+            name: "{{ .Release.Name }}-dialog-init-scripts"
+            defaultMode: 0755
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+  
+      serviceAccountName: "{{ .Release.Name }}-litelinks-registrant"
+
+        {{- if and (semverCompare ">=1.16" (printf "%s.%s" ( regexReplaceAll "[^0-9]" (.Capabilities.KubeVersion.Major | toString ) "" ) ( regexReplaceAll "[^0-9]" (.Capabilities.KubeVersion.Minor | toString ) "" ))) .Values.global.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+      - maxSkew:           {{ tpl ( .Values.global.topologySpreadConstraints.maxSkew           | toString ) . }}
+        topologyKey:       "{{ tpl ( .Values.global.topologySpreadConstraints.topologyKey       | toString ) . }}"
+        whenUnsatisfiable: "{{ tpl ( .Values.global.topologySpreadConstraints.whenUnsatisfiable | toString ) . }}"
+        labelSelector:
+          matchExpressions:
+          - key: "service"
+            operator: In
+            values:
+            - "conversation"
+          - key: "component"
+            operator: In
+            values:
+            - "dialog"
+          - key: "slot"
+            operator: In
+            values:
+            - "{{ .Release.Name }}"
+        {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: beta.kubernetes.io/arch
+                  operator: In
+                  values: [ "amd64" ]
+        {{- if .Values.global.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.matchExpressions }}
+          {{- printf "\n%s" ( .Values.global.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.matchExpressions | toYaml | indent 16 ) }}
+        {{- end }}
+        {{- if (or (eq .Values.global.podAntiAffinity "Enable") (and (eq .Values.global.deploymentType "Production") (ne .Values.global.podAntiAffinity "Disable"))) }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: "service"
+                operator: In
+                values:
+                - "conversation"
+              - key: "component"
+                operator: In
+                values:
+                - "dialog"
+              - key: "slot"
+                operator: In
+                values:
+                - "{{ .Release.Name }}"
+            topologyKey: "kubernetes.io/hostname"
+        {{- end }}

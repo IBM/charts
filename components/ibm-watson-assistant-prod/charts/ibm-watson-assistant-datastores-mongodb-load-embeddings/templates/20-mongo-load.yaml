@@ -1,0 +1,167 @@
+{{- include "sch.config.init" (list . "assistant.sch.chart.config.values") -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Name}}-recommends-load-mongo"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "" (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" "loadjob" "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 4 }}
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 432000
+  template:
+    metadata:
+      name: recommends-load-mongo
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" "") | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "" (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" "loadjob" "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      initContainers:
+      - name: recommends-load-data-en-counts
+        image:  "{{ if tpl ( .Values.dataEmbeddings.en.counts.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.dataEmbeddings.en.counts.image.repository | toString ) . ) }}{{ end }}/{{ .Values.dataEmbeddings.en.counts.image.name }}:{{ .Values.dataEmbeddings.en.counts.image.tag }}"
+        imagePullPolicy: {{ .Values.dataEmbeddings.en.counts.image.pullPolicy | quote }}
+        securityContext:
+{{ include "assistant.recommends.securityContext" . | indent 10 }}
+        command: ["sh", "-c", "cd /home/app && ./move_data.sh"]
+        resources:
+{{ toYaml .Values.loader.resources | indent 10 }}
+        volumeMounts:
+        - mountPath: /data
+          name: recommends-data
+      - name: recommends-load-data-en-precomputed
+        image:  "{{ if tpl ( .Values.dataEmbeddings.en.precomputed.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.dataEmbeddings.en.precomputed.image.repository | toString ) . ) }}{{ end }}/{{ .Values.dataEmbeddings.en.precomputed.image.name }}:{{ .Values.dataEmbeddings.en.precomputed.image.tag }}"
+        imagePullPolicy: {{ .Values.dataEmbeddings.en.precomputed.image.pullPolicy | quote }}
+        securityContext:
+{{ include "assistant.recommends.securityContext" . | indent 10 }}
+        command: ["sh", "-c", "cd /home/app && ./move_data.sh"]
+        resources:
+{{ toYaml .Values.loader.resources | indent 10 }}
+        volumeMounts:
+        - mountPath: /data
+          name: recommends-data
+      - name: recommends-load-data-en-wordembeddings
+        image:  "{{ if tpl ( .Values.dataEmbeddings.en.wordEmbeddings.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.dataEmbeddings.en.wordEmbeddings.image.repository | toString ) . ) }}{{ end }}/{{ .Values.dataEmbeddings.en.wordEmbeddings.image.name }}:{{ .Values.dataEmbeddings.en.wordEmbeddings.image.tag }}"
+        imagePullPolicy: {{ .Values.dataEmbeddings.en.wordEmbeddings.image.pullPolicy | quote }}
+        securityContext:
+{{ include "assistant.recommends.securityContext" . | indent 10 }}
+        command: ["sh", "-c", "cd /home/app && ./move_data.sh"]
+        resources:
+{{ toYaml .Values.loader.resources | indent 10 }}
+        volumeMounts:
+        - mountPath: /data
+          name: recommends-data
+{{- if .Values.global.languages.spanish }}
+      - name: recommends-load-data-es
+        image:  "{{ if tpl ( .Values.dataEmbeddings.es.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.dataEmbeddings.es.image.repository | toString ) . ) }}{{ end }}/{{ .Values.dataEmbeddings.es.image.name }}:{{ .Values.dataEmbeddings.es.image.tag }}"
+        imagePullPolicy: {{ .Values.dataEmbeddings.es.image.pullPolicy | quote }}
+        securityContext:
+{{ include "assistant.recommends.securityContext" . | indent 10 }}
+        command: ["sh", "-c", "cd /home/app && ./move_data.sh"]
+        resources:
+{{ toYaml .Values.loader.resources | indent 10 }}
+        volumeMounts:
+        - mountPath: /data
+          name: recommends-data
+{{- end }}
+{{- if .Values.global.languages.french }}
+      - name: recommends-load-data-fr
+        image:  "{{ if tpl ( .Values.dataEmbeddings.fr.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.dataEmbeddings.fr.image.repository | toString ) . ) }}{{ end }}/{{ .Values.dataEmbeddings.fr.image.name }}:{{ .Values.dataEmbeddings.fr.image.tag }}"
+        imagePullPolicy: {{ .Values.dataEmbeddings.fr.image.pullPolicy | quote }}
+        securityContext:
+{{ include "assistant.recommends.securityContext" . | indent 10 }}
+        command: ["sh", "-c", "cd /home/app && ./move_data.sh"]
+        resources:
+{{ toYaml .Values.loader.resources | indent 10 }}
+        volumeMounts:
+        - mountPath: /data
+          name: recommends-data
+{{- end }}
+{{- if .Values.global.languages.japanese }}
+      - name: recommends-load-data-ja
+        image:  "{{ if tpl ( .Values.dataEmbeddings.ja.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.dataEmbeddings.ja.image.repository | toString ) . ) }}{{ end }}/{{ .Values.dataEmbeddings.ja.image.name }}:{{ .Values.dataEmbeddings.ja.image.tag }}"
+        imagePullPolicy: {{ .Values.dataEmbeddings.ja.image.pullPolicy | quote }}
+        securityContext:
+{{ include "assistant.recommends.securityContext" . | indent 10 }}
+        command: ["sh", "-c", "cd /home/app && ./move_data.sh"]
+        resources:
+{{ toYaml .Values.loader.resources | indent 10 }}
+        volumeMounts:
+        - mountPath: /data
+          name: recommends-data
+{{- end }}
+      - name: mongo-check
+        image:  "{{ if tpl ( .Values.loader.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.loader.image.repository | toString ) . ) }}{{ end }}/{{ .Values.loader.image.name }}:{{ .Values.loader.image.tag }}"
+        imagePullPolicy: {{ .Values.loader.image.pullPolicy | quote }}
+        securityContext:
+{{ include "assistant.recommends.securityContext" . | indent 10 }}
+        command: [ "/scripts/check_mongo_is_running.sh" ]
+        env:
+        - name: mongo_url
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Release.Name }}-recommends"
+              key: mongodb_connection_string
+        - name: mongo_cert
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Release.Name }}-recommends"
+              key: mongodb_certificate
+        - name: word_embeddings_settings
+          value: "{{ include "assistant.recommends.languages" . }}"
+        resources:
+{{ toYaml .Values.loader.resources | indent 10 }}
+        volumeMounts:
+        - name:      "recommends-data"
+          mountPath: "/data"
+        - name:      "scripts"
+          mountPath: "/scripts"
+      containers:
+      - name: recommends-load-mongo
+        image:  "{{ if tpl ( .Values.loader.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.loader.image.repository | toString ) . ) }}{{ end }}/{{ .Values.loader.image.name }}:{{ .Values.loader.image.tag }}"
+        imagePullPolicy: {{ .Values.loader.image.pullPolicy | quote }}
+        securityContext:
+{{ include "assistant.recommends.securityContext" . | indent 10 }}
+        command: [ "/scripts/load_data_embeddings.sh" ]
+        env:
+        - name: mongo_url
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Release.Name }}-recommends"
+              key: mongodb_connection_string
+        - name: mongo_cert
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Release.Name }}-recommends"
+              key: mongodb_certificate
+        - name: embeddings
+          value: "{{ include "assistant.recommends.languages" . }}"
+        resources:
+{{ toYaml .Values.loader.resources | indent 10 }}
+        volumeMounts:
+        - name:      "recommends-data"
+          mountPath: "/data"
+        - name:      "scripts"
+          mountPath: "/scripts"
+      restartPolicy: Never
+      volumes:
+      - name: recommends-data
+{{- if include "assistant.boolConvertor" (list .Values.persistence.enabled . ) }}
+        persistentVolumeClaim:
+  {{- if tpl ( .Values.dataPVC.existingClaimName | toString ) . }}
+          claimName: {{ tpl ( .Values.dataPVC.existingClaimName | toString ) . }}
+  {{- else }}
+          claimName: {{ .Release.Name }}-{{ tpl ( .Values.dataPVC.name | toString ) . }}
+  {{- end }}
+{{- else }}
+        emptyDir: {}
+{{- end }}
+      - name: "scripts"
+        configMap:
+          name: "{{ .Release.Name}}-recommends-load-mongo-scripts"
+          defaultMode: 0755
+      serviceAccountName: {{ .Release.Name }}-restricted
+      affinity:
+{{ include "assistant.nodeAffinities" . | indent 8 }}

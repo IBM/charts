@@ -1,0 +1,222 @@
+ # deploy only models specified in model_ids_with_replicas
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .Release.Name }}-sireg-ja-tok-20160902"
+  labels: &deployment_labels
+    <<: &primary_labels # Don't touch or extend these labels!
+      service:   "conversation"
+      component: "sireg"
+      slot:      "{{ .Release.Name }}"
+      model:     "ja-tok"
+      version:   "20160902"
+    # Make sure the indent of other labels is the same as this comment's
+    tenant: PUBLIC
+
+
+    release:                       "{{ .Release.Name }}"
+    app.kubernetes.io/instance:    "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by:  "{{ .Release.Service }}"
+    app.kubernetes.io/name:        "ibm-watson-assistant"
+    helm.sh/chart:                 "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    icpdsupport/addOnName:         "assistant"
+    icpdsupport/app:               "sireg"
+    icpdsupport/serviceInstanceId: "{{ .Values.global.zenServiceInstanceId | int64 }}"
+spec:
+  replicas: {{ include "assistant.sireg.ja-tok-20160902.replicas" . }}
+  progressDeadlineSeconds: 3840 # Largest deployment 4 groups (2 pods) of SIREg sys-entities containers -> each group can take 960 seconds = 4*960
+  selector:
+   matchLabels: *primary_labels # Don't touch or extend!
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 2
+  template:
+    metadata:
+      name: sireg-pod
+      annotations:
+
+        productName:              "IBM Watson Assistant for IBM Cloud Pak for Data"
+        productID:                "ICP4D-addon-fa92c14a5cd74c31aab1616889cbe97a-assistant"
+        productVersion:           "1.4.2"
+        cloudpakName:             "IBM Cloud Pak for Data"
+        cloudpakId:               "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion:          "3.0.0"
+        productChargedContainers: "All"
+        productMetric:            "VIRTUAL_PROCESSOR_CORE"
+      labels:
+        <<: *deployment_labels
+        # Any pod-specific labels go below
+# Volumes
+    spec:
+      volumes:
+      - name: model-storage
+        emptyDir: {}        
+      - name: clu-secrets-sire
+        secret:
+          defaultMode: 420
+          items:
+          - key: sireg_certificate
+            path: sireg.watson.ibm.com.cert.pem
+          - key: sireg_privatekey
+            path: sireg.watson.ibm.com.key.pem
+          secretName: "{{ .Release.Name }}-clu-config-secret"          
+# Affinity
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: beta.kubernetes.io/arch
+                  operator: In
+                  values: [ "amd64" ]
+        {{- if .Values.global.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.matchExpressions }}
+          {{- printf "\n%s" ( .Values.global.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.matchExpressions | toYaml | indent 16 ) }}
+        {{- end }}
+
+{{- $_ := set . "modelName" "ja-tok" }}
+{{ include "assistant.podAntiAffinity" . | indent 8 }}
+# Containers
+      {{- if tpl .Values.imagePullSecret . }}
+      imagePullSecrets:
+        - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+      {{- end }}
+
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+
+      initContainers:
+
+
+      - name: model-loader
+        image: "{{ if tpl (.Values.model.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.model.image.repository | toString ) . ) }}{{ end }}/{{ .Values.model.image.name }}:ja-tok-20160902-{{ .Values.model.image.tagSuffix }}"
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+              - ALL
+          {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 10000
+          {{- end }}
+        imagePullPolicy: {{ .Values.model.image.pullPolicy | quote }}
+        command:
+        - sh
+        - -c
+        - 'rm -rf /opt/ibm/sireg-models/* && mv /data/*.tar.gz /opt/ibm/sireg-models/model.tgz && cd /opt/ibm/sireg-models && tar xf model.tgz && rm -rf model.tgz'
+        
+        resources:
+          limits:
+            cpu: "2000m"
+            memory: 2Gi
+          requests:
+            cpu: "400m"
+            memory: 2Gi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/ibm/sireg-models/
+          name: model-storage
+      containers:
+      - name: sireg-server
+        image: "{{ if tpl (.Values.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.image.repository | toString ) . ) }}{{ end }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+              - ALL
+          {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 10000
+          {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        resources:
+          requests:
+            memory: "1700Mi"
+            cpu: "500m"
+          limits:  
+            memory: "1700Mi"
+            cpu: "2000m"
+        volumeMounts:
+        - name: model-storage
+          mountPath: /opt/ibm/sireg-models/          
+        - mountPath: /opt/ibm/sireg/config/.x509_1
+          name: clu-secrets-sire
+          readOnly: true          
+        env:        
+        - name: X509_KEY_PATH
+          value: /opt/ibm/sireg/config/.x509_1/sireg.watson.ibm.com.key.pem
+        - name: X509_CERT_PATH
+          value: /opt/ibm/sireg/config/.x509_1/sireg.watson.ibm.com.cert.pem          
+        - name: DDINF_FILE
+          value: "/opt/ibm/sireg-models/models/libACE_models/sire.ddinf"
+        - name: NUM_WORKERS
+          value: "3"
+
+
+       # Adding MAX_WORKER_MEM_GROWTH_FACTOR env var
+       # to properly set per-worker language limits
+        - name:  "MAX_WORKER_MEM_GROWTH_FACTOR"
+          value: "1.8"
+
+
+       # Adding MAX_WORKER_MEM_MB env to properly set per-worker limits
+        - name:  "MAX_WORKER_MEM_MB"
+          value: "500"
+
+        ports:
+        - containerPort: 50443
+          name: api-port
+        readinessProbe:
+          exec:
+            command:
+            - /opt/ibm/sireg/bin/healthcheck_client.sh
+            - "50443"
+          initialDelaySeconds: 60
+          timeoutSeconds: 6 # internal SIREg health-check script limit is 5 seconds
+          periodSeconds: 15
+          failureThreshold: 2
+        livenessProbe:
+          exec:
+            command:
+            - /opt/ibm/sireg/bin/healthcheck_client.sh
+            - "50443"
+          initialDelaySeconds: 960 # SIREg sys-entities containers start 10-15 minutes
+          timeoutSeconds: 6 # internal SIREg health-check script limit is 5 seconds
+          periodSeconds: 60
+          failureThreshold: 3
+      serviceAccountName: {{ .Release.Name }}-restricted
+
+        {{- if and (semverCompare ">=1.16" (printf "%s.%s" ( regexReplaceAll "[^0-9]" (.Capabilities.KubeVersion.Major | toString ) "" ) ( regexReplaceAll "[^0-9]" (.Capabilities.KubeVersion.Minor | toString ) "" ))) .Values.global.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+      - maxSkew:           {{ tpl ( .Values.global.topologySpreadConstraints.maxSkew           | toString ) . }}
+        topologyKey:       "{{ tpl ( .Values.global.topologySpreadConstraints.topologyKey       | toString ) . }}"
+        whenUnsatisfiable: "{{ tpl ( .Values.global.topologySpreadConstraints.whenUnsatisfiable | toString ) . }}"
+        labelSelector:
+          matchExpressions:
+          - key: "service"
+            operator: In
+            values:
+            - "conversation"
+          - key: "component"
+            operator: In
+            values:
+            - "sireg"
+          - key: "model"
+            operator: In
+            values:
+            - "ja-tok"
+          - key: "slot"
+            operator: In
+            values:
+            - "{{ .Release.Name }}"
+          - key: "version"
+            operator: In
+            values:
+            - "20160902"
+        {{- end }}

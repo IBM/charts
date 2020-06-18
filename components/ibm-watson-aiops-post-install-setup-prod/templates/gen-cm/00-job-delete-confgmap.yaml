@@ -1,0 +1,39 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $compName := "cm-cleanup" -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Namespace }}-watson-aiops-post-cpd-install-delete
+  namespace: {{ .Values.global.zenControlPlaneNamespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName ) | trim | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-delete"
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 60
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | trim | indent 8 }}
+      name: cm-cleanup
+    spec:
+      serviceAccountName: {{ .Values.global.existingServiceAccount }}
+{{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim | indent 6 }}
+      restartPolicy: Never
+      containers:
+      - name: cm-cleanup
+        image: {{ include "zeno.imageName" (dict "root" . "service" .Values.creds) }}
+        resources:
+{{ toYaml .Values.creds.resources | trim | indent 10 }}
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | trim | indent 8 }}
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          kubectl delete -n {{ .Values.global.zenControlPlaneNamespace }} --ignore-not-found=true configmap {{ .Values.cpd.connections.extensions.configMapName }}
+
+      affinity:
+{{ include "zeno.nodeAffinity" . | trim | indent 8 }}

@@ -1,0 +1,147 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $name :=  .sch.chart.components.modelTrainConsole -}}
+{{- $minioTlsVolumeName := "minio-tls-secret" -}}
+{{- $elasticsearchTlsVolumeName := "elasticsearch-tls-secret" -}}
+{{- $dlaasTlsVolumeName := "dlaas-tls-secret" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $name) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | indent 4 }}
+{{ include "zeno.meteringLabels" (dict "root" . "name" $name) | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 25
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $name ) | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{ include "sch.metadata.annotations.metering" (list . .sch.chart.metering .sch.chart.metering.productMetric .sch.chart.metering.productCloudpakRatio nil) | trim | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | indent 8 }}
+{{ include "zeno.meteringLabels" (dict "root" . "name" $name) | indent 8 }}
+    spec:
+{{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim |  indent 6 }}
+      affinity:
+{{ include "zeno.nodeAffinity" . | trim | indent 8 }}
+{{ include "zeno.imagePullSecretTemplate" . | indent 6 }}
+      initContainers:
+{{ include "zeno.minioInitContainerReadiness" (dict "root" . "tlsVolumeName" $minioTlsVolumeName) | indent 6 }}
+      containers:
+      - name: console
+        image: {{ include "zeno.imageName" (dict "root" . "service" .Values.modelTrainConsole) }}
+        imagePullPolicy: IfNotPresent
+        resources:
+{{ toYaml .Values.modelTrainConsole.resources | trim | indent 10 }}
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | trim |  indent 8 }}
+        livenessProbe:
+          exec:
+            command: ["bash", "-c", "/opt/health/live.sh"]
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          exec:
+            command: [ "bash", "-c", "HOME=/home/zeno /opt/health/ready.sh" ]
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 25
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.modelTrainConsole) }}
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.componentUrls) }}
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.kafka) }}
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.elasticsearch) }}
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.tls) }}
+        env:
+{{ include "zeno.kafkaEnvSecrets" . | indent 8 }}
+{{ include "zeno.elasticsearchEnvSecrets" . | indent 8 }}
+        - name: DATABASE_URL
+          value: "{{ include .Values.global.postgres.tls.hostnameTpl . }}:{{ .Values.global.postgres.endpointPort }}"
+        - name: DATABASE_HOST
+          value: "{{ include .Values.global.postgres.tls.hostnameTpl . }}"
+        - name: DATABASE_PORT
+          value: "{{ .Values.global.postgres.endpointPort }}"
+        - name: DATABASE_USER
+          value: {{ .Values.global.postgres.authSecret.pgSuperuserName | quote }}
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include .Values.global.postgres.authSecret.nameTpl . | quote }}
+              key: pg_su_password
+        - name: DATABASE_CACERT
+          value: /etc/ssl/certs/postgres-cert.pem
+        - name: QES_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.componentUrls) }}
+              key: QUALITY_EVALUATION_SERVICE_URL
+        - name: ES_CACERT_RAW
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "zeno.elasticsearchTlsSecretNameTemplate" . }}
+              key: ca.pem
+        - name: MINIO_CA_BUNDLE
+          valueFrom:
+            secretKeyRef:
+              name: {{ include .Values.global.minio.tlsSecret.nameTpl . | quote}}
+              key: tls.cacrt
+        - name: MINIO_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include .Values.global.minio.accessSecret.nameTpl . | quote }}
+              key: accesskey
+        - name: MINIO_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include .Values.global.minio.accessSecret.nameTpl . | quote }}
+              key: secretkey
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include .Values.global.minio.accessSecret.nameTpl . | quote }}
+              key: secretkey
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include .Values.global.minio.accessSecret.nameTpl . | quote }}
+              key: accesskey
+        volumeMounts:
+{{ include "zeno.kafkaConfigVolumeMount" . | indent 8 }}
+        - name: {{ $dlaasTlsVolumeName }}
+          mountPath: /home/zeno/.dlaas/
+          readOnly: true
+        - name: {{ $minioTlsVolumeName }}
+          mountPath: /home/zeno/.minio/
+          readOnly: true
+        - name: {{ $elasticsearchTlsVolumeName }}
+          mountPath: /home/zeno/.es/
+          readOnly: true
+{{ include "zeno.tlsVolumeMounts" . | indent 8 }}
+      volumes:
+{{ include "zeno.kafkaConfigVolume" . | indent 6 }}
+      - name: {{ $dlaasTlsVolumeName }}
+        configMap:
+          name: {{ include .Values.global.modeltrain.trainer.certCmTpl . | quote  }}
+          items:
+          - key: trainer-ca.crt
+            path: ca.crt
+      - name: {{ $minioTlsVolumeName }}
+        secret:
+          secretName: {{ include .Values.global.minio.tlsSecret.nameTpl . | quote  }}
+          items:
+          - key: tls.cacrt
+            path: tls.cacrt
+      - name: {{ $elasticsearchTlsVolumeName }}
+        secret:
+          secretName: {{ include "zeno.elasticsearchTlsSecretNameTemplate" . }}
+          items:
+          - key: ca.pem
+            path: tls.cacer
+{{ include "zeno.tlsVolume" . | indent 6 }}

@@ -1,0 +1,188 @@
+{{- include "sch.config.init" (list . "etcd.sch.chart.config.values") -}}
+{{- if (.Values.auth.enabled) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "auth-enable-job" ) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "auth-enable-job" (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" "auth-enable-job" "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 4 }}
+{{- if (include "etcd3.boolConvertor" (list .Values.hooks.auth.enable . )) }}
+  annotations:
+    "helm.sh/hook": "post-install"
+    "helm.sh/hook-weight": {{ .Values.hooks.auth.weight | default "9" | quote }}
+    "helm.sh/hook-delete-policy": hook-succeeded
+{{- end }}
+spec:
+  backoffLimit: {{ .Values.backoffLimit.enableAuth }}
+  activeDeadlineSeconds: {{ .Values.activeDeadlineSeconds.enableAuth }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "auth-enable-job" (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" "auth-enable-job" "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 8 }}
+      name: auth-enable
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" "") | indent 8 }}
+    spec:
+{{ include "sch.security.securityContext" (list . .sch.chart.securityContext1) | indent 6 }}
+      serviceAccountName: {{ template "etcd3.serviceaccountname" . }}
+      restartPolicy: Never
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      initContainers:
+      - name: etcd-running
+        image: "{{ if tpl (.Values.global.dockerRegistryPrefix | toString ) .  }}{{ trimSuffix "/" (tpl (.Values.global.dockerRegistryPrefix | toString) . ) }}/{{ end }}{{ tpl ( .Values.image.name | toString ) . }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - "/bin/sh"
+        - -ec
+        - |
+          # Checks if etcd is running and healthy (a pre-requisite for enabling  authorization)
+          if [ ${DEBUG} ] ; then
+           set -x
+          fi
+
+
+          while true ; do
+            echo "etcdctl endpoint health"
+            etcdctl endpoint health && break
+            echo "  command failed. Waiting 5 sec before next retry"
+            sleep 5
+          done
+        env:
+        - name: USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "etcd3.rootSecret" . }}
+              key: username
+        - name: PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "etcd3.rootSecret" . }}
+              key: password
+        # Entries for ETCDCTL
+        - name: ETCDCTL_API
+          value: "3"
+        - name: ETCDCTL_DIAL_TIMEOUT
+          value: {{ (tpl .Values.etcdctlDialTimeout .) | default "3s" | quote }}
+        - name: ETCDCTL_ENDPOINTS
+          value: "{{ if include "etcd3.boolConvertor" (list .Values.tls.enabled . ) }}https{{ else }}http{{ end }}://{{ include "etcd3.fullservicename" . }}:2379"
+        - name: ETCDCTL_USER
+          value: "$(USERNAME):$(PASSWORD)"
+{{- if include "etcd3.boolConvertor" (list .Values.tls.enabled . ) }}
+        - name: ETCD_CERT_FILE
+          value: "/var/etcd/certs/tls.crt"
+        - name: ETCD_KEY_FILE
+          value: "/var/etcd/certs/tls.key"
+        - name: ETCDCTL_CACERT
+          value: "/var/etcd/certs/tls.cacrt"
+        volumeMounts:
+          - name: tls
+            mountPath: /var/etcd/certs/
+{{- end }}
+{{ include "sch.security.securityContext" (list . .sch.chart.securityContext2) | indent 8 }}
+        resources:
+          requests:
+            cpu:    100m
+            memory: 128Mi
+          limits:
+            cpu:    250m
+            memory: 256Mi
+      containers:
+      - name: auth-enable
+        image: "{{ if tpl (.Values.global.dockerRegistryPrefix | toString ) .  }}{{ trimSuffix "/" (tpl (.Values.global.dockerRegistryPrefix | toString) . ) }}/{{ end }}{{ tpl ( .Values.image.name | toString ) . }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - "/bin/sh"
+        - "-ec"
+        - |
+          echo "Listing existing ETCD users"
+          echo "    etcdctl user list"
+          etcdctl user list
+
+          echo
+          echo "CREATING USER ${USERNAME}"
+          echo "  etcdctl user get \"${USERNAME}\""
+          if etcdctl user get "${USERNAME}" ; then
+            echo "    user exists skipping creation"
+          else
+            echo "    etcdctl user add \"${USERNAME}:*********\""
+            etcdctl user add "${USERNAME}:${PASSWORD}"
+          fi
+
+          echo
+          echo "Listing existing ETCD users"
+          echo "    etcdctl user list"
+          etcdctl user list
+
+          echo "ENABLING AUTHENTICATION"
+          echo "    etcdctl auth enable"
+          etcdctl auth enable
+          echo
+          echo
+          echo
+
+          echo "Checking access with invalid creds"
+          echo "    ETCDCTL_USER='${USERNAME}:****-invalid' etcdctl user list"
+          ETCDCTL_USER="${USERNAME}:${PASSWORD}-invalid" etcdctl user list || echo "command failed as expected"
+          echo
+
+          echo "Checking access with valid creds"
+          echo "    etcdctl user list"
+          etcdctl user list
+
+          echo
+          echo "Completed"
+        env:
+        - name: USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "etcd3.rootSecret" . }}
+              key: username
+        - name: PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "etcd3.rootSecret" . }}
+              key: password
+        - name: ETCDCTL_API
+          value: "3"
+        - name: ETCDCTL_DIAL_TIMEOUT
+          value: {{ (tpl .Values.etcdctlDialTimeout .) | default "3s" | quote }}
+        - name: ETCDCTL_ENDPOINTS
+          value: "{{ if include "etcd3.boolConvertor" (list .Values.tls.enabled . ) }}https{{ else }}http{{ end }}://{{ include "etcd3.fullservicename" . }}:2379"
+        - name: ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "etcd3.rootSecret" . }}
+              key: password
+        - name: ETCDCTL_USER
+          value: "$(USERNAME):$(PASSWORD)"
+        - name: ETCDUSER
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "etcd3.rootSecret" . }}
+              key: username
+{{- if include "etcd3.boolConvertor" (list .Values.tls.enabled . ) }}
+        - name: ETCD_CERT_FILE
+          value: "/var/etcd/certs/tls.crt"
+        - name: ETCD_KEY_FILE
+          value: "/var/etcd/certs/tls.key"
+        - name: ETCDCTL_CACERT
+          value: "/var/etcd/certs/tls.cacrt"
+        volumeMounts:
+          - name: tls
+            mountPath: /var/etcd/certs/
+{{- end }}
+{{ include "sch.security.securityContext" (list . .sch.chart.securityContext2) | indent 8 }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+{{- if include "etcd3.boolConvertor" (list .Values.tls.enabled . ) }}
+      volumes:
+        - name: tls
+          secret:
+            secretName: {{ include "etcd3.tlsSecret" . | quote }}
+            defaultMode: 0644
+{{- end }}
+      affinity:
+{{ include "etcd3.affinityEtcd" (list . (dict "kind" "Job" "component" "auth-enable-job")) | indent 8 }}
+{{- end }}

@@ -1,0 +1,69 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $name :=  .sch.chart.components.chatopsSlackIntegrator -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $name) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 4 }}
+{{ include "zeno.meteringLabels" (dict "root" . "name" $name) | indent 4 }}
+spec:
+  replicas: 3
+  revisionHistoryLimit: 25
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{ include "sch.metadata.annotations.metering" (list . .sch.chart.metering .sch.chart.metering.productMetric .sch.chart.metering.productCloudpakRatio nil) | trim | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 8 }}
+{{ include "zeno.meteringLabels" (dict "root" . "name" $name) | indent 8 }}
+    spec:
+{{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim | indent 6 }}
+      affinity:
+{{ include "zeno.nodeAffinity" . | trim | indent 8 }}
+{{ include "zeno.podAntiAffinity" (list . $name) | trim | indent 8 }}
+{{ include "zeno.imagePullSecretTemplate" . | trim | indent 6 }}
+      containers:
+      - name: {{ $name | quote }}
+        image: {{ include "zeno.imageName" (dict "root" . "service" .Values.chatopsSlackIntegrator) }}
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | trim | indent 8 }}
+        resources:
+{{ toYaml .Values.chatopsSlackIntegrator.resources | trim | indent 10 }}
+        ports:
+        - containerPort: 8000
+          name: http
+{{ include "zeno.livenessProbeTemplate" . | indent 8 }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.componentUrls) }}
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.tls) }}
+        env:
+        - name: SLACK_WELCOME_COMMAND_NAME
+          value: {{ .Values.chatopsSlackIntegrator.slackWelcomeCommandName }}
+{{- if ne .Values.chatopsSlackIntegrator.slackSecretName "" }}
+        - name: CONNECTION_MANAGER_URL
+          value: "" # Overwrite this as empty to force manual config
+        - name: WAIOPS_HOME_CHANNEL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.chatopsSlackIntegrator.slackSecretName }}
+              key: home_channel
+        - name: SLACK_BOT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.chatopsSlackIntegrator.slackSecretName }}
+              key: bot.token
+        - name: SLACK_SIGNING_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.chatopsSlackIntegrator.slackSecretName }}
+              key: secret
+{{- end }}
+        volumeMounts:
+{{ include "zeno.tlsVolumeMounts" . | indent 8 }}
+      volumes:
+{{ include "zeno.tlsVolume" . | indent 6 }}

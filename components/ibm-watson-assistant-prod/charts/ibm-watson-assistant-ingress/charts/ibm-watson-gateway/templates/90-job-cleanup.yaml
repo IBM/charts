@@ -1,0 +1,79 @@
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $compName := include "gateway.get-name-or-use-default" (list . "gw-cleanup") -}}
+{{- $secretName := include "gateway.get-name-or-use-default" (list . "gw-tls") -}}
+{{- $roleName := include "gateway.get-name-or-use-default" (list . "gw-role") -}}
+{{- $roleBindingName := include "gateway.get-name-or-use-default" (list . "gw-role-binding") -}}
+
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "gateway-cleanup" (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" "gateway-cleanup" "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 4 }}
+  annotations:
+    "helm.sh/hook": {{               tpl (.Values.addon.tls.hooks.delete.type         | toString ) . | quote }}
+    "helm.sh/hook-weight": {{        tpl (.Values.addon.tls.hooks.delete.weight       | toString ) . | quote }}
+    "helm.sh/hook-delete-policy": {{ tpl (.Values.addon.tls.hooks.delete.deletePolicy | toString ) . | quote }}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . "gateway-cleanup") | quote }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" "") | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "gateway-cleanup" (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" "gateway-cleanup" "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 8 }}
+    spec:
+      affinity:
+{{- include "gateway.affinity" (list . (dict "kind" "Job" "component" $compName)) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 8000
+{{- end }}
+      restartPolicy: Never
+      serviceAccountName: {{ include "gateway.privileged-account.name" . }}
+      containers:
+      - name: cleanup
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 8000
+{{- end }}
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: 100Mi
+            cpu: '.2'
+          limits:
+            memory: 200Mi
+            cpu: '.5'
+        image: "{{ include "gateway.icpDockerRepo" . }}{{ include "gateway.image-name-extract" .Values.addon.tls.image.repository }}:{{ .Values.addon.tls.image.tag }}"
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+            set -x
+            # kubectl delete secret {{ include "sch.names.fullCompName" (list . $secretName) }} || true
+            # Delete configmap deployment
+            # kubectl delete configmap {{ include "sch.names.fullCompName" (list . "deployment") | quote }} || true
+            # TODO: do we want to always cleanup addon service: {{ include "gateway.common.service.name" . | quote }} (disabling for now) implement logic?
+{{- if not .Values.preInstallValidation }}
+            # kubectl delete services {{ include "gateway.common.service.name" . | quote }}
+{{- end }}
+{{- if not .Values.privilegedServiceAccount.name }}
+            kubectl delete role,rolebinding -l app.kubernetes.io/instance={{ .Release.Name }} || true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            kubectl delete serviceaccount {{ include "gateway.privileged-account.name" . }} || true
+{{- end }}
+{{- end }}

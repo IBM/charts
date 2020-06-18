@@ -1,0 +1,19 @@
+{{- if include "gateway.booleanConvertor" (list .Values.autoscaling.enabled . ) }}
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $hpaName := include "gateway.get-name-or-use-default" (list . "gw-hpa") -}}
+{{- $compName := include "gateway.get-name-or-use-default" (list . "gw-deployment") -}}
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $hpaName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  maxReplicas: {{ tpl (.Values.autoscaling.maxReplicas | toString) . }}
+  minReplicas: {{ tpl (.Values.autoscaling.minReplicas | toString) . }}
+  targetCPUUtilizationPercentage: {{ tpl (.Values.autoscaling.targetCPUUtilizationPercentage | toString ) . }}
+  scaleTargetRef:
+    apiVersion: extensions/v1beta1
+    kind: Deployment
+    name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+{{- end -}}

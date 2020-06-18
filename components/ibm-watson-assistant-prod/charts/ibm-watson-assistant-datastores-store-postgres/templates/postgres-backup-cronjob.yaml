@@ -1,0 +1,139 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2020. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################{{ include "sch.config.init" (list . .Values.global.schConfigTemplate) }}
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: "{{ .Release.Name }}-backup-cronjob"
+  labels:  &labels
+{{ include "sch.metadata.labels.standard" (list . "" (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" "store-postgres-backup-cronjob" "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 4 }}
+    component: "store-postgres-backup-cronjob"
+spec:
+  suspend: {{ .Values.backup.suspend }} 
+  schedule: {{ .Values.backup.schedule | quote }} 
+  successfulJobsHistoryLimit: {{ .Values.backup.history.jobs.success }}
+  failedJobsHistoryLimit: {{ .Values.backup.history.jobs.failed }} 
+  concurrencyPolicy: Forbid
+
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          name: {{ .Release.Name }}-backup-job
+          annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" "") | indent 12 }}
+          labels:
+            <<: *labels
+        spec:
+          restartPolicy: Never 
+          serviceAccountName: {{ (printf "%s-credentials" .Release.Name) | quote }}
+          affinity:
+{{ include "assistant.nodeAffinities" . | indent 12 }}
+          hostIPC: false
+          hostNetwork: false
+          hostPID: false
+
+          containers:
+          - name: store-backup
+            image: "{{ if tpl (.Values.backup.image.repository | toString ) .  }}{{ trimSuffix "/" (tpl (.Values.backup.image.repository | toString) . ) }}/{{ end }}{{ .Values.backup.image.name }}:{{ .Values.backup.image.tag }}"
+            imagePullPolicy: {{ .Values.backup.image.pullPolicy | quote }}
+            securityContext:
+              privileged: false
+              readOnlyRootFilesystem: false
+              allowPrivilegeEscalation: false
+              runAsNonRoot: true
+              capabilities:
+                drop:
+                  - ALL
+              {{- if not ( .Capabilities.APIVersions.Has "security.openshift.io/v1" ) }}
+              runAsUser: 2000
+              {{- end }}
+
+            env:
+            - name: "PGHOST"
+              value: "{{ include "assistant.postgres.hostname"       . }}"
+            - name: "PGPORT"
+              value: "{{ include "assistant.postgres.port"           . }}"
+            - name: "PGDATABASE"
+              value: "{{ include "assistant.postgres.store.database" . }}"
+            - name: "PGUSER"
+              value: "{{ include "assistant.postgres.store.user"     . }}"
+            - name: "PGPASSWORD"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-store-vcap"
+                  key: "password"
+            args:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              startTime=`date +%s`
+              echo "Starting backup at $(date)..."
+{{- if include "assistant.ibm-postgresql.boolConvertor" (list .Values.backup.persistence.enabled . ) }}
+              WEEKLY_BACKUP_DAY={{ .Values.backup.history.files.weeklyBackupDay }}
+              KEEP_DAILY={{ .Values.backup.history.files.daily }}
+              KEEP_WEEKLY={{ .Values.backup.history.files.weekly }}
+              BACKUP_DIR="/store-backups"
+              TIMESTAMP=$(date "+%Y%m%d-%H%M%S")
+              TODAY=$(date +%u)
+
+              # If today is the weekly backup day specified in postgres.backup.history.files.weeklyBackupDay then write the backup to the weekly dir
+              echo "Today is day $TODAY"
+              echo "Weekly backup is taken on day $WEEKLY_BACKUP_DAY"
+              if [ "$TODAY" == "$WEEKLY_BACKUP_DAY" ]; then
+                echo "Taking weekly backup..."
+                mkdir -p /store-backups/weekly
+                BACKUP_DIR="/store-backups/weekly"
+              fi
+
+              echo "Running pg_dump -Fc > $BACKUP_DIR/store.dump_$TIMESTAMP"
+              pg_dump -Fc > $BACKUP_DIR/store.dump_$TIMESTAMP
+
+              echo "Backup stored in PVC store-backup"
+              echo ""
+
+              echo "Cleaning old backups, keeping the most recent $KEEP_DAILY daily backups and $KEEP_WEEKLY weekly backups"
+              cd /store-backups
+              ls -tp store.dump_* | grep -v '/$' | tail -n +$((${KEEP_DAILY}+1)) | xargs -d '\n' -r rm -v --
+              if [ "$TODAY" == "$WEEKLY_BACKUP_DAY" ]; then
+                echo "Cleaning weekly backups..."
+                cd weekly
+                ls -tp store.dump_* | grep -v '/$' | tail -n +$((${KEEP_WEEKLY}+1)) | xargs -d '\n' -r rm -v --
+              fi
+              echo ""
+
+              echo "Listing backups"
+              ls -alRt /store-backups
+{{- else }}
+              echo "Running pg_dump -Fc"
+              echo ""
+              pg_dump -Fc
+              echo ""
+              echo ""
+{{- end }}
+              endTime=`date +%s`
+              echo "Finished backup at $(date)"
+              echo "Backup took $((endTime-startTime)) seconds"
+
+            resources:
+{{ .Values.creds.resources | toYaml | indent 14 }}
+{{- if include "assistant.ibm-postgresql.boolConvertor" (list .Values.backup.persistence.enabled . ) }}
+            volumeMounts:
+            - name: {{ ( tpl ( .Values.backup.dataPVC.name | toString )  . ) | quote }} 
+              mountPath: /store-backups
+          volumes:
+          - name: {{ ( tpl ( .Values.backup.dataPVC.name | toString )  . ) | quote }}
+            persistentVolumeClaim:
+            {{- if tpl ( .Values.backup.dataPVC.existingClaimName | toString ) . }}
+              claimName: {{ ( tpl ( .Values.backup.dataPVC.existingClaimName | toString ) . ) | quote }}
+            {{- else }}
+              claimName: {{ ( tpl ( .Values.backup.dataPVC.name | toString )  . ) | quote }}
+          {{- end }}
+{{- end }}

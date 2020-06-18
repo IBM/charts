@@ -1,0 +1,60 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $name :=  .sch.chart.components.chatopsOrchestrator -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $name) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 4 }}
+{{ include "zeno.meteringLabels" (dict "root" . "name" $name) | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 25
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{ include "sch.metadata.annotations.metering" (list . .sch.chart.metering .sch.chart.metering.productMetric .sch.chart.metering.productCloudpakRatio nil) | trim | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 8 }}
+{{ include "zeno.meteringLabels" (dict "root" . "name" $name) | indent 8 }}
+    spec:
+{{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim | indent 6 }}
+      affinity:
+{{ include "zeno.nodeAffinity" . | trim | indent 8 }}
+{{ include "zeno.podAntiAffinity" (list . $name) | trim | indent 8 }}
+{{- include "zeno.imagePullSecretTemplate" . | indent 6 }}
+      initContainers:
+{{ include "zeno.initContainerReadiness.persistence" . | indent 6 }}
+{{ include "zeno.initContainerReadiness.chatopsSlackIntegrator" . | indent 6 }}
+      containers:
+      - name: {{ $name | quote }}
+        image: {{ include "zeno.imageName" (dict "root" . "service" .Values.chatopsOrchestrator) }}
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | trim | indent 8 }}
+        resources:
+{{ toYaml .Values.chatopsOrchestrator.resources | trim | indent 10 }}
+        ports:
+        - containerPort: 8443
+          name: http
+{{ include "zeno.livenessProbeTemplate" . | indent 8 }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.componentUrls) }}
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.kafka) }}
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.tls) }}
+        env:
+{{ include "zeno.kafkaEnvSecrets" . | indent 8 }}
+        - name: APP_NAME
+          value: {{ $name }}
+        - name: KAFKA_PRODUCER_CLIENT_ID
+          value: chataops_orchestrator_producer
+        volumeMounts:
+{{ include "zeno.tlsVolumeMounts" . | indent 8 }}
+{{ include "zeno.kafkaConfigVolumeMount" . | indent 8 }}
+      volumes:
+{{ include "zeno.tlsVolume" . | indent 6 }}
+{{ include "zeno.kafkaConfigVolume" . | indent 6 }}

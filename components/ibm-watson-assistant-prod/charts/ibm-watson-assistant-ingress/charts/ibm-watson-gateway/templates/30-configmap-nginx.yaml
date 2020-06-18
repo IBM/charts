@@ -1,0 +1,145 @@
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $compName := include "gateway.get-name-or-use-default" (list . "gw-cm") -}}
+{{- $root := . -}}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  namespace: {{ include "gateway.addonService.zenNamespace" . }}
+  labels:
+    icpdata_addon_version: "{{ include "gateway.version" . }}"
+    icpdata_addon: "true"
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+data:
+  nginx.conf: |
+{{- if .Values.additionalServices }}
+    # Handles /backend/api/{additional-routes} using the auth location defined above.
+    # Rewrites the URL in case the backend needs it,
+    # propagates the X-Watson-UserInfo from the auth location to the backend
+  {{- range $elem := .Values.additionalServices }}
+    location ~ {{ include "gateway.routing.path" $ }}/instances/[^/]+{{- if or (not (hasKey $elem "exposeAPI")) ($elem.exposeAPI) -}}/api{{- end }}{{- $elem.path }} {
+{{ include "gateway.cors" . | indent 6 }}
+      {{- if or (not ( hasKey $elem "authentication" )) ($elem.authentication) }}
+      auth_request     {{ include "gateway.common.path" $ }}/auth;
+      {{- end }}
+      {{- if and (hasKey $elem "exposeAPI") (not $elem.exposeAPI) }}
+      # This is a UI request so we can redirect to the defined @ui_redirect directive
+      error_page 401 = @ui_redirect;
+      {{- end }}
+      error_page 500 = @auth_error_json;
+      auth_request_set $auth_x_watson_userinfo $upstream_http_x_watson_userinfo;
+      auth_request_set $auth_x_global_transaction_id $upstream_http_x_global_transaction_id; # forward X-Global-Transaction-Id
+
+      {{- range $directive := $elem.nginxDirectives }}
+      {{ $directive }}
+      {{- end }}
+      proxy_http_version 1.1;
+      proxy_set_header  Upgrade $http_upgrade;
+      proxy_set_header  Connection "upgrade";
+      proxy_set_header  Host $host:$server_port;
+      proxy_set_header  X-Real-IP $remote_addr;
+      proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header  X-Forwarded-Proto $scheme;
+      proxy_set_header 'X-Watson-Userinfo' $auth_x_watson_userinfo;
+      proxy_set_header 'X-Global-Transaction-Id' $auth_x_global_transaction_id;
+
+      rewrite ^ $request_uri;
+      rewrite {{ include "gateway.routing.path" $ }}/instances/[^/]+{{- if or (not (hasKey $elem "exposeAPI")) ($elem.exposeAPI) -}}/api{{- end }}{{- $elem.path }}(.*) {{ $elem.rewriteTarget }}$1 break;
+      return 404;
+      proxy_pass {{ include "gateway.routing.endpoint" (list $ $elem) }}$uri;
+    }
+  {{- end }}
+{{- end }}
+
+
+{{- if not .Values.backendService.exposeAPI }}
+    # Helper location to ensure we get X-Watson-Userinfo header when exposeApi=false
+    location ~ {{ include "gateway.routing.path" . }}/instances/(?<instance>[^/]+)/(?<tail>.*)$ {
+{{ include "gateway.cors" . | indent 6 }}
+{{- if or (not ( hasKey .Values.backendService "authentication" )) (.Values.backendService.authentication) }}
+      access_by_lua_file /nginx_data/checkjwt.lua;
+{{- end }}
+      proxy_set_header Host $host;
+      content_by_lua_block {
+        local args = ngx.var.args and "?"..ngx.var.args or "";
+        ngx.exec("{{ include "gateway.routing.path" . }}-internal/instances/" .. ngx.var.instance ..  "/" .. ngx.var.tail .. args);
+      }
+    }
+{{- end }}
+    # Handles /backend using the auth location defined above.
+    # Rewrites the URL in case the backend needs it,
+    # propagates the X-Watson-UserInfo from the auth location to the backend
+    # and configure the proxy to handle bigger files and timeouts (some of our services are slow)
+{{- if .Values.backendService.exposeAPI }}
+    location ~ {{ include "gateway.routing.path" . }}/instances/[^/]+/api/ {
+{{- else }}
+    location ~ {{ include "gateway.routing.path" . }}-internal/instances/[^/]+/ {
+      internal;
+{{- end }}
+{{ include "gateway.cors" . | indent 6 }}
+      auth_request     {{ include "gateway.common.path" . }}/auth;
+      auth_request_set $auth_x_watson_userinfo $upstream_http_x_watson_userinfo;
+      error_page 500 = @auth_error_json;
+
+      {{- range $elem := .Values.backendService.nginxDirectives }}
+      {{ $elem }}
+      {{- end }}
+      proxy_http_version 1.1;
+      proxy_set_header  Upgrade $http_upgrade;
+      proxy_set_header  Connection "upgrade";
+      proxy_set_header  Host $host:$server_port;
+      proxy_set_header  X-Real-IP $remote_addr;
+      proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header  X-Forwarded-Proto $scheme;
+      proxy_set_header  'X-Watson-Userinfo' $auth_x_watson_userinfo;
+      rewrite ^ $request_uri;
+{{- if .Values.backendService.exposeAPI }}
+      rewrite {{ include "gateway.routing.path" . }}/instances/[^/]+/api/(.*) $1 break;
+{{- else }}
+      rewrite {{ include "gateway.routing.path" . }}/instances/[^/]+/(.*) $1 break;
+{{- end }}
+      return 404;
+      proxy_pass {{ include "gateway.routing.endpoint" (list . .Values.backendService) }}{{ .Values.backendService.rewriteTarget }}$uri;
+    }
+{{- if .Values.additionalToolings }}
+  {{- range $elem := .Values.additionalToolings }}
+
+    location {{ include "gateway.routing.path" $ }}{{ $elem.path }} {
+{{ include "gateway.cors" . | indent 6 }}
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      {{- range $directive := $elem.nginxDirectives }}
+      {{ $directive }}
+      {{- end }}
+      proxy_set_header  Host $host:$server_port;
+      proxy_set_header  X-Real-IP $remote_addr;
+      proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header  X-Forwarded-Proto $scheme;
+      proxy_pass {{ include "gateway.routing.endpoint" (list $ $elem) }}{{ $elem.rewriteTarget }};
+    }
+  {{- end }}
+{{- end }}
+{{ if .Values.tooling.enabled }}
+    # If the service has tooling, adds the location to route traffic to it.
+    # Redirects /tooling to /tooling/
+    location {{ include "gateway.routing.path" . }} {
+      return 301 $scheme://$http_host{{ include "gateway.routing.path" . }}/;
+    }
+
+    # Handles /tooling/ requests using the tooling k8s service
+    # Rewrites the URL in case the tooling needs it,
+    # and configure the proxy to handle bigger files and timeouts
+    location {{ include "gateway.routing.path" . }}/ {
+{{ include "gateway.cors" . | indent 6 }}
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      {{- range $elem := .Values.tooling.nginxDirectives }}
+      {{ $elem }}
+      {{- end }}
+      proxy_set_header  Host $host:$server_port;
+      proxy_set_header  X-Real-IP $remote_addr;
+      proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header  X-Forwarded-Proto $scheme;
+
+      proxy_pass {{ include "gateway.routing.endpoint" (list $ .Values.tooling) }}{{ .Values.tooling.rewriteTarget }};
+    }
+{{ end }}

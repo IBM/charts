@@ -1,0 +1,89 @@
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $root := . -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "gateway-install") | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "gateway-install" (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" "gateway-install" "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 4 }}
+  annotations:
+{{- if tpl (.Values.addon.tls.hooks.create.type | toString ) . }}
+    "helm.sh/hook": {{               tpl (.Values.addon.preinstall.hooks.create.type         | toString ) . | quote }}
+    "helm.sh/hook-weight": {{        tpl (.Values.addon.preinstall.hooks.create.weight       | toString ) . | quote }}
+{{- end }}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . "gateway-install") | quote }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" "") | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "gateway-install" (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" "gateway-install" "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 8 }}
+    spec:
+      affinity:
+{{- include "gateway.affinity" (list . (dict "kind" "Job" "component" "gateway-install")) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 8000
+{{- end }}
+      restartPolicy: Never
+      serviceAccountName: {{ include "gateway.privileged-account.name" . }}
+      containers:
+      - name: zen-configmap-creator
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 8000
+{{- end }}
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: 100Mi
+            cpu: '.2'
+          limits:
+            memory: 200Mi
+            cpu: '.5'
+        image: "{{ include "gateway.icpDockerRepo" . }}{{ .Values.addon.tls.image.repository }}:{{ .Values.addon.tls.image.tag }}"
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+          #!/bin/bash
+          set -x
+          # This hack detects whether we are installing the "{{ include "gateway.id" . }}" service for the first time
+          # Or if we are installing an additional deployment of an "{{ include "gateway.id" . }}" existing installation
+          INITIAL_DEPLOY=true
+          kubectl get configmaps -n {{ include "gateway.addonService.zenNamespace" . }} "{{ include "gateway.id" . }}"
+
+          if [[ $? -eq 0 ]]; then
+            echo -e "=========== {{ .Values.addon.serviceId }} already deployed... deploying new instance... ==========="
+            INITIAL_DEPLOY=false
+            # exit 0
+          else
+            echo -e "=========== Deploying {{ .Values.addon.serviceId }} service for the FIRST time ==========="
+          fi
+
+          if [[ "$INITIAL_DEPLOY" == true ]]; then
+
+          # First we create the add-on.json (tile)
+          cat <<"EOF_ADDON" | kubectl apply -f -
+          {{- include "gateway.addon.json" . | nindent 12 }}
+          EOF_ADDON
+
+          # Create the common UI kubernetes service for the FIRST deployment of the addon
+          cat <<"EOF_UI_SVC" | kubectl apply -f -
+          {{- include "gateway.common.service.yaml" . | nindent 12 }}
+          EOF_UI_SVC
+
+          fi
