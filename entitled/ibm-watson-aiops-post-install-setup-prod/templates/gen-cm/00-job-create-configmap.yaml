@@ -1,0 +1,479 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $compName := "create-configmap" -}}
+{{- $configName :=  .Values.cpd.connections.extensions.configMapName -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Namespace }}-watson-aiops-post-cpd-install-create
+  namespace: {{ .Values.global.zenControlPlaneNamespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName ) | trim | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 60
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | trim | indent 8 }}
+      name: cm-gen
+    spec:
+      serviceAccountName: {{ .Values.global.existingServiceAccount }}
+{{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim | indent 6 }}
+      restartPolicy: Never
+      containers:
+      - name: cm-gen
+        image: {{ include "zeno.imageName" (dict "root" . "service" .Values.creds) }}
+        resources:
+{{ toYaml .Values.creds.resources | trim | indent 10 }}
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | trim | indent 8 }}
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          retval=0 && kubectl -n {{ .Values.global.zenControlPlaneNamespace }} get configmap {{ .Values.cpd.connections.extensions.configMapName }} || retval=$?
+          if [[ $retval != 0 ]]; then
+            cat <<EOF | kubectl create -n {{ .Values.global.zenControlPlaneNamespace }} -f -
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: {{ $configName | quote }}
+              namespace: "{{ .Values.global.zenControlPlaneNamespace }}"
+              labels:
+                icpdata_addon: "true"
+{{ include "sch.metadata.labels.standard" (list . $configName) | trim | indent 16 }}
+            data:
+              extensions: |
+                [
+                  {
+                    "extension_point_id": "zen_external_conn_context",
+                    "extension_name": "zeno",
+                    "display_name": "Zeno Context",
+                    "meta": {},
+                    "details": {
+                      "supported_svc_conn": ["logdna", "pagerduty", "slack", "kafka", "asm"],
+                      "handlers": {
+                        "delete_handler": {
+                          "method": "DELETE",
+                          "uri": "/aiops/{{ include "zeno.instanceNameRef" . }}/instances/{instance_id}/v1/cpdconnections/{connection_id}"
+                        },
+                        "update_handler": {
+                          "method": "PUT",
+                          "uri": "/aiops/{{ include "zeno.instanceNameRef" . }}/instances/{instance_id}/v1/cpdconnections/{connection_id}"
+                        }
+                      },
+                      "nav_routes": {
+                        "add_route": "/aiops/{{ include "zeno.instanceNameRef" . }}/instances/{instance_id}/ui/#/connections/{connection_id}",
+                        "cancel_route": "/aiops/{{ include "zeno.instanceNameRef" . }}/instances/{instance_id}/ui/#/connections"
+                      },
+                      "views": {
+                        "form_view": {
+                          "default_fields": {
+                            "name": {
+                              "label": "Ops integration name",
+                              "placeholder": "Enter a display name for the Ops integration"
+                            },
+                            "description": {
+                              "label": "Description (optional)",
+                              "placeholder": "Enter a description for the Ops integration"
+                            },
+                            "type_selection": {
+                              "label": "Ops integration type",
+                              "placeholder": "Select a Ops integration type"
+                            },
+                            "shared_credentials": {
+                              "tooltip": {
+                                "label": "Share credentials",
+                                "trigger_text": "Share your credentials with other services and users."
+                              },
+                              "toggle_labels": {
+                                "a": "Off",
+                                "b": "On"
+                              }
+                            }
+                          }
+                        },
+                        "list_view": {
+                          "enforce_instance": true,
+                          "header": {
+                            "title": "Ops integrations",
+                            "sub_header": {
+                              "text": "Select an existing Ops integration or ",
+                              "text_link": "create a new Ops integration."
+                            },
+                            "header_buttons": {
+                              "left_button": {
+                                "text": "Cancel"
+                              },
+                              "right_button": {
+                                "text": "Next"
+                              }
+                            }
+                          },
+                          "bread_crumbs": {
+                            "levels": [
+                              {
+                                "label": "My instances",
+                                "href": "/zen/#/myInstances",
+                                "key": "my_instances"
+                              },
+                              {
+                                "label": "{instance_name}",
+                                "href": "/aiops/{{ include "zeno.instanceNameRef" . }}/instances/{instance_id}/ui/#/",
+                                "key": "zeno_home",
+                                "is_external": true
+                              },
+                              {
+                                "label": "Ops integrations",
+                                "href": "/aiops/{{ include "zeno.instanceNameRef" . }}/instances/{instance_id}/ui/#/connections",
+                                "key": "manage_cons",
+                                "is_external": true
+                              }
+                            ],
+                            "current_location": {
+                              "label": "Add Ops integration",
+                              "key": "add_con"
+                            }
+                          },
+                          "data_table": {
+                            "empty_state": {
+                              "title": "You don't have any Ops integrations yet.",
+                              "message": "Create an Ops integration now.",
+                              "add_button": {
+                                "text": "New Ops integration"
+                              }
+                            },
+                            "search": {
+                              "placeholder": "Find Ops integrations",
+                              "empty_state": {
+                                "title": "No Ops integrations matched your search.",
+                                "message": "Make sure everything is spelled correctly or try entering different keywords."
+                              }
+                            }
+                          }
+                        },
+                        "new_view": {
+                          "enforce_instance": true,
+                          "defaults": {
+                            "shared_credentials": true
+                          },
+                          "header": {
+                            "title": "New Ops integration"
+                          },
+                          "bread_crumbs": {
+                            "levels": [
+                              {
+                                "label": "My instances",
+                                "href": "/zen/#/myInstances",
+                                "key": "my_instances"
+                              },
+                              {
+                                "label": "{instance_name}",
+                                "href": "/aiops/{{ include "zeno.instanceNameRef" . }}/instances/{instance_id}/ui/#/",
+                                "key": "zeno_home",
+                                "is_external": true
+                              },
+                              {
+                                "label": "Ops integrations",
+                                "href": "/aiops/{{ include "zeno.instanceNameRef" . }}/instances/{instance_id}/ui/#/connections",
+                                "key": "manage_cons",
+                                "is_external": true
+                              },
+                              {
+                                "label": "Add Ops integration",
+                                "href": "/zen/#/connection_extensions/list?context=zeno&instance_id={instance_id}",
+                                "key": "add_con"
+                              }
+                            ],
+                            "current_location": {
+                              "label": "New Ops integration",
+                              "key": "new_con"
+                            }
+                          }
+                        },
+                        "edit_view": {
+                          "enforce_instance": true,
+                          "header": {
+                            "title": "Edit Ops integration"
+                          },
+                          "bread_crumbs": {
+                            "levels": [
+                              {
+                                "label": "My instances",
+                                "href": "/zen/#/myInstances",
+                                "key": "my_instances"
+                              },
+                              {
+                                "label": "{instance_name}",
+                                "href": "/aiops/{{ include "zeno.instanceNameRef" . }}/instances/{instance_id}/ui/#/",
+                                "key": "zeno_home",
+                                "is_external": true
+                              },
+                              {
+                                "label": "Ops integrations",
+                                "href": "/aiops/{{ include "zeno.instanceNameRef" . }}/instances/{instance_id}/ui/#/connections",
+                                "key": "manage_cons",
+                                "is_external": true
+                              },
+                              {
+                                "label": "Add Ops integration",
+                                "href": "/zen/#/connection_extensions/list?context=zeno&instance_id={instance_id}",
+                                "key": "add_con"
+                              }
+                            ],
+                            "current_location": {
+                              "label": "Edit Ops integration",
+                              "key": "edit_con"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "extension_point_id": "zen_external_svc_conn",
+                    "extension_name": "logdna",
+                    "display_name": "LogDNA",
+                    "meta": {},
+                    "details": {
+                      "label": "LogDNA",
+                      "description": "logDNA description",
+                      "category": "service",
+                      "json_schema": {
+                        "type": "object",
+                        "required": [
+                          "url",
+                          "service_key",
+                          "base_parallelism",
+                          "sampling_rate"
+                        ],
+                        "credentials": ["service_key"],
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "label": "URL",
+                            "placeholder": "URL for the LogDNA API"
+                          },
+                          "service_key": {
+                            "type": "string",
+                            "label": "Service Key",
+                            "placeholder": "LogDNA service key"
+                          },
+                          "filters": {
+                            "type": "string_description",
+                            "label": "Filters",
+                            "placeholder": "Source, app, or log-level filters to apply to the alert data"
+                          },
+                          "base_parallelism": {
+                            "type": "number",
+                            "label": "Base parallelism",
+                            "placeholder": "Number of requests running in parallel"
+                          },
+                          "sampling_rate": {
+                            "type": "number",
+                            "label": "Sampling Rate",
+                            "placeholder": "Number of requests running per minute"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "extension_point_id": "zen_external_svc_conn",
+                    "extension_name": "pagerduty",
+                    "display_name": "PagerDuty",
+                    "meta": {},
+                    "details": {
+                      "label": "PagerDuty",
+                      "description": "{{.Values.descriptions.pagerDuty}}",
+                      "category": "service",
+                      "json_schema": {
+                        "type": "object",
+                        "required": [
+                          "api_key",
+                          "base_parallelism",
+                          "sampling_rate"
+                        ],
+                        "credentials": [
+                          "api_key"
+                        ],
+                        "properties": {
+                          "api_key": {
+                            "type": "string",
+                            "label": "API Key",
+                            "placeholder": "Connection token for PagerDuty"
+                          },
+                          "base_parallelism": {
+                            "type": "number",
+                            "label": "Base Parallelism",
+                            "placeholder": "Number of requests running in parallel"
+                          },
+                          "sampling_rate": {
+                            "type": "number",
+                            "label": "Sampling Rate",
+                            "placeholder": "Number of requests running per minute"
+                          },
+                          "service_ids": {
+                            "type": "string_description",
+                            "label": "Service IDs",
+                            "placeholder": "IDs for the applications, components, or teams containing your incident data"
+                          },
+                          "team_ids": {
+                            "type": "string_description",
+                            "label": "Team IDs",
+                            "placeholder": "IDs for the organizational groups associated with your incident data"
+                          },
+                          "incident_ids": {
+                            "type": "string_description",
+                            "label": "Incident IDs",
+                            "placeholder": "IDs for your PagerDuty incident data"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "extension_point_id": "zen_external_svc_conn",
+                    "extension_name": "slack",
+                    "display_name": "Slack",
+                    "meta": {},
+                    "details": {
+                      "label": "Slack",
+                      "description": "{{.Values.descriptions.slack}}",
+                      "category": "service",
+                      "json_schema": {
+                        "type": "object",
+                        "required": [
+                          "secret",
+                          "bot_token",
+                          "channel"
+                        ],
+                        "credentials": [
+                          "secret",
+                          "bot_token"
+                        ],
+                        "properties": {
+                          "secret": {
+                            "type": "string",
+                            "label": "Signing secret",
+                            "placeholder": "The secret generated for your Slack client"
+                          },
+                          "bot_token": {
+                            "type": "string",
+                            "label": "Bot User OAuth access token",
+                            "placeholder": "Token for the bot associated with the AIOps application installed in your workspace"
+                          },
+                          "channel": {
+                            "type": "string",
+                            "label": "Incident Notification Channel",
+                            "placeholder": "Channel ID for the AIOps application installed in your workspace"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "extension_point_id": "zen_external_svc_conn",
+                    "extension_name": "kafka",
+                    "display_name": "Apache Kafka",
+                    "meta": {},
+                    "details": {
+                      "label": "Apache Kafka",
+                      "description": "{{.Values.descriptions.kafka}}",
+                      "category": "service",
+                      "json_schema": {
+                        "type": "object",
+                        "required": [
+                          "topic",
+                          "base_parallelism"
+                        ],
+                        "credentials": [
+                        ],
+                        "properties": {
+                          "topic": {
+                            "type": "string",
+                            "label": "Topic",
+                            "placeholder": "Topic name from AIOps Kafka topic dictionary"
+                          },
+                          "num_partitions": {
+                            "type": "number",
+                            "label": "Number of partitions",
+                            "placeholder": "Partition number"
+                          },
+                          "base_parallelism": {
+                            "type": "number",
+                            "label": "Base Parallelism",
+                            "placeholder": "Number of requests running in parallel"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "extension_point_id": "zen_external_svc_conn",
+                    "extension_name": "asm",
+                    "display_name": "ASM",
+                    "meta": {},
+                    "details": {
+                      "label": "ASM",
+                      "description": "{{.Values.descriptions.genericRest}}",
+                      "category": "service",
+                      "json_schema": {
+                        "type": "object",
+                        "required": [
+                          "topology_service_url",
+                          "search_service_url",
+                          "merge_service_url",
+                          "username",
+                          "password",
+                          "certificate"
+                        ],
+                        "credentials": [
+                          "username",
+                          "password",
+                          "certificate"
+                        ],
+                        "properties": {
+                          "search_service_url": {
+                            "type": "string",
+                            "label": "Search service URL",
+                            "placeholder": "URL for the search API"
+                          },
+                          "merge_service_url": {
+                            "type": "string",
+                            "label": "Merge service URL",
+                            "placeholder": "URL for the merge API"
+                          },
+                          "topology_service_url": {
+                            "type": "string",
+                            "label": "Topology service URL",
+                            "placeholder": "URL for the topology API"
+                          },
+                          "username": {
+                            "type": "string",
+                            "label": "User ID",
+                            "placeholder": "ASM user name"
+                          },
+                          "password": {
+                            "type": "string",
+                            "label": "Password",
+                            "placeholder": "ASM password"
+                          },
+                          "certificate": {
+                            "type": "string_description",
+                            "label": "Certificate",
+                            "placeholder": "Certificate used to verify the SSL/TLS connection to ASM"
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+          EOF
+          fi
+
+      affinity:
+{{ include "zeno.nodeAffinity" . | trim | indent 8 }}

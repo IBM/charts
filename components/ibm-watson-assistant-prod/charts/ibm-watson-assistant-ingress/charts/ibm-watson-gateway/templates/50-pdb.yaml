@@ -1,0 +1,18 @@
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $podDisrupt := include "gateway.get-name-or-use-default" (list . "gw-pdb") -}}
+{{- $compName := include "gateway.get-name-or-use-default" (list . "gw-deployment") -}}
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $podDisrupt) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $podDisrupt) | indent 4 }}
+spec:
+  {{- if include "gateway.booleanConvertor" (list .Values.autoscaling.enabled . ) }}
+  minAvailable: {{ tpl (.Values.autoscaling.minReplicas | toString) . }}
+  {{- else }}
+  maxUnavailable: 0
+  {{- end }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}

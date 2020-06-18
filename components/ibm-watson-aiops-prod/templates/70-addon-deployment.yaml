@@ -1,0 +1,53 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $name :=  .sch.chart.components.addon -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $name) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 4 }}
+{{ include "zeno.meteringLabels" (dict "root" . "name" $name) | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 25
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{ include "sch.metadata.annotations.metering" (list . .sch.chart.metering .sch.chart.metering.productMetric .sch.chart.metering.productCloudpakRatio nil) | trim | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 8 }}
+{{ include "zeno.meteringLabels" (dict "root" . "name" $name) | indent 8 }}
+    spec:
+{{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim | indent 6 }}
+      affinity:
+{{ include "zeno.nodeAffinity" . | trim | indent 8 }}
+{{ include "zeno.imagePullSecretTemplate" . | trim | indent 6 }}
+      initContainers:
+{{ include "zeno.elasticsearchInitContainerReadiness" . | trim | indent 6 }}
+{{ include "zeno.initContainerReadiness.controller" . | indent 6 }}
+      containers:
+      - name: {{ $name | quote }}
+        image: {{ include "zeno.imageName" (dict "root" . "service" .Values.addon) }}
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | trim | indent 8 }}
+        resources:
+{{ toYaml .Values.addon.resources | trim | indent 10 }}
+        ports:
+        - containerPort: 8443
+          name: http
+{{ include "zeno.livenessProbeTemplate" . | indent 8 }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.componentUrls) }}
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.elasticsearch) }}
+        env:
+{{ include "zeno.elasticsearchEnvSecrets" . | indent 8 }}
+        volumeMounts:
+{{ include "zeno.elasticsearchConfigVolumeMount" . | indent 8 }}
+{{ include "zeno.tlsVolumeMounts" . | indent 8 }}
+      volumes:
+{{ include "zeno.elasticsearchConfigVolume" . | indent 6 }}
+{{ include "zeno.tlsVolume" . | indent 6 }}

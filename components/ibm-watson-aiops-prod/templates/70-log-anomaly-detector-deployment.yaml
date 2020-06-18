@@ -1,0 +1,84 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $name :=  .sch.chart.components.logAnomalyDetector -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $name) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 4 }}
+{{ include "zeno.meteringLabels" (dict "root" . "name" $name) | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 25
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{ include "sch.metadata.annotations.metering" (list . .sch.chart.metering .sch.chart.metering.productMetric .sch.chart.metering.productCloudpakRatio nil) | trim | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 8 }}
+{{ include "zeno.meteringLabels" (dict "root" . "name" $name) | indent 8 }}
+    spec:
+{{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim | indent 6 }}
+      affinity:
+{{ include "zeno.nodeAffinity" . | trim | indent 8 }}
+{{ include "zeno.podAntiAffinity" (list . $name) | trim | indent 8 }}
+{{ include "zeno.imagePullSecretTemplate" . | trim | indent 6 }}
+      initContainers:
+{{ include "zeno.elasticsearchInitContainerReadiness" . | trim | indent 6 }}
+      containers:
+      - name: {{ $name | quote }}
+        image: {{ include "zeno.imageName" (dict "root" . "service" .Values.logAnomaly) }}
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | trim | indent 8 }}
+        resources:
+{{ toYaml .Values.logAnomaly.resources | trim | indent 10 }}
+        livenessProbe:
+          exec:
+            command:
+            - bash
+            -  /opt/ai4it/health/live.sh
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - bash
+            - /opt/ai4it/health/ready.sh
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.elasticsearch) }}
+        env:
+{{ include "zeno.kafkaEnvSecrets" . | indent 8 }}
+{{ include "zeno.elasticsearchEnvSecrets" . | indent 8 }}
+        - name: MINIO_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include .Values.global.minio.accessSecret.nameTpl . | quote }}
+              key: accesskey
+        - name: MINIO_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include .Values.global.minio.accessSecret.nameTpl . | quote }}
+              key: secretkey
+        - name: MINIO_ENDPOINT
+          value: {{ include .Values.global.minio.endpointTpl . | quote }}
+        - name: APP_THRESHOLD
+          value: {{ .Values.logAnomaly.appThreshold | quote  }}
+        volumeMounts:
+{{ include "zeno.globalConfigVolumeMount" . | indent 8 }}
+{{ include "zeno.secretConfigVolumeMount" . | indent 8 }}
+{{ include "zeno.kafkaConfigVolumeMount" . | indent 8 }}
+{{ include "zeno.elasticsearchConfigVolumeMount" . | indent 8 }}
+      volumes:
+{{ include "zeno.globalConfigVolume" . | indent 6 }}
+{{ include "zeno.secretConfigVolume" . | indent 6 }}
+{{ include "zeno.kafkaConfigVolume" . | indent 6 }}
+{{ include "zeno.elasticsearchConfigVolume" . | indent 6 }}

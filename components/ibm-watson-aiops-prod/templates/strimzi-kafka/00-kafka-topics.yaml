@@ -1,0 +1,22 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $clusterName := .Values.global.kafka.strimzi.clusterName -}}
+{{- $root := . -}}
+
+{{ if .Values.global.kafka.strimzi.enabled }}
+{{ range .Values.global.kafka.strimzi.topics }}
+{{ $name :=  . }}
+---
+apiVersion: kafka.strimzi.io/v1beta1
+kind: KafkaTopic
+metadata:
+  name: {{ $name }}
+  labels:
+    strimzi.io/cluster: {{ $clusterName }}
+{{ include "sch.metadata.labels.standard" (list $root $name) | trim | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": {{ add 1 $root.Values.preInstallHookWeightAnchor | quote }}
+spec:
+{{ $root.Values.global.kafka.strimzi.defaultTopicSpec | toYaml | indent 2 }}
+{{ end }}
+{{ end }}

@@ -1,0 +1,30 @@
+{{- if .Values.global.autoscaling.enabled }}
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: "{{ .Release.Name }}-ui-hpa"
+  labels:
+    <<: &primary_labels # Don't touch or extend these labels!
+      service:                     "conversation"
+      component:                   "ui"
+      slot:                        "{{ .Release.Name }}"
+    # Make sure the indent of other labels is the same as this comment's
+    tenant:                        "PUBLIC"
+    release:                       "{{ .Release.Name }}"
+    app.kubernetes.io/instance:    "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by:  "{{ .Release.Service }}"
+    app.kubernetes.io/name:        "ibm-watson-assistant"
+    helm.sh/chart:                 "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    icpdsupport/addOnName:         "assistant"
+    icpdsupport/app:               "ui"
+    icpdsupport/serviceInstanceId: "{{ .Values.global.zenServiceInstanceId | int64 }}"
+  namespace: {{ .Release.Namespace }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: "{{ .Release.Name }}-ui"
+  minReplicas: {{ include "assistant.ui.replicas" . }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  targetCPUUtilizationPercentage: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}

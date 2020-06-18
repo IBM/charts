@@ -5,6 +5,7 @@ metadata:
   name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.ddScenarioUi.compName ) | quote }}
   labels:
 {{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddScenarioUi.compName) | indent 4 }}
+    app: {{ .sch.chart.components.ddScenarioUi.compName }}
 spec:
   replicas: {{ .Values.ddScenarioUi.replicas }}
   selector:
@@ -14,8 +15,9 @@ spec:
     metadata:
       labels:
 {{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddScenarioUi.compName) | indent 8 }}
+        app: {{ .sch.chart.components.ddScenarioUi.compName }}
       annotations:
-        {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}      
+        {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil nil) | indent 8 }}      
     spec:
       terminationGracePeriodSeconds: 0
       affinity:
@@ -89,11 +91,16 @@ spec:
             secretKeyRef:
               name: watson-studio-secrets
               key: redis-encryption-token.txt
-        - name: WDP_SERVICE_ID
+        - name: WDP_SERVICE_ID_CREDENTIALS
           valueFrom:
             secretKeyRef:
               name: wdp-service-id
               key: service-id-credentials
+        - name: LOCAL_RABBITMQ_PRIMARY_URL
+          valueFrom:
+            secretKeyRef:
+              key: rabbitmq-url.txt
+              name: rabbitmq-url              
         resources:
 {{ toYaml .Values.ddScenarioUi.resources | indent 10 }}
         ports:
@@ -104,15 +111,16 @@ spec:
             path: /decision-optimization/ping
             port: 8449
             scheme: HTTPS
-          initialDelaySeconds: 120
+          initialDelaySeconds: 180
           periodSeconds: 30
-          timeoutSeconds: 2          
+          timeoutSeconds: 2    
+          failureThreshold: 10      
         readinessProbe:
           httpGet:
             path: /decision-optimization/ping
             port: 8449
             scheme: HTTPS
-          initialDelaySeconds: 120
+          initialDelaySeconds: 10
           periodSeconds: 30
           timeoutSeconds: 2
           

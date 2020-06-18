@@ -1,0 +1,341 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .Release.Name }}-ui"
+  labels: &deployment_labels
+    <<: &primary_labels # Don't touch or extend these labels!
+      service:                     "conversation"
+      component:                   "ui"
+      slot:                        "{{ .Release.Name }}"
+    # Make sure the indent of other labels is the same as this comment's
+    tenant:                        "PUBLIC"
+    release:                       "{{ .Release.Name }}"
+    app.kubernetes.io/instance:    "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by:  "{{ .Release.Service }}"
+    app.kubernetes.io/name:        "ibm-watson-assistant"
+    helm.sh/chart:                 "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    icpdsupport/addOnName:         "assistant"
+    icpdsupport/app:               "ui"
+    icpdsupport/serviceInstanceId: "{{ .Values.global.zenServiceInstanceId | int64 }}"
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ include "assistant.ui.replicas" . }}
+  selector:
+    matchLabels: *primary_labels # Don't touch or extend!
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge:       1
+
+  revisionHistoryLimit: 4
+  template:
+    metadata:
+      annotations:
+
+        productName:              "IBM Watson Assistant for IBM Cloud Pak for Data"
+        productID:                "ICP4D-addon-fa92c14a5cd74c31aab1616889cbe97a-assistant"
+        productVersion:           "1.4.2"
+        cloudpakName:             "IBM Cloud Pak for Data"
+        cloudpakId:               "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion:          "3.0.0"
+        productChargedContainers: "All"
+        productMetric:            "VIRTUAL_PROCESSOR_CORE"
+      labels:
+        <<: *deployment_labels
+        # Any pod-specific labels go below
+    spec:
+      {{- if tpl .Values.imagePullSecret . }}
+      imagePullSecrets:
+        - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+      {{- end }}
+
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+
+      initContainers:
+        - name: redis-running
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 2000
+            {{- end }}
+          image: "{{ if tpl ( .Values.init.redis.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.init.redis.image.repository | toString ) . ) }}{{ end }}/{{ .Values.init.redis.image.name }}:{{ .Values.init.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [ "/scripts/redis_running.sh" ]
+          env:
+            - name:  "VCAP_SERVICES"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-ui-vcap"
+                  key: "vcap_services"
+          resources:
+            {{ .Values.init.redis.resources | toYaml | indent 12 | trim }}
+          volumeMounts:
+            - name: "init-scripts"
+              mountPath: /scripts
+
+      containers:
+        - name: "ui"
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 2000
+            {{- end }}
+          image: "{{ if tpl ( .Values.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.image.repository | toString ) . ) }}{{ end }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+          - containerPort: 8443
+          livenessProbe:
+            httpGet:
+              path: /login/
+              port: 8443
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                - /bin/sleep
+                - "30"
+          readinessProbe:
+            httpGet:
+              path: /login/
+              port: 8443
+              scheme: HTTPS
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 5
+
+          env:
+            - name:  "IP"
+              value: "0.0.0.0"
+            - name:  "PORT"
+              value: "8443"
+            - name:  "HOST_SLOT"
+              value: "1"
+            - name: "BASE_URL"
+              value: "{{ include "ui.ingress.path" . }}"
+            - name: "ICP"
+              value: "true"
+            - name: "NODE_TLS_REJECT_UNAUTHORIZED"
+              value: "0"
+            - name: "TOKEN_PUBLIC_KEY_URL"
+              value: "https://ibm-nginx-svc.{{ tpl .Values.global.zenNamespace . }}.svc.{{ tpl .Values.clusterDomain . }}/auth/jwtpublic"
+            - name: "AUTHORIZATION_ENDPOINT"
+              value: "https://{{ include "assistant.icp.proxyHostname" . }}:31843/zen/login"
+            - name:  "COOKIE_SECRET"
+              value: "{{ .Values.cookieSecret }}"
+            - name:  "WEA_CONVERSATIONAL_STORE"
+              value: "{{ include "ui.store_service" . }}"
+            - name:  "BLUEMIX_SERVICE_NAME"
+              value: "conversation"
+            - name:  "BLUEMIX_SERVICE_PLAN_NAMES"
+              value: ''
+            - name:  "RESOURCE_CATALOG_SERVICE_NAME"
+              value: "assistant"
+            - name:  "RESOURCE_CATALOG_SERVICE_ID"
+              value: ""
+            - name:  "RESOURCE_CATALOG_SERVICE_PLAN_NAMES"
+              value: '["standard"]'
+            - name:  "RESOURCE_CATALOG_SERVICE_PLAN_IDS"
+              value: ''
+            - name:  "BLUEMIX_CALLBACK"
+              value: "https://{{ include "assistant.icp.proxyHostname" . }}{{ include "ui.ingress.path" . }}/auth/bluemix/return"
+            - name:  "BLUEMIX_REGIONS"
+              value: '{}'
+            - name:  "BLUEMIX_SERVICE_GUIDS"
+              value: '{}'
+            - name:  "BLUEMIX_SERVICE_PLAN_GUIDS"
+              value: '{}'
+            - name:  "BLUEMIX_APP_MGMT_ENABLE"
+              value: ""
+            - name:  "BLUEMIX_PLAN_HOSTS"
+              value: ''
+            - name:  "ACCOUNT_MANAGEMENT_URL"
+              value: "{{-  include "ui.ibmcloudApi" . -}}/account-management"
+            - name:  "RESOURCE_CONTROLLER_URL"
+              value: "{{-  include "ui.ibmcloudApi" . -}}/resource-controller"
+            - name:  "RESOURCE_MANAGER_URL"
+              value: "{{-  include "ui.ibmcloudApi" . -}}/resource-manager"
+            - name:  "RESOURCE_CATALOG_URL"
+              value: "{{-  include "ui.ibmcloudApi" . -}}/resource-catalog/assistant"
+            - name:  "USE_RESOURCE_CONTROLLER"
+              value: "true"
+            - name:  "USE_CLOUD_FOUNDRY"
+              value: "false"
+            - name:  "USE_ENVIRONMENT_RESOURCE_CATALOG"
+              value: "false"
+            - name: "PREFER_ENV_STORE_URL"
+              value: "false"
+            - name:  "AUTH_PROVIDER"
+              value: "jwt"
+            - name:  "IAM_CLIENT_ID"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-ui-iam"
+                  key:  "iam_client_id"
+            - name:  "IAM_CLIENT_SECRET"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-ui-iam"
+                  key:  "iam_client_secret"
+            - name:  "IAM_ENDPOINT"
+              value: ""
+            - name:  "RESOURCE_CONTROLLER_REGIONS"
+              value: '[\"us-south\"]'
+            - name:  "REDIS_SERVICE_NAME"
+              value: "icp-redis"
+            - name:  "REDIS_TLS_CONFIG"
+              value: ""
+            - name:  "DEPLOY_ENV"
+              value: "dev"
+            - name:  "FEATURES"
+              value: '{"analytics":false,"cloud-logout":true,"clusters":false,"enable-premium-features":true,"iam-adoption":false,"icp":true,"integrations":false,"intent-conflicts":"{{ .Values.global.recommends.enabled }}","intercom-integration":false,"response-types-slots":true,"synonym-recommendations":"{{ .Values.global.recommends.enabled }}","system-entities-v2":false,"system-entities-v2-default":false}'
+            - name:  "FEATURE_RULES"
+              value: '{{ .Values.featureRules }}'
+            - name:  "LANGUAGES"
+              value: '{{ include "ui.languages" . }}'
+            - name:  "CORS_WHITELIST"
+              value: "[]"
+            - name:  "API_MINOR_VERSION"
+              value: "2018-07-10"
+            - name:  "SEGMENT_CONFIG"
+              value: ''
+            - name: "INTEGRATIONS_OAUTH_REDIRECT_HOSTNAME"
+              value: ''
+            - name:  "WEB_EXPERIENCE_CONFIG"
+              value: '{}'
+            - name:  "WEB_CHAT_URL"
+              value: ''
+            - name:  "CLOUD_LOGOUT_URL"
+              value: '/auth/doLogout'
+            - name:  "PLUS_TRIAL_LENGTH"
+              value: ''
+            - name:  "USE_ENVIRONMENT_BLUEMIX_REGIONS"
+              value: "true"
+            - name:  "SESSION_SECRET"
+              value: "{{ .Values.sessionSecret }}"
+            - name:  "ORIGIN_IDENTIFIER"
+              value: 'a064c34f-73f7-4ddf-8e24-d963879af26c'
+            - name:  "CRYPTO_KEY"
+              value: "{{ .Values.cryptoKey }}"
+            - name:  "SESSION_TIMEOUT"
+              value: "{{ .Values.sessionTimeout }}"
+            - name:  "NODE_ENV"
+              value: "production"
+            - name:  "VCAP_SERVICES"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-ui-vcap"
+                  key: "vcap_services"
+            - name: "SEARCH_SKILL_WORKER_URL"
+              value: "https://{{ .Release.Name }}-skill-search.{{ .Release.Namespace }}:443"{{- if .Values.global.apiV2.enabled }}
+            - name: "SKILL_SEARCH_AUTHORIZATION_ENCRYPTION_KEY"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ include "skillSearch.authorization-encryption.secretName"        . }}"
+                  key: "authorization_encryption_key"{{- end }}
+
+            - name: "DISCOVERY_API_VERSION"
+              value: '2018-12-03'
+            - name: "APPSCAN_VERIFICATION_CODE"
+              value: ''
+            - name: "HTTPS_CERT"
+              value: "/app/certs/ssl_cert"
+            - name: "HTTPS_KEY"
+              value: "/app/certs/ssl_key"
+          volumeMounts:
+            - name: secret-ui-ssl
+              mountPath: "/app/certs/ssl_key"
+              subPath: ssl_key
+              readOnly: true
+            - name: secret-ui-ssl
+              mountPath: "/app/certs/ssl_cert"
+              subPath: ssl_cert
+              readOnly: true
+              
+
+          resources:
+            {{ .Values.resources | toYaml | indent 12 | trim }}
+      volumes:
+        - name: secret-ui-ssl
+          secret:
+            secretName: "{{ .Release.Name }}-ui-ssl"
+        - name: "init-scripts"
+          configMap:
+            name: "{{ .Release.Name }}-ui-init-scripts"
+            defaultMode: 0755
+      serviceAccountName: "{{ .Release.Name }}-restricted"
+    {{- if .Values.global.icp.masterIP }}
+      hostAliases:
+      - hostnames:
+         - "{{ .Values.global.icp.masterHostname }}"
+        ip: {{ .Values.global.icp.masterIP }}
+    {{- end }}
+
+        {{- if and (semverCompare ">=1.16" (printf "%s.%s" ( regexReplaceAll "[^0-9]" (.Capabilities.KubeVersion.Major | toString ) "" ) ( regexReplaceAll "[^0-9]" (.Capabilities.KubeVersion.Minor | toString ) "" ))) .Values.global.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+      - maxSkew:           {{ tpl ( .Values.global.topologySpreadConstraints.maxSkew           | toString ) . }}
+        topologyKey:       "{{ tpl ( .Values.global.topologySpreadConstraints.topologyKey       | toString ) . }}"
+        whenUnsatisfiable: "{{ tpl ( .Values.global.topologySpreadConstraints.whenUnsatisfiable | toString ) . }}"
+        labelSelector:
+          matchExpressions:
+          - key: "service"
+            operator: In
+            values:
+            - "conversation"
+          - key: "component"
+            operator: In
+            values:
+            - "ui"
+          - key: "slot"
+            operator: In
+            values:
+            - "{{ .Release.Name }}"
+        {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: beta.kubernetes.io/arch
+                  operator: In
+                  values: [ "amd64" ]
+        {{- if .Values.global.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.matchExpressions }}
+          {{- printf "\n%s" ( .Values.global.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.matchExpressions | toYaml | indent 16 ) }}
+        {{- end }}
+        {{- if (or (eq .Values.global.podAntiAffinity "Enable") (and (eq .Values.global.deploymentType "Production") (ne .Values.global.podAntiAffinity "Disable"))) }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: "service"
+                operator: In
+                values:
+                - "conversation"
+              - key: "component"
+                operator: In
+                values:
+                - "ui"
+              - key: "slot"
+                operator: In
+                values:
+                - "{{ .Release.Name }}"
+            topologyKey: "kubernetes.io/hostname"
+        {{- end }}

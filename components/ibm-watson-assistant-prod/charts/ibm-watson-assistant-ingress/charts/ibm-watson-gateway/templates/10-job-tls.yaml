@@ -1,0 +1,124 @@
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $compName := include "gateway.get-name-or-use-default" (list . "gw-tls") -}}
+{{- $svcName := include "gateway.get-name-or-use-default" (list . "gateway-svc") -}}
+
+{{- define "gateway.openssl.config" -}}
+[ req ]
+default_bits       = 2048
+distinguished_name = req_distinguished_name
+x509_extensions    = v3_req
+
+[ req_distinguished_name ]
+
+[ v3_ca ]
+# Extensions for a typical CA
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid:always,issuer
+basicConstraints = CA:true
+
+[ v3_req ]
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid:always,issuer
+
+# Extensions to add to a certificate request
+basicConstraints = CA:FALSE
+keyUsage         = critical,nonRepudiation, digitalSignature, keyEncipherment
+#extendedKeyUsage = critical,serverAuth
+
+# subjectAltName is added dynamically later
+{{- end }}
+
+{{- if or .Release.IsInstall .Values.isTravis -}}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 4 }}
+  annotations:
+{{- if tpl (.Values.addon.tls.hooks.create.type | toString ) . }}
+    "helm.sh/hook": {{               tpl (.Values.addon.tls.hooks.create.type         | toString ) . | quote }}
+    "helm.sh/hook-weight": {{        tpl (.Values.addon.tls.hooks.create.weight       | toString ) . | quote }}
+    "helm.sh/hook-delete-policy": {{ tpl (.Values.addon.tls.hooks.create.deletePolicy | toString ) . | quote }}
+{{- end }}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" "") | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 8 }}
+    spec:
+      affinity:
+{{- include "gateway.affinity" (list . (dict "kind" "Job" "component" $compName)) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 8000
+{{- end }}
+      restartPolicy: Never
+      serviceAccountName: {{ include "gateway.privileged-account.name" . }}
+      volumes:
+      - name: tls-out
+        emptyDir: {}
+      containers:
+      - name: secret-config
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 8000
+{{- end }}
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: 100Mi
+            cpu: '.2'
+          limits:
+            memory: 200Mi
+            cpu: '.5'
+        image: "{{ include "gateway.icpDockerRepo" . }}{{ include "gateway.image-name-extract" .Values.addon.tls.image.repository }}:{{ .Values.addon.tls.image.tag }}"
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - name: tls-out
+          mountPath: /tmp/secretGen/tls
+        command:
+        - /bin/bash
+        - -c
+        - |
+            set -e
+            cat <<EOF >/tmp/openssl.cnf
+{{ include "gateway.openssl.config" . | indent 12 }}
+            EOF
+            {{- $altName1 := ( include "gateway.addonService.svc" . ) }}
+            {{- $altName2 := printf "%s.%s.svc"  ( include "sch.names.fullCompName" (list . $svcName) ) .Release.Name }}
+            {{- $altName3 := printf "%s.%s"      ( include "sch.names.fullCompName" (list . $svcName) ) .Release.Name }}
+            {{- $altName4 := ( include "sch.names.fullCompName" (list . $svcName) ) }}
+            echo $'subjectAltName = DNS:{{ $altName1 }}, DNS:{{ $altName2 }}, DNS:{{ $altName3 }}, DNS:{{ $altName4 }}' >>/tmp/openssl.cnf
+
+            openssl genrsa -out /tmp/secretGen/tls/{{ include "ibm-watson-gateway.name" . }}.key 2048
+            openssl req -x509 -config /tmp/openssl.cnf -new -nodes -key /tmp/secretGen/tls/{{ include "ibm-watson-gateway.name" . }}.key -subj "/CN={{ include "sch.names.fullCompName" (list . $svcName) }}" -days 3650 -reqexts v3_req -out /tmp/secretGen/tls/{{ include "ibm-watson-gateway.name" . }}.crt
+            openssl x509 -noout -text -in /tmp/secretGen/tls/{{ include "ibm-watson-gateway.name" . }}.crt
+            cat <<EOF | kubectl create -f -
+            apiVersion: v1
+            kind: Secret
+            type: kubernetes.io/tls
+            metadata:
+              name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+              labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 16 }}
+            data:
+              tls.crt: $(cat /tmp/secretGen/tls/{{ include "ibm-watson-gateway.name" . }}.crt | base64 | tr -d '\n')
+              tls.key: $(cat /tmp/secretGen/tls/{{ include "ibm-watson-gateway.name" . }}.key | base64 | tr -d '\n')
+            EOF
+{{- end -}}

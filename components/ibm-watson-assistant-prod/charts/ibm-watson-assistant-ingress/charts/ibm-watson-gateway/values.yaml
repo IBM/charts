@@ -1,0 +1,241 @@
+---
+global:
+  # global.icpDockerRepo - repository to pull images from.
+  #   Supports templates like '{{ .Values.global.image.repository }}'
+
+  # Old style (deprecated)
+  # icpDockerRepo: 'mycluster.icp:8500/default/'
+  # imagePullSecretName: 'mySecretName'
+
+  image:
+    repository: 'registry.ng.bluemix.net'
+    pullSecret: ''
+  appName: 'wcn'
+
+preInstallValidation: true
+
+arch: 'amd64'
+runAsUser: 1000
+schConfigName: 'gateway.sch.chart.config.values'
+serviceAccount:
+  name: ''
+privilegedServiceAccount:
+  name: ''
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 2
+  targetCPUUtilizationPercentage: 90
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 100Mi
+  limits:
+    cpu: 500m
+    memory: 150Mi
+
+# Node/pod affinities for gateway pods. If specified overrides default gateway to run on any amd64 node.
+affinity: {}
+
+livenessProbe:
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+addon:
+  platformVersion: '3.0.0.0'
+  displayName: Watson Assistant
+  version: ''
+  shortDescription: ''
+  longDescription: ''
+  deployDocs: ''
+  productDocs: ''
+  apiReferenceDocs: ''
+  gettingStartedDocs: ''
+  productImages: 3
+  # addon.serviceId -
+  # bluemix name: assistant, discovery, natural-language-understanding, knowledge-studio, etc..
+  serviceId: 'assistant'
+  maxInstances: 30
+  # maxDeployments: set this to 1 if you only need 1 deployment (this will override the placeholder & give you 1 tile in the catalog)
+  # maxDeployments: 1
+  # instanceId, the hardcoded instance id that will be used as part of the `X-Watson-UserInfo` header.
+  # Make sure that `addon.maxInstances` is set to 1
+  instanceId: ''
+  organizationId: 'ba4ab788-68a9-492b-87da-9179cb1e6541'
+  accountId: '02a92df0-657c-43c9-94fc-2280450b1e0b'
+  planId: 'cec95e99-75b8-4e2f-a176-8687f31597fd'
+  showUserManagement: true
+  showCredentials: true
+  # set to true if you want the chart to fail on helm upgrade
+  disableUpgrade: false
+
+  networkPolicy:
+    additionalLabels: {}
+    enabled: true
+
+  preinstall:
+    hooks:
+      create:
+        type: "pre-install"
+        weight: "-1"
+
+  tls:
+    image:
+      repository: opencontent-common-utils
+      tag: 1.1.2-amd64
+    # addon.tls.hooks - configures hooks for TLS creation / deletion
+    hooks:
+      create:
+        # addon.tls.hooks.create.type - Type of the hook for tls secret creation. Supports templates iin values.
+        #                 If (renders to) an empty string, it is run as a standard job and not as a hook; slightly equivalent to post-install hook.
+        type: "pre-install"
+        # addon.tls.hooks.create.weight - Weight of the hook for tls secret creation. Defines order of the hooks w.r.t. other hooks of the same type.
+        weight: "-1"
+        # addon.tls.hooks.create.deletePolicy - Specifies what happens when hook completes.
+        deletePolicy: "hook-succeeded"
+      delete:
+        # addon.tls.hooks.delete.type - Type of the hook for the tls secret clean-up job.
+        type: "post-delete"
+        # addon.tls.hooks.delete.weight - Weight of the hook for the tls secret clean-up job.
+        weight: "0"
+        # addon.tls.hooks.delete.deletePolicy - Specifies what happens when the cleanup job hook completes.
+        deletePolicy: "hook-succeeded"
+addonService:
+  port: 5000
+
+  replicas: 1
+
+  image:
+    repository: watson-gateway
+    tag: 3.4.1
+    containerPort: 5000
+    imagePullPolicy: Always
+
+  # addonService.antiAffinity specification for gateway pods
+  antiAffinity:
+    # addonService.antiAffinity.policy -  Policy for anti affinity of the StatefulSet.
+    #      If **soft** is set, the scheduler tries to create the pods on nodes (with the default topology key) not to co-locate them, but it will not be guaranteed.
+    #      If **hard**, the scheduler tries to create the pods on nodes not to co-locate them and will not create the pods in case of co-location.
+    #      If the other value, anti affinity is disabled.
+    #  Support templates
+    policy: "soft"
+    
+    # addonService.antiAffinity.topologyKe - Key for the node label that the system uses to denote a topology domain.--
+    #  Support templates
+    topologyKey: "kubernetes.io/hostname"
+
+  userMgmtUrl: ''
+  zenCoreUrl: ''
+  zenCoreApiUrl: ''
+  zenNginxUrl: ''
+  # addonService.zenNamespace - The namespace where CP4D aka Zen is installed (typically zen)
+  #   supports templates, like `{{ .Values.global.zenNamespace }}`.
+  #   consider using reference to global.zenNamespace key if your umbrella chart needs to refer to zen namespace as well (e.g., oauth return url)
+  # NOTE: {{ .Values.global.zenControlPlaneNamespace }} overrides this value, if set (to comply with the new CPD installer)
+  zenNamespace: 'zen'
+
+backendService:
+  # name - Name of the k8s service to which terminate the requests from ingress
+  name: 'watson-backend'
+  # nameTemplate - Specifies name of the helm template that will be rendered and its output will be used as the name. Used only if the name is empty.
+  nameTemplate: ''
+  # backendService.namespace - namespace where lives the service to which terminate the requests from ingress
+  namespace: '' # Defaults to the namespace where the chart is installed
+  # namespace - port service listens on (for optional CSB provision call)
+  port: 8443
+  # rewriteTarget - set to '/' if you want requests to have their path stripped.
+  # It needs to start and end with / e.g /api/
+  rewriteTarget: '/'
+  secure: true
+  # If set, notify the backend service of a provisioning request at the given path, expects a leading slash.
+  # An empty string (default) will disable the callback.
+  brokerPath: ''
+  # If the service exposes an API endpoint only the public url will contain /api/ otherwise it won't
+  exposeAPI: true
+  # List of directives to use in the nginx location. For example "proxy_set_header  Host $host;"
+  # Use directive if you need to specify things like proxy timeout, body limit or connection timeout
+  nginxDirectives: []
+  # if set to false we skip JWT token checking for this path
+  authentication: true
+
+# additional paths required for certain services
+additionalServices: []
+# - name: "unauthenticated-service-test1"
+#   nameTemplate: ""
+#   namespace: ""
+#   port: 8443
+#   path: "/slack"
+#   rewriteTarget: "/slack"
+#   secure: true
+#   exposeAPI: false
+#   # if set to false we skip JWT token checking for this path
+#   authentication: false
+# - name: "watson-additional-service"
+#   nameTemplate: ""
+#   namespace: ""
+#   port: 8080
+#   path: "/v2/foo"
+#   rewriteTarget: "/v2/foo"
+#   secure: false
+#   nginxDirectives: []
+
+tooling:
+  # enabled - if true, tooling routes will be configured
+  enabled: false
+  name: 'watson-tooling'
+  nameTemplate: ''
+  namespace: '' # Defaults to the namespace where the chart is installed
+  port: 8443
+  rewriteTarget: '/tooling/'
+  secure: true
+  nginxDirectives: []
+
+additionalToolings: []
+# - name: "watson-tooling"
+#   nameTemplate: ""
+#   namespace: ""
+#   port: 8443
+#   path: "/tooling-path-foo"
+#   rewriteTarget: "/tooling-path-bar"
+# - name: "watson-tooling"
+#   nameTemplate: ""
+#   namespace: ""
+#   port: 8443
+#   path: "/tooling-path-toor"
+#   rewriteTarget: "/tooling-path-zoor"
+#   nginxDirectives: []
+
+# clusterDomain - the suffix of all the cluster DNS names like service_name.service_namespace.svc.cluster.local.
+#    Supports templated values like "{{ .Values.global.clusterDomain }}"
+clusterDomain: "cluster.local"
+
+# Metering details - specifies metering annotations to be used by the addon deployment
+metering:
+  productName: '{{ .Values.addon.displayName }}'
+  productID: '{{ printf "%s-%s-%s-%s-%s" "ICP4D" "addon" "IBMWatsonAddon" .Release.Name .Values.addon.serviceId | trunc 63 }}'
+  productVersion: '{{ include "gateway.version" . }}'
+  cloudpakName: 'IBM Cloud Pak for Data'
+  cloudpakId: 'eb9998dcc5d24e3eb5b6fb488f750fe2'
+  cloudpakVersion: 3.0.0
+  productChargedContainers: All
+  productMetric: VIRTUAL_PROCESSOR_CORE
+
+# topologySpreadConstraints configures how the pods are distributed across multiple reziliency/failure zones. 
+#    Requires kubernetes 1.16+ with enabled MZR support.
+#   See https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/ to get more info about topologyContraints.
+topologySpreadConstraints:
+  # topologySpreadConstraints.enabled - Specifies if the topology spread contraints should be added to gateway deployment
+  enabled:           false
+  
+  # topologySpreadConstraints.maxSkew - How much the available zone can differ in number of pods.
+  maxSkew:           1
+  
+  # topologySpreadConstraints.topologyKey - Label of nodes defining failure zone; 
+  #     the nodes with the same values of the label are consider to belong to the same failure zone.
+  topologyKey:       "failure-domain.beta.kubernetes.io/zone"
+  
+  # topologySpreadConstraints.whenUnsatisfiable - Specifies action in case new pod cannot be scheduled because topology contraints.
+  #   Possible values are DoNotSchedule and ScheduleAnyway
+  whenUnsatisfiable: "ScheduleAnyway"

@@ -1,0 +1,56 @@
+{{- if  not (include "etcd3.boolConvertor" (list .Values.keep . )) }}
+{{- include "sch.config.init" (list . "etcd.sch.chart.config.values") -}}
+{{- if or (and (include "etcd3.boolConvertor" (list .Values.tls.enabled . )) (not (tpl .Values.tls.existingTlsSecret . ))) (and (.Values.auth.enabled) (not (tpl .Values.auth.existingRootSecret . ))) -}}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "creds-clean-up-job" ) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "creds-clean-up-job" (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" "creds-clean-up-job" "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 4 }}
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-weight": {{ .Values.hooks.credential.cleanup.weight | default "-5" | quote }}
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" "") | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "creds-clean-up-job" (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" "creds-clean-up-job" "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 8 }}
+      name: delete-creds
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ template "etcd3.serviceaccountname" . }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+{{ include "sch.security.securityContext" (list . .sch.chart.securityContext1) | indent 6 }}
+      containers:
+      - name: delete-creds
+        image: "{{ if tpl (.Values.global.dockerRegistryPrefix | toString ) .  }}{{ trimSuffix "/" (tpl (.Values.global.dockerRegistryPrefix | toString) . ) }}/{{ end }}{{ tpl (.Values.certgen.image.name | toString ) . }}:{{ .Values.certgen.image.tag }}"
+        imagePullPolicy: {{ .Values.certgen.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+{{- if and (include "etcd3.boolConvertor" (list .Values.tls.enabled . )) (not (tpl .Values.tls.existingTlsSecret . )) }}
+          if kubectl get   secret {{ template "etcd3.tlsSecret" . }} -n {{ .Release.Namespace }} ; then
+            kubectl delete secret {{ template "etcd3.tlsSecret" . }} -n {{ .Release.Namespace }}
+          fi
+{{- end }}
+{{- if and (.Values.auth.enabled) (not (tpl .Values.auth.existingRootSecret . )) }}
+          if kubectl get   secret {{ template "etcd3.rootSecret" . }} -n {{ .Release.Namespace }} ; then
+            kubectl delete secret {{ template "etcd3.rootSecret" . }} -n {{ .Release.Namespace }}
+          fi
+{{- end }}
+{{ include "sch.security.securityContext" (list . .sch.chart.securityContext2) | indent 8 }}
+      affinity:
+{{ include "etcd3.affinityEtcd" (list . (dict "kind" "Job" "component" "creds-clean-up-job")) | indent 8 }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,674 @@
+## Global Settings #############################################################
+global:
+  product:
+    name: "Watson AIOps"
+    schName: "ibm-aiops"
+    id: "ibm-watson-aiops-prod"
+    version: "1.0.0"
+    addOnName: "aiops"
+  tetheredNamespace: "zen"
+  metering:
+    productName: "Watson AIOps"
+    productID: "ibm-watson-aiops-prod"
+    addOnName: "aiops"
+  broker:
+    secret: zen-service-broker-secret
+  image:
+    pullSecret: ""
+  affinity: {}
+  sch:
+    enabled: true
+  meteringLabelsTpl: "zeno.meteringLabels"
+  storageClassName: portworx-sc
+  persistence:
+    useDynamicProvisioning: true
+    enabled: false
+  clusterDomain: "svc.cluster.local"
+  icpDockerRepo: "cp.icr.io/cp/cpd"
+  dockerRegistryPrefix: "cp.icr.io/cp/cpd"
+  zenControlPlaneNamespace: zen
+  imagePullSecret: "" # used by elasticsearch
+  imagePullSecretName: ""
+  minio:
+    accessSecret:
+      nameTpl: "zeno.minioAccessSecretNameTemplate"
+    tlsSecret:
+      nameTpl: "zeno.tlsSecretNameTemplate"
+    sslEnabled: true
+    endpointPort: 9000
+    endpointTpl: "zeno.minioEndpointTemplate"
+    buckets: # TODO: simplify if only need one bucket for all of Zeno
+      eventGrouping: "event-grouping-service"
+      similarIncidents: "similar-incident-service"
+      logIngest: "log-ingest"
+      eventIngest: "event-ingest"
+  elastic:
+    endpointTpl: "zeno.elasticsearchEndpointTemplate"
+    clusterName: "elasticsearch" # needed for flink should match non global elasticsearch config below
+  modeltrain:
+    trainer:
+      endpointTpl: "zeno.modeltrainTrainerEndpointTemplate"
+      certCmTpl: "zeno.modeltrainTrainerCertCmTemplate"
+  postgres:
+    authSecret:
+      nameTpl: "zeno.postgresAuthSecretNameTemplate" # Matches postgres.auth.authSecretName below
+      pgSuperuserName: "stolon" # DO NOT CHANGE
+    endpointPort: 5432
+    nameOverride: "postgres" # Matches postgres.nameOverride below
+    tls:
+      hostnameTpl: "zeno.postgresHostnameTemplate"
+      secret:
+        nameTpl: "zeno.postgresTlsSecretNameTemplate" # Matches postgres.tls.tlsSecretName below
+  tls:
+    truststoreSecret:
+      nameTpl: "zeno.truststoreSecretNameTemplate"
+    secret:
+      nameTpl: "zeno.tlsSecretNameTemplate"
+  existingServiceAccount: "" # if a customer has an existing account, you can use that to create a secret; usually not populated by customer
+  kafka:
+    strimzi:
+      enabled: false
+      clusterName: "strimzi-cluster"
+      user: "token" # Must be token, controller hardcodes it
+      replicas: 3
+      resources:
+        requests:
+          memory: 1Gi
+          cpu: 100m
+        limits:
+          memory: 2Gi
+          cpu: 1
+      jvmOptions: # JVM Options for memory should correlate to resource limits and requests
+        -Xms: 1024m
+        -Xmx: 2048m
+      storage:
+        # To enable persistence use type "persistent-claim" and set values below
+        # note 1: a valid fsGroup will need to be set
+        # note 2: Strimzi storage overrides to set storage zones etc. see linked docs for more info
+        # https://strimzi.io/docs/operators/master/using.html#storage_class_overrides
+        type: ephemeral
+        # size: 10Gi
+        # class: portworx-sc
+        # overrides:
+      template: {}
+        # This is to allow templating of the pod. Below is a commented out example for fsGroup
+        # pod:
+        #   securityContext:
+        #     fsGroup: 1000
+      config: # Below are the suggested config settings for AIOps Kafka
+        offsets.topic.replication.factor: 3
+        transaction.state.log.replication.factor: 3
+        transaction.state.log.min.isr: 2
+        log.message.format.version: "2.4"
+        message.max.bytes: 20000000 # This is the minimum required message size
+      zookeeper:
+        replicas: 3
+        resources:
+          requests:
+            memory: 1Gi
+            cpu: 100m
+          limits:
+            memory: 2Gi
+            cpu: 1
+        jvmOptions: # JVM Options for memory should correlate to resource limits and requests
+          -Xms: 1024m
+          -Xmx: 2048m
+        storage:
+          # To enable persistence use type "persistent-claim" and set values below
+          # note 1: a valid fsGroup will need to be set
+          # note 2: Strimzi storage overrides to set storage zones etc. see linked docs for more info
+          # https://strimzi.io/docs/operators/master/using.html#storage_class_overrides
+          type: ephemeral
+          # size: 10Gi
+          # class: portworx-sc
+          # https://strimzi.io/docs/operators/master/using.html#storage_class_overrides
+          # overrides:
+        template: {}
+          # This is to allow templating of the pod. Below is a commented out example for fsGroup
+          # pod:
+          #   securityContext:
+          #     fsGroup: 1000
+      entityOperator:
+        topicOperatorResources:
+          requests:
+            memory: 512Mi
+            cpu: 1
+          limits:
+            memory: 512Mi
+            cpu: 1
+        userOperatorResources:
+          requests:
+            memory: 512Mi
+            cpu: 1
+          limits:
+            memory: 512Mi
+            cpu: 1
+      defaultTopicSpec:
+        partitions: 1
+        replicas: 1
+        config:
+          retention.ms: 1800000
+          segment.bytes: 1073741824
+      topics:
+        - windowed-logs
+        - raw-logdna-logs
+        - normalized-logs
+        - normalized-logs-quality
+        - raw-k8s-configs
+        - normalized-k8s-configs
+        - raw-pagerduty-alerts
+        - normalized-alerts
+        - derived-alert-groups
+        - raw-servicenow-incidents
+        - normalized-incidents
+        - raw-user-messages
+        - raw-user-actions
+        - derived-stories
+        - derived-similar-incidents
+        - connections
+    api:
+      version:
+        request: True
+    security:
+      protocol: SASL_SSL
+    sasl:
+      accessSecretName: ""
+      mechanisms: PLAIN
+      username: token
+      ca:
+        certSecretName: ""
+        certSecretKey: "tls.crt"
+        location: /etc/ssl/certs/es-cert.pem
+    log:
+      connection:
+        close: "False"
+    broker:
+      version:
+        fallback: "0.10.2.1"
+    bootstrap:
+      servers: []
+  controller:
+    name: "controller"
+    kafkaTruststoreSecret: "kafka-truststore"
+  chatopsSlackIntegrator:
+    name: "chatops-slack-integrator"
+  addon:
+    name: "addon"
+  dlaasExistingPostgresDisabled: false
+  flink:
+    flinkConfig:
+      nameTpl: "flink.flinkConfigSecretName"
+
+## Zeno Components #############################################################
+eventGrouping:
+  rankedResourceTypes: '[["application"],["deployment","service"],["replicaSet","ingress"],["volume"],["daemonSet","statefulSet"],["server"],["pod"]]'
+  image:
+    repository: event-grouping
+    tag: f2b52dd.20-06-04-110547.master
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 200m
+      memory: 1Gi
+
+alertLocalization:
+  image:
+    repository: alert-localization
+    tag: fa628f2.20-05-16-174715.master
+  resources:
+    requests:
+      cpu: 200m
+      memory: 384Mi
+    limits:
+      cpu: 1
+      memory: 512Mi
+
+chatopsSlackIntegrator:
+  image:
+    repository: chatops-slack-integrator
+    tag: f67e002.20-06-04-142807.master
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      # Needs a high cpu to start, levels quickly
+      cpu: 300m
+      memory: 512Mi
+  slackSecretName: ''
+  slackWelcomeCommandName: '/waiops-welcome'
+
+chatopsOrchestrator:
+  image:
+    repository: chatops-orchestrator
+    tag: 6272a12.20-06-04-110259.master
+  resources:
+    limits:
+      cpu: 200m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 512Mi
+
+logAnomaly:
+  image:
+    repository: log-anomaly
+    tag: 8abe0c3.20-05-15-192922.master
+  resources:
+    limits:
+      cpu: 200m
+      memory: 2048Mi
+    requests:
+      cpu: 100m
+      memory: 512Mi
+  appThreshold: "0"
+
+modelTrainConsole:
+  image:
+    repository: model-train-console
+    tag: 67d33bc.20-05-29-225330.master
+  resources:
+    requests:
+      memory: 1Gi
+      cpu: 100m
+    limits:
+      memory: 2Gi
+      cpu: 200m
+  persistence:
+    storageClassName: portworx-sc
+    accessModes:
+    - ReadWriteOnce
+    size: 10Gi
+
+persistence:
+  image:
+    repository: persistence-service
+    tag: ac2351e.20-05-15-162356.master
+  resources:
+    requests:
+      memory: 100Mi
+      cpu: 100m
+    limits:
+      memory: 1Gi
+      cpu: 200m
+
+similarIncidents:
+  image:
+    repository: similar-incidents-service
+    tag: e5565c3.20-05-15-145751.master
+  resources:
+    requests:
+      memory: 768Mi
+      cpu: 400m
+    limits:
+      memory: 2Gi
+      cpu: 800m
+
+topology:
+  image:
+    repository: topology
+    tag: 82201e7.20-05-19-121217.master
+  # null means, exclusively pull connections from connection manager. Configurable for testing
+  defaultBackend: "null"
+  resources:
+    limits:
+      cpu: 200m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 512Mi
+
+controller:
+  image:
+    repository: connection-manager
+    tag: 8655387.20-06-05-175855.master
+  resources:
+    requests:
+      memory: 100Mi
+      cpu: 1000m
+    limits:
+      memory: 1Gi
+      cpu: 1000m
+
+addon:
+  image:
+    repository: cpd-addon
+    tag: 52aa9aa.20-05-25-221100.master
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 100m
+    limits:
+      memory: 1Gi
+      cpu: 200m
+
+## Training  #############################################################
+preprocessingMTWorkflow:
+  image:
+    repository: data-preprocessing-mtworkflow
+    tag: 200514
+
+eventgroupingMTWorkflow:
+  image:
+    repository: event-grouping-mtworkflow
+    tag: 200514
+
+logAnomalyMTWorkflow:
+  image:
+    repository: log-anomaly-training
+    tag: 200512
+
+## Zeno Tests #############################################################
+coreTests:
+  image:
+    repository: core-tests
+    tag: 8954e7a.20-05-30-022345.master
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 100m
+      memory: 256Mi
+  # Used for gathering output reports and debugging
+  persistence:
+    enabled: false
+    useDynamicProvisioning: true
+    storageClassName: "portworx-sc"
+    accessModes:
+    - ReadWriteOnce
+    size: 1Gi
+    ## If subPath is set mount a sub folder of a volume instead of the root of the volume.
+    ## This is especially handy for volume plugins that don't natively support sub mounting (like glusterfs).
+    ##
+    subPath: ""
+    # persistence.selector - if useDynamicProvisioning is disabled, user may either bound PV to PVC manually,
+    #   or specify selector (label and value) to bind pre-created PV to PVC based on the labels (useful for local-storage).
+    # Selector cannot be specified if dynamic provisioning is used.
+    selector:
+      # label - label that the PV should have to be boundable to created PVCs
+      label: ""
+      # value - value of the label that the PV should have to be boundable to created PVCs
+      value: ""
+
+mockServer:
+  image:
+    repository: mock-server
+    tag: c308f62.20-05-18-210014.master
+  resources:
+    requests:
+      memory: 100Mi
+      cpu: 100m
+    limits:
+      memory: 1Gi
+      cpu: 1
+  mockASMUsername: "this-is-a-mock-username"
+  authSecret:
+    nameTpl: 'zeno.mockServerSecretNameTemplate'
+
+qualityEvaluationService:
+  image:
+    repository: quality-evaluation-service
+    tag: 18a47fb.20-05-30-041345.master
+  replicas: 1
+  resources:
+    requests:
+      memory: 100Mi
+      cpu: 100m
+    limits:
+      memory: 1Gi
+      cpu: 1
+  # Used for gathering output reports and debugging
+  persistence:
+    enabled: false
+    useDynamicProvisioning: true
+    storageClassName: "portworx-sc"
+    accessMode: ReadWriteOnce
+    size: 10Gi
+    ## If subPath is set mount a sub folder of a volume instead of the root of the volume.
+    ## This is especially handy for volume plugins that don't natively support sub mounting (like glusterfs).
+    ##
+    subPath: ""
+
+    # persistence.selector - if useDynamicProvisioning is disabled, user may either bound PV to PVC manually,
+    #   or specify selector (label and value) to bound pre-creaed PV to PVC based on the labels (useful for local-storage).
+    # Selector cannot be specified if dynamic provisioning is used.
+    selector:
+      # label - label that the PV should have to be boundable to created PVCs
+      label: ""
+      # value - value of the label that the PV should have to be boundable to created PVCs
+      value: ""
+
+## Common Settings #############################################################
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 100m
+    memory: 256Mi
+preInstallHookWeightAnchor: -10 # base hook weight; this is our weight "origin"
+
+## Tether Job  #################################################################
+tether:
+  sa: cpd-admin-sa
+  rolebinding:
+    name: watson-aiops-strimzi-role-rb-tether
+    roleName: watson-aiops-strimzi-role
+
+## Cred Generation #############################################################
+creds:
+  image:
+    repository: "opencontent-icp-cert-gen-1"
+    tag: "1.1.3"
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 200m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+
+## Utilities ###################################################################
+utils:
+  image:
+    repository: opencontent-common-utils
+    tag: 1.1.5
+  resources:
+    limits:
+      memory: 100Mi
+      cpu: 200m
+    requests:
+      memory: 100Mi
+      cpu: 200m
+
+## Dependencies ###################################################################
+flink:
+  enabled: true
+  image:
+    repository: flink-core
+    tag: 1a2b64f.20-05-27-124824.master
+  jobmanager:
+    address: '{{ include "zeno.flinkJobManagerEndpointTemplate" . }}'
+    service:
+      port: 8000
+  commonConfigMounts:
+    volumeMountTemplates:
+    - "zeno.kafkaConfigVolumeMount"
+    - "zeno.globalConfigVolumeMount"
+    - "zeno.secretConfigVolumeMount"
+    - "zeno.elasticsearchConfigVolumeMount"
+    - "zeno.tlsVolumeMounts"
+    volumeTemplates:
+    - "zeno.kafkaConfigVolume"
+    - "zeno.secretConfigVolume"
+    - "zeno.globalConfigVolume"
+    - "zeno.elasticsearchConfigVolume"
+    - "zeno.tlsVolume"
+
+minio:
+  enabled: true
+  enableCp4dMeteringLabels: true
+  existingSecret: '{{ include "zeno.minioAccessSecretNameTemplate" . }}'
+  minio:
+    image:
+      name: "opencontent-minio"
+      tag: "1.1.3"
+  minioClient:
+    image:
+      name: "opencontent-minio-client"
+      tag: "1.0.2"
+  creds:
+    image:
+      name: "opencontent-icp-cert-gen-1"
+      tag: "1.1.3"
+  buckets:
+  - name: event-grouping
+    policy: none
+    purge: false
+  - name: log-ingest
+    policy: none
+    purge: false
+  - name: event-ingest
+    policy: none
+    purge: false
+  tls:
+    enabled: true
+    certSecret: '{{ include "zeno.tlsSecretNameTemplate" . }}'
+  persistence:
+    enabled: true
+    storageClass: "portworx-sc"
+    size: 10Gi
+  arch: ""
+  # If changing replicas:
+  # - need to change to an even number
+  # - no less than 4 is recommended
+  #replicas: 4
+
+postgres:
+  enableCp4dMeteringLabels: true
+  enabled: true
+  rbac:
+    create: false
+  serviceAccount:
+    create: false
+  nameOverride: "postgres"
+  tls:
+    enabled: true
+    tlsSecretName: '{{ include "zeno.postgresTlsSecretNameTemplate" . }}'
+  auth:
+    authSecretName: '{{ include "zeno.postgresAuthSecretNameTemplate" . }}'
+  persistence:
+    enabled: true
+    useDynamicProvisioning: true
+    size: 10Gi
+    storageClassName: "portworx-sc"
+  livenessProbe:
+    timeoutSeconds: 5
+  readinessProbe:
+    timeoutSeconds: 5
+
+elasticsearch:
+  replicas: 1
+  minimumMasterNodes: 1
+  enableCp4dMeteringLabels: true
+  enabled: true
+  protocol: https
+  httpsPort: 9200
+  clusterName: "elasticsearch"
+  nodeGroup: "master"
+  persistence:
+    enabled: true
+  volumeClaimTemplate:
+    resources:
+      requests:
+        storage: 10Gi
+
+modeltrain:
+  enabled: true
+  dlaasLCM:
+    image:
+      pullSecret: ""
+    certs:
+      pullSecret: ""
+    learner:
+      pullSecret: ""
+    postgresql:
+      pullSecret: ""
+  dlaasRatelimiter:
+    image:
+      pullSecret: ""
+    maxLearners: 1
+  dlaasTrainer:
+    queue:
+      queueSizeLimit: 1000
+    certs:
+      pullSecret: ""
+    gprc:
+      image:
+        pullSecret: ""
+    image:
+      pullSecret: ""
+    # Use postgres database in parent chart FIXME (dlaas needs to make this work)
+    postgresql:
+      repository: docker-registry.default.svc:5000/zen
+      pullSecret: ""
+      existing:
+        host: '{{ include "zeno.postgresHostnameTemplate" . }}'
+        tlsSecretName: '{{ include "zeno.postgresTlsSecretNameTemplate" . }}'
+        authSecretName: '{{ include "zeno.postgresAuthSecretNameTemplate" . }}'
+
+gateway:
+  enabled: true
+  addon:
+    disableProvisioningUI: true
+    platformVersion: '3.0.0.0'
+    displayName: Watson AIOps
+    version: '1.0.0'
+    shortDescription: 'AIOps provides AI driven insights for IT Operations teams, helping them understand and react to issues with greater context and recommendations'
+    longDescription: 'Watson AIOps combines structured and unstructured data from applications and infrastructure components of your IT landscape. It applies AI to that data to discover anomalies and correlate them to discover impact across components and to localize faults
+  This is used to  guide IT operations teams to understand the nature and impact of issues as they emerge and to guide inform short term remedies and permanent resolutions.'
+    deployDocs: ''
+    productDocs: ''
+    apiReferenceDocs: ''
+    gettingStartedDocs: ''
+    productImages: 2
+    serviceId: 'aiops'
+    maxInstances: ""
+    toolInNewTab: false
+
+  backendService:
+    name: ''
+    nameTemplate: 'zeno.controllerService'
+    port: 8000
+    brokerPath: '/v1/zeno/service_instances'
+    exposeAPI: false
+
+  additionalServices:
+  - nameTemplate: 'zeno.addonService'
+    name: ''
+    port: 8000
+    path: "/ui"
+    rewriteTarget: ""
+    secure: true
+    exposeAPI: false
+    authentication: true
+    nginxDirectives: []
+  - nameTemplate: 'zeno.chatopsSlackIntegratorService'
+    name: ''
+    port: 8000
+    path: "/slack/events"
+    rewriteTarget: "/slack/events"
+    secure: true
+    exposeAPI: true
+    authentication: false
+    nginxDirectives: []
+  tooling:
+    enabled: false
+
+s3fs:
+  enabled: false
+  secret:
+    nameTpl: "zeno.s3fsSecretNameTemplate"

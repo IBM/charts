@@ -1,0 +1,86 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $name :=  .sch.chart.components.controller -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $name) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | indent 4 }}
+{{ include "zeno.meteringLabels" (dict "root" . "name" $name) | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $name) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | indent 8 }}
+{{ include "zeno.meteringLabels" (dict "root" . "name" $name) | indent 8 }}
+      annotations:
+{{ include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+{{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim |  indent 6 }}
+      affinity:
+{{ include "zeno.nodeAffinity" . | trim | indent 8 }}
+{{ include "zeno.imagePullSecretTemplate" . | trim | indent 6 }}
+      initContainers:
+{{ include "zeno.flinkInitContainerReadiness" . | indent 6 }}
+{{ include "zeno.initContainerReadiness.persistence" . | indent 6 }}
+      containers:
+      - name: {{ $name | quote }}
+        image: {{ include "zeno.imageName" (dict "root" . "service" .Values.controller) }}
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 9443
+          name: http
+{{ include "zeno.livenessProbeTemplate" (dict "livePeriod" 30 "liveDelay" 60 "readyDelay" 30 "timeoutLive" 10 ) | indent 8 }}
+        resources:
+{{ toYaml .Values.controller.resources | indent 12 }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.componentUrls) }}
+        env:
+        - name: CPD_CONTEXT
+          value: "zeno"
+        - name: HA_ENABLED
+          value: "True"
+        - name: FLINK_CHECKER_STARTUP_MINUTES
+          value: "20"
+        - name: FLINK_CHECKER_FREQUENCE_MINUTES
+          value: "10"
+        - name: CPD_SERVICE_BROKER_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Values.global.broker.secret }}"
+              key: token
+        - name: CPD_NGINX_URL
+          value: "{{ include "zeno.cpdNginxEndpointTemplate" . }}/zen-data/internal"
+        - name: ENV_FLINK_URL
+          value: {{ include "zeno.flinkJobManagerEndpointTemplate" . | quote }}
+        - name: CA_FLINK_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include .Values.global.tls.truststoreSecret.nameTpl . }}
+              key: flink-tls-ca-truststore.password
+        - name: TLS_P12_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include .Values.global.tls.secret.nameTpl . }}
+              key: tls.p12.password
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | trim |  indent 8 }}
+        volumeMounts:
+{{ include "zeno.globalConfigVolumeMount" . | indent 8 }}
+{{ include "zeno.secretConfigVolumeMount" . | indent 8 }}
+{{ include "zeno.kafkaConfigVolumeMount" . | indent 8 }}
+{{ include "zeno.tlsVolumeMounts" . | indent 8 }}
+        - name: flink-config
+          mountPath: /etc/flink
+      volumes:
+{{ include "zeno.globalConfigVolume" . | indent 6 }}
+{{ include "zeno.secretConfigVolume" . | indent 6 }}
+{{ include "zeno.kafkaConfigVolume" . | indent 6 }}
+{{ include "zeno.tlsVolume" . | indent 6 }}
+      - name: flink-config
+        secret:
+          secretName: {{ include .Values.global.flink.flinkConfig.nameTpl . }}

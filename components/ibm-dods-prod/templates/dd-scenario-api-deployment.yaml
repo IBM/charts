@@ -5,6 +5,7 @@ metadata:
   name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.ddScenarioApi.compName ) | quote }}
   labels:
 {{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddScenarioApi.compName) | indent 4 }}
+    app: {{ .sch.chart.components.ddScenarioApi.compName }}
 spec:
   replicas: {{ .Values.ddScenarioApi.replicas }}
   selector:
@@ -14,8 +15,9 @@ spec:
     metadata:
       labels:
 {{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddScenarioApi.compName) | indent 8 }}
+        app: {{ .sch.chart.components.ddScenarioApi.compName }}
       annotations:
-        {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}      
+        {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil nil) | indent 8 }}      
     spec:
       terminationGracePeriodSeconds: 0
       affinity:
@@ -38,6 +40,8 @@ spec:
         env:
           - name: PROPERTY_PREFIX
             value: "k8s_local_"
+          - name: LOGGING_TRACE_SPECIFICATION
+            value: "*=info"                        
           - name: WDP_SERVICE_ID_CREDENTIALS
             valueFrom:
               secretKeyRef:
@@ -65,7 +69,8 @@ spec:
             scheme: HTTPS
           initialDelaySeconds: 120
           periodSeconds: 30
-          timeoutSeconds: 2          
+          timeoutSeconds: 2 
+          failureThreshold: 6         
         readinessProbe:
           httpGet:
             path: /health

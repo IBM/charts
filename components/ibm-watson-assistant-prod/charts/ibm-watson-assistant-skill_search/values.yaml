@@ -1,0 +1,77 @@
+global:
+  # global.deploymentType Valid values are Development or Production. A Production deployment is scaled up i.e. a higher number of replicas.
+  deploymentType: ""
+
+  image:
+    repository: ""
+    pullSecret: ""
+
+  skillSearch:
+    encryptionKey:
+      # global.skillSearch.encryptionKey - The name of the secret that hold 128bit AES encryption key (under `authorization_encryption_key`) used to encrypt/decrypt credentials for Discovery service. If empty secret with random password is generated.
+      existingSecretName: ""
+
+# replicas - If set to 0 the size is configured based on global.deploymentType (defined in umbrella chart) (the template is also in the umbrella chart)
+replicas: 0
+
+autoscaling:
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 100
+
+# imagePullSecret - Additional image pull secret to be used for pulling images. Supports templated values
+imagePullSecret: "{{ tpl .Values.global.image.pullSecret . }}"
+
+image:
+  repository: "{{ tpl .Values.global.image.repository . }}"
+  name:       "skill-search"
+  tag:        "20200520-123651-4b5d8f-wa-icp-1.4.2-9"
+  pullPolicy: "IfNotPresent"
+
+resources:
+  requests:
+    cpu:    "50m"
+    memory: "256Mi"
+  limits:
+    cpu:    4
+    memory: "256Mi"
+
+creds:
+  # image used to generate/delete the skill secret
+  image:
+    repository: "{{ tpl .Values.global.image.repository . }}"
+    name:       "conan-tools"
+    tag:        "20200421-1841"
+    pullPolicy: "IfNotPresent"
+  resources:
+    requests:
+      cpu:    10m
+      memory: 256Mi
+    limits:
+      cpu:    50m
+      memory: 256Mi
+
+authKey:
+  # image used to generate/delete the authorization encryption secret
+  image:
+    repository: "{{ tpl .Values.global.image.repository . }}"
+    name:       "conan-tools"
+    tag:        "20200421-1841"
+    pullPolicy: "IfNotPresent"
+  resources:
+    requests:
+      cpu:    10m
+      memory: 256Mi
+    limits:
+      cpu:    50m
+      memory: 256Mi
+
+# maxThreads - Specifing maximal amount of the in-flight requests
+maxThreads: 20
+
+# javaMemoryXMX - Env variable specifying max memory used by Java for heap (should be slightly less then memory requests)
+javaMemoryXMX: "160m"
+
+# The suffix of all the cluster DNS names like service_name.service_namespace.svc.cluster.local
+# No need to change
+#clusterDomain: "cluster.local"
+clusterDomain: '{{ tpl .Values.global.clusterDomain . }}'

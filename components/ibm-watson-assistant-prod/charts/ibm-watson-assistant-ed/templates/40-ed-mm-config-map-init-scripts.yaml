@@ -1,0 +1,136 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .Release.Name }}-ed-mm-init-scripts"
+  labels:
+    <<: &primary_labels # Don't touch or extend these labels!
+      service:                     "conversation"
+      component:                   "ed"
+      slot:                        "{{ .Release.Name }}"
+    # Make sure the indent of other labels is the same as this comment's
+    tenant:                        "PUBLIC"
+    release:                       "{{ .Release.Name }}"
+    app.kubernetes.io/instance:    "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by:  "{{ .Release.Service }}"
+    app.kubernetes.io/name:        "ibm-watson-assistant"
+    helm.sh/chart:                 "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    icpdsupport/addOnName:         "assistant"
+    icpdsupport/app:               "ed"
+    icpdsupport/serviceInstanceId: "{{ .Values.global.zenServiceInstanceId | int64 }}"
+data:
+  cos_ready.sh: |
+    #!/bin/sh
+    # Assumes CLU secret is mounted to /entities-distro
+    
+    
+     if [ ${DEBUG} ] ; then
+      set -x
+    fi
+    
+    set -e
+    echo "Reading COS connection specification from /entities-distro/primary_objectstore_string"
+    objectstoreString=$(cat /entities-distro/primary_objectstore_string)
+    if [ -z "${objectstoreString}" ] ; then
+        echo "ERROR: objectstore connection spec is empty."
+        exit 1
+    fi
+    
+    echo "Parsing the object store"
+    KIND=$(echo "${objectstoreString}" | sed 's/,.*//')
+    if [ "${KIND}" = "swift" ] ; then
+      echo "Detected SLOC (swift) type. Assuming the service is working"
+      exit 0
+    fi
+    
+    if [ "${KIND}" != "s3" ] ; then
+      echo "ERROR: Invalid unsupported objectore type (${KIND}), expecting s3"
+      exit 1
+    fi
+    ENDPOINT=$(     echo "${objectstoreString}" | tr "," $'\n' | grep "^endpoint="     | sed 's/^endpoint=//')
+    ACCESS_KEY=$(   echo "${objectstoreString}" | tr "," $'\n' | grep "^accesskey="    | sed 's/^accesskey=//')
+    SECRET_KEY=$(   echo "${objectstoreString}" | tr "," $'\n' | grep "^secretkey="    | sed 's/^secretkey=//')
+    BUCKET_SUFFIX=$(echo "${objectstoreString}" | tr "," $'\n' | grep "^bucketsuffix=" | sed 's/^bucketsuffix=//')
+    
+    # Add schema if missing
+    if [ "${ENDPOINT:0:7}" != "http://" -a "${ENDPOINT:0:8}" != "https://" ] ; then
+      ENDPOINT="https://${ENDPOINT}"
+    fi 
+    
+    # Creating link to file with certificate to COS
+    mkdir -p /home/app/.mc/certs/CAs/
+    if [ -e "/etc/secrets/cos/ca.crt" ] ; then
+      ln -s /etc/secrets/cos/ca.crt /home/app/.mc/certs/CAs/ca.crt
+    fi
+    
+    echo "Trying to connect into COS/Minio"
+    
+    RETRY_MC_CONFIG=true
+    while ${RETRY_MC_CONFIG} ; do
+      echo "Running: mc -C /home/app/.mc config host add test \"${ENDPOINT}\" \"\${ACCESS_KEY}\" \"\${SECRET_KEY}\" S3v4"
+      if mc -C /home/app/.mc config host add test "${ENDPOINT}" "${ACCESS_KEY}" "${SECRET_KEY}" S3v4 ; then
+        RETRY_MC_CONFIG=false
+      else
+        echo "Error: mc configuration failed. Will retry in 10 sec."
+        sleep 10
+      fi
+    done
+    
+    while true ; do
+      echo "Running: mc -C /home/app/.mc ls test/"
+      if mc -C /home/app/.mc ls test/ ; then
+        echo "Successfully connected to COS/Minio"
+        exit 0
+      fi
+      echo "Connection to COS/Minio errored, will retry in 10 seconds"
+      sleep 10
+    done
+  etcd_running.sh: |
+    #!/bin/sh
+    # Checks if etcd is running and password authorization is enabled
+    # Assumes etcd secret is mounted to /etc/secrets/etcd
+    #
+    # Required container with etcdctl and jq commands (e.g., conan-tools)
+     if [ ${DEBUG} ] ; then
+      set -x
+    fi
+    
+    set -e
+    
+    echo "Checking if ETCD is up and running and authorization is enabled"
+    
+    # configure etcdctl - use some defaults from the secrets mount unless already specified (as env vars)
+    export ETCDCTL_API ETCDCTL_ENDPOINTS ETCDCTL_USER ETCDCTL_CACERT ETCDCTL_DIAL_TIMEOUT ETCDCTL_COMMAND_TIMEOUT
+    ETCDCTL_API=${ETCDCTL_API:-3}
+    ETCDCTL_ENDPOINTS=${ETCDCTL_ENDPOINTS:-$(</etc/secrets/etcd/etcd_connection jq -r '.endpoints')}
+    ETCDCTL_USER=${ETCDCTL_USER:-$(</etc/secrets/etcd/etcd_connection jq -r '.userid + ":" + .password')}
+    ETCDCTL_CACERT=${ETCDCTL_CACERT:-'/etc/secrets/etcd/etcd_certificate'}
+    ETCDCTL_DIAL_TIMEOUT=${ETCDCTL_DIAL_TIMEOUT:-10s}
+    ETCDCTL_COMMAND_TIMEOUT=${ETCDCTL_COMMAND_TIMEOUT:-10s}
+    
+    while true ; do
+      echo "etcdctl endpoint health"
+      etcdctl endpoint health && break
+      echo "  command failed. Waiting 5 sec before next retry"
+      sleep 5
+    done
+    echo ""
+    echo "ETCD seems to be running. Checking if authorization is enabled"
+    while true ; do
+      echo ""
+      echo "Running (with correct credentials): etcdctl put /test \"test\""
+      if etcdctl put /test "test"; then
+        echo "Running (with wrong credentials): etcdctl put /test \"test_wrong_creds\""
+        if ETCDCTL_USER=${ETCDCTL_USER/:/:xxx} etcdctl put /test "test_wrong_creds"; then
+          echo "  It seems that AUTHORIZATION is not enabled. The write command succeeded with invalid password. Retry in 5 sec"
+          sleep 5
+        else
+          # Above command failed as expected. --> we are happy
+          echo "  write command failed as expected"
+          break
+        fi
+      else 
+        echo "  It seems test put failed (etcd is not working correctly). Retry in 5 sec"
+        sleep 5
+      fi
+    done
+    echo "It seems ETCD is ready. Going to start the microservice"

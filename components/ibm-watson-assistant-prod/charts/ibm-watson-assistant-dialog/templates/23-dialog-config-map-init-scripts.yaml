@@ -1,0 +1,94 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .Release.Name }}-dialog-init-scripts"
+  labels:
+    <<: &primary_labels # Don't touch or extend these labels!
+      service:                     "conversation"
+      component:                   "dialog"
+      slot:                        "{{ .Release.Name }}"
+    # Make sure the indent of other labels is the same as this comment's
+    tenant:                        "PUBLIC"
+    release:                       "{{ .Release.Name }}"
+    app.kubernetes.io/instance:    "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by:  "{{ .Release.Service }}"
+    app.kubernetes.io/name:        "ibm-watson-assistant"
+    helm.sh/chart:                 "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    icpdsupport/addOnName:         "assistant"
+    icpdsupport/app:               "dialog"
+    icpdsupport/serviceInstanceId: "{{ .Values.global.zenServiceInstanceId | int64 }}"
+data:
+  etcd_running.sh: |
+    #!/bin/sh
+    # Checks if etcd is running and password authorization is enabled
+    # Assumes etcd secret is mounted to /etc/secrets/etcd
+    #
+    # Required container with etcdctl and jq commands (e.g., conan-tools)
+     if [ ${DEBUG} ] ; then
+      set -x
+    fi
+    
+    set -e
+    
+    echo "Checking if ETCD is up and running and authorization is enabled"
+    
+    # configure etcdctl - use some defaults from the secrets mount unless already specified (as env vars)
+    export ETCDCTL_API ETCDCTL_ENDPOINTS ETCDCTL_USER ETCDCTL_CACERT ETCDCTL_DIAL_TIMEOUT ETCDCTL_COMMAND_TIMEOUT
+    ETCDCTL_API=${ETCDCTL_API:-3}
+    ETCDCTL_ENDPOINTS=${ETCDCTL_ENDPOINTS:-$(</etc/secrets/etcd/etcd_connection jq -r '.endpoints')}
+    ETCDCTL_USER=${ETCDCTL_USER:-$(</etc/secrets/etcd/etcd_connection jq -r '.userid + ":" + .password')}
+    ETCDCTL_CACERT=${ETCDCTL_CACERT:-'/etc/secrets/etcd/etcd_certificate'}
+    ETCDCTL_DIAL_TIMEOUT=${ETCDCTL_DIAL_TIMEOUT:-10s}
+    ETCDCTL_COMMAND_TIMEOUT=${ETCDCTL_COMMAND_TIMEOUT:-10s}
+    
+    while true ; do
+      echo "etcdctl endpoint health"
+      etcdctl endpoint health && break
+      echo "  command failed. Waiting 5 sec before next retry"
+      sleep 5
+    done
+    echo ""
+    echo "ETCD seems to be running. Checking if authorization is enabled"
+    while true ; do
+      echo ""
+      echo "Running (with correct credentials): etcdctl put /test \"test\""
+      if etcdctl put /test "test"; then
+        echo "Running (with wrong credentials): etcdctl put /test \"test_wrong_creds\""
+        if ETCDCTL_USER=${ETCDCTL_USER/:/:xxx} etcdctl put /test "test_wrong_creds"; then
+          echo "  It seems that AUTHORIZATION is not enabled. The write command succeeded with invalid password. Retry in 5 sec"
+          sleep 5
+        else
+          # Above command failed as expected. --> we are happy
+          echo "  write command failed as expected"
+          break
+        fi
+      else 
+        echo "  It seems test put failed (etcd is not working correctly). Retry in 5 sec"
+        sleep 5
+      fi
+    done
+    echo "It seems ETCD is ready. Going to start the microservice"
+
+  redis_running.sh: |
+    #!/bin/sh
+    # Checks if redis is running and respond to PING commands
+    # Assumes REDIS_HOST, REDIS_PORT and REDIS_PASSWORD are set
+    # Requires container with redis-cli (e.g., conan-tools)
+    if [ ${DEBUG} ] ; then
+      set -x
+    fi
+    
+    while true ; do
+      echo "redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT} -a ********** PING"
+      RESULT=$(timeout 5 redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT} -a ${REDIS_PASSWORD} PING 2>&1 )
+      EXIT_CODE=$?
+      echo "${RESULT}"
+      if [ "_${EXIT_CODE}" = "_0" -a "_${RESULT}" = "_PONG" ] ; then
+        break;
+      fi
+      
+      echo "  command failed (exit code: ${EXIT_CODE}). Waiting 5 sec before next retry"
+      sleep 5
+    done
+    
+    echo "Redis service seems to be ready. Going to start the microservice."

@@ -1,0 +1,92 @@
+
+global:
+  # Do not modify the serviceId value (needs to changed also in templates/_helpers.tpl, template name: assistant.ingress.addon.simulatedContext)
+  appName: "addon"
+  sch:
+    enabled: false
+  icpDockerRepo: ""
+  imagePullSecretName: ""
+  
+  zenControlPlaneNamespace: "" # The value is ignored (if empty). It is here just to make linter happy.
+  
+wcnAddon:
+  preInstallValidation: false
+  serviceAccount:
+    name: '{{ .Release.Name }}-restricted'
+  privilegedServiceAccount:
+    name: '{{ (printf "%s-credentials" .Release.Name ) | quote }}'
+    
+  autoscaling:
+    enabled: '{{ .Values.global.autoscaling.enabled }}'
+    minReplicas: '{{ include "assistant.ingress.wcn-addon.replicas" . }}'
+    maxReplicas: 4
+  affinity: '{{- include "assistant.ibm-watson-gateway.affinities.nodeAffinity" . -}}'
+  addon:
+    displayName:        "Watson Assistant"
+    shortDescription:   "Give your customers fast, straightforward, and accurate answers to their questions, across any application, device, or platform."
+    longDescription:    "Use the Watson Assistant service to design an engaging conversation for your virtual assistant to follow as it interacts with your customers. As you identify the common and unique needs of your customers, the service uses industry-leading machine learning technologies to build a custom AI model for you. The model understands customer requests and maps them to the appropriate solutions. Your assistant can even connect to the customer engagement resources you already use to deliver a unified, problem-solving experience."
+    deployDocs:         "https://www.ibm.com/support/knowledgecenter/SSQNUZ_current/cpd/svc/watson/assistant-install.html"
+    productDocs:        "https://www.ibm.com/support/knowledgecenter/SSQNUZ_current/cpd/svc/watson/assistant.html"
+    apiReferenceDocs:   "https://cloud.ibm.com/apidocs/assistant/assistant-data-v2"
+    gettingStartedDocs: "https://cloud.ibm.com/docs/assistant-data"
+    
+    overridePath: "" # The value is ignored (if empty). It is here just to make linter happy.
+    version: "1.4.2"
+    serviceId: "assistant"
+    maxInstances: 30
+    productImages: 3
+    disableUpgrade: true
+    
+    networkPolicy:
+      additionalLabels:
+        service: "conversation"
+    preinstall:
+      hooks:
+        create:
+          type: ""
+          weight: ""
+    tls:
+      # addon.tls.hooks - configures hooks for TLS creation / deletion
+      hooks:
+        create:
+          # addon.tls.hooks.create.type - Type of the hook for tls secret creation. Supports templates iin values.
+          #                 If (renders to) an empty string, it is run as a standard job and not as a hook; slightly equivalent to post-install hook.
+          type: ""
+        delete:
+          type: "pre-delete"
+
+  addonService:
+    replicas: '{{ include "assistant.ingress.wcn-addon.replicas" . }}'
+    secure: true
+    zenNamespace: "{{ tpl (.Values.global.zenNamespace | toString ) . }}"
+    antiAffinity:
+       policy: '{{- if or (eq .Values.global.podAntiAffinity "Enable") (and (eq .Values.global.deploymentType "Production") (ne .Values.global.podAntiAffinity "Disable")) -}} hard {{- else -}} soft {{- end -}}'
+  backendService:
+    name: ""
+    nameTemplate: "assistant.ingress.store_service_name"
+    namespace: "" 
+    port: 443
+    brokerPath: "/csb/v2/service_instances"
+
+  tooling:
+    enabled: true
+    name: ""
+    nameTemplate: "assistant.ingress.tooling_service_name"
+    namespace: ""
+    rewriteTarget: "/"
+    port: 8443
+    secure: true
+  
+  clusterDomain: "{{ tpl .Values.global.clusterDomain . }}"
+  
+  metering:
+    productName:    'IBM Watson Assistant for IBM Cloud Pak for Data'
+    productID:      'ICP4D-addon-fa92c14a5cd74c31aab1616889cbe97a-assistant'
+    productVersion: '1.4.2'
+    
+  topologySpreadConstraints:
+    enabled:           "{{ tpl ( .Values.global.topologySpreadConstraints.enabled           | toString ) . }}"
+    maxSkew:           "{{ tpl ( .Values.global.topologySpreadConstraints.maxSkew           | toString ) . }}"
+    topologyKey:       "{{ tpl ( .Values.global.topologySpreadConstraints.topologyKey       | toString ) . }}"
+    whenUnsatisfiable: "{{ tpl ( .Values.global.topologySpreadConstraints.whenUnsatisfiable | toString ) . }}"
+

@@ -1,0 +1,51 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $name :=  .sch.chart.tests.mockServer -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $name) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 4 }}
+{{ include "zeno.meteringLabels" (dict "root" . "name" $name) | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 25
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{ include "sch.metadata.annotations.metering" (list . .sch.chart.metering .sch.chart.metering.productMetric .sch.chart.metering.productCloudpakRatio nil) | trim | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 8 }}
+{{ include "zeno.meteringLabels" (dict "root" . "name" $name) | indent 8 }}
+    spec:
+{{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim | indent 6 }}
+      affinity:
+{{ include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | trim | indent 8 }}
+{{ include "zeno.imagePullSecretTemplate" . | trim | indent 6 }}
+      containers:
+      - name: {{ $name | quote }}
+        image: {{ include "zeno.imageName" (dict "root" . "service" .Values.mockServer) }}
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | trim | indent 8 }}
+        resources:
+{{ toYaml .Values.mockServer.resources | indent 10 }}
+        ports:
+        - containerPort: 8443
+          name: http
+{{ include "zeno.livenessProbeTemplate" . | indent 8 }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.tls) }}
+        - secretRef:
+            name: {{ include .Values.mockServer.authSecret.nameTpl . }}
+        env:
+        - name: ENVIRONMENT
+          value: "PRODUCTION"
+        - name: MOCK_ASM_USERNAME
+          value: {{ .Values.mockServer.mockASMUsername }}
+        volumeMounts:
+{{ include "zeno.tlsVolumeMounts" . | indent 8 }}
+      volumes:
+{{ include "zeno.tlsVolume" . | indent 6 }}

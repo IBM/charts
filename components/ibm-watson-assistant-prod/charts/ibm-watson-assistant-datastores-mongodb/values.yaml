@@ -1,0 +1,83 @@
+config:
+  global:
+    sch:
+      enabled: false # Using sch chart from umbrella chart
+    image:
+      pullSecret: ""
+
+  resources:
+    limits:
+      cpu: 4
+      memory: 6Gi
+    requests:
+      cpu: 50m
+      memory: 6Gi
+
+  creds:
+    resources:
+      requests:
+        memory: 256Mi
+  auth:
+    enabled: "{{ .Values.global.mongodb.auth.enabled }}"
+    # Predefined Secrets for MongoDB Authentication and Authorization
+    authSecretName: "{{ .Values.global.mongodb.auth.existingAdminSecret }}"
+
+  tls:
+    # Enable or disable MongoDB TLS support
+    enabled: "{{ .Values.global.mongodb.tls.enabled }}"
+    # Predefined Secrets for MongoDB TLS
+    tlsSecretName: "{{ .Values.global.mongodb.tls.existingCaSecret }}"
+
+  replicaSetName: "{{ .Values.global.mongodb.replicaSetName }}"
+  
+  # With WiredTiger, MongoDB utilizes both the WiredTiger internal cache and the filesystem cache.
+  # Starting in 3.4, the WiredTiger internal cache, by default, will use the larger of either: 
+  # 50% of (RAM - 1 GB), or 256 MB.
+  # Recommend to change this to 0.4 of your memory limit for container
+  wiredTigerCacheSizeGb: "2.5"
+
+  # The maximum size in megabytes for the replication operation log
+  # By default, the mongod process creates an oplog based on the maximum amount of space available. 
+  # The oplog is typically 5% of available persistent volume.
+  # Min: 990 MB, Max: 50 GB
+  # Using 15GB; goal is to start new rs from scrats without any issues
+  oplogSizeMB: 15000
+
+
+  # Enabling pod disruption budget
+  podDisruptionBudget:
+    maxUnavailable: 1
+  persistentVolume:
+    enabled: true
+    useDynamicProvisioning: "{{ tpl ( .Values.global.persistence.useDynamicProvisioning | toString ) . }}"
+    storageClass:           "{{ tpl ( .Values.global.storageClassName                   | toString ) . }}"
+
+    accessModes:
+      - ReadWriteOnce
+    size: 75Gi
+    annotations: {}
+  
+  affinity: '{{ include "assistant.mongo.ibm-mongodb.affinitiesMongodb.nodeAffinity"    . }}'
+  
+  antiAffinity:
+    policy: '{{- if or (eq .Values.global.podAntiAffinity "Enable") (and (eq .Values.global.deploymentType "Production") (ne .Values.global.podAntiAffinity "Disable")) -}} hard {{- else -}} soft {{- end -}}'
+
+  metering:
+    productName:              "IBM Watson Assistant for IBM Cloud Pak for Data"
+    productID:                "ICP4D-addon-fa92c14a5cd74c31aab1616889cbe97a-assistant"
+    productVersion:           "1.4.2"
+    cloudpakName:             "IBM Cloud Pak for Data"
+    cloudpakId:               "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    cloudpakVersion:          "3.0.0"
+    productChargedContainers: "All"
+    productMetric:            "VIRTUAL_PROCESSOR_CORE"
+
+  # if true, don't delete the datastore objects during a helm delete
+  keep: "{{ .Values.global.keepDatastores }}"
+  clusterDomain: "{{ tpl .Values.global.clusterDomain . }}"
+
+  topologySpreadConstraints:
+    enabled:           "{{ tpl ( .Values.global.topologySpreadConstraints.enabled           | toString ) . }}"
+    maxSkew:           "{{ tpl ( .Values.global.topologySpreadConstraints.maxSkew           | toString ) . }}"
+    topologyKey:       "{{ tpl ( .Values.global.topologySpreadConstraints.topologyKey       | toString ) . }}"
+    whenUnsatisfiable: "{{ tpl ( .Values.global.topologySpreadConstraints.whenUnsatisfiable | toString ) . }}"

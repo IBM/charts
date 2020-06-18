@@ -1,0 +1,35 @@
+{{- include "sch.config.init" (list . "ibmMinio.sch.config.values") -}}
+Minio can be accessed via port {{ .Values.service.port }} on the following DNS name from within your cluster:
+{{ include "sch.names.fullCompName" (list . .sch.chart.components.service) }}.{{ .Release.Namespace }}.svc.{{ tpl (.Values.clusterDomain | toString ) . }}
+
+To access Minio from localhost, run the below commands:
+
+  1. export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+
+  2. kubectl port-forward $POD_NAME 9000 --namespace {{ .Release.Namespace }}
+
+To get AccessKey 
+
+accesskey=$(kubectl get secret {{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) }}  -o json | jq -r .data.accesskey | base64 -D)
+
+To get SecretKey
+
+secretkey=$(kubectl get secret {{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) }}  -o json | jq -r .data.secretkey | base64 -D)
+
+Read more about port forwarding here: http://kubernetes.io/docs/user-guide/kubectl/kubectl_port-forward/
+
+You can now access Minio server on https://localhost:9000. Follow the below steps to connect to Minio server with mc client:
+
+  1. Download the Minio mc client - https://docs.minio.io/docs/minio-client-quickstart-guide
+
+  2. mc config host add --insecure {{ include "sch.names.fullName" (list .) }}-local http://localhost:9000 $accesskey $secretkey S3v4
+
+  3. mc ls --insecure {{ include "sch.names.fullName" (list .) }}-local
+
+Alternately, you can use your browser or the Minio SDK to access the server - https://docs.minio.io/categories/17
+
+{{ if and (include "ibm-minio.boolConvertor" (list .Values.networkPolicy.enabled . )) (not (include "ibm-minio.boolConvertor" (list .Values.networkPolicy.allowExternal . ))) }}
+Note: Since NetworkPolicy is enabled, only pods with label
+{{ include "sch.names.fullName" (list .) }}-client=true"
+will be able to connect to this minio cluster.
+{{- end }}

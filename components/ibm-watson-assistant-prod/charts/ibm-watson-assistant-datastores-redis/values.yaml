@@ -1,0 +1,94 @@
+global:
+  image:
+    repository: ""
+  
+  license: true
+
+creds:
+  image:
+    repository: "{{ tpl .Values.global.image.repository . }}"
+    name:       "conan-tools"
+    tag:        "20200421-1841"
+    pullPolicy: "IfNotPresent"
+  resources:
+    requests:
+      cpu:    10m
+      memory: 256Mi
+    limits:
+      cpu:    50m
+      memory: 256Mi
+  
+config:
+  global:
+    image:
+      secretName: "{{ .Values.global.image.pullSecret }}"
+  
+  arch:
+    amd64: "2 - No preference"
+    ppc64le: "0 - Do not use"
+    s390x: "0 - Do not use"
+  
+  nameOverride: "redis"
+
+  rbac:
+    # Specifies whether RBAC resources should be created
+    create: true
+
+  auth:
+    # Used by creds gen job. Not modifiable by user.
+    authSecretName: "{{ .Release.Name }}-redis-password"
+  persistence:
+    enabled: false # Redis is only in-memory cache
+
+  resources:
+    server:
+      requests:
+        memory: 256Mi
+        cpu: 25m
+      limits:
+        cpu: 4
+        memory: 256Mi
+    sentinel:
+      requests:
+        memory: 50Mi
+        cpu: 10m
+      limits:
+        cpu: 4
+        memory: 50Mi
+    
+  # if true, don't delete the datastore objects during a helm delete
+  keep: "{{ .Values.global.keepDatastores }}"
+
+  clusterDomain: "{{ tpl .Values.global.clusterDomain . }}"
+
+  # Enabling pod disruption budget
+  master:
+    podDisruptionBudget:
+      maxUnavailable: 1
+    topologySpreadConstraints:
+      enabled:           "{{ tpl ( .Values.global.topologySpreadConstraints.enabled           | toString ) . }}"
+      maxSkew:           "{{ tpl ( .Values.global.topologySpreadConstraints.maxSkew           | toString ) . }}"
+      topologyKey:       "{{ tpl ( .Values.global.topologySpreadConstraints.topologyKey       | toString ) . }}"
+      whenUnsatisfiable: "{{ tpl ( .Values.global.topologySpreadConstraints.whenUnsatisfiable | toString ) . }}"
+  sentinel:
+    podDisruptionBudget:
+      maxUnavailable: 1
+    topologySpreadConstraints:
+      enabled:           "{{ tpl ( .Values.global.topologySpreadConstraints.enabled           | toString ) . }}"
+      maxSkew:           "{{ tpl ( .Values.global.topologySpreadConstraints.maxSkew           | toString ) . }}"
+      topologyKey:       "{{ tpl ( .Values.global.topologySpreadConstraints.topologyKey       | toString ) . }}"
+      whenUnsatisfiable: "{{ tpl ( .Values.global.topologySpreadConstraints.whenUnsatisfiable | toString ) . }}"
+  
+  affinity: '{{ include "assistant.ibm-redis.affinity.nodeAffinity"    . }}'
+  antiAffinity:
+    policy: '{{- if or (eq .Values.global.podAntiAffinity "Enable") (and (eq .Values.global.deploymentType "Production") (ne .Values.global.podAntiAffinity "Disable")) -}} hard {{- else -}} soft {{- end -}}'
+
+  metering:
+    productName:              "IBM Watson Assistant for IBM Cloud Pak for Data"
+    productID:                "ICP4D-addon-fa92c14a5cd74c31aab1616889cbe97a-assistant"
+    productVersion:           "1.4.2"
+    cloudpakName:             "IBM Cloud Pak for Data"
+    cloudpakId:               "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    cloudpakVersion:          "3.0.0"
+    productChargedContainers: "All"
+    productMetric:            "VIRTUAL_PROCESSOR_CORE"

@@ -1,0 +1,180 @@
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $compName := include "gateway.get-name-or-use-default" (list . "gw-deployment") -}}
+{{- $secretName := include "gateway.get-name-or-use-default" (list . "gw-tls") -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+    icpdsupport/collection_type: DEFAULT
+    icpdsupport/addOnKey: {{ include "gateway.id" . }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 4 }}
+spec:
+  {{- if not (include "gateway.booleanConvertor" (list .Values.autoscaling.enabled . )) }}
+  replicas: {{ tpl (.Values.addonService.replicas | toString) . }}
+  {{- end }}
+  selector:
+    matchLabels:
+      icpdsupport/collection_type: DEFAULT
+      icpdsupport/addOnKey: {{ include "gateway.id" . }}
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  revisionHistoryLimit: 2
+  minReadySeconds: 20
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+      labels:
+        icpdsupport/collection_type: DEFAULT
+        icpdsupport/addOnKey: {{ include "gateway.id" . }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      {{- if ne .Values.serviceAccount.name "" }}
+      serviceAccountName: {{ include "gateway.account.name" . }}
+      {{- end }}
+      {{- include "sch.security.securityContext" (list . .sch.chart.securityContextSpec) | indent 6 }}
+      terminationGracePeriodSeconds: 60
+{{- if (include "gateway.icpDockerImageSecret" .) }}
+      imagePullSecrets:
+      - name: {{ include "gateway.icpDockerImageSecret" . }}
+{{- end }}
+      affinity:
+{{- include "gateway.affinity"       (list . (dict "kind" "Deployment" "component" $compName )) | indent 8 }}
+{{- include "gateway.gwAntiAffinity" (list . (dict "kind" "Deployment" "component" $compName )) | indent 8 }}
+      containers:
+      - name: "gateway"
+        image: "{{ include "gateway.icpDockerRepo" . }}{{ include "gateway.image-name-extract" .Values.addonService.image.repository }}:{{ .Values.addonService.image.tag }}"
+        imagePullPolicy: {{ .Values.addonService.image.imagePullPolicy }}
+{{- include "sch.security.securityContext" (list . .sch.chart.securityContextContainer) | indent 8 }}
+        resources:
+          requests:
+            cpu: "{{ .Values.resources.requests.cpu }}"
+            memory: "{{ .Values.resources.requests.memory }}"
+          limits:
+            cpu: "{{ .Values.resources.limits.cpu }}"
+            memory: "{{ .Values.resources.limits.memory }}"
+        ports:
+        - containerPort: {{ .Values.addonService.image.containerPort }}
+        livenessProbe:
+          httpGet:
+            path: "/healthz"
+            port: {{ .Values.addonService.image.containerPort }}
+            scheme: HTTPS
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds}}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds}}
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: "/healthz"
+            port: {{ .Values.addonService.image.containerPort }}
+            scheme: HTTPS
+          timeoutSeconds: 5
+        env:
+        - name: PORT
+          value: {{ .Values.addonService.image.containerPort | quote }}
+        - name: CONTEXT_PATH
+          value: {{ include "gateway.common.path" . | quote }}
+        - name: HAS_TOOLING
+          value: {{ if or (not .Values.backendService.exposeAPI) .Values.tooling.enabled -}} "true" {{- else -}} "false" {{- end }}
+        - name: ADDON_DISPLAY_NAME
+          value: {{ .Values.addon.displayName | quote }}
+        - name: NODE_ENV
+          value: "production"
+        - name: SERVICE_BROKER_URL
+          value: {{ include "gateway.routing.endpoint" (list . .Values.backendService) }}
+        - name: NGINX_URL
+{{- if .Values.addonService.zenNginxUrl }}
+          value: {{ .Values.addonService.zenNginxUrl | quote -}}
+{{- else }}
+          value: {{ printf "https://ibm-nginx-svc.%s:443" ( include "gateway.addonService.zenNamespace" . ) -}}
+{{- end }}
+        - name: ZEN_CORE_API_URL
+{{- if .Values.addonService.zenCoreApiUrl }}
+          value: {{ .Values.addonService.zenCoreApiUrl | quote -}}
+{{- else }}
+          value: {{ printf "http://zen-core-api-svc.%s:3333" ( include "gateway.addonService.zenNamespace" . ) -}}
+{{- end }}
+        - name: ZEN_CORE_URL
+{{- if .Values.addonService.zenCoreUrl }}
+          value: {{ .Values.addonService.zenCoreUrl | quote -}}
+{{ else }}
+          value: {{ printf "http://zen-core-svc.%s:3003" ( include "gateway.addonService.zenNamespace" . ) -}}
+{{- end }}
+        - name: USER_MGMT_URL
+{{- if .Values.addonService.userMgmtUrl }}
+          value: {{ .Values.addonService.userMgmtUrl | quote -}}
+{{- else }}
+          value: {{ printf "http://usermgmt-svc.%s:8080" ( include "gateway.addonService.zenNamespace" . ) -}}
+{{- end }}
+        - name: PROVISIONING
+          value: {{ if .Values.backendService.brokerPath }}"true"{{- else }}"false"{{- end }}
+{{- if .Values.backendService.brokerPath }}
+        - name: SERVICE_BROKER_PATH
+          value: {{ .Values.backendService.brokerPath }}
+{{- end }}
+        - name: REGION
+          value: "us-south"
+        - name: RELEASE_NAME
+          value: {{ .Release.Name | quote }}
+        - name: CHART_VERSION
+          value: {{ include "gateway.version" . | quote }}
+        - name: ADDON_NAME
+          value: {{ include "gateway.id" . | quote }}
+        - name: SERVICE_ID
+          value: {{ .Values.addon.serviceId | quote }}
+        - name: NAMESPACE
+          value: {{ .Release.Namespace | quote }}
+        - name: MAX_INSTANCES
+          value: {{ .Values.addon.maxInstances | quote }}
+        - name: INSTANCE_ID
+          value: {{ .Values.addon.instanceId | quote }}
+        - name: ACCOUNT_ID
+          value: {{ .Values.addon.accountId | quote }}
+        - name: PLAN_ID
+          value: {{ .Values.addon.planId | quote }}
+        - name: RESOURCE_GROUP_ID
+          value: {{ .Values.addon.organizationId | quote }}
+        - name: DOCS_GETTING_STARTED
+          value: {{ include "gateway.gettingStartedDocs" . | quote }}
+        - name: DOCS_API_REFERENCE
+          value: {{ include "gateway.apiReferenceDocs" . | quote }}
+        - name: SHOW_USER_MANAGEMENT
+          value: {{ .Values.addon.showUserManagement | quote }}
+        - name: SHOW_CREDENTIALS
+          value: {{ .Values.addon.showCredentials | quote }}
+        - name: PLATFORM_VERSION
+          value: {{ .Values.addon.platformVersion | quote }}
+        - name: USE_HTTPS
+          value: "true"
+        - name: TLS_KEY
+          value: "/certs/tls.key"
+        - name: TLS_CERT
+          value: "/certs/tls.crt"
+        volumeMounts:
+        - name: certs
+          mountPath: /certs
+          readOnly: true
+{{- if and (semverCompare ">=1.16" (printf "%s.%s" ( regexReplaceAll "[^0-9]" ( .Capabilities.KubeVersion.Major | toString ) "" ) ( regexReplaceAll "[^0-9]" ( .Capabilities.KubeVersion.Minor | toString ) "" ))) (include "gateway.booleanConvertor" (list .Values.topologySpreadConstraints.enabled . )) }}
+      topologySpreadConstraints:
+      - maxSkew:            {{ tpl (.Values.topologySpreadConstraints.maxSkew           | toString ) .         }}
+        topologyKey:        {{ tpl (.Values.topologySpreadConstraints.topologyKey       | toString ) . | quote }}
+        whenUnsatisfiable:  {{ tpl (.Values.topologySpreadConstraints.whenUnsatisfiable | toString ) . | quote }}
+        labelSelector:
+          matchLabels:
+            icpdsupport/collection_type: DEFAULT
+            icpdsupport/addOnKey: {{ include "gateway.id" . }}
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 12 }}
+{{- end }}
+      volumes:
+      - name: certs
+        secret:
+          secretName: {{ include "sch.names.fullCompName" (list . $secretName) | quote }}

@@ -1,0 +1,86 @@
+global:
+  icp:
+    # global.icp.masterHostname - Hostname of the ICP cluster Master node - i.e., the name where you login to the cluster https://{{ masterHostname }}:8443, and where docker repository is running.
+    # If the master node is not an DNS resolvable name (e.g., it is "mycluster.icp"), then global.icp.masterIP has to be also specified.
+    masterHostname: ""
+    # global.icp.masterIP - IP (v4) address of the master node. Has to be specified if the global.icp.masterHostname cannot be resolved inside the pods (i.e., if the global.icp.masterHostname is not a valid DNS entry). This IP address has to be accessible from inside of the cluster.
+    masterIP: ""
+  image:
+    repository: ""
+
+# replicas - If set to 0 the size is configured based on .global.deploymentType (defined in umbrella chart))
+replicas: 0
+
+autoscaling:
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 100
+
+# imagePullSecret - Additional image pull secret to be used for pulling images. Supports templated values
+imagePullSecret: "{{ tpl .Values.global.image.pullSecret . }}"
+
+init:
+  # Specifications for init container etcd-running. It checks whether etcd is running and healthy, has enabled authorization and configuration entries for master are stored there.
+  etcd:
+    image:
+      repository: "{{ tpl .Values.global.image.repository . }}"
+      name:       "conan-tools"
+      tag:        "20200421-1841"
+      pullPolicy: "IfNotPresent"
+    resources:
+      requests:
+        cpu:    10m
+        memory: 256Mi
+      limits:
+        cpu:    50m
+        memory: 256Mi
+  
+  # Specifications for init container cos-running-check. It checks whether it is possible to connection into cos/minio.
+  cosRunning:
+    image:
+      repository: "{{ tpl .Values.global.image.repository . }}"
+      name:       "conan-tools"
+      tag:        "20200421-1841"
+      pullPolicy: "IfNotPresent"
+    resources:
+      requests:
+        cpu:    10m
+        memory: 256Mi
+      limits:
+        cpu:    50m
+        memory: 256Mi
+  
+image:
+  repository: "{{ tpl .Values.global.image.repository . }}"
+  name:       "training-master"
+  tag:        "20200520-133714-2-31f589"
+  pullPolicy: "IfNotPresent"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 300Mi
+  limits:
+    cpu: 4
+    memory: 300Mi
+
+# The max_heap_size key must be adjusted based on the resource values.
+maxHeapSize: "256m"
+
+slad:
+  # slad.dockerRegistry - The docker registry where the training images are located.
+  #            Master observes content of the registry for available training (slad) images. And use it as a registry for training pods when they created them (the temporary vn-* pods)
+  #     should default to the {icp-url}:8500 if left empty. The default is extracted from image.repository values
+  dockerRegistry: ""
+
+  # slad.dockerRegistryPullSecret - The pull secret that is used by master to connect into docker images. It is NOT used for created training pods.
+  #     Defaults to the sa-{ Release.Namespace } if left empty. This secret should be automatically created
+  #       once the PPA achvive is uploaded to your ICP cluster using
+  #  bx pr load-ppa-archive --archive ...  --clustername {{ global.icp.masterHostname}} --namespace {{ .Release.Namespace }}
+  dockerRegistryPullSecret: "{{ tpl ( .Values.global.image.pullSecret | toString ) . }}"
+
+  # slad.dockerRegistry - The docker registry namespace under which the slad/training images are uploaded.
+  #     Should default to the {{ .Release.Namespace }}. The default is extracted from image.repository values.
+  dockerRegistryNamespace: ""
+
+  # slad.dockerTrustAllCertificates - If true master will trust to any certificate for docker registry. Required to be true if ICP docker registy is using self-signed certificate; breaks training if misconfigured.
+  dockerTrustAllCertificates: "true"
