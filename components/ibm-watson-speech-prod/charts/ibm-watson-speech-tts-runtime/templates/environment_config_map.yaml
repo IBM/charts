@@ -1,0 +1,66 @@
+{{- include "sch.config.init" (list . "sch.chart.chuck.tts.config.values") -}}
+{{- $compName := .sch.chart.components.ttsRuntime.name -}}
+{{- $fullCompName := include "sch.names.fullCompName" (list . $compName) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullCompName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+data:
+  env_config.json: |
+    {
+       "allowDashboard": true,
+       "anonymizeLogs": {{ .Values.anonymizeLogs }},
+       "defaultTTSVoice": {{ .Values.global.defaultTTSVoice | quote }},
+       "baseModelsSURL": {
+          "service": "baseModelsStore",
+          "urlSuffix": "{{ .Values.modelVersion }}"
+       },
+       "clusterGroups": {
+          "tts-rt-default": {
+             "component": "runtime",
+             "dns": "{{ $fullCompName }}",
+             "group": "default",
+             "models": [
+                {{ include "chuck.getEnabledModels" (list .Values.global.ttsVoices true) }}
+             ],
+             "service_type": "text-to-speech"
+          }
+       },
+       "defaultVerbosity": "INFO",
+       "meteringEnabled": false,
+       "requireCookies": false,
+       "serviceDependencies": {
+          "ttsCustomization": {
+             "baseUrl": "https://{{ .Release.Name }}-speech-to-text-tts-customization/text-to-speech/api/v1",
+             "healthCheckSuffix": "../../health/check",
+             "type": "UrlService"
+          },
+          "baseModelsStore": {
+             "accessKey": "MINIO_ACCESS_KEY",
+             "secretKey": "MINIO_SECRET_KEY",
+             "baseDirectory": "models",
+             "bucketId": "{{ .Values.global.datastores.minio.baseModelsBucket }}",
+             "endpointUrl": "{{ include "ibm-watson-speech-prod.object-storage-endpoint" . }}",
+             "type": "CloudObjectStorageService"
+          },
+          "customizationsStore": {
+             "accessKey": "MINIO_ACCESS_KEY",
+             "secretKey": "MINIO_SECRET_KEY",
+             "bucketId": "tts-customization-icp",
+             "endpointUrl": "{{ include "ibm-watson-speech-prod.object-storage-endpoint" . }}",
+             "type": "CloudObjectStorageService"
+          }
+       },
+       "setCookies": false
+    }
+
+  resourceRequirements.py: |
+{{ include "chuck.chuckResourceRequirements" (list .Values.groups.ttsRuntimeDefault.resources.threads .Values.global.ttsVoiceMarginalCPU) | indent 4 }}
+
+  sessionPools.yaml: |
+{{ include "chuck.chuckSessionPoolsYaml" .Values.global.ttsVoices | indent 4 }}
+
+  sessionPools.py: |
+{{ include "chuck.chuckSessionPoolsPy" . | indent 4 }}

@@ -1,0 +1,176 @@
+{{- include "sch.config.init" (list . "sch.chart.chuck.stt.ampatcher.config.values") -}}
+{{- $compName := .sch.chart.components.amPatcher.name -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  #replicas: 1 is the default, let's not use it and scale manually, so that kubectl apply does not overwrite this
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 3
+      maxUnavailable: {{ include "chuck.valueOrDefault" (list .Values.chuck.maxUnavailable "1") }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        enabledModelsChecksum: {{ include "chuck.getEnabledModels" (list .Values.global.sttModels true) | sha256sum | quote }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 1000
+        {{- end }}
+      terminationGracePeriodSeconds: 1800
+      initContainers:
+        {{ include "chuck.wait4models" (list . .Values.global.sttModels) | indent 8 }}
+      containers:
+      - name: chuck
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.images.chuck.image }}:{{ .Values.images.chuck.tag }}
+{{ include "chuck.containerSecurityContext" (list . 1000) | indent 8 }}
+        command: ['sh', '-c']
+        args:
+          - ACCESS_KEY=`cat /etc/chuck/minio/accesskey`;
+            SECRET_KEY=`cat /etc/chuck/minio/secretkey`;
+            sed -e "s/MINIO_ACCESS_KEY/${ACCESS_KEY}/g; s/MINIO_SECRET_KEY/${SECRET_KEY}/g" /opt/ibm/chuck.x86_64/var/env_config.json.template > /opt/ibm/chuck.x86_64/var/env_config.json;
+            sed -ie s/num_threads=./num_threads= {{- .Values.groups.sttAMPatcher.resources.threads -}} / coreModels/modelBaseTrainAM.py;
+            exec /opt/ibm/chuck.x86_64/runChuck.sh;
+        resources:
+          {{ include "chuck.getResources" (list .Values.global.sttModels .Values.groups.sttAMPatcher .Values.minimalResources.sttAMPatcher) | indent 10 }}
+        env:
+        # groups may map to the same deployment
+        - name: GROUP_KEY
+          value: stt-am-patcher
+        - name: SIDECAR_PORT
+          value: "9080"
+        - name: KUBERNETES_RESOURCE_CPUS
+          valueFrom:
+            resourceFieldRef:
+              containerName: chuck
+              resource: requests.cpu
+        - name: KUBERNETES_RESOURCE_MEM
+          valueFrom:
+            resourceFieldRef:
+              containerName: chuck
+              resource: requests.memory
+        - name: DOCKER_IMAGE
+          value: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.images.chuck.image }}:{{ .Values.images.chuck.tag }}
+        - name: LOGHANDLER
+          value: KibanaLogHandler
+        - name: SERVICE_TYPE
+          value: speech-to-text
+
+        - name: PAY_PLAN_ID
+          value: public
+        - name: COMPONENT
+          value: am-patcher
+        - name: GROUP
+          value: N-A
+        - name: TRACK
+          value: stable
+        - name: CLOUD_ENVIRONMENT
+          value: icp
+        - name: CHUCK_VAR
+          value: /opt/ibm/chuck.x86_64/var
+        - name: CLOUDPAK_RELEASE_NAME
+          value: {{ .Release.Name }}
+        - name: CLOUDPAK_PORT
+          value: {{ .Values.global.cloudPakPort | quote }}
+        ports:
+        - containerPort: 1080 #chuck http
+        readinessProbe:
+          httpGet:
+             path: /v1/miniHealthCheck
+             port: 1080
+          initialDelaySeconds: 10
+          #periodSeconds: 10 default
+          #timeoutSeconds: 1
+        livenessProbe:
+          tcpSocket:
+            port: 1080
+          initialDelaySeconds: 120
+          periodSeconds: 30
+        volumeMounts:
+        - mountPath: /opt/ibm/chuck.x86_64/var
+          name: chuck-var
+        - mountPath: /opt/ibm/chuck.x86_64/logs
+          name: chuck-logs
+        - mountPath: /opt/ibm/chuck.x86_64/var/env_config.json.template
+          name: chuck-env
+          subPath: env_config.json
+        - mountPath: /opt/ibm/chuck.x86_64/var/sessionPools.yaml
+          name: chuck-env
+          subPath: sessionPools.yaml
+        - mountPath: /opt/ibm/chuck.x86_64/var/sessionPools.py
+          name: chuck-env
+          subPath: sessionPools.py
+        - mountPath: /etc/chuck/minio
+          name: minio-account
+          readOnly: true
+        - mountPath: /opt/ibm/chuck.x86_64/var/resourceRequirements.py
+          name: chuck-env
+          subPath: resourceRequirements.py
+
+      - name: haproxy
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.images.haproxy.image }}:{{ .Values.images.haproxy.tag }}
+{{ include "chuck.containerSecurityContext" (list . 1000) | indent 8 }}
+        command: ['sh', '-c']
+        args:
+          - cat /etc/ssl/private-ssl/tls.crt /etc/ssl/private-ssl/tls.key > /etc/ssl/private/chuckHaproxy.includesprivatekey.pem;
+            exec /runHaproxy.sh;
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "1024Mi"
+            cpu: "1000m"
+        env:
+        ports:
+        - containerPort: 1081   #chuck http via haproxy
+        - containerPort: 1443 #chuck https via haproxy
+        readinessProbe:
+          httpGet:
+             path: /v1
+             port: 1443
+             scheme: HTTPS
+          initialDelaySeconds: 10
+          #periodSeconds: 10 default
+          #timeoutSeconds: 1
+        livenessProbe:
+          tcpSocket:
+            port: 1443
+          initialDelaySeconds: 15
+          periodSeconds: 30
+        volumeMounts:
+        - mountPath: /etc/ssl/private-ssl
+          name: runtime-ssl-certificate
+
+      affinity:
+{{- include "ibm-watson-speech-prod.affinity" . | indent 8 }}
+
+      volumes:
+        - name: chuck-var
+          emptyDir: {}
+        - name: chuck-logs
+          emptyDir: {}
+{{ include "chuck.defineSSLCertificateVolume" (list . "runtime-ssl-certificate") | indent 8 }}
+        - name: chuck-env
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . $compName) }}
+        - name: minio-account
+          secret:
+            secretName: {{ .Values.global.datastores.minio.secretName }}

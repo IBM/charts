@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ds-entitlement
+  labels:
+    app: ds-entitlement
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: ds-entitlement
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ds-entitlement
+  template:
+    metadata:
+      labels:
+        app: ds-entitlement
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/name: ds-entitlement
+        helm.sh/chart: {{ .Chart.Name | quote }}
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+      annotations:
+      {{- include "ds-product-metering" . | indent 8 }}
+    spec:
+      containers:
+      - name: ds-entitlement-container
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.release.image.ds.entitlement.repository }}:{{ .Values.release.image.ds.entitlement.tag }}
+        imagePullPolicy: {{ .Values.release.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          {{- if .Values.release.image.ds.entitlement.runAsUser }}
+          runAsUser: {{ .Values.release.image.ds.entitlement.runAsUser }}
+          {{- end }}
+          {{- if .Values.release.image.ds.entitlement.fsGroup }}
+          fsGroup: {{ .Values.release.image.ds.entitlement.fsGroup }}
+          {{- end }}
+        command: ['/bin/bash', '-c', 'tail -f /dev/null']
+        livenessProbe:
+          exec:
+            command:
+            - echo
+            - "entitlement pod live"
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        readinessProbe:
+          exec:
+            command:
+            - echo
+            - "entitlement pod ready"
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        resources:
+          requests:
+            memory: "64M"
+            cpu: "500m"
+          limits:
+            memory: "64M"
+            cpu: "500m"
+      {{- if .Values.release.image.ds.entitlement.serviceAccountName }}
+      serviceAccountName: {{ .Values.release.image.ds.entitlement.serviceAccountName }}
+      {{- end }}
+      {{- include "image-secret" . | indent 6 }}
