@@ -1,0 +1,19 @@
+{{ if .Values.global.persistence.portworxInstalled }}
+apiVersion: stork.libopenstorage.org/v1alpha1
+kind: Rule
+metadata:
+  name: mdc-pre-backup-rule
+rules:
+  - podSelector:
+      app.kubernetes.io/component: {{ .Values.cassandra.name }}
+    actions:
+      - type: command
+        value: nodetool flush
+  - podSelector:
+      app.kubernetes.io/component: {{ .Values.elasticsearch.name }}-{{ .Values.elasticsearch.data.role }}
+      role: {{ .Values.elasticsearch.data.role }}
+    actions:
+      - type: command
+        value: curl -X POST -k -u elastic:${ELASTIC_PASSWORD} "https://${HOSTNAME}:${{ .Values.elasticsearch.name | upper | replace "-" "_" }}_SERVICE_PORT_HTTP/_flush"
+        runInSinglePod: true
+{{ end }}

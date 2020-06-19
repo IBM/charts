@@ -1,0 +1,113 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ .Values.cassandra.name }}-enable-authentication
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "8"
+  labels:
+    app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    icpdsupport/app : {{ .Values.global.productLabelName }}
+    icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+    app.kubernetes.io/component: {{ .Values.cassandra.name }}-enable-authentication
+    app.kubernetes.io/part-of: {{ .Values.cassandra.name }}
+spec:
+  template:
+    metadata:
+      annotations:
+        productName: IBM Master Data Management
+        productID: MDM1000200300
+        productVersion: 1.0.0
+        productMetric: VIRTUAL_PROCESSOR_CORE
+        productChargedContainers: All
+        cloudpakName: "IBM Cloud Pak for Data"
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion: 3.0.1
+      labels:
+        app: {{ .Values.global.productLabelName }}
+        app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        release: {{ .Release.Name }}
+        icpdsupport/app : {{ .Values.global.productLabelName }}
+        icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+        icpdsupport/addOnName: "{{ .Values.zenServiceInstanceType }}"
+        app.kubernetes.io/component: {{ .Values.cassandra.name }}-enable-authentication
+        app.kubernetes.io/part-of: {{ .Values.cassandra.name }}
+    spec:
+      {{ if eq .Values.global.remoteDockerRepo true }}
+      imagePullSecrets:
+      - name: {{ .Values.global.imagePullSecretName }}
+      {{ end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccount: {{ .Values.sa.viewer }}
+      serviceAccountName: {{ .Values.sa.viewer }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+      containers:
+      - name: {{ .Values.cassandra.name }}-enable-authentication
+        image: {{ if .Values.global.docker_registry_prefix }}{{ trimSuffix "/" .Values.global.docker_registry_prefix }}/{{ end }}{{ .Values.cassandra.image }}:{{ .Values.cassandra.tag }}
+        imagePullPolicy: {{ .Values.cassandra.imagePullPolicy }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 1000325000
+        command: ["sh", "-c", "cqlsh --cqlshrc /etc/cassandra_config/.cassandra/cqlshrc --ssl -u cassandra -p cassandra -e \"alter keyspace system_auth with replication= {'class' : 'NetworkTopologyStrategy', '$CASSANDRA_DC' : $NODE_COUNT};\" && cqlsh --cqlshrc /etc/cassandra_config/.cassandra/cqlshrc --ssl -u cassandra -p cassandra -e \"select keyspace_name, replication from system_schema.keyspaces where keyspace_name = 'system_auth';\" && cqlsh --cqlshrc /etc/cassandra_config/.cassandra/cqlshrc --ssl -u cassandra -p cassandra -e \"alter user cassandra with PASSWORD '$CASSANDRA_PASSWORD';\" && if [ $? -eq 0 ]; then echo; echo 'Cassandra Authentication Enabled Successfully.'; exit 0; else echo 'Cassandra Authentication Failed.'; exit 1; fi"]
+        env:
+          - name: CASSANDRA_DC
+            value: {{ .Values.cassandra.cluster.dataCenter }}
+          - name: CASSANDRA_RACK
+            value: {{ .Values.cassandra.cluster.rack }}
+          - name: NODE_COUNT
+            value: "{{ .Values.cassandra.replicas }}"
+          - name: CASSANDRA_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.cassandra.name }}-tls-secret
+                key: cassandrapass
+        volumeMounts:
+        - name: cassandra-tls-secrets
+          mountPath: /etc/pki/tls/private/cassandra
+        - name: cassandra-cqlsh-config
+          mountPath: /etc/cassandra_config/.cassandra
+        resources:
+          requests:
+            cpu: {{ .Values.cassandra.authJob.requests.cpu }}
+            memory: {{ .Values.cassandra.authJob.requests.memory }}
+          limits:
+            cpu: {{ .Values.cassandra.authJob.limits.cpu }}
+            memory: {{ .Values.cassandra.authJob.limits.memory }}
+      volumes:
+        - name: cassandra-tls-secrets
+          secret:
+            secretName: {{ .Values.cassandra.name }}-tls-secret
+            items:
+              - key: keystorepem
+                path: keystorepem
+        - name: cassandra-cqlsh-config
+          configMap:
+            name: {{ .Values.cassandra.name }}-configuration
+            items:
+            - key: cqlshrc
+              path: cqlshrc
+      restartPolicy: Never
+  backoffLimit: {{ .Values.cassandra.authJob.backoffLimit }}

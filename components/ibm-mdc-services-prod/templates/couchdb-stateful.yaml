@@ -1,0 +1,214 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    icpdsupport/app : {{ .Values.global.productLabelName }}
+    icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+    app.kubernetes.io/component: {{ .Values.couchdb.name }}
+    app.kubernetes.io/part-of: {{ .Values.couchdb.name }}
+  name: {{ .Values.couchdb.name }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "5"
+spec:
+  podManagementPolicy: Parallel
+  {{- $shards := int .Values.couchdb.shards }}
+  {{- $podReplicas := int .Values.couchdb.replicas }}
+  {{- $replicas := int (mul $shards 3) }}
+  {{- if or (lt $shards 2) (gt $shards 5) }}
+    {{- fail "couchdb.shards must be between 2 and 5 inclusive" }}
+  {{- end }}
+  {{- if or (lt $podReplicas 3) (gt $podReplicas $replicas) }}
+    {{- fail "couchdb.replicas must be between 3 and $replicas inclusive" }}
+  {{- end }}
+  replicas: {{ .Values.couchdb.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: {{ .Values.couchdb.name }}
+      app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+  serviceName: {{ .Values.couchdb.name }}
+  template:
+    metadata:
+      annotations:
+        productName: IBM Master Data Management
+        productID: MDM1000200300
+        productVersion: 1.0.0
+        productMetric: VIRTUAL_PROCESSOR_CORE
+        productChargedContainers: All
+        cloudpakName: "IBM Cloud Pak for Data"
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion: 3.0.1
+      labels:
+        app: {{ .Values.global.productLabelName }}
+        app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        release: {{ .Release.Name }}
+        icpdsupport/app : {{ .Values.global.productLabelName }}
+        icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+        icpdsupport/addOnName: "{{ .Values.zenServiceInstanceType }}"
+        app.kubernetes.io/component: {{ .Values.couchdb.name }}
+        app.kubernetes.io/part-of: {{ .Values.couchdb.name }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccount: {{ .Values.sa.viewer }}
+      serviceAccountName: {{ .Values.sa.viewer }}
+      {{ if eq .Values.global.remoteDockerRepo true }}
+      imagePullSecrets:
+      - name: {{ .Values.global.imagePullSecretName }}
+      {{ end }}
+      securityContext:
+        runAsUser: 1000321000
+        fsGroup: 0
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+      containers:
+      - env:
+        - name: COUCHDB_USER
+          valueFrom:
+            secretKeyRef:
+              key: cloudant.username
+              name: {{ .Values.couchdb.name }}-secret
+        - name: COUCHDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: cloudant.password
+              name: {{ .Values.couchdb.name }}-secret
+        - name: COUCHDB_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: cookie.auth.secret
+              name: {{ .Values.couchdb.name }}-secret
+        - name: ERL_FLAGS
+          value: ' -name couchdb  -setcookie monster '
+        image: {{ if .Values.global.docker_registry_prefix }}{{ trimSuffix "/" .Values.global.docker_registry_prefix }}/{{ end }}{{ .Values.couchdb.image }}:{{ .Values.couchdb.tag }}
+        imagePullPolicy: {{ .Values.couchdb.imagePullPolicy }}
+        securityContext:
+          runAsUser: 1000321000
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 6984
+            scheme: HTTPS
+          initialDelaySeconds: 45
+          timeoutSeconds: 5
+        name: {{ .Values.couchdb.name }}
+        ports:
+        - containerPort: 6984
+          name: couchdb
+          protocol: TCP
+        - containerPort: 4369
+          name: epmd
+          protocol: TCP
+        - containerPort: 9100
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /_up
+            port: 6984
+            scheme: HTTPS
+          timeoutSeconds: 5
+        volumeMounts:
+        - mountPath: /opt/couchdb/etc/default.d
+          name: config-storage
+        - mountPath: /opt/couchdb/data
+          name: data-storage
+        - mountPath: /etc/couchdb/cert
+          name: couchdb-secret
+        resources:
+          limits:
+            cpu: {{ .Values.couchdb.requests.cpu }}
+            memory: {{ .Values.couchdb.requests.memory }}
+          requests:
+            cpu: {{ .Values.couchdb.requests.cpu }}
+            memory: {{ .Values.couchdb.requests.memory }}
+      initContainers:
+      - command:
+        - sh
+        - -c
+        - cp /tmp/chart.ini /default.d; cp /tmp/seedlist.ini /default.d; ls -lrt /default.d;
+        image: {{ if .Values.global.docker_registry_prefix }}{{ trimSuffix "/" .Values.global.docker_registry_prefix }}/{{ end }}{{ .Values.couchdb.image }}:{{ .Values.couchdb.tag }}
+        imagePullPolicy: {{ .Values.couchdb.imagePullPolicy }}
+        securityContext:
+          runAsUser: 1000321000
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        name: init-copy
+        volumeMounts:
+        - mountPath: /tmp/
+          name: couchdb-configuration
+        - mountPath: /default.d
+          name: config-storage
+        resources:
+          limits:
+            cpu: {{ .Values.couchdb.limits.cpu }}
+            memory: {{ .Values.couchdb.limits.memory }}
+          requests:
+            cpu: {{ .Values.couchdb.requests.cpu }}
+            memory: {{ .Values.couchdb.requests.memory }}
+      volumes:
+      - emptyDir: {}
+        name: config-storage
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: inifile
+            path: chart.ini
+          - key: seedlistinifile
+            path: seedlist.ini
+          name: {{ .Values.couchdb.name }}-configuration
+        name: couchdb-configuration
+      - secret:
+          items:
+          - key: privkey.pem
+            path: privkey.pem
+          - key: cloudant.crt
+            path: metadata.crt
+          secretName: {{ .Values.couchdb.name }}-secret
+        name: couchdb-secret
+  volumeClaimTemplates:
+  - metadata:
+      creationTimestamp: null
+      labels:
+        app.kubernetes.io/component: {{ .Values.couchdb.name }}
+      name: data-storage
+    spec:
+      {{- if or .Values.global.persistence.suppressDynamicProvisioning .Values.couchdb.suppressDynamicProvisioning }}
+      storageClassName: ""
+      {{- else if .Values.couchdb.storageClassName }}
+      storageClassName: {{ .Values.couchdb.storageClassName | quote }}
+      {{- else if .Values.global.persistence.storageClassName }}
+      storageClassName: {{ .Values.global.persistence.storageClassName | quote }}
+      {{- end }}
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: {{ .Values.couchdb.storage }}

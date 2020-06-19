@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    icpdsupport/app : {{ .Values.global.productLabelName }}
+    icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+    app.kubernetes.io/component: {{ .Values.aspera.name }}
+    app.kubernetes.io/part-of: {{ .Values.aspera.name }}
+  name: {{ .Values.aspera.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  serviceName: {{ .Values.aspera.name }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: {{ .Values.aspera.name }}
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        productName: IBM Master Data Management
+        productID: MDM1000200300
+        productVersion: 1.0.0
+        productMetric: VIRTUAL_PROCESSOR_CORE
+        productChargedContainers: All
+        cloudpakName: "IBM Cloud Pak for Data"
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion: 3.0.1
+      labels:
+        app: {{ .Values.global.productLabelName }}
+        app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        release: {{ .Release.Name }}
+        icpdsupport/app : {{ .Values.global.productLabelName }}
+        icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+        icpdsupport/addOnName: "{{ .Values.zenServiceInstanceType }}"
+        app.kubernetes.io/component: {{ .Values.aspera.name }}
+        app.kubernetes.io/part-of: {{ .Values.aspera.name }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccount: {{ .Values.sa.viewer }}
+      serviceAccountName: {{ .Values.sa.viewer }}
+      securityContext:
+        runAsUser: 1000325000
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+      terminationGracePeriodSeconds: 90
+      containers:
+      - name: {{ .Values.aspera.name }}
+        image: {{ if .Values.global.docker_registry_prefix }}{{ trimSuffix "/" .Values.global.docker_registry_prefix }}/{{ end }}{{ .Values.aspera.image }}:{{ .Values.aspera.tag }}
+        imagePullPolicy: {{ .Values.aspera.imagePullPolicy }}
+        securityContext:
+          runAsUser: 1000325000
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.aspera.port }}
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.aspera.port }}
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        resources:
+          requests:
+            cpu: {{ .Values.aspera.requests.cpu }}
+            memory: {{ .Values.aspera.requests.memory }}
+          limits:
+            cpu: {{ .Values.aspera.limits.cpu }}
+            memory: {{ .Values.aspera.limits.memory }}
+        ports:
+        - name: 'aspera-hst-port'
+          containerPort: {{ .Values.aspera.port }}
+        volumeMounts:
+        - name: {{ .Values.global.sharedStoragePVC.name }}
+          mountPath: /home/asperaserv/transfers
+        - name: aspera-server-sshd-configuration
+          mountPath: /opt/aspera/ssh/sshd_config
+          subPath: sshd_config
+        - name: aspera-server-rsa-secret
+          mountPath: /opt/aspera/ssh/ssh_host_rsa_key
+          subPath: ssh_host_rsa_key
+        - name: aspera-server-rsa-secret
+          mountPath: /opt/aspera/ssh/ssh_host_rsa_key.pub
+          subPath: ssh_host_rsa_key.pub
+        - name: aspera-server-client-keys
+          mountPath: /configmaps/authorized-client-keys
+      {{ if eq .Values.global.remoteDockerRepo true }}
+      imagePullSecrets:
+      - name: {{ .Values.global.imagePullSecretName }}
+      {{ end }}
+      volumes:
+        - name: {{ .Values.global.sharedStoragePVC.name }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.global.sharedStoragePVC.name }}
+        - name: aspera-server-sshd-configuration
+          configMap:
+            name: {{ .Values.aspera.name }}-sshd-configuration
+            defaultMode: 0755
+        - name: aspera-server-rsa-secret
+          secret:
+            secretName: {{ .Values.aspera.name }}-rsa-secret
+            defaultMode: 0750
+        - name: aspera-server-client-keys
+          configMap:
+            name: {{ .Values.aspera.name }}-client-keys
+            defaultMode: 0740

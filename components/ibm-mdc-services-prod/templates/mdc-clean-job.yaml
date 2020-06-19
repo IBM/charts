@@ -1,0 +1,83 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ .Values.mdc.name }}-clean
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-delete-policy": hook-succeeded
+  labels:
+    app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    icpdsupport/app : {{ .Values.global.productLabelName }}
+    icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+    app.kubernetes.io/component: {{ .Values.mdc.name }}-clean
+    app.kubernetes.io/part-of: {{ .Values.mdc.name }}
+spec:
+  template:
+    metadata:
+      annotations:
+        productName: IBM Master Data Management
+        productID: MDM1000200300
+        productVersion: 1.0.0
+        productMetric: VIRTUAL_PROCESSOR_CORE
+        productChargedContainers: All
+        cloudpakName: "IBM Cloud Pak for Data"
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion: 3.0.1
+      labels:
+        app: {{ .Values.global.productLabelName }}
+        app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        release: {{ .Release.Name }}
+        icpdsupport/app : {{ .Values.global.productLabelName }}
+        icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+        icpdsupport/addOnName: "{{ .Values.zenServiceInstanceType }}"
+        app.kubernetes.io/component: {{ .Values.mdc.name }}-clean
+        app.kubernetes.io/part-of: {{ .Values.mdc.name }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccount: {{ .Values.sa.editor }}
+      serviceAccountName: {{ .Values.sa.editor }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+      containers:
+      - name: {{ .Values.mdc.name }}-onboarding
+        image: {{ if .Values.global.docker_registry_prefix }}{{ trimSuffix "/" .Values.global.docker_registry_prefix }}/{{ end }}{{ .Values.mdc.image }}:{{ .Values.mdc.tag }}
+        imagePullPolicy: {{ .Values.mdc.imagePullPolicy }}
+        securityContext:
+          runAsUser: 1000325000
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        command: ["/bin/sh", "-c", "set -xe; kubectl delete all -l app.kubernetes.io/name={{ .Values.global.productLabelName }} --ignore-not-found=true; kubectl delete cm,secret,pdb,pvc -l app.kubernetes.io/name={{ .Values.global.productLabelName }} --ignore-not-found=true; kubectl delete pods -l spark-role=driver --ignore-not-found=true; kubectl delete cm mdc-app --ignore-not-found=true"]
+        resources:
+          requests:
+            cpu: {{ .Values.mdc.cleanJob.requests.cpu }}
+            memory: {{ .Values.mdc.cleanJob.requests.memory }}
+          limits:
+            cpu: {{ .Values.mdc.cleanJob.limits.cpu }}
+            memory: {{ .Values.mdc.cleanJob.limits.memory }}
+      {{ if eq .Values.global.remoteDockerRepo true }}
+      imagePullSecrets:
+      - name: {{ .Values.global.imagePullSecretName }}
+      {{ end }}
+      restartPolicy: Never
+  backoffLimit: {{ .Values.mdc.cleanJob.backoffLimit }}
