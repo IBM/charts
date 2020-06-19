@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "dg.fullname" . }}-ui
+  labels:
+    app: {{ template "dg.fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    icpd-addon/status: "{{ .Values.zenServiceInstanceId | int64 }}"
+    component: "datagate-ui"
+{{ include "dg.metadataLabels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.images.replicas }}
+  selector:
+    matchLabels:
+      app: {{ template "dg.fullname" . }}-ui
+      component: "datagate-ui"
+  template:
+    metadata:
+      annotations:
+        {{- include "datagate.annotations" .  | indent 8 }}
+      labels:
+        app: {{ template "dg.fullname" . }}-ui
+        release: "{{ .Release.Name }}"
+        chart: "{{ .Chart.Name }}"
+        component: "datagate-ui"
+{{ include "dg.metadataLabels" . | indent 8 }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: {{ default "default" .Values.targetDbInstance }}
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - name: data-gate-ui
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: true
+          runAsUser: 1000326001
+          capabilities:
+            drop:
+            - ALL
+        command: ["/bin/sh", "-c"]
+        args: ["sh /scripts/startup.sh;"]
+        image: "{{ .Values.images.ui.image.repository }}:{{ .Values.images.ui.image.tag }}"
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        env:
+        - name: DATAGATE_API_SERVICE_NAME
+          value: "{{ template "dg.fullname" . }}-data-gate-api-svc"
+        - name: ZEN_SERVICE_INSTANCE
+          value: {{ template "dg.fullname" . }}
+        ports:
+        - name: ui-port
+          containerPort: 8443
+        livenessProbe:
+          tcpSocket:
+            port: ui-port
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /console/test.html
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        resources:
+          limits:
+            memory: {{ .Values.images.ui.limit.memory }}
+            cpu: {{ .Values.images.ui.limit.cpu }}
+          requests:
+            memory: {{ .Values.images.ui.request.memory }}
+            cpu: {{ .Values.images.ui.request.cpu }}
+      serviceAccount: {{ default "default" .Values.serviceAccount }}
+      serviceAccountName: {{ default "default" .Values.serviceAccount }}
+      tolerations:
+        - key: "icp4data"
+          operator: "Exists"
+          effect: "NoSchedule"

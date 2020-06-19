@@ -1,0 +1,55 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: {{ template "data-gate-catalog.fullname" .}}-upload-job
+  labels:
+{{ include "data-gate-catalog.metadataLabels" . | indent 4 }}
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      annotations:
+{{- include "datagate-catalog.annotations" .  | indent 8 }}
+      labels:
+        component: "datagate-catalog-upload-job"
+{{ include "data-gate-catalog.metadataLabels" . | indent 8 }}
+    spec:
+      containers:
+      - name: {{ .Chart.Name }}
+        {{ if .Values.global.docker_registry_prefix }}
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        {{ else }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        {{ end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: true
+          runAsUser: 1000321000
+          capabilities:
+            drop:
+            - ALL
+        command: ['/bin/sh', '-cx']
+        args: ["sh /reloadNginxConfig.sh --namespace {{ .Values.baseNamespace }} --dbType {{ .Values.dbType }}; sh /upload.sh --image-registry {{ .Values.global.docker_registry_prefix }}"]
+        resources:
+{{ toYaml .Values.uploadJobResources | indent 10 }}
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+      volumes:
+        - name: user-home-mount
+          persistentVolumeClaim:
+            claimName: "user-home-pvc"
+      restartPolicy: Never
+      serviceAccount: {{ default "default" .Values.global.serviceAccount }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
