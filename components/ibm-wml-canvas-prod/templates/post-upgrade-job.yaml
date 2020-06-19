@@ -1,0 +1,65 @@
+{{- $compName := "spss-preupgrade-deletejobs" -}}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: {{$compName}}
+  labels:
+    app.kubernetes.io/name: {{$compName}}
+    helm.sh/chart: {{$compName}}
+    app.kubernetes.io/instance: {{$compName}}
+  annotations:
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded 
+    {{- if .Values.global.annotations }}
+{{ toYaml .Values.global.annotations | trim | indent 4 }}
+    {{- end }}
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{$compName}}
+        helm.sh/chart: {{$compName}}
+        component: {{$compName}}
+        app.kubernetes.io/instance: {{$compName}}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.global.runAsUser }}
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - "amd64"
+                      - "ppc64le"
+      restartPolicy: Never
+      containers:
+        - name: {{$compName}}
+          image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.preInstaller.image.repository }}:{{ .Values.preInstaller.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}          
+          resources:
+            limits:
+              cpu: "0.5"
+              memory: "256Mi"
+            requests:
+              cpu: "0.5"
+              memory: "256Mi"
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ .Values.global.runAsUser }}
+            capabilities:
+              drop:
+                - ALL
+          command: [ "/bin/bash" , "-c" ,
+                   "/usr/local/bin/upgrade-cleanup.sh" ]

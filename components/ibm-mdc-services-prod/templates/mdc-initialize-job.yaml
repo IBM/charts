@@ -1,0 +1,138 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ .Values.mdc.name }}-initialize
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "0"
+  labels:
+    app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    icpdsupport/app: {{ .Values.global.productLabelName }}
+    icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+    app.kubernetes.io/component: {{ .Values.mdc.name }}-initialize
+    app.kubernetes.io/part-of: {{ .Values.mdc.name }}
+spec:
+  template:
+    metadata:
+      annotations:
+        productName: IBM Master Data Management
+        productID: MDM1000200300
+        productVersion: 1.0.0
+        productMetric: VIRTUAL_PROCESSOR_CORE
+        productChargedContainers: All
+        cloudpakName: "IBM Cloud Pak for Data"
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion: 3.0.1
+      labels:
+        app: {{ .Values.global.productLabelName }}
+        app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        release: {{ .Release.Name }}
+        icpdsupport/app : {{ .Values.global.productLabelName }}
+        icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+        icpdsupport/addOnName: "{{ .Values.zenServiceInstanceType }}"
+        app.kubernetes.io/component: {{ .Values.mdc.name }}-initialize
+        app.kubernetes.io/part-of: {{ .Values.mdc.name }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccount: {{ .Values.sa.editor }}
+      serviceAccountName: {{ .Values.sa.editor }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+      {{ if eq .Values.global.remoteDockerRepo true }}
+      imagePullSecrets:
+      - name: {{ .Values.global.imagePullSecretName }}
+      {{ end }}
+      containers:
+      - name: {{ .Values.mdc.name }}-initialize
+        image: {{ if .Values.global.docker_registry_prefix }}{{ trimSuffix "/" .Values.global.docker_registry_prefix }}/{{ end }}{{ .Values.mdc.image }}:{{ .Values.mdc.tag }}
+        imagePullPolicy: {{ .Values.mdc.imagePullPolicy }}
+        command:
+        - /bin/bash
+        - -c
+        - 'echo "${USER_NAME:-default}:x:$(id -u):0:${USER_NAME:-default} user:/usr/operational-cache:/sbin/nologin" >> /etc/passwd && cd /usr/operational-cache/init/init/bin && ./configure.sh'
+        env:
+        - name: NAMESPACE_NAME
+          value: {{ .Release.Namespace }}
+        - name: KEYSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.mdc.initSecretName }}
+              key: keystore.password
+        - name: CASSANDRA_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.mdc.initSecretName }}
+              key: cassandra.password
+        - name: ELASTICSEARCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.mdc.initSecretName }}
+              key: elasticsearch.password
+        - name: COUCHDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.mdc.initSecretName }}
+              key: couchdb.password
+        - name: COUCHDB_COOKIE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.mdc.initSecretName }}
+              key: couchdb.cookie.password
+        - name: COUCHDB_USERNAME
+          value: {{ .Values.couchdb.username }}
+        - name: ASPERA_ALIAS
+          value: {{ .Values.aspera.aliasname }}
+        - name: ASPERA_RESOURCE_PREFIX
+          value: {{ .Values.aspera.name }}
+        - name: COUCHDB_RESOURCE_PREFIX
+          value: {{ .Values.couchdb.name }}
+        - name: CASSANDRA_RESOURCE_PREFIX
+          value: {{ .Values.cassandra.name }}
+        - name: MDC_RESOURCE_PREFIX
+          value: {{ .Values.mdc.name }}
+        - name: ELASTICSEARCH_RESOURCE_PREFIX
+          value: {{ .Values.elasticsearch.name }}
+        resources:
+          requests:
+            cpu: {{ .Values.mdc.initializeJob.requests.cpu }}
+            memory: {{ .Values.mdc.initializeJob.requests.memory }}
+          limits:
+            cpu: {{ .Values.mdc.initializeJob.limits.cpu }}
+            memory: {{ .Values.mdc.initializeJob.limits.memory }}
+        securityContext:
+          runAsUser: 1000325000
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+          - name: metadatainfo
+            mountPath: /etc/metadatainfo
+      volumes:
+        - name: metadatainfo
+          downwardAPI:
+            items:
+              - path: "labels"
+                fieldRef:
+                  fieldPath: metadata.labels
+      restartPolicy: Never
+  backoffLimit: {{ .Values.mdc.initializeJob.backoffLimit }}

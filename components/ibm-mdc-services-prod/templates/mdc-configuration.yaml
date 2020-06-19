@@ -1,0 +1,418 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ .Values.mdc.name }}-configuration
+  labels:
+    app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    icpdsupport/app : {{ .Values.global.productLabelName }}
+    icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+    app.kubernetes.io/component: {{ .Values.mdc.name }}
+    app.kubernetes.io/part-of: {{ .Values.mdc.name }}
+data:
+  janusgraph-static.properties: |
+    # General static settings
+    gremlin.graph=org.janusgraph.core.JanusGraphFactory
+    cache.db-cache = true
+    cache.db-cache-clean-wait = 20
+    cache.db-cache-time = 180000
+    schema.default=none
+    cache.db-cache-size = 0.5
+    graph.replace-instance-if-exists = true
+
+    # Indexing static settings
+    index.search.backend=elasticsearch
+    index.search.map-name=true
+    query.force-index=true
+    index.search.elasticsearch.create.use-external-mappings=true
+
+    # Storage static settings
+    storage.backend=cql
+    storage.lock.retries=5
+    storage.lock.wait-time=250
+
+    # Storage Replication
+    storage.cql.replication-factor={{ .Values.cassandra.replicas }}
+    storage.cql.replication-strategy-class=NetworkTopologyStrategy
+    storage.cql.replication-strategy-options={{ .Values.cassandra.cluster.dataCenter }},{{ .Values.cassandra.replicas }}
+
+    # Index Replication
+    index.search.elasticsearch.create.ext.number_of_shards=1
+    index.search.elasticsearch.create.ext.number_of_replicas={{ sub .Values.elasticsearch.data.replicas 1 }}
+
+  env.sh: |
+
+    export JANUS_HOME=/usr/operational-cache/janus
+    export PATH=$PATH:/opt/spark/bin
+    export PRODUCT_HOME=/usr/operational-cache
+    export WLP_HOST=localhost
+    export WLP_HTTPS_PORT=$OC_HTTPS_PORT
+
+    export JAVA_HOME=/usr/lib/jvm/jre-1.8.0-openjdk
+    export JAVA=$JAVA_HOME/bin/java
+  analytics-config.xml: |
+    <configuration>
+    	<property>
+    		<name>analytics.search.request.timeout</name>
+    		<value>60</value>
+    	</property>
+    	<property>
+    		<name>analytics.janus.pool.size</name>
+    		<value>4</value>
+    	</property>
+    	<property>
+    		<name>analytics.thread.pool.core-size</name>
+    		<value>16</value>
+    	</property>
+    	<property>
+    		<name>analytics.thread.pool.max-size</name>
+    		<value>64</value>
+    	</property>
+    	<property>
+    		<name>analytics.subgraph.distance-limit</name>
+    		<value>3</value>
+    	</property>
+    	<property>
+    		<name>analytics.subgraph.vertex-limit</name>
+    		<value>50</value>
+    	</property>
+    	<property>
+    		<name>analytics.subgraph.max-edges-per-vertex</name>
+    		<value>50</value>
+    	</property>
+    	<property>
+    		<name>analytics.job.resources.request.cpu</name>
+    		<value>{{ .Values.mdc.apiJob.requests.cpu }}</value>
+    	</property>
+    	<property>
+    		<name>analytics.job.resources.request.memory</name>
+    		<value>{{ .Values.mdc.apiJob.requests.memory }}</value>
+    	</property>
+    	<property>
+    		<name>analytics.job.resources.limit.cpu</name>
+    		<value>{{ .Values.mdc.apiJob.limits.cpu }}</value>
+    	</property>
+    	<property>
+    		<name>analytics.job.resources.limit.memory</name>
+    		<value>{{ .Values.mdc.apiJob.limits.memory }}</value>
+    	</property>
+    </configuration>  
+  spark-config.xml: |
+    <configuration>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.driverEnv.SPARK_EXTRA_CLASSPATH_PATTERN</name>
+            <value>/usr/analytics-common/libs/hbase-shaded-client-,/usr/analytics-common/libs/analytics-graph-api-model-,/usr/analytics-common/libs/commons-csv-,/usr/analytics-common/libs/analytics-graph-core-,/usr/analytics-common/libs/analytics-logical-model-,/usr/analytics-common/libs/scala-logging_,/usr/analytics-common/libs/elasticsearch-spark-,/usr/spark/jars/univocity-parsers-,/usr/analytics-common/janus/lib/httpclient-,/usr/analytics-common/janus/lib/httpcore-,/usr/analytics-common/janus/lib/httpasyncclient-,/usr/analytics-common/janus/lib/httpcore-nio-,/usr/analytics-common/janus/lib/json-simple-,/usr/analytics-common/janus/lib/elasticsearch-rest-client-,/usr/analytics-common/janus/lib/janusgraph-core-,/usr/analytics-common/janus/lib/gremlin-core-,/usr/analytics-common/janus/lib/gremlin-shaded-,/usr/analytics-common/janus/lib/reflections-,/usr/analytics-common/janus/lib/guava-,/usr/analytics-common/janus/lib/janusgraph-cassandra-,/usr/analytics-common/janus/lib/cassandra-all-,/usr/analytics-common/janus/lib/cassandra-thrift-,/usr/analytics-common/janus/lib/jamm-,/usr/analytics-common/janus/lib/astyanax-cassandra-,/usr/analytics-common/janus/lib/janusgraph-es-,/usr/analytics-common/janus/lib/hadoop-gremlin-,/usr/analytics-common/janus/lib/hppc-,/usr/analytics-common/janus/lib/high-scale-lib-,/usr/analytics-common/janus/lib/spark-gremlin-,/usr/analytics-common/janus/lib/javatuples-,/usr/analytics-common/janus/lib/janusgraph-cql-,/usr/analytics-common/janus/lib/cassandra-driver-core-,/usr/analytics-common/janus/lib/vavr-,/usr/analytics-common/janus/lib/guava-,/usr/analytics-common/janus/lib/janusgraph-solr-,/usr/analytics-common/janus/lib/solr-solrj-,/usr/analytics-common/janus/lib/lucene-core-,/usr/analytics-common/janus/lib/noggit-,/usr/analytics-common/janus/lib/httpmime-</value>
+        </property>
+        <property>
+            <name>sparkload.master</name>
+            <value>k8s://https://kubernetes.default.svc:443</value>
+        </property>
+        <property>
+            <name>sparkload.deploy-mode</name>
+            <value>cluster</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.container.image.pullPolicy</name>
+            <value>{{ .Values.spark.imagePullPolicy }}</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.driver.secrets.{{ .Values.spark.name }}-janusgraph-configuration-secret</name>
+            <value>/configmaps/janusgraph</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.executor.secrets.{{ .Values.spark.name }}-janusgraph-configuration-secret</name>
+            <value>/configmaps/janusgraph</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.driver.secrets.{{ .Values.spark.name }}-elasticsearch-configuration-secret</name>
+            <value>/configmaps/index</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.executor.secrets.{{ .Values.spark.name }}-elasticsearch-configuration-secret</name>
+            <value>/configmaps/index</value>
+        </property>
+
+        <property>
+            <name>sparkload-conf.spark.kubernetes.driver.secrets.{{ .Values.spark.name }}-cassandra-configuration-secret</name>
+            <value>/configmaps/data</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.executor.secrets.{{ .Values.spark.name }}-cassandra-configuration-secret</name>
+            <value>/configmaps/data</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.driver.secrets.{{ .Values.cassandra.name }}-tls-secret</name>
+            <value>/secrets/data</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.executor.secrets.{{ .Values.cassandra.name }}-tls-secret</name>
+            <value>/secrets/data</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.driver.secrets.{{ .Values.elasticsearch.name }}-tls-secret</name>
+            <value>/secrets/index</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.executor.secrets.{{ .Values.elasticsearch.name }}-tls-secret</name>
+            <value>/secrets/index</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.driverEnv.JANUS_STATIC_CONFIG</name>
+            <value>/staging/janusgraph/janusgraph-static.properties</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.driver.volumes.persistentVolumeClaim.spark-share.mount.readOnly</name>
+            <value>false</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-share.mount.readOnly</name>
+            <value>false</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.driver.volumes.persistentVolumeClaim.spark-share.options.claimName</name>
+            <value>{{ .Values.global.sharedStoragePVC.name }}</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-share.options.claimName</name>
+            <value>{{ .Values.global.sharedStoragePVC.name }}</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-share.mount.path</name>
+            <value>/shared-volume</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.driver.volumes.persistentVolumeClaim.spark-share.mount.path</name>
+            <value>/shared-volume</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.driver.volumes.emptyDir.staging-configuration.mount.path</name>
+            <value>/staging</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.executor.volumes.emptyDir.staging-configuration.mount.path</name>
+            <value>/staging</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.driver.volumes.emptyDir.janus-keystore-dir.mount.path</name>
+            <value>/etc/pki/tls/certs/janus</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.executor.volumes.emptyDir.janus-keystore-dir.mount.path</name>
+            <value>/etc/pki/tls/certs/janus</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.executor.instances</name>
+            <value>{{ .Values.spark.executor.instanceCount }}</value>
+        </property>
+        {{ if .Values.spark.driver.cpu }}
+        <property>
+            <name>sparkload-conf.spark.kubernetes.driver.limit.cores</name>
+            <value>{{ .Values.spark.driver.cpu }}</value>
+        </property>
+        {{ end }}
+        <property>
+            <name>sparkload-conf.spark.driver.memory</name>
+            <value>{{ .Values.spark.driver.memory }}</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.memoryOverheadFactor</name>
+            <value>{{ .Values.spark.memoryOverheadFactor }}</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.executor.limit.cores</name>
+            <value>{{ .Values.spark.executor.cpu }}</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.driverEnv.SPARK_EXECUTOR_MEMORY</name>
+            <value>{{ .Values.spark.executor.memory }}</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.sql.shuffle.partitions</name>
+            <value>{{ .Values.spark.shufflePartitions }}</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.app.name</name>
+            <value>load-everything</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.namespace</name>
+            <value>{{ .Release.Namespace }}</value>
+        </property>
+        {{ if eq .Values.global.remoteDockerRepo true }}
+        <property>
+            <name>sparkload-conf.spark.kubernetes.container.image.pullSecrets</name>
+            <value>{{ .Values.global.imagePullSecretName }}</value>
+        </property>
+        {{ end }}
+        <property>
+            <name>sparkload-conf.spark.kubernetes.authenticate.driver.serviceAccountName</name>
+            <value>{{ .Values.sa.editor }}</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.kubernetes.container.image</name>
+            <value>{{ if .Values.global.docker_registry_prefix }}{{ trimSuffix "/" .Values.global.docker_registry_prefix }}/{{ end }}{{ .Values.spark.image }}:{{ .Values.spark.tag }}</value>
+        </property>
+        <property>
+            <name>sparkload-conf.spark.jars.ivy</name>
+            <value>/usr/operational-cache</value>
+        </property>
+    </configuration>
+  load-config.xml: |
+    <configuration>
+    	<property>
+    		<name>analytics.load.sample.consent</name>
+    		<value>/shared-volume/sample/mdm-extract</value>
+    	</property>
+    		<property>
+    		<name>analytics.load.sample.consent-small</name>
+    		<value>/shared-volume/sample/mdm-extract-with-consent-small</value>
+    	</property>
+    	<property>
+    		<name>analytics.load.sample.contract</name>
+    		<value>/shared-volume/sample/mdm-extract-with-contract</value>
+    	</property>
+    	<property>
+    		<name>analytics.load.sample.contract-small</name>
+    		<value>/shared-volume/sample/mdm-extract-with-contract-small</value>
+    	</property>
+    </configuration>
+  jvm.options: |
+    -Djava.security.properties=/usr/operational-cache/conf/java.security
+    -Xmx2g
+    -Dcom.ibm.ws.logging.log.directory=/var/log/operational-cache
+    -Dfile.encoding=UTF8
+    -Dmp.openapi.extensions.liberty.public.url=api-cache
+  server.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <server description="MDM Cache Server">
+        <!-- WLP Settings -->
+        <httpEndpoint accessLoggingRef="cache-access" host="*" httpPort="-1" httpsPort="${https.port}" id="defaultHttpEndpoint">
+        <tcpOptions soReuseAddr="true"/>
+        <httpOptions maxKeepAliveRequests="-1" readTimeout="1m" writeTimeout="1m"/>
+        <accessLogging filePath="/var/log/operational-cache/access/access.log" id="cache-access" logFormat=" %h %i %u %t %q &quot;%r&quot; %s %b %D" maxFileSize="100" maxFiles="3"/>
+        </httpEndpoint>
+        <featureManager>
+                <feature>jsp-2.3</feature>
+                <feature>servlet-4.0</feature>
+                <feature>ssl-1.0</feature>
+                <feature>cdi-2.0</feature>
+                <feature>ejbLite-3.2</feature>
+                <feature>jaxrs-2.1</feature>
+                <feature>openapi-3.1</feature>
+                <feature>appSecurity-3.0</feature>
+                <feature>concurrent-1.0</feature>
+                <feature>jsonb-1.0</feature>
+                <feature>jwt-1.0</feature>
+        </featureManager>
+
+        <!-- Ensure WLP does not report successful start until web applications have completed loading or 2 mins have passed -->
+        <applicationManager startTimeout="2m"/>
+
+        <!-- Disable welcome page -->
+        <httpDispatcher enableWelcomePage="false"/>
+
+        <webContainer deferServletLoad="false"/>
+        <!-- Logging Settings -->
+        <logging consoleLogLevel="INFO" copySystemStreams="false" maxFileSize="5" maxFiles="4" suppressSensitiveTrace="true" traceFormat="ADVANCED" traceSpecification="org.janusgraph.graphdb.database.IndexSerializer=off:com.datastax.driver.core.*=audit"/>
+        <!-- Job Service Settings -->
+        <!-- Required to set the thread pool up for async job launches. -->
+        <managedExecutorService jndiName="concurrent/execSvc1">
+            <contextService>
+                <classloaderContext/>
+                <securityContext/>
+                    <jeeMetadataContext/>
+            </contextService>
+        </managedExecutorService>
+
+        <transaction totalTranLifetimeTimeout="1m"/>
+        <!-- Variables -->
+        <variable name="cache.reader.role" value="MDC-Reader"/>
+        <variable name="cache.writer.role" value="MDC-Writer"/>
+        <variable name="cache.manager.role" value="MDC-Manager"/>
+        <variable name="http.port" value="${env.OC_HTTP_PORT}"/>
+        <variable name="https.port" value="${env.OC_HTTPS_PORT}"/>
+        <variable name="ibm.cp4d.jwks.endpoint" value="https://ibm-nginx-svc/auth/jwtpublic"/>
+        <variable name="ibm.cp4d.jwt.issuer" value="ICPD"/>
+        <variable name="platform.home" value="${platform.home}"/>
+
+        <!-- Environment Settings -->
+        <classloading useJarUrls="true"/>
+
+        <!-- Security Settings -->
+        <webAppSecurity singleSignonEnabled="false" allowFailOverToBasicAuth="false"/>
+        <httpSession cookieHttpOnly="true" cookieSecure="true" invalidationTimeout="1800" securityIntegrationEnabled="false" useContextRootAsCookiePath="false"/>
+        <!-- registry settings: A WLP registry is NOT used. This registry is only added to address CWWKS3005E errors generated on each request. will remove once WLP addresses  -->
+        <quickStartSecurity userName="noUser" userPassword="l50JakGvCxsIJwjhLehzwH8Ypyssm1gYIVkeEbyQ" />
+
+        <sslDefault sslRef="defaultSSLSettings"/>
+        <ssl clientAuthenticationSupported="false" id="defaultSSLSettings" keyStoreRef="defaultKeyStore" trustDefaultCerts="true" sslProtocol="TLSv1.2" enabledCiphers="TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384 TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256 TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA"/>
+
+        <jwtConsumer id="cp4dJwtConsumer" trustStoreRef="defaultKeyStore" jwkEndpointUrl="${ibm.cp4d.jwks.endpoint}" issuer="${ibm.cp4d.jwt.issuer}" signatureAlgorithm="RS256" jwkEnabled="true"/>
+
+        <library id="cp4dTaiLibrary">
+                <fileset dir="${product.home}/lib/security" includes="wlp-cp4d*.jar"/>
+        </library>
+
+        <trustAssociation id="cp4dTai" invokeForUnprotectedURI="false" failOverToAppAuthType="false">
+                <interceptors id="cp4dTai" enabled="true" className="com.ibm.entity.analytics.security.CP4DTrustAssociationInterceptor" invokeBeforeSSO="true" invokeAfterSSO="false" libraryRef="cp4dTaiLibrary">
+                        <properties jwt.consumer.id="cp4dJwtConsumer" jwt.issuer="${ibm.cp4d.jwt.issuer}"/>
+                </interceptors>
+        </trustAssociation>
+
+        <!-- SSL Config -->
+        <keyStore id="defaultKeyStore" password="${env.WLP_KEYSTORE_PASS}"/>
+        <ltpa keysPassword="${env.WLP_LTPA_PASS}"/>
+
+        <library id="cacheLibrary">
+            <folder dir="${product.home}/conf/analytics"/>
+            <folder dir="${product.home}/conf/load"/>
+            <folder dir="${product.home}/conf/spark"/>
+            <fileset dir="${product.home}/janus/lib" includes="janusgraph-core-*.jar, janusgraph-es-*.jar, janusgraph-solr-*.jar, janusgraph-cql-*.jar, janusgraph-cassandra-*.jar, solr-solrj-*.jar, gremlin-core-*.jar, gremlin-groovy-*.jar, groovy-*.jar, caffeine-*.jar, jbcrypt-*.jar, gremlin-shaded-*.jar, protobuf-java-*.jar, zookeeper-*.jar, htrace-core-*.jar, netty-all-*.jar, log4j-*.jar, metrics-core-*.jar, commons-codec-*.jar, reflections-*.jar, httpasyncclient-*.jar, httpclient-*.jar, httpcore-*.jar, httpmime-*.jar, noggit-*.jar, hppc-*.jar, high-scale-lib-*.jar, commons-cli-*.jar, commons-io-*.jar, lucene-core-*.jar, guava-*.jar, spark-gremlin-*.jar, javatuples-*.jar, cassandra-driver-core-*.jar, vavr-*.jar, commons-configuration-*.jar, commons-logging-*.jar, commons-collections-*.jar, commons-lang3-*.jar, hadoop-hdfs-*.jar, hadoop-common-*.jar, hadoop-auth-*.jar, elasticsearch-rest-client-*.jar"/>
+             <fileset dir="${product.home}/lib" includes="*.jar"/>
+             <fileset dir="${product.home}/lib/transform" includes="*.jar"/>
+             <fileset dir="${product.home}/lib/boarding" includes="*.jar"/>
+        </library>
+
+        <webApplication id="cache-api-rest" location="operational-cache-api-rest.war" name="cache-api-rest">
+            <classloader privateLibraryRef="cacheLibrary"/>
+                <application-bnd>
+                    <security-role name="Everyone">
+                        <special-subject type="EVERYONE"/>
+                    </security-role>
+                    <security-role name="Reader">
+                        <group name="ReaderGroup" access-id="group:${ibm.cp4d.jwt.issuer}/${cache.reader.role}"/>
+                        <group name="WriterGroup" access-id="group:${ibm.cp4d.jwt.issuer}/${cache.writer.role}"/>
+                        <group name="ManagerGroup" access-id="group:${ibm.cp4d.jwt.issuer}/${cache.manager.role}"/>
+                    </security-role>
+                    <security-role name="Writer">
+                        <group name="WriterGroup" access-id="group:${ibm.cp4d.jwt.issuer}/${cache.writer.role}"/>
+                                <group name="ManagerGroup" access-id="group:${ibm.cp4d.jwt.issuer}/${cache.manager.role}"/>
+                    </security-role>
+                    <security-role name="Manager">
+                        <group name="ManagerGroup" access-id="group:${ibm.cp4d.jwt.issuer}/${cache.manager.role}"/>
+                    </security-role>
+                </application-bnd>
+        </webApplication>
+    </server>
+  service-action.properties: |
+    mdm-oc.rest.read=Reader
+    mdm-oc.rest.write=Writer
+    mdm-oc.rest.manage=Manager
+  bootstrap.properties: |
+
+    product.home=${wlp.install.dir}/..
+
+    # set the message file name
+    com.ibm.ws.logging.message.file.name=wlp.log
+
+    # set the trace file name
+    com.ibm.ws.logging.trace.file.name=wlpTrace.log
+
+  java.security: |
+    #The following configurations will protect against various security exploits
+    #CVE-2014-3566, CVE-2015-2808, CVE-2015-4000, CVE-2015-7575
+    jdk.certpath.disabledAlgorithms=MD2, MD5, RSA keySize < 1024, DSA keySize < 1024, EC keySize < 224
+    jdk.tls.disabledAlgorithms=SSLv3, RC4, MD5withRSA, DH keySize < 768, 3DES_EDE_CBC, DESede, EC keySize < 224

@@ -2,6 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ template "addon.fullname" . }}-config
+#  name: {{ template "addon.oldchartfullname" . }}-config
   labels:
     app: {{ template "addon.name" . }}
     chart: {{ template "addon.chart" . }}
@@ -24,7 +25,7 @@ data:
           "consoleURL": "/cognosanalytics",
           "external_console": true,
           "generate_username": false,
-          "service_provider_url": "http://admin:password@ibm-cognos-addon-sp-service:3100",
+          "service_provider_url": "http://ibm-cognos-addon-sp-service:3100",
           "accessManagementURL": "/{{ .Release.Name }}-cognos-analytics-content/webpage/#/caUserManagement",
           "serviceDetailsURL": "/{{ .Release.Name }}-cognos-analytics-content/webpage/#/caDetails",
           "premium": "true"
@@ -40,10 +41,17 @@ data:
             "helm_location": {
               "chart_path": [
                 {{- $rname := .Release.Name -}}
+                {{- $sname := .Values.serviceNameRoute -}}
                 {{- $local := dict "first" true -}}
+                {{- $scheme := "https" -}}
+                {{- $port := "8443" -}}
+                {{- if not .Values.global.tls.enabled -}}
+                {{- $scheme := "http" -}}
+                {{- $port := "8080" -}}
+                {{- end -}}
                 {{- range .Files.Lines "packages.txt" }}
                 {{- if not $local.first -}},{{- end }}
-                  {{ printf "http://%s-cognos-analytics-addon:8080/charts/cognos-analytics-service/%s" $rname .  | quote }}
+                {{ printf "%s://%s-%s:%s/charts/cognos-analytics-service/%s" $scheme $rname $sname $port .  | quote }}
                 {{- $_ := set $local "first" false -}}
                 {{- end }}
               ]
@@ -58,6 +66,25 @@ data:
   nginx.conf: |
     underscores_in_headers on;
 
+    location ~ ^/cognosanalytics/artifacts/(.*)$ {
+                  error_log  /dev/stdout notice;
+                  access_log /dev/stdout;
+                  rewrite_log on;
+                  access_by_lua_file /nginx_data/checkjwt.lua;
+                  proxy_http_version 1.1;
+                  proxy_set_header Host $host;
+                  {{- if .Values.global.tls.enabled }}
+                  proxy_pass https://artifacts.{{ .Release.Namespace }}.svc.cluster.local:3000/$1$is_args$args;
+                  {{- else -}}
+                  proxy_pass http://artifacts.{{ .Release.Namespace }}.svc.cluster.local:3000/$1$is_args$args;
+                  {{- end }}
+                  proxy_read_timeout     300s;
+                  proxy_send_timeout     300s;
+                  proxy_connect_timeout  300s;
+                  client_body_buffer_size     3m;
+                  client_max_body_size 15m;
+    }
+
     location ~ ^/cognosanalytics/bi/(.*)$ {
         error_log  /dev/stdout notice;
         access_log /dev/stdout;
@@ -66,8 +93,11 @@ data:
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-BI-PATH /cognosanalytics/bi/v1;
-
+        {{- if .Values.global.tls.enabled }}
+        proxy_pass https://biapp.{{ .Release.Namespace }}.svc.cluster.local:9300/bi/$1$is_args$args;
+        {{- else -}}
         proxy_pass http://biapp.{{ .Release.Namespace }}.svc.cluster.local:9300/bi/$1$is_args$args;
+        {{- end }}
         proxy_read_timeout     300s;
         proxy_send_timeout     300s;
         proxy_connect_timeout  300s;
@@ -98,8 +128,11 @@ data:
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-BI-PATH /cognosanalytics/bi/v1;
-
+        {{- if .Values.global.tls.enabled }}
+        proxy_pass https://biapp.{{ .Release.Namespace }}.svc.cluster.local:9300/$1/$2$is_args$args;
+        {{- else -}}
         proxy_pass http://biapp.{{ .Release.Namespace }}.svc.cluster.local:9300/$1/$2$is_args$args;
+        {{- end }}
         proxy_read_timeout     300s;
         proxy_send_timeout     300s;
         proxy_connect_timeout  300s;
@@ -115,8 +148,11 @@ data:
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-BI-PATH /cognosanalytics/bi/v1;
-
+        {{- if .Values.global.tls.enabled }}
+        proxy_pass https://biapp.{{ .Release.Namespace }}.svc.cluster.local:9300/$1$is_args$args;
+        {{- else -}}
         proxy_pass http://biapp.{{ .Release.Namespace }}.svc.cluster.local:9300/$1$is_args$args;
+        {{- end }}
         proxy_read_timeout     300s;
         proxy_send_timeout     300s;
         proxy_connect_timeout  300s;
@@ -146,13 +182,15 @@ data:
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
-
-        # proxy_pass http://nginx-server-$2-$1-svc:8080;
-        # TODO: remote hard coded
-        proxy_pass http://{{ .Release.Name }}-cognos-analytics-addon:8080/;
+        {{- if .Values.global.tls.enabled }}
+        proxy_pass https://{{ .Release.Name }}-{{ .Values.serviceNameRoute }}:8443/;
+        {{- else -}}
+        proxy_pass http://{{ .Release.Name }}-{{ .Values.serviceNameRoute }}:8080/;
+        {{- end }}
         proxy_read_timeout     300s;
         proxy_send_timeout     300s;
         proxy_connect_timeout  300s;
         client_body_buffer_size     3m;
         client_max_body_size 15m;
     }
+

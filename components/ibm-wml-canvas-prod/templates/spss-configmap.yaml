@@ -5,7 +5,7 @@ metadata:
   labels:
     icpdata_addon: "true"
     icpdata_addon_version: {{.Chart.AppVersion | quote }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
+    release: {{ .Release.Name }}
   namespace: {{ .Release.Namespace }}
   annotations:
     build: {{ .Values.global.buildVersion | quote }}
@@ -15,15 +15,15 @@ data:
       "spss-modeler": {
         "category": "ds",
         "details": {
-    {{- if hasKey .Values "global" }}
-    {{- if hasKey .Values.global "ibmProduct" }}
-    {{- if eq .Values.global.ibmProduct "ws" }}
-              "product_docs":"https://www.ibm.com/support/knowledgecenter/SSHGWL_2.1.0/wsd/spss-modeler.html",
-              "deploy_docs": "https://www.ibm.com/support/knowledgecenter/SSHGWL_2.1.0/wsj/install/install-spss.html",
-              "images": null,
-    {{- end }}
-    {{- end }}
-    {{- end }}
+{{- if hasKey .Values "global" }}
+{{- if hasKey .Values.global "ibmProduct" }}
+{{- if eq .Values.global.ibmProduct "ws" }}
+            "product_docs":"https://www.ibm.com/support/knowledgecenter/SSHGWL_3.0.1/wsd/spss-modeler.html",
+            "deploy_docs": "https://www.ibm.com/support/knowledgecenter/SSHGWL_3.0.1/wsj/install/install-spss.html",
+            "images": null,
+{{- end }}
+{{- end }}
+{{- end }}
           "has_jobs": false,
           "premium": true,
           "priority": 75
@@ -31,10 +31,204 @@ data:
         "extensions": {},
         "max_instances": "",
         "versions": {
-          "3.0.0": {
+          "3.0.1": {
             "state": "enabled",
             "details": {}
           }
         }
       }
     }
+  spss-modeler-server.json: |
+    {
+      "displayName": "SPSS Modeler",
+      "description": "SPSS Modeler Runtime",
+      "annotations": [
+          {
+            "name": "cloudpakName",
+            "value": "{{ .Values.global.annotations.cloudpakName }}"
+          },
+          {
+            "name": "cloudpakId",
+            "value": "{{ .Values.global.annotations.cloudpakId }}"
+          },
+          {
+            "name": "cloudpakVersion",
+            "value": "{{ .Values.global.annotations.cloudpakVersion }}"
+          },
+          {
+            "name": "productMetric",
+            "value": "{{ .Values.global.annotations.productMetric }}"
+          },
+          {
+            "name": "productChargedContainers",
+            "value": "{{ .Values.global.annotations.productChargedContainers }}"
+          },
+          {
+            "name": "productID",
+            "value": "{{ .Values.global.annotations.productID }}"
+          },
+          {
+            "name": "productName",
+            "value": "{{ .Values.global.annotations.productName }}"
+          },
+          {
+            "name": "productVersion",
+            "value": "{{ .Values.global.annotations.productVersion }}"
+          }
+      ],
+      "author": "IBM",
+      "tested": true,
+      "isService": true,
+      "runtimeType": "spss-modeler",
+      "features": ["environment", "SPSS Modeler", "worker"],
+      "portMappings": [
+        {
+          "servicePort": 9443,
+          "containerPort": 9443,
+          "protocol": "TCP"
+        }
+      ],
+      "replicas": 1,
+      "image": "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.flowSession.image.repository }}:{{ .Values.flowSession.image.tag }}",
+      "privileged": false,
+      "command": ["./modeler-service-1.0/startup.sh"],
+      "env": [
+        {
+          "name": "SERVICE_IMAGE_NAME",
+          "value": "flow-session"
+        },
+        {
+          "name": "CPUS_PER_POD",
+          "value": "4"
+        },
+        {
+          "name": "SERVICE_CPU",
+          "value": "{{ .Values.global.flowSession.cpuLimits }}"
+        },
+        {
+          "name": "SERVICE_MEM",
+          "value": "{{ .Values.global.flowSession.memLimits }}"
+        },
+        {
+          "name": "MODELER_SERVER_HOST",
+          "value": "localhost"
+        },
+        {
+          "name": "DEVELOPMENT_MODE",
+          "value": "false"
+        },
+        {
+          "name": "USE_ICONSET",
+          "value": "v1/"
+        },
+        {
+          "name": "PLAY_OPTS",
+          "value": "-J-Xms1024M -J-Xmx3072M -J-Dfile.encoding=UTF-8"
+        },
+        {
+          "name": "ULIMIT_MEM",
+          "value": "8388608"
+        },
+        {
+          "name": "OMP_NUM_THREADS",
+          "value": "4"
+        },
+        {
+          "name": "TRUST_SELF_SIGNED_CERTIFICATES",
+          "value": "1"
+        },
+        {
+          "name": "DEPLOYMENT_TARGET",
+          "value": "local"
+        },
+        {
+          "name": "LOCALFS_ROOT_PATH",
+          "value": "/"
+        },
+        {
+          "name": "NGINX_SERVICE_SSL_CERTIFICATE_FILE_PATH",
+          "value": "/etc/certificate/certificate.pem"
+        },
+        {
+          "name": "STREAMS_URL",
+          "value": "{{ .Values.global.canvasApi.url }}"
+        },
+        {
+          "name": "ML_SERVICE_BASE_URL",
+          "value": "{{ .Values.global.wml.url }}"
+        },
+        {
+          "name": "MODEL_VIEWER_SERVICE",
+          "value": "{{ .Values.global.modelViewer.url }}"
+        },
+        {
+          "name": "MODEL_VIEWER_BROWSER_PREFIX",
+          "value": "/model-viewer"
+        }
+      ],
+      "probes": {
+        "liveness": {
+          "path": "/monitor",
+          "scheme": "https",
+          "port": 9443,
+          "initialDelaySeconds": 90,
+          "failureThreshold": 3,
+          "timeoutSeconds": 3,
+          "periodSeconds": 30
+        },
+        "readiness": {
+          "path": "/monitor",
+          "scheme": "https",
+          "port": 9443,
+          "initialDelaySeconds": 10,
+          "failureThreshold": 3,
+          "timeoutSeconds": 2,
+          "periodSeconds": 3
+        }
+      },
+      "volumes": [
+        {
+          "volume": "project_dir",
+          "mountPath": "/project_data",
+          "claimName": "file-api-claim",
+          "subPath": "projects/$project_id/assets"
+        }
+      ],
+      "resources": {
+        "cpu": {
+          "request": 2048,
+          "minimum": 2000
+        },
+        "gpu": {
+          "request": -1,
+          "minimum": 0
+        },
+        "memory": {
+          "request": 16384,
+          "minimum": 0
+        },
+        "duration": {
+          "value": -1,
+          "units": "unix"
+        }
+      }
+    }
+  nginx.conf: |
+    set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
+    location ~ ^/dsx-canvas/ibmdsxuser-(.*?)/(.*?)/(.*?)/(.*) {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      rewrite ^/dsx-canvas/ibmdsxuser-(.*?)/(.*?)/(.*?)/(.*)$ /$4 break;
+      proxy_pass https://$3-svc.$nsdomain:9443;
+      proxy_read_timeout 10m;
+    }
+  files: |
+    [
+      {
+        "dest": "/user-home/_global_/config/.runtime-definitions/ibm/spss-modeler-server.json",
+        "contentKey": "spss-modeler-server.json"
+      }
+    ]

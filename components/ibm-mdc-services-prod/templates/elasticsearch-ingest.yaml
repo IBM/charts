@@ -1,0 +1,220 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ .Values.elasticsearch.name }}-{{ .Values.elasticsearch.ingest.role }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "5"
+  labels:
+    role: {{ .Values.elasticsearch.ingest.role }}
+    app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    icpdsupport/app : {{ .Values.global.productLabelName }}
+    icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+    app.kubernetes.io/component: {{ .Values.elasticsearch.name }}-{{ .Values.elasticsearch.ingest.role }}
+    app.kubernetes.io/part-of: {{ .Values.elasticsearch.name }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: {{ .Values.elasticsearch.name }}-{{ .Values.elasticsearch.ingest.role }}
+  replicas: {{ .Values.elasticsearch.ingest.replicas }}
+  template:
+    metadata:
+      annotations:
+        productName: IBM Master Data Management
+        productID: MDM1000200300
+        productVersion: 1.0.0
+        productMetric: VIRTUAL_PROCESSOR_CORE
+        productChargedContainers: All
+        cloudpakName: "IBM Cloud Pak for Data"
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion: 3.0.1
+      labels:
+        role: {{ .Values.elasticsearch.ingest.role }}
+        app: {{ .Values.global.productLabelName }}
+        app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        release: {{ .Release.Name }}
+        icpdsupport/app : {{ .Values.global.productLabelName }}
+        icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+        icpdsupport/addOnName: "{{ .Values.zenServiceInstanceType }}"
+        app.kubernetes.io/component: {{ .Values.elasticsearch.name }}-{{ .Values.elasticsearch.ingest.role }}
+        app.kubernetes.io/part-of: {{ .Values.global.productLabelName }}
+    spec:
+      {{ if eq .Values.global.remoteDockerRepo true }}
+      imagePullSecrets:
+      - name: {{ .Values.global.imagePullSecretName }}
+      {{ end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccount: {{ .Values.sa.viewer }}
+      serviceAccountName: {{ .Values.sa.viewer }}
+      securityContext:
+        runAsUser: 1000325000
+        fsGroup: 0
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+      initContainers:
+      - name: copy-configuration
+        image: {{ if .Values.global.docker_registry_prefix }}{{ trimSuffix "/" .Values.global.docker_registry_prefix }}/{{ end }}{{ .Values.elasticsearch.image }}:{{ .Values.elasticsearch.tag }}
+        imagePullPolicy: {{ .Values.elasticsearch.imagePullPolicy }}
+        securityContext:
+          runAsUser: 1000325000
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        command: ['sh', '-c', 'cp /usr/share/elasticsearch/config/* /scratch/ && cp /tmp/elasticsearch/* /scratch/ && cp /configmaps/elasticsearch/* /scratch/ && chmod +x /scratch/probe.sh']
+        volumeMounts:
+        - name: elasticsearch-tls-secrets
+          mountPath: /tmp/elasticsearch
+        - name: scratch-volume
+          mountPath: /scratch
+        - name: elasticsearch-configuration
+          mountPath: /configmaps/elasticsearch
+        resources:
+          requests:
+            cpu: {{ .Values.elasticsearch.init.requests.cpu }}
+            memory: {{ .Values.elasticsearch.init.requests.memory }}
+          limits:
+            cpu: {{ .Values.elasticsearch.init.limits.cpu }}
+            memory: {{ .Values.elasticsearch.init.limits.memory }}
+      containers:
+      - name: es-ingest
+        image: {{ if .Values.global.docker_registry_prefix }}{{ trimSuffix "/" .Values.global.docker_registry_prefix }}/{{ end }}{{ .Values.elasticsearch.image }}:{{ .Values.elasticsearch.tag }}
+        imagePullPolicy: {{ .Values.elasticsearch.imagePullPolicy }}
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 1000325000
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: node.name
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: cluster.name
+          value: elasticsearch-cluster
+        - name: path.data
+          value: /data/data
+        - name: path.logs
+          value: /data/log
+        - name: node.master
+          value: "false"
+        - name: node.data
+          value: "false"
+        - name: node.ingest
+          value: "true"
+        - name: http.enabled
+          value: "true"
+        - name: http.compression
+          value: "true"
+        - name: http.cors.enabled
+          value: "true"
+        - name: http.cors.allow-origin
+          value: "*"
+        - name: network.host
+          value: _site_,_lo_
+        - name: ES_JAVA_OPTS
+          value: -Xms{{ .Values.elasticsearch.ingest.heapNewSize }} -Xmx{{ .Values.elasticsearch.ingest.maxHeapSize }}
+        - name: discovery.zen.ping.unicast.hosts
+          value: {{ .Values.elasticsearch.name }}-discovery
+        - name: xpack.security.enabled
+          value: "true"
+        - name: xpack.security.http.ssl.enabled
+          value: "true"
+        - name: xpack.security.http.ssl.keystore.path
+          value: /usr/share/elasticsearch/config/certs.p12
+        - name: xpack.security.http.ssl.truststore.path
+          value: /usr/share/elasticsearch/config/certs.p12
+        - name: xpack.security.transport.ssl.enabled
+          value: "true"
+        - name: xpack.security.transport.ssl.verification_mode
+          value: "certificate"
+        - name: xpack.security.transport.ssl.keystore.path
+          value: /usr/share/elasticsearch/config/certs.p12
+        - name: xpack.security.transport.ssl.truststore.path
+          value: /usr/share/elasticsearch/config/certs.p12
+        - name: ELASTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.elasticsearch.name }}-tls-secret
+              key: elasticsearch.password
+        - name: discovery.zen.minimum_master_nodes
+          value: {{ div .Values.elasticsearch.master.replicas 2 | add 1 | quote }}
+        - name: bootstrap.memory_lock
+          value: "false"
+        - name: node.max_local_storage_nodes
+          value: "1"
+        - name: script.max_size_in_bytes
+          value: "10000000"
+        - name: processors
+          valueFrom:
+            resourceFieldRef:
+              resource: limits.cpu
+        resources:
+          requests:
+            cpu: {{ .Values.elasticsearch.ingest.requests.cpu }}
+            memory: {{ .Values.elasticsearch.ingest.requests.memory }}
+          limits:
+            cpu: {{ .Values.elasticsearch.ingest.limits.cpu }}
+            memory: {{ .Values.elasticsearch.ingest.limits.memory }}
+        ports:
+        - containerPort: 9200
+          name: http
+        - containerPort: 9300
+          name: transport
+        readinessProbe:
+          exec:
+            command:
+            - /usr/share/elasticsearch/config/probe.sh
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        livenessProbe:
+          tcpSocket:
+            port: transport
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          timeoutSeconds: 5
+        volumeMounts:
+        - name: data-storage
+          mountPath: /data
+        - name: scratch-volume
+          mountPath: /usr/share/elasticsearch/config
+      volumes:
+          - name: data-storage
+            emptyDir:
+              medium: ""
+          - name: elasticsearch-tls-secrets
+            secret:
+              secretName: {{ .Values.elasticsearch.name }}-tls-secret
+              items:
+                - key: certs.p12
+                  path: certs.p12
+                - key: elasticsearch.keystore
+                  path: elasticsearch.keystore
+          - name: scratch-volume
+            emptyDir: {}
+          - name: elasticsearch-configuration
+            configMap:
+              name: {{ .Values.elasticsearch.name }}-configuration
