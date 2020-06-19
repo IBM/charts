@@ -1,0 +1,105 @@
+{{- $compName := "zen-audit" -}}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: zen-audit
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.zenAudit.replicas }}
+  strategy:
+     type: RollingUpdate
+     rollingUpdate:
+       maxSurge: 1
+       maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "zenhelper.labels" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+        runAsUser: 1000321000
+        {{- end }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      terminationGracePeriodSeconds: 0
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
+      containers:
+      - name: zen-audit-container
+        securityContext:
+          runAsNonRoot: true
+          {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 1000321000
+          {{- end }}
+          capabilities:
+            drop:
+            - ALL
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenAudit.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.zenAudit.resources | indent 12 }}
+        env:
+          - name: NODENAME
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: spec.nodeName
+          - name: PODIPADDRESS
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: status.podIP
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+          - name: SERVICEACCOUNT
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: spec.serviceAccountName
+          - name: CONTAINERNAME
+            value: zen-audit-container
+        ports:
+          - containerPort: 9880
+            protocol: TCP
+        livenessProbe: 
+          exec:
+            command:
+              - /bin/sh
+              - '-c'
+              - '[[ $( pgrep fluentd | wc -l)  == 1 ]]'
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          exec:
+            command:
+              - /bin/sh
+              - '-c'
+              - '[[ $( pgrep fluentd | wc -l)  == 1 ]]'
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        volumeMounts:
+        - name: main-config
+          mountPath: /fluentd/config
+        - mountPath: /user-home
+          name: user-home-mount
+        - mountPath: /etc/internal-tls
+          name: internal-tls
+      volumes:
+      {{- include "zenhelper.user-home-pvc" .  | indent 6 }}
+      - name: main-config
+        configMap:
+          name: zen-audit-config
+      - name: internal-tls
+        secret:
+          secretName: internal-tls

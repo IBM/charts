@@ -1,3 +1,4 @@
+{{- if .Values.usermgmt.usermgmt_enable_localrepo }}
 {{- $compName := "usermgmt-prep-job" -}}
 kind: Job
 apiVersion: batch/v1
@@ -6,6 +7,8 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook-delete-policy": "hook-succeeded"
 spec:
   template:
     metadata:
@@ -23,12 +26,20 @@ spec:
         - /bin/bash
         - /usermgmt-prep.sh
         name: usermgmt-prep-job
+        securityContext:
+          runAsNonRoot: true
+{{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 1000321000
+{{- end }}
+          capabilities:
+            drop:
+            - ALL
         image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.couchdb.image.repository }}:{{ .Values.global.image.tag }}"
         imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
         resources:
 {{ toYaml .Values.usermgmt.resources | indent 12 }}
         env:
-        - name: COUCHDB_USER
+        - name: COUCHDB_USERNAME
           valueFrom:
             secretKeyRef:
               name: couchdb-secrets
@@ -48,11 +59,10 @@ spec:
         - mountPath: /configData.json
           subPath: configData.json
           name: usermgmt-setup-configmap
-        - mountPath: /userRolesData.json
-          subPath: userRolesData.json
-          name: usermgmt-setup-configmap
       volumes:
       - name: usermgmt-setup-configmap
         configMap:
           name: usermgmt-setup-configmap
       restartPolicy: OnFailure
+{{- end }}
+
