@@ -1,0 +1,62 @@
+{{- include "sch.config.init" (list . "sch.chart.stt.config.values") -}}
+{{- $compName := "runtime-ssl-cert-cleanup" -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-speech-runtime-ssl-cleanup
+  annotations:
+    "helm.sh/hook": "post-delete"
+    "helm.sh/hook-delete-policy": hook-succeeded
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      name: {{ .Release.Name }}-speech-runtime-ssl-cleanup
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 8000
+        {{- end }}
+      restartPolicy: Never
+      serviceAccountName: {{ .Release.Name }}-speech-runtime-privileged
+      containers:
+      - name: delete-tls-secret
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 8000
+          {{- end }}
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: 100Mi
+            cpu: '.2'
+          limits:
+            memory: 200Mi
+            cpu: '.5'
+        image: "{{ .Values.global.dockerRegistryPrefix | trimSuffix "/"  }}/{{ .Values.global.ssl.image.repository }}:{{ .Values.global.ssl.image.tag }}"
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+            set -x
+            kubectl delete secret {{ .Release.Name }}-speech-runtime-ssl-cert --ignore-not-found
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
