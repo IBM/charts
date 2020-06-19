@@ -23,7 +23,10 @@ spec:
         {{- include "zenhelper.annotations" . | indent 8 }}
     spec:
       securityContext:
+        runAsNonRoot: true
+        {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
         runAsUser: 1000321000
+        {{- end }}
       serviceAccountName: {{ .Values.global.editor.sa }}
       terminationGracePeriodSeconds: 0
       affinity:
@@ -31,6 +34,14 @@ spec:
         {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
       containers:
       - name: zen-watchdog-container
+        securityContext:
+          runAsNonRoot: true
+          {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 1000321000
+          {{- end }}
+          capabilities:
+            drop:
+            - ALL
         image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenWatchdog.image.repository }}:{{ .Values.global.image.tag }}"
         imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
         command:

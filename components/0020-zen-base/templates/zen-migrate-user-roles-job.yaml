@@ -1,0 +1,66 @@
+{{- if .Values.usermgmt.usermgmt_enable_localrepo }}
+{{- $compName := "zen-migrate-user-roles-job" -}}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: zen-migrate-user-roles-job
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 1000321000
+        {{- end }}
+      serviceAccountName: {{ .Values.global.viewer.sa }}
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
+      containers:
+      - name: zen-migrate-user-roles-job
+        securityContext:
+          runAsNonRoot: true
+          {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 1000321000
+          {{- end }}
+          capabilities:
+            drop:
+            - ALL
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenMigrateUserRoles.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command:
+        - node
+        - /usr/src/server-src/migrate-user-roles.js
+        resources:
+{{ toYaml .Values.zenMigrateUserRoles.resources | indent 12 }}
+        env:
+        - name: COUCHDB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: couchdb-secrets
+              key: couchdb_username
+        - name: COUCHDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: couchdb-secrets
+              key: couchdb_password
+        volumeMounts:
+        - mountPath: /var/run/sharedsecrets
+          name: zen-service-broker-secret
+      volumes:
+      - name: zen-service-broker-secret
+        secret:
+          defaultMode: 420
+          secretName: zen-service-broker-secret
+      restartPolicy: OnFailure
+{{- end }}

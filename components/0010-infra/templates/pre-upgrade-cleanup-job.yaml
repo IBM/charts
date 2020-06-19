@@ -1,0 +1,52 @@
+{{- $compName := "pre-upgrade-cleanup" -}}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: pre-upgrade-cleanup
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      serviceAccountName: {{ .Values.global.admin.sa }}
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
+      containers:
+      - command:
+        - /coreapi-server
+        - --clean
+        name: pre-upgrade-cleanup
+        securityContext:
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.preUpgrade.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: Always
+        resources:
+{{ toYaml .Values.usermgmt.resources | indent 12 }}
+        env:
+        - name: ENABLE_JWT_CHECK
+          value: "false"
+        - name: ICPD_CONTROLPLANE_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+      volumes:
+      {{- include "zenhelper.user-home-pvc" .  | indent 6 }}
+      restartPolicy: OnFailure

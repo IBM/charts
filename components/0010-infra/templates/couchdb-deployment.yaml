@@ -24,7 +24,10 @@ spec:
         {{- include "zenhelper.annotations" .  | indent 8 }}
     spec:
       securityContext:
+        runAsNonRoot: true
+  {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
         runAsUser: 1000321000
+  {{- end }} 
       serviceAccountName: {{ .Values.global.viewer.sa }}
       {{- if .Values.global.baseInstaller }}
       nodeSelector:
@@ -36,6 +39,14 @@ spec:
         {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
       containers:
       - name: couchdb-container
+        securityContext:
+          runAsNonRoot: true
+  {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+          runAsUser: 1000321000
+  {{- end }} 
+          capabilities:
+            drop:
+            - ALL
         image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.couchdb.image.repository }}:{{ .Values.global.image.tag }}"
         imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
         env:
@@ -78,8 +89,6 @@ spec:
             scheme: HTTP
           initialDelaySeconds: 40
           periodSeconds: 30
-      securityContext:
-        runAsUser: 1000321000
       volumes:
       - name: internal-tls
         secret:

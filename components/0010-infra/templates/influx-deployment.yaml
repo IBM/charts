@@ -17,12 +17,25 @@ spec:
       annotations:
         {{- include "zenhelper.annotations" .  | indent 8 }}
     spec:
+      securityContext:
+        runAsNonRoot: true
+  {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+        runAsUser: 1000321000
+  {{- end }}
       affinity:
         {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
         {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
       serviceAccountName: {{ .Values.global.viewer.sa }}
       containers:
       - name: dsx-influxdb
+        securityContext:
+          runAsNonRoot: true
+  {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 1000321000
+  {{- end }}
+          capabilities:
+            drop:
+            - ALL
         image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.influxdb.image.repository }}:{{ .Values.global.image.tag }}"
         imagePullPolicy: {{ .Values.influxdb.image.pullPolicy | quote }}
         resources:
@@ -75,8 +88,6 @@ spec:
           mountPath: /etc/influxdb
         - name: internal-tls
           mountPath: /etc/internal-tls
-      securityContext:
-        runAsUser: 1000321000
       volumes:
       - name: internal-tls
         secret:

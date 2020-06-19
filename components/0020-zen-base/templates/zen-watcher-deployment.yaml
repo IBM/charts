@@ -23,7 +23,10 @@ spec:
         {{- include "zenhelper.annotations" . | indent 8 }}
     spec:
       securityContext:
-        runAsUser: 1000321000
+        runAsNonRoot: true
+        {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+        runAsUser:  1000321000
+        {{- end }}
       serviceAccountName: {{ .Values.global.editor.sa }}
       terminationGracePeriodSeconds: 0
       affinity:
@@ -31,6 +34,14 @@ spec:
         {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
       containers:
       - name: zen-watcher-container
+        securityContext:
+          runAsNonRoot: true
+          {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 1000321000
+          {{- end }}
+          capabilities:
+            drop:
+            - ALL
         image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenCoreApi.image.repository }}:{{ .Values.global.image.tag }}"
         imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
         command:
@@ -48,7 +59,30 @@ spec:
         - "/etc/internal-tls/tls.crt"
         - --tls-key
         - "/etc/internal-tls/tls.key"
+        envFrom:
+        - configMapRef:
+            name: product-configmap
         env:
+        - name: NODENAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: SERVICEACCOUNT
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.serviceAccountName
+        - name: PODIPADDRESS
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: SERVICENAME
+          value: zen-watcher
+        - name: CONTAINERNAME
+          value: zen-watcher-container          
         - name: TILLER_NAMESPACE
           value: {{ .Values.zenCoreApi.tillerNamespace | quote }}
         - name: TILLER_PORT
@@ -120,6 +154,14 @@ spec:
         image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenRequisite.image.repository }}:{{ .Values.global.image.tag }}"
         imagePullPolicy: IfNotPresent
         name: change-permissions
+        securityContext:
+          runAsNonRoot: true
+          {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 1000321000
+          {{- end }}
+          capabilities:
+            drop:
+            - ALL
         resources:
           limits:
             cpu: '2'
@@ -133,6 +175,14 @@ spec:
         - mountPath: /tmp/metastore
           name: metastore-volume
       - name: zen-placeholder-init
+        securityContext:
+          runAsNonRoot: true
+          {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 1000321000
+          {{- end }}
+          capabilities:
+            drop:
+            - ALL
         image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenCoreApi.image.repository }}:{{ .Values.global.image.tag }}"
         command: ['/coreapi-server', '--placeholder']
         env:
