@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "data-gate-catalog.fullname" . }}
+  labels:
+    component: "datagate-catalog-deployment"
+{{ include "data-gate-catalog.metadataLabels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "data-gate-catalog.name" . }}
+      release: {{ .Release.Name }}
+      icpdata_addon: "true"
+      icpdata_addon_version: {{.Chart.AppVersion | quote }}
+  template:
+    metadata:
+      annotations:
+{{- include "datagate-catalog.annotations" .  | indent 8 }}
+      labels:
+        component: "datagate-catalog-deployment"
+{{ include "data-gate-catalog.metadataLabels" . | indent 8 }}
+    spec:
+      serviceAccount: {{ default "default" .Values.global.serviceAccount }}
+      containers:
+      - name: {{ .Chart.Name }}
+        {{ if .Values.global.docker_registry_prefix }}
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        {{ else }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        {{ end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: true
+          runAsUser: 1000321000
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: ICPD_CONTROLPLANE_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+          - mountPath: /shared
+            name: data-gate-catalog-pvc
+          - mountPath: /user-home
+            name: user-home-pvc
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: https
+          containerPort: 8443
+          protocol: TCP
+        livenessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          successThreshold: 1
+          tcpSocket:
+            port: 8080
+          timeoutSeconds: 1
+        readinessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          tcpSocket:
+            port: 8080
+          timeoutSeconds: 1
+        resources:
+{{ toYaml .Values.resources | indent 12 }}
+      volumes:
+      - name: data-gate-catalog-pvc
+        persistentVolumeClaim:
+          claimName: data-gate-catalog-pvc
+      - name: user-home-pvc
+        persistentVolumeClaim:
+          claimName: user-home-pvc
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
