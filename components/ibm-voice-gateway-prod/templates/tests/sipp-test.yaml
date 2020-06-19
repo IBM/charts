@@ -1,0 +1,61 @@
+{{- if eq .Values.sip.enable true }}
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $fullTestCompName := include "sch.names.fullCompName" (list . "sipp-test-container") }}
+{{- $compName := "sipp-test" }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  hostNetwork: true
+  hostPID: false
+  hostIPC: false
+  {{- if .Values.global.image.pullSecrets }}
+  imagePullSecrets:
+  - name: {{ .Values.global.image.pullSecrets }}
+  {{- end }}
+  securityContext:
+    runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+    runAsUser: 100
+{{- end }}
+  containers:
+  - name: "{{ $fullTestCompName }}"
+    image: "{{ if tpl ( .Values.dvt.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.dvt.image.repository | toString ) . ) }}{{ end }}/{{ .Values.dvt.image.name }}:{{ .Values.dvt.image.tag }}"
+    imagePullPolicy: "{{ .Values.dvt.image.pullPolicy }}"
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+      runAsUser: 100
+{{- end }}
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        memory: 100Mi
+        cpu: '.2'
+      limits:
+        memory: 200Mi
+        cpu: '.5'
+    env:
+    - name: SIP_HOST
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: status.hostIP
+    - name: SIP_PORT
+      value: "{{ .Values.sipOrchestratorEnvVariables.sipPort }}"
+  restartPolicy: Never
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 4 }}
+{{ include "voice-gateway.podAffinity" (list .) | indent 4 }}
+{{ include "sch.metadata.labels.standard" (list . "sip") | indent 12 }}
+{{- end }}

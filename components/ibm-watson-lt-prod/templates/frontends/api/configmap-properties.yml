@@ -1,0 +1,102 @@
+{{- include "sch.config.init" (list . "ibm-watson-lt.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.api.name -}}
+{{- $lidCompName :=  .sch.chart.components.lid.name -}}
+{{- $segmenterCompName :=  .sch.chart.components.segmenter.name -}}
+{{- $comp := .Values.api -}}
+{{- if $comp.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ include "sch.names.fullCompName" (list . $compName "config") }}-config"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+data:
+  language-translator.properties: |-
+    realm_name={{ .Release.Name | quote }}
+
+    # Translation backends
+    service.serve.ibm-models-in-modelmesh=false
+
+    # Segmenter
+    service.segmenter.modelId={{ .Values.segmenter.model.id }}
+    service.segmenter.grpcHost={{ include "sch.names.fullCompName" (list . $segmenterCompName) }}
+
+    # Lid
+    service.lid.disabled={{ if not .Values.lid.enabled }}true{{ else }}false{{ end }}
+    service.lid.models={{ .Values.lid.model.id }}
+    service.lid.grpcHost={{ include "sch.names.fullCompName" (list . $lidCompName) }}
+    service.lid.use-vmodel-header=false
+
+    # DB
+    service.translation-handler.sentence-dbcache-timeout-duration={{ $comp.config.sentencedbcachetimeoutduration }}
+
+    # BILLING
+    service.bill-handler.enabled=false
+    com.ibm.csf.metering.client.enabled=false
+
+    # THROTTLING
+    rest.throttling.max-concurrent-requests-per-second={{ $comp.config.request_throttling }}
+
+    #TRAIN
+    rest.customization.disable=true
+
+  # you can make changes to the log config, it is checked every 30s (monitorInterval)
+  # remove root-level template change
+  log4j2.xml: |-
+    <Configuration status="WARN" monitorInterval="30">
+      <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+          <PatternLayout pattern="%d{ISO8601} [%t] %-5level %logger{36} - %msg %n" />
+        </Console>
+        <Console name="JsonConsole" target="SYSTEM_OUT">
+          <JsonLayout compact="true" eventEol="true" properties="true" />
+        </Console>
+        <Console name="StatsRequestConsole" target="SYSTEM_OUT">
+          <PatternLayout>
+            <pattern>{"@timestamp": "%d{ISO8601}", "thread": "%t", "level": "%-5level", "logger": "%logger{36}", "message": "%enc{%m}{JSON}", "model_id": "%X{model_id}", "src_target": "%X{src_target}", "is_default": %X{is_default}, "is_bill_later": %X{is_bill_later}, "fast_mode": %X{fast_mode}, "char_count": %X{char_count}, "instance_id": "%enc{%X{instance_id}}{JSON}", "plan_id": "%enc{%X{plan_id}}{JSON}", "region": "%enc{%X{region}}{JSON}" }%n</pattern>
+          </PatternLayout>
+        </Console>
+        <Console name="StatsResponseConsole" target="SYSTEM_OUT">
+          <PatternLayout>
+            <pattern>{"@timestamp": "%d{ISO8601}", "thread": "%t", "level": "%-5level", "logger": "%logger{36}", "message": "%enc{%m}{JSON}", "model_id": "%X{model_id}", "src_target": "%X{src_target}", "is_default": %X{is_default}, "is_bill_later": %X{is_bill_later}, "fast_mode": %X{fast_mode}, "char_count": %X{char_count}, "latency_millis": %X{latency_millis}, "chars_per_second": %X{chars_per_second}, "cache_hit_ratio_sentence": %X{cache_hit_ratio_sentence}, "instance_id": "%enc{%X{instance_id}}{JSON}", "plan_id": "%enc{%X{plan_id}}{JSON}", "region": "%enc{%X{region}}{JSON}" }%n</pattern>
+          </PatternLayout>
+        </Console>
+      </Appenders>
+      <Loggers>
+        <Logger name="stats.TranslateRequest" level="info" additivity="false">
+          <appender-ref ref="StatsRequestConsole" />
+        </Logger>
+        <Logger name="stats.TranslateResponse" level="info" additivity="false">
+          <appender-ref ref="StatsResponseConsole" />
+        </Logger>
+        <Logger name="com.ibm.watson.lt" level="info" additivity="false">
+          <appender-ref ref="JsonConsole" />
+        </Logger>
+        <Logger name="com.ibm.watson.lt.service.LTServiceImpl" level="info" additivity="false">
+          <appender-ref ref="JsonConsole" />
+        </Logger>
+        <Logger name="com.netflix.discovery" level="error" additivity="false">
+          <appender-ref ref="JsonConsole" />
+        </Logger>
+
+        <!-- metering related -->
+        <Logger name="com.ibm.csf.metering" level="error" additivity="false">
+          <appender-ref ref="JsonConsole" />
+        </Logger>
+        <Logger name="com.ibm.watson.lt.service.bill" level="info" additivity="false">
+          <appender-ref ref="JsonConsole" />
+        </Logger>
+
+        <!-- payload logging -->
+        <Logger name="com.ibm.watson.lt.rest.filter.CustomLoggingFilter" level="error"
+          additivity="false"
+        >
+          <appender-ref ref="JsonConsole" />
+        </Logger>
+
+        <Root level={{ $comp.config.rootLogLevel | quote }}>
+          <AppenderRef ref="JsonConsole" />
+        </Root>
+      </Loggers>
+    </Configuration>
+{{- end -}}

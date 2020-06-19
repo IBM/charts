@@ -1,0 +1,154 @@
+{{- include "sch.config.init" (list . "ibm-watson-lt.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.docTrans.name -}}
+{{- $comp := .Values.documents -}}
+{{- if $comp.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.documents.replicas }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      affinity:
+{{ include "ibm-watson-lt.affinity" $ | trim | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.mnlpPodSecurityContext) | indent 6 }}
+
+      volumes:
+{{ include "ibm-watson-lt.pg_cert_volume" . | indent 6 }}
+      - name: tls
+        secret:
+          secretName: {{ include "ibm-watson-lt.tlsSecretName" . | quote }}
+          items:
+          - key: tls.crt
+            path: server.crt.pem
+          - key: tls.key
+            path: server.key.pem
+      - name: s3-cacrt
+        secret:
+          secretName: {{ include "ibm-watson-lt.s3TlsSecretNameTemplate" . }}
+          items:
+          - key: tls.cacrt
+            path: tls.cacrt
+
+      # configmap volumes
+      - name: td-config
+        configMap:
+          name: "{{ include "sch.names.fullCompName" (list . $compName "config") }}-config"
+          items:
+          - key:  log4j2.xml
+            path: log4j2.xml
+
+  ### IMAGE PULL SECRET
+{{ include "ibm-watson-lt.pullSecretTemplate" . | indent 6 }}
+
+      ################################################# DT CONTAINER #############################################
+      containers:
+      - name: document-translator
+        {{ include "sch.security.securityContext" (list . .sch.chart.dropAllContainerSecurityContext) | indent 8 }}
+        {{ include "ibm-watson-lt.pullPolicyTemplate" . }}
+        image: {{ include "ibm-watson-lt.repo" . }}{{ $comp.image.name }}:{{ $comp.image.tag }}
+        resources:
+          limits:
+            cpu: {{ $comp.resources.cpuLimitMillis }}m
+            memory: {{ $comp.resources.memoryLimitMB }}Mi
+          requests:
+            memory: {{ $comp.resources.memoryRequestMB }}Mi
+            cpu: {{ $comp.resources.cpuRequestMillis }}m
+        ports:
+        - name: https
+          containerPort: 9443
+        volumeMounts:
+{{ include "ibm-watson-lt.pg_cert_mount" . | indent 8 }}
+        - name: td-config
+          mountPath: "/opt/ibm/td/cfg/local"
+          readOnly: true
+        - name: tls
+          mountPath: "/etc/ssl/dt/"
+          readOnly: true
+        - name: s3-cacrt
+          mountPath: "/etc/ssl/s3/"
+          readOnly: true
+        env:
+        - name: TD_HOME
+          value: /opt/ibm/td
+        - name: LOG4J_CONFIGURATION_FILE
+          value: /opt/ibm/td/cfg/local/log4j2.xml
+        - name: REALM_NAME
+          value: {{ .Release.Name }}
+        - name: DT_PORT
+          value: "9443"
+        - name: DT_TLS_ENABLED
+          value: "true"
+        - name: DT_TLS_ENGINE
+          value: "openssl"
+        - name: DT_TLS_KEY_PATH
+          value: "/etc/ssl/dt/server.key.pem"
+        - name: DT_TLS_CERT_PATH
+          value: "/etc/ssl/dt/server.crt.pem"
+        - name: DT_LT_URL
+          value: {{ printf "https://%s/language-translator/api" (include "ibm-watson-lt.apiSvcName" .) }}
+        - name: DT_SIRE_SEGMENTER_MODELID
+          value: {{ .Values.segmenter.model.id }}
+        - name: DT_SIRE_SEGMENTER_SVCNAME
+          value: {{ include "sch.names.fullCompName" (list . .sch.chart.components.segmenter.name) | quote }}
+        - name: DT_SIRE_SEGMENTER_CACERT
+          value:  "/etc/ssl/dt/server.crt.pem"
+        - name: AWS_HOSTNAME
+          value: {{ include "ibm-watson-lt.s3EndpointTemplate" . | quote }}
+        - name: AWS_PORT
+          value: {{ .Values.s3.service.port | quote }}
+        - name: AWS_BUCKET
+          value: {{ $comp.config.s3BucketName }}
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "ibm-watson-lt.s3AccessSecretNameTemplate" . }}
+              key: "accesskey"
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "ibm-watson-lt.s3AccessSecretNameTemplate" . }}
+              key: "secretkey"
+        - name: AWS_SSL
+          value: "true"
+        - name: AWS_CA_BUNDLE
+          value: "/etc/ssl/s3/tls.cacrt"
+
+        - name: MAX_HEAP
+          value: {{ div (mul 8 $comp.resources.memoryLimitMB) 10 }}m
+{{ include "ibm-watson-lt.pgenv_common" . | indent 8 }}
+{{ include "ibm-watson-lt.pgenv_comp" $comp | indent 8 }}
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        readinessProbe:
+          httpGet:
+            path: /check/readiness
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        livenessProbe:
+          httpGet:
+            path: /check/health
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 300
+          periodSeconds: 30
+{{- end -}}

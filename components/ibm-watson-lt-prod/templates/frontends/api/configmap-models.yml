@@ -1,0 +1,28 @@
+{{- include "sch.config.init" (list . "ibm-watson-lt.sch.chart.config.values") -}}
+{{- define "ibm-models" -}}
+{{- range $modelID, $modelConfig := .Values.translationModels }}
+{{- if $modelConfig.enabled -}}
+{{- $backendSvcSuffix := printf "engine-%s" $modelID }}
+{
+  "model_id" : {{ $modelID | quote }},
+  "backend_service_name": {{ include "sch.names.fullCompName" (list $ $backendSvcSuffix ) | quote }}
+},
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $compName := "model-config" -}}
+{{- if (.Values.api.enabled) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ include "sch.names.fullCompName" (list . $compName) }}"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+data:
+  model-config.json: |-
+    {
+      "ibm-models" : [
+      {{- include "ibm-models" . | trimSuffix " " | trimSuffix "," | indent 8  }}
+      ]
+    }
+{{- end -}}
