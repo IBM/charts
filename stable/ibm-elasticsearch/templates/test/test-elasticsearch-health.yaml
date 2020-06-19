@@ -1,0 +1,44 @@
+{{- include "sch.config.init" (list . "ibmElasticsearch.sch.chart.config.values") -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.helmTest) | quote }}
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.helmTest) | indent 4}}
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: kubernetes.io/arch
+  hostNetwork: false
+  {{- if .Values.rbac.create }}
+  serviceAccountName: {{ include "sch.names.fullName" (list .) | quote }}
+  {{- else if not (eq .Values.rbac.serviceAccountName "") }}
+  serviceAccountName: {{ .Values.rbac.serviceAccountName | quote }}
+  {{- end }}
+  hostPID: false
+  hostIPC: false
+  securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.elasticsearchPodSecurityContext) | indent 4 }}
+  affinity:
+{{ include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 4 }}
+  containers:
+  - name: {{ .Release.Name }}-{{ randAlpha 5 | lower }}-test
+    image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+    resources:
+{{ toYaml .Values.initContainer.resources | indent 6 }}
+    securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.elasticsearchContainerSecurityContext) | indent 6 }}
+    resources:
+{{ toYaml .Values.resources | indent 6 }}
+    command:
+      - "sh"
+      - "-c"
+      - |
+        #!/usr/bin/env bash -e
+        curl -XGET -s -k --fail http://127.0.0.1:{{ .Values.httpPort }}/_cluster/health?{{ .Values.clusterHealthCheckParams }}
+  restartPolicy: Never

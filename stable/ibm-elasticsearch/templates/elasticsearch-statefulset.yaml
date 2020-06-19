@@ -1,0 +1,457 @@
+{{- include "sch.config.init" (list . "ibmElasticsearch.sch.chart.config.values") -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.statefulSetName" (list .) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.esServer) | indent 4}}
+  annotations:
+    esMajorVersion: "{{ include "elasticsearch.esMajorVersion" . }}"
+spec:
+  serviceName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.headless) | quote }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.esServer) | indent 6 }}
+  replicas: {{ .Values.replicas }}
+  podManagementPolicy: {{ .Values.podManagementPolicy }}
+  updateStrategy:
+    type: {{ .Values.updateStrategy }}
+  {{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ template "elasticsearch.uname" . }}
+    {{- with .Values.persistence.annotations  }}
+      annotations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    spec:
+{{- if .Values.persistence.useDynamicProvisioning }}
+      # if present, use the storageClassName from the values.yaml, else use the default storageClass setup by kube Administrator
+      # setting storageClassName to nil means use the default storage class
+      storageClassName: {{ default nil .Values.global.storageClassName | quote }}
+{{ end }}
+{{ toYaml .Values.volumeClaimTemplate | indent 6 }}
+  {{- end }}
+  template:
+    metadata:
+      name: {{ include "sch.names.statefulSetName" (list .) | quote }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.esServer) | indent 8 }}
+        tuned.openshift.io/elasticsearch: ""
+{{- if .Values.enableCp4dMeteringLabels }}
+{{ include "elasticsearch.cp4dMeteringLabels" (dict "root" . "name" .sch.chart.components.esServer) | indent 8 }}
+{{- end }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+        {{- range $key, $value := .Values.podAnnotations }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+        {{/* This forces a restart if the configmap has changed */}}
+        {{- if .Values.esConfig }}
+        configchecksum: {{ include (print .Template.BasePath "/elasticsearch-configmap.yaml") . | sha256sum | trunc 63 }}
+        {{- end }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.elasticsearchPodSecurityContext) | indent 8 }}
+      {{- if .Values.schedulerName }}
+      schedulerName: "{{ .Values.schedulerName }}"
+      {{- end }}
+      {{- if .Values.rbac.create }}
+      serviceAccountName: {{ include "sch.names.fullName" (list .) | quote }}
+      {{- else if not (eq .Values.rbac.serviceAccountName "") }}
+      serviceAccountName: {{ .Values.rbac.serviceAccountName | quote }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 6 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      {{- if or (eq .Values.antiAffinity "hard") (eq .Values.antiAffinity "soft") .Values.nodeAffinity }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+                - ppc64le
+      {{- end }}
+      {{- if eq .Values.antiAffinity "hard" }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - "{{ template "elasticsearch.uname" .}}"
+            topologyKey: {{ .Values.antiAffinityTopologyKey }}
+      {{- else if eq .Values.antiAffinity "soft" }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              topologyKey: {{ .Values.antiAffinityTopologyKey }}
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - "{{ template "elasticsearch.uname" . }}"
+      {{- end }}
+      {{- with .Values.nodeAffinity }}
+        nodeAffinity:
+{{ toYaml . | indent 10 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriod }}
+      volumes:
+        {{- if eq .Values.protocol "https" }}
+        - name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.esCert) }}
+          secret:
+            secretName: {{ if .Values.secretGeneration.existingSecret }}{{ .Values.secretGeneration.existingCertSecret }}{{ else }}{{ include "sch.names.fullCompName" (list . .sch.chart.components.esCert) }}{{ end }}
+      {{- end }}
+        {{- range .Values.secretMounts }}
+        - name: {{ .name }}
+          secret:
+            secretName: {{ .secretName }}
+        {{- end }}
+        {{- if .Values.esConfig }}
+        - name: esconfig
+          configMap:
+            name: {{ include "sch.names.fullName" (list .) | quote }}
+        {{- end }}
+        {{- if not .Values.persistence.enabled }}
+        - name: "{{ template "elasticsearch.uname" . }}"
+          emptyDir: {}
+        {{- end }}
+        - name: haproxy-config-volume
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.haproxyConfig) }}
+        - name: shared-socket
+          emptyDir: {}
+        - name: plugindir
+          emptyDir: {}
+      {{- if .Values.extraVolumes }}
+{{ tpl .Values.extraVolumes . | indent 8 }}
+      {{- end }}
+      initContainers:
+{{- if .Values.pluginInitContainer.enabled }}
+      - name: es-plugin-install
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+        imagePullPolicy: "{{ .Values.imagePullPolicy }}"
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.esplugininstallContainerSecurityContext) | indent 10 }}
+        resources:
+{{ toYaml .Values.initContainer.resources | indent 12 }}
+        command:
+          - "sh"
+        args:
+          - "-c"
+          - "{{- range .Values.plugins }}elasticsearch-plugin install --batch {{ . }};{{- end }}"
+        env:
+          - name: NODE_NAME
+            value: es-plugin-install
+        volumeMounts:
+          - mountPath: /usr/share/elasticsearch/plugins/
+            name: plugindir
+      {{- end }}
+      {{- if .Values.extraInitContainers }}
+{{ tpl .Values.extraInitContainers . | indent 6 }}
+      {{- end }}
+      containers:
+      - name: "{{ template "elasticsearch.name" . }}"
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.elasticsearchContainerSecurityContext) | indent 10 }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+        imagePullPolicy: "{{ .Values.imagePullPolicy }}"
+        {{- if .Values.useSSLProxy }}
+        command: ['sh']
+        args:
+        - "-c"
+        - |
+          set -e;
+
+          publishPort="970"$(echo $HOSTNAME | awk '{n=split($0,A,"-"); print A[n]}')
+          echo "publish port: ${publishPort}"
+
+          env transport.publish_port=${publishPort} /usr/local/bin/docker-entrypoint.sh;
+        {{- end }}
+        livenessProbe:
+          tcpSocket:
+            port: 19200
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+        readinessProbe:
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+          exec:
+            command:
+              - sh
+              - -c
+              - |
+                #!/usr/bin/env bash -e
+                # If the node is starting up wait for the cluster to be ready (request params: '{{ .Values.clusterHealthCheckParams }}' )
+                # Once it has started only check that the node itself is responding
+                START_FILE=/tmp/.es_start_file
+
+                http () {
+                    local path="${1}"
+
+                    curl -XGET -s -k --fail http://127.0.0.1:{{ .Values.httpPort }}${path}
+                }
+
+                if [ -f "${START_FILE}" ]; then
+                    echo 'Elasticsearch is already running, lets check the node is healthy'
+                    http "/"
+                else
+                    echo 'Waiting for elasticsearch cluster to become cluster to be ready (request params: "{{ .Values.clusterHealthCheckParams }}" )'
+                    if http "/_cluster/health?{{ .Values.clusterHealthCheckParams }}" ; then
+                        touch ${START_FILE}
+                        exit 0
+                    else
+                        echo 'Cluster is not yet ready (request params: "{{ .Values.clusterHealthCheckParams }}" )'
+                        exit 1
+                    fi
+                fi
+        ports:
+        - name: http
+          containerPort: {{ .Values.httpPort }}
+        - name: transport
+          containerPort: {{ .Values.transportPort }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        env:
+          - name: node.name
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          {{- if eq .Values.roles.master "true" }}
+          {{- if ge (int (include "elasticsearch.esMajorVersion" .)) 7 }}
+          - name: cluster.initial_master_nodes
+          {{- if .Values.useSSLProxy }}
+            value: "{{ template "elasticsearch.haproxyEndpoints" .Values }}"
+          {{- else }}
+            value: "{{ template "elasticsearch.endpoints" .Values }}"
+          {{- end }}
+          {{- else }}
+          - name: discovery.zen.minimum_master_nodes
+            value: "{{ .Values.minimumMasterNodes }}"
+          {{- end }}
+          {{- end }}
+          {{- if lt (int (include "elasticsearch.esMajorVersion" .)) 7 }}
+          - name: discovery.zen.ping.unicast.hosts
+            value: {{ include "sch.names.fullCompName" (list . .sch.chart.components.headless) | quote }}
+          {{- else }}
+          - name: discovery.seed_hosts
+          {{- if .Values.useSSLProxy }}
+            value: "{{ template "elasticsearch.haproxyEndpoints" .Values }}"
+          {{- else }}
+            value: "elasticsearch-master-headless"
+          {{- end }}
+          {{- end }}
+          - name: cluster.name
+            value: "{{ .Values.clusterName }}"
+          - name: network.host
+            value: "{{ .Values.networkHost }}"
+          - name: network.publish_host
+            value: "{{ .Values.networkPublishHost }}"
+          - name: ES_JAVA_OPTS
+            value: "{{ .Values.esJavaOpts }}"
+          - name: transport.tcp.port
+            value: "{{ .Values.transportPort }}"
+          - name: http.port
+            value: "{{ .Values.httpPort }}"
+
+          {{- range $role, $enabled := .Values.roles }}
+          - name: node.{{ $role }}
+            value: "{{ $enabled }}"
+          {{- end }}
+
+{{- if .Values.extraEnvs }}
+{{ toYaml .Values.extraEnvs | indent 10 }}
+{{- end }}
+        volumeMounts:
+          {{- if .Values.persistence.enabled }}
+          - name: {{ template "elasticsearch.uname" . }}
+            mountPath: /usr/share/elasticsearch/data
+          {{- end }}
+          {{- if eq .Values.protocol "https" }}
+          - name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.esCert) }}
+            mountPath: /usr/share/elasticsearch/config/certs
+          {{- end }}
+          {{- range .Values.secretMounts }}
+          - name: {{ .name }}
+            mountPath: {{ .path }}
+            {{- if .subPath }}
+            subPath: {{ .subPath }}
+            {{- end }}
+          {{- end }}
+          {{- range $path, $config := .Values.esConfig }}
+          - name: esconfig
+            mountPath: /usr/share/elasticsearch/config/{{ $path }}
+            subPath: {{ $path }}
+          - name: plugindir
+            mountPath: /usr/share/elasticsearch/plugins/
+          {{- end -}}
+        {{- if .Values.extraVolumeMounts }}
+{{ tpl .Values.extraVolumeMounts . | indent 10 }}
+        {{- end }}
+      {{- if .Values.masterTerminationFix }}
+      {{- if eq .Values.roles.master "true" }}
+      # This sidecar will prevent slow master re-election
+      # https://github.com/elastic/helm-charts/issues/63
+      - name: elasticsearch-master-graceful-termination-handler
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+        imagePullPolicy: "{{ .Values.imagePullPolicy }}"
+        livenessProbe:
+          tcpSocket:
+            port: 19200 #unsure of correct port
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+        readinessProbe:
+          tcpSocket:
+            port: 19200 #unsure of correct port
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+        command:
+        - "sh"
+        - -c
+        - |
+          #!/usr/bin/env bash
+          set -eo pipefail
+
+          http () {
+              local path="${1}"
+              if [ -n "${ELASTIC_USERNAME}" ] && [ -n "${ELASTIC_PASSWORD}" ]; then
+                BASIC_AUTH="-u ${ELASTIC_USERNAME}:${ELASTIC_PASSWORD}"
+              else
+                BASIC_AUTH=''
+              fi
+              curl -XGET -s -k --fail ${BASIC_AUTH} {{ .Values.protocol }}://{{ template "elasticsearch.masterService" . }}:{{ .Values.httpPort }}${path}
+          }
+
+          cleanup () {
+            while true ; do
+              local master="$(http "/_cat/master?h=node" || echo "")"
+              if [[ $master == "{{ template "elasticsearch.masterService" . }}"* && $master != "${NODE_NAME}" ]]; then
+                echo "This node is not master."
+                break
+              fi
+              echo "This node is still master, waiting gracefully for it to step down"
+              sleep 1
+            done
+
+            exit 0
+          }
+
+          trap cleanup SIGTERM
+
+          sleep infinity &
+          wait $!
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.elasticsearchmastergracefulterminationhandlerContainerSecurityContext) | indent 10 }}
+        resources:
+{{ toYaml .Values.sidecarResources | indent 10 }}
+        env:
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          # auth is provided by the haproxy sidecar...
+          {{- if .Values.useSSLProxy }}
+          - name: ELASTIC_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ if .Values.secretGeneration.existingSecret }}{{ .Values.secretGeneration.existingAuthSecret }}{{ else }}{{ include "sch.names.fullCompName" (list . .sch.chart.components.esSecret) }}{{ end }}
+                key: password
+          - name: ELASTIC_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ if .Values.secretGeneration.existingSecret }}{{ .Values.secretGeneration.existingAuthSecret }}{{ else }}{{ include "sch.names.fullCompName" (list . .sch.chart.components.esSecret) }}{{ end }}
+                key: username
+          {{- end }}
+        {{- if .Values.extraEnvs }}
+{{ toYaml .Values.extraEnvs | indent 10 }}
+        {{- end }}
+      {{- end }}
+      {{- end }}
+{{- if .Values.lifecycle }}
+        lifecycle:
+{{ toYaml .Values.lifecycle | indent 10 }}
+{{- end }}
+      # This sidecar will enable https proxy tls termination
+      {{- if .Values.useSSLProxy }}
+      - name: haproxy
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.haproxy.image.repository }}:{{ .Values.haproxy.image.tag }}
+        imagePullPolicy: {{ .Values.haproxy.image.pullPolicy }}
+        ports:
+          - name: https
+            containerPort: {{ .Values.proxyHttpPort }}
+          - name: transport
+            containerPort: {{ .Values.proxyTransportPort }}
+        livenessProbe:
+          tcpSocket:
+            port: 9300
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+        readinessProbe:
+          tcpSocket:
+            port: 9300
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.haproxyContainerSecurityContext) | indent 10 }}
+        volumeMounts:
+          - name: haproxy-config-volume
+            mountPath: /usr/local/etc/haproxy
+          - name: shared-socket
+            mountPath: /run/haproxy
+          - name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.esCert) }}
+            mountPath: /etc/ssl/certs
+        resources:
+{{ toYaml .Values.haproxy.resources | indent 10 }}
+        env:
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: ELASTIC_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ if .Values.secretGeneration.existingSecret }}{{ .Values.secretGeneration.existingAuthSecret }}{{ else }}{{ include "sch.names.fullCompName" (list . .sch.chart.components.esSecret) }}{{ end }}
+                key: password
+          - name: ELASTIC_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ if .Values.secretGeneration.existingSecret }}{{ .Values.secretGeneration.existingAuthSecret }}{{ else }}{{ include "sch.names.fullCompName" (list . .sch.chart.components.esSecret) }}{{ end }}
+                key: username
+      {{- end }}

@@ -1,0 +1,25 @@
+{{- include "sch.config.init" (list . "ibmElasticsearch.sch.chart.config.values") -}}
+kind: Service
+apiVersion: v1
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.service) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.service) | indent 4 }}
+  annotations:
+{{ toYaml .Values.service.annotations | indent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.esServer) | indent 4 }}
+  ports:
+  - name: {{ .Values.service.httpPortName | default "http" }}
+    protocol: TCP
+    port: {{ if .Values.useSSLProxy }}{{ .Values.proxyHttpPort }}{{ else }}{{ .Values.httpPort }}{{ end }}
+    targetPort: {{ if .Values.useSSLProxy }}{{ .Values.proxyHttpPort }}{{ else }}{{ .Values.httpPort }}{{ end }}
+{{- if .Values.service.nodePort }}
+    nodePort: {{ .Values.service.nodePort }}
+{{- end }}
+  - name: {{ .Values.service.transportPortName | default "transport" }}
+    protocol: TCP
+    port: {{ if .Values.useSSLProxy }}{{ .Values.proxyTransportPort }}{{ else }}{{ .Values.transportPort }}{{ end }}
+    targetPort: {{ if .Values.useSSLProxy }}{{ .Values.proxyTransportPort }}{{ else }}{{ .Values.transportPort }}{{ end }}

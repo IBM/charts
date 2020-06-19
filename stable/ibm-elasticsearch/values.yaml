@@ -1,0 +1,343 @@
+global:
+  dockerRegistryPrefix: ""
+  #Usage: cp.icr.io/cp or docker.io/YOUR_ACCOUNT
+  imagePullSecret: ""
+  #Usage: er-prod-secret
+  installCerts: false
+  ibmProduct: ""
+  sch:
+    enabled: true
+  storageClassName: ""
+
+  metering:
+    productID: "ibm_elasticsearch_1_0_0_Apache_2___22222"
+    productName: "Elasticsearch"
+    productVersion: "7.5.0"
+    productMetric: "VIRTUAL_PROCESSOR_CORE"
+    productChargedContainers: "All"
+    cloudpakId: "4df52d2cdc374ba09f631a650ad2b5bf"
+    cloudpakName: "IBM Cloud Pak for Data"
+    cloudpakVersion: "3.0"
+    addOnName: ""
+  zenServiceInstanceId: ""
+  deploymentType: "Production"
+
+enableCp4dMeteringLabels: false
+
+image:
+  repository: opencontent-elasticsearch-7
+  tag: 7.5.2-amd64
+imagePullPolicy: "IfNotPresent"
+
+haproxy:
+  image:
+    repository: opencontent-haproxy-1
+    tag: 1.9.17-2
+    pullPolicy: IfNotPresent
+#  securityContext:
+#    runAsUser: 1000
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 50m
+    limits:
+      memory: 1Gi
+      cpu: 1
+
+# job for generating secrets.. only runs is existingSecret=false
+# entitled registry
+secretGeneration:
+  existingSecret: false
+  existingAuthSecret: ""
+  existingCertSecret: ""
+  image:
+    repository: opencontent-elasticsearch-init-container-1
+    tag: 1.0.59-amd64
+#    imagePullSecrets: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+minimumMasterNodes: 2
+
+clusterName: "elasticsearch"
+nodeGroup: "master"
+
+# The service that non master groups will try to connect to when joining the cluster
+# This should be set to clusterName + "-" + nodeGroup for your master group
+masterService: ""
+
+# Elasticsearch roles that will be applied to this nodeGroup
+# These will be set as environment variables. E.g. node.master=true
+roles:
+  master: "true"
+  ingest: "true"
+  data: "true"
+
+replicas: 3
+
+# Set the uid for the containers
+securityContext:
+  elasticsearch:
+    runAsUser: 1000
+  creds:
+    runAsUser: 1000
+
+esMajorVersion: "7"
+
+# Allows you to add any config files in /usr/share/elasticsearch/config/
+# such as elasticsearch.yml and log4j2.properties
+esConfig:
+  elasticsearchyml: |
+    #network.bind_host: 127.0.0.1
+    transport.tcp.port: 19300
+
+    network.publish_host: 127.0.0.1
+    #transport.publish_port: 9700
+    #xpack.security.enabled: false
+    http.port: 19200
+    #cluster.initial_master_nodes:
+     # - 127.0.0.1:9700
+      #- 127.0.0.1:9701
+
+    #discovery.zen.minimum_master_nodes: 2
+
+    #xpack.ml.enabled: false
+    #xpack.security.transport.ssl.enabled: true
+    #xpack.security.transport.ssl.verification_mode: certificate
+    #xpack.security.transport.ssl.key: /usr/share/elasticsearch/config/certs/key.pem
+    #xpack.security.transport.ssl.certificate: /usr/share/elasticsearch/config/certs/certificate.pem
+    #xpack.security.transport.ssl.certificate_authorities: [ "/usr/share/elasticsearch/config/certs/ca.pem" ]
+    #xpack.security.http.ssl.enabled: true
+    #xpack.security.http.ssl.key: /usr/share/elasticsearch/config/certs/key.pem
+    #xpack.security.http.ssl.certificate: /usr/share/elasticsearch/config/certs/certificate.pem
+    #xpack.security.http.ssl.certificate_authorities: [ "/usr/share/elasticsearch/config/certs/ca.pem" ]
+    path.repo: ["/usr/share/elasticsearch/backups"]
+#  elasticsearch.yml: |
+#    key:
+#      nestedkey: value
+#  log4j2.properties: |
+#    key = value
+
+# Extra environment variables to append to this nodeGroup
+# This will be appended to the current 'env:' key. You can use any of the kubernetes env
+# syntax here
+extraEnvs: []
+#  - name: MY_ENVIRONMENT_VAR
+#    value: the_value_goes_here
+
+username: elastic
+
+# A list of secrets and their paths to mount inside the pod
+# This is useful for mounting certificates for security and for mounting
+# the X-Pack license
+secretMounts: []
+#  - name: elastic-certificates
+#    secretName: elastic-certificates
+#    path: /usr/share/elasticsearch/config/certs
+
+
+podAnnotations:
+  productName: "IBM Elasticsearch of the Common Core Services for IBM Cloud Pak for Data"
+  productID: "Elasticsearch_750_free_00000"
+  productVersion: "1.0.5"
+  cloudpakId: "4df52d2cdc374ba09f631a650ad2b5bf"
+  cloudpakName: "IBM Cloud Pak for Applications"
+  cloudpakVersion: "3.0"
+
+esJavaOpts: "-Xmx1g -Xms1g"
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "1Gi"
+  limits:
+    cpu: "1000m"
+    memory: "2Gi"
+
+sidecarResources:
+  limits:
+    cpu: "25m"
+    memory: "128Mi"
+  requests:
+    cpu: "25m"
+    memory: "128Mi"
+
+
+
+networkHost: "0.0.0.0"
+
+# network publish host, set to 127.0.0.1 for supporting haproxy TLS. else comment out.
+networkPublishHost: "127.0.0.1"
+
+volumeClaimTemplate:
+  accessModes: [ "ReadWriteOnce" ]
+  resources:
+    requests:
+      storage: 30Gi
+
+rbac:
+  create: true
+  serviceAccountName: ""
+
+persistence:
+  useDynamicProvisioning: true
+  enabled: false
+  annotations: {}
+
+extraVolumes: ""
+# - name: extras
+#   emptyDir: {}
+
+extraVolumeMounts: ""
+  # - name: extras
+#   mountPath: /usr/share/extras
+#   readOnly: true
+
+extraInitContainers: ""
+  # - name: do-something
+#   image: busybox
+#   command: ['do', 'something']
+
+# This is the PriorityClass settings as defined in
+# https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass
+priorityClassName: ""
+
+# By default this will make sure two pods don't end up on the same node
+# Changing this to a region would allow you to spread pods across regions
+antiAffinityTopologyKey: "kubernetes.io/hostname"
+
+# Hard means that by default pods will only be scheduled if there are enough nodes for them
+# and that they will never end up on the same node. Setting this to soft will do this "best effort"
+antiAffinity: "hard"
+
+# This is the node affinity settings as defined in
+# https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#node-affinity-beta-feature
+nodeAffinity: {}
+
+# The default is to deploy all pods serially. By setting this to parallel all pods are started at
+# the same time when bootstrapping the cluster
+podManagementPolicy: "Parallel"
+
+protocol: https
+httpPort: 19200
+transportPort: 19300
+
+service:
+  type: ClusterIP
+  nodePort: ""
+  annotations: {}
+  httpPortName: http
+  transportPortName: transport
+
+updateStrategy: RollingUpdate
+
+# This is the max unavailable setting for the pod disruption budget
+# The default value of 1 will make sure that kubernetes won't allow more than 1
+# of your pods to be unavailable during maintenance
+maxUnavailable: 1
+
+terminationGracePeriod: 120
+
+livenessProbe:
+  failureThreshold: 3
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 5
+
+readinessProbe:
+  failureThreshold: 3
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  successThreshold: 3
+  timeoutSeconds: 5
+
+# https://www.elastic.co/guide/en/elasticsearch/reference/current/cluster-health.html#request-params wait_for_status
+clusterHealthCheckParams: "wait_for_status=green&timeout=1s"
+
+## Use an alternate scheduler.
+## ref: https://kubernetes.io/docs/tasks/administer-cluster/configure-multiple-schedulers/
+##
+schedulerName: ""
+
+nodeSelector: {}
+tolerations: []
+
+# Enabling this will publically expose your Elasticsearch instance.
+# Only enable this if you have security enabled on your cluster
+ingress:
+  enabled: false
+  annotations: {}
+  # kubernetes.io/ingress.class: nginx
+  # kubernetes.io/tls-acme: "true"
+  path: /
+  hosts:
+    - chart-example.local
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+nameOverride: ""
+
+# https://github.com/elastic/helm-charts/issues/63
+masterTerminationFix: false
+
+lifecycle: {}
+  # preStop:
+  #   exec:
+  #     command: ["/bin/sh", "-c", "echo Hello from the postStart handler > /usr/share/message"]
+  # postStart:
+#   exec:
+#     command: ["/bin/sh", "-c", "echo Hello from the postStart handler > /usr/share/message"]
+
+## Kubernetes Cluster Domain
+clusterDomain: cluster.local
+
+# haproxy - reverse proxy TLS/auth sidecar
+useSSLProxy: true
+
+# haproxy port
+proxyHttpPort: 9200
+proxyTransportPort: 9300
+
+# entitled registry
+
+
+# Specify architecture (amd64, ppc64le, s390x) and weight to be  used for scheduling as follows :
+#   0 - Do not use
+#   1 - Least preferred
+#   2 - No preference
+#   3 - Most preferred
+arch:
+  amd64: "2 - No preference"
+  ppc64le: "2 - No preference"
+
+pluginInitContainer:
+  enabled: true
+
+# If you want any plugins installed, give them here as a list. They will be
+# passed to elasticsearch-plugin install {line here}
+plugins:
+#- discovery-ec2
+#- file:///usr/share/elasticsearch/plugins-jars/analysis-icu-7.5.2.zip
+
+# if chown is true, an init-container with sudo is launched to
+# change the owner of the persistence volume mount folder to the user defined in the
+# security context
+## entitled registry
+initContainer:
+  resources:
+    limits:
+      cpu: 100m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+
