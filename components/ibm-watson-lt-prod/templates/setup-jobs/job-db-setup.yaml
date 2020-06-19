@@ -1,0 +1,270 @@
+{{- include "sch.config.init" (list . "ibm-watson-lt.sch.chart.config.values") -}}
+{{/* not valid in tiller < 2.10 according to linter: $compName := printf "job-pg-%s" (ternary "init" (printf "upgrade-%d" .Release.Revision) .Release.IsInstall) */}}
+{{- $compName := tpl "job-pg-{{- if .Release.IsInstall }}init{{ else }}upgrade-{{ .Release.Revision }}{{ end -}}" . -}}
+{{- $dbConfigApi := .Values.api.dbConfig -}}
+{{- $dbConfigDT := .Values.documents.dbConfig -}}
+{{- if .Values.postgres.enabled -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      restartPolicy: Never
+      affinity:
+{{ include "ibm-watson-lt.affinity" $ | trim | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.mnlpPodSecurityContext) | indent 6 }}
+### IMAGE PULL SECRET
+{{ include "ibm-watson-lt.pullSecretTemplate" . | indent 6 }}
+
+      volumes:
+{{ include "ibm-watson-lt.pg_cert_volume" . | indent 6 }}
+
+      containers:
+      - name: psql
+        {{ include "sch.security.securityContext" (list . .sch.chart.dropAllContainerSecurityContext) | indent 8 }}
+        {{ include "ibm-watson-lt.pullPolicyTemplate" . }}
+        image: {{ include "ibm-watson-lt.repo" . }}{{ .Values.postgres.postgres.image.name }}:{{ .Values.postgres.postgres.image.tag }}
+        command:
+          - "/bin/bash"
+          - "-c"
+          - |
+            {{/* wait until PG ready */}}
+            echo "Waiting until postgres is running"
+            while true ; do
+              pg_isready -h $PGHOST -d postgres -U $PGUSER && break || sleep 30
+            done
+            echo "Done. Postgres is running now. Let go to create/update the DB schema for store microservice."
+            cat <<EOF | psql -h $PGHOST -d postgres -U $PGUSER -f -
+            {{ if .Release.IsInstall }}
+            {{/* create the database */}}
+            SET client_encoding = 'UTF8';
+            CREATE DATABASE {{ $dbConfigApi.dbname }} ENCODING='UTF8';
+            -- connect to database
+            \c {{ $dbConfigApi.dbname }}
+
+            {{/* create the Document Translator schema */}}
+            {{ if .Values.documents.enabled }}
+            -- create schema {{ $dbConfigDT.schemaname }}
+            CREATE SCHEMA IF NOT EXISTS {{ $dbConfigDT.schemaname }};
+            -- select schema
+            SET search_path TO {{ $dbConfigDT.schemaname }};
+            CREATE OR REPLACE FUNCTION now_utc() returns bigint as \$\$
+              select (extract(epoch from (now() at time zone 'utc'))*1000)::bigint;
+            \$\$ language sql;
+
+            -- create table
+            CREATE TABLE pod (
+              p_id serial not null unique,
+              p_name text unique not null,
+              p_ctime bigint not null,
+              p_mtime bigint not null,
+              unique (p_name, p_ctime)
+            );
+
+            -- create table
+            CREATE TABLE task (
+            -- pulled or derived from the original request, set at creation and never changed
+              t_id serial not null unique,
+              t_pod_key text not null, -- 'p_name':'p_ctime'
+              t_task_id text unique not null, -- task id
+              t_batch_id text not null, -- batch id or null for standalone task
+              t_ref_id text not null, -- ref id (for subsequent task sharing doc with previous task id with the src doc)
+              t_opt_out boolean default false,
+              t_ctime bigint,    -- creation time
+              t_filename text not null, -- input filename as supplied by user
+              t_mime text not null, -- content-type of input
+              t_model_id text not null, -- model id
+              t_base_model_id text not null, -- model id
+              t_source text not null,
+              t_target text not null,
+              t_user_data text not null, -- dep ibm: email[,cc], bm: auth[,usr], sl: watson_userinfo
+              t_options text not null,
+              t_bcount integer,
+            -- updated through life-cycle
+              t_state text not null,
+              t_pcount integer,
+              t_scount integer,
+              t_wcount integer,
+              t_ccount integer,
+              t_mtime bigint default 0, -- mod time
+              t_cpltime bigint default 0, -- completion time
+              t_ftime bigint default 0 -- fetch time
+            );
+
+            -- create table
+            CREATE TABLE task_log (
+              l_tid integer references task(t_id) on delete cascade,
+              l_state text not null,
+              l_ctime bigint default now_utc(),
+              unique (l_tid, l_state)
+            );
+            CREATE TABLE sentences (
+              s_id bigserial not null unique,
+              s_tid integer references task(t_id) on delete cascade,
+              s_pid integer not null, -- paragraph from 1 to total_paragraphs
+              s_sid integer not null, -- sentence id from 1 to total_sentence_count
+                                      -- i.e. s.length() if no trailing whitespace
+              s_ttxt text,             -- translation of source sentence with restored tail and head
+              unique (s_tid, s_pid, s_sid)
+            );
+            CREATE TABLE batch (
+            -- pulled or derived from the original request, set at creation and never changed
+              b_batch_id text unique not null, -- batch id
+              b_pod_key text not null,
+              b_ref_id text not null,
+              b_opt_out boolean,
+              b_input_url text not null,
+              b_input_bucket text not null,
+              b_input_access_key text not null,
+              b_input_secret_key text not null,
+              b_input_path text not null,
+              b_output_url text not null,
+              b_output_bucket text not null,
+              b_output_access_key text not null,
+              b_output_secret_key text not null,
+              b_output_path text not null,
+              b_model_id text not null, -- default model for batch
+              b_base_model_id text not null,
+              b_source text not null,
+              b_target text not null,
+              b_user_data text not null,
+              b_options text not null,
+              b_ctime bigint, -- creation time
+            -- updated through life-cycle
+              b_mtime bigint default 0, -- mod time
+              b_cpltime bigint default 0 -- completion time
+            );
+            {{- end -}}
+
+            {{/* LT API schema */}}
+            -- create schema {{ $dbConfigApi.schemaname }}
+            CREATE SCHEMA IF NOT EXISTS {{ $dbConfigApi.schemaname }};
+            -- select schema
+            SET search_path TO {{ $dbConfigApi.schemaname }};
+
+            CREATE TABLE IF NOT EXISTS MODEL (                -- Table to store information related to Models
+                M_MODEL_ID                varchar(64) NOT NULL,       -- Model Name for Base Models (e.g. "en-es"), and UUID for custom models, SIRE models?
+                M_BASE_MODEL_ID           varchar(64),            -- Name of the Base Model for custom models (e.g. "en-es"), only defined for MT Customized models otherwise null
+
+                M_NAME                    varchar(64),            -- Model Name
+                M_TYPE                    varchar(64),            -- Model Type i.e. mt,ie,lid,rct
+                M_MQ_NAME                 varchar(64),            -- Message Queue Name
+                M_SOURCE_LANGUAGE         varchar(64),            -- Source Language
+                M_TARGET_LANGUAGE         varchar(64),            -- Target Language
+
+                M_IS_CUSTOMIZABLE     boolean DEFAULT FALSE,    -- If the base model is customizable
+                M_IS_DEFAULT        boolean DEFAULT FALSE,    -- If the base model is a DEFAULT model for a given source and target language
+
+                M_DOMAIN                  varchar(64),
+                M_DESCRIPTION               text,
+                M_STATUS                  varchar(64),            -- Model Status : AVAILABLE | UNAVAILABLE | DELETED etc.
+
+                M_OWNER                 text,                   -- Customer UUID for IE models and MT customized models, base models don't have a customer owner
+
+                -- Info from headers
+                M_X_WATSON_USERINFO       text,                   -- X-Watson-UserInfo header value string e.g. "UserId=xxx;bluemix-instance-id=xxx;..."
+                M_X_WATSON_USERINFO_USER_ID text,                   -- ID UserID extracted from X-Watson-UserInfo header, used in billing
+
+                -- Additional info about custom trained models
+                M_PROFILE_ID              varchar(64),                -- Custom Model Profile ID
+                M_PROFILE_TYPE            varchar(64),                -- Custom Model Profile Type for e.g. corpus, glossary etc..
+                M_TRAIN_REQUEST_ID          varchar(100),               -- Request ID generated by Train Framework to track a train request
+
+                M_CREATION_TIME           timestamp DEFAULT now(),  -- Model Creation Time
+                M_MODEL_URI           text,                 -- Model URI after uploading to Object Store
+                M_DELETED                 boolean DEFAULT FALSE,      -- Flag set for deleted models
+
+                M_BACKUP_MODEL_URI          text,                     -- Uri of Backed up model
+                M_DELETION_TIME             timestamp,
+                M_BACKUP_TTL_DAYS           NUMERIC DEFAULT 90,
+                M_BACKUP_DELETED            boolean DEFAULT 'f',
+
+                PRIMARY KEY               (M_MODEL_ID)
+            );
+
+
+            CREATE INDEX IF NOT EXISTS IDX_M_PID ON MODEL(M_PROFILE_ID);
+
+            CREATE TABLE IF NOT EXISTS CUSTOMIZATION_LOG (          -- Table to store log entries for custom model training
+
+                M_MODEL_ID          varchar(64) REFERENCES MODEL (M_MODEL_ID),
+                CL_START_STATE            varchar(64),              -- Custom Model State before update
+                CL_END_STATE              varchar(64),            -- Custom Model State after update
+                CL_MESSAGE              text,                 -- Any message associated wtih state change for e.g. to ERROR
+                CL_CREATION_TIME          timestamp DEFAULT now(),  -- Creation Time, default current timestamp
+
+                PRIMARY KEY               (M_MODEL_ID, CL_CREATION_TIME)
+            );
+
+            CREATE INDEX IF NOT EXISTS IDX_CL_MID ON CUSTOMIZATION_LOG (M_MODEL_ID);
+
+            CREATE TABLE IF NOT EXISTS TRANSLATION_CACHE (
+
+                TC_SOURCE_SENTENCE      varchar(1024) NOT NULL,
+                TC_TARGET_SENTENCE      varchar(1024) NOT NULL,
+                M_MODEL_ID          varchar(64) NOT NULL,
+              TC_LAST_USED        timestamp NOT NULL DEFAULT now(),
+                TC_OPT_OUT_FLAG           boolean DEFAULT FALSE,
+                PRIMARY KEY         (M_MODEL_ID, TC_SOURCE_SENTENCE)
+            );
+
+            -- looks up a translation in the cache and updates the last used time stamp if found
+            -- opt out is set to false if at least on lookup was without opt-out set (logical AND between current and new flag)
+            -- in other words, opt-out == true only if all lookups have the opt-out flag set
+
+            CREATE OR REPLACE FUNCTION tc_lru_lookup_with_optout(IN model_id text, IN source_sentence text, IN opt_out boolean, OUT translation text) AS \$\$
+            BEGIN
+              SELECT TC_TARGET_SENTENCE INTO translation FROM translation_cache WHERE M_MODEL_ID = model_id AND TC_SOURCE_SENTENCE = source_sentence;
+              IF FOUND THEN
+                UPDATE translation_cache SET TC_LAST_USED = now(), TC_OPT_OUT_FLAG = TC_OPT_OUT_FLAG AND opt_out WHERE M_MODEL_ID = model_id AND TC_SOURCE_SENTENCE = source_sentence;
+              END IF;
+            END;
+            \$\$ LANGUAGE PLPGSQL;
+
+            CREATE TABLE IF NOT EXISTS LEASES (                 -- Table used for Locking / Leader Election,  TTL is set programmatically in code
+
+                  NAME                    text,                 -- Name of the lock
+                  OWNER                   text,                 -- Owner IP of the lock
+                  MODIFICATION_TIME       timestamp NOT NULL DEFAULT now(),
+                  PRIMARY KEY             (NAME)
+            );
+
+            CREATE TABLE IF NOT EXISTS OWNER_DELETION (        -- Table used to keep information about deleted owners
+                  M_OWNER                 text,
+                  OD_DELETION_TIME        timestamp NOT NULL DEFAULT now(),
+                  OD_MODELS_DELETED       boolean DEFAULT FALSE,
+                  PRIMARY KEY (M_OWNER)
+            );
+            {{ end }}
+            {{/* insert configured models */}}
+{{ include "ibm-watson-lt.modelInsert" . | indent 12 }}
+            EOF
+        resources:
+          requests:
+            memory: "100Mi"
+            cpu: "100m"
+          limits:
+            memory: "200Mi"
+            cpu: "200m"
+        volumeMounts:
+{{ include "ibm-watson-lt.pg_cert_mount" . | indent 8 }}
+        env:
+{{ include "ibm-watson-lt.pgenv_common" . | indent 8 }}
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+{{- end -}}

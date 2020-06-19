@@ -1,0 +1,231 @@
+{{- include "sch.config.init" (list . "ibm-watson-lt.sch.chart.config.values") -}}
+{{- $compName := "test" -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+
+spec:
+  ### IMAGE PULL SECRET
+{{ include "ibm-watson-lt.pullSecretTemplate" . | indent 2 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.mnlpPodSecurityContext) | indent 2 }}
+
+    # container specs
+  containers:
+  - name: test
+    {{ include "ibm-watson-lt.pullPolicyTemplate" . }}
+    {{- include "sch.security.securityContext" (list . .sch.chart.dropAllContainerSecurityContext) | indent 4 }}
+    image: {{ include "ibm-watson-lt.repo" . }}{{ .Values.global.tests.image.name }}:{{ .Values.global.tests.image.tag }}
+    resources:
+      limits:
+        cpu: {{ .Values.global.tests.resources.cpuLimitMillis }}m
+        memory: {{ .Values.global.tests.resources.memoryLimitMB }}Mi
+      requests:
+        cpu: {{ .Values.global.tests.resources.cpuRequestMillis }}m
+        memory: {{ .Values.global.tests.resources.memoryRequestMB }}Mi
+    command:
+        - "/bin/bash"
+        - -c
+        - |
+          export LT_HOME=/tmp
+          export TEST_WORKSPACE=$LT_HOME/tests
+          export AUTH_HEADER='X-Watson-UserInfo:UserId=00305d54-75b4-431b-adb2-eb6b9e546011;bluemix-instance-id=001f1aa2-4e27-4771-9218-9fd7ba0c2a27;bluemix-organization-guid=00305d54-75b4-431b-adb2-eb6b9e546013'
+          export BASE_PATH=/language-translator/api/v3
+          export VERSION=version=2018-05-01
+          export API_ENDPOINT={{ include "ibm-watson-lt.apiSvcName" . }}
+          export DOC_ENDPOINT={{ include "ibm-watson-lt.dtSvcName" . }}
+          export TEST_TEXT="Hello, Welcome to the CP4D World. Thanks, MNLP Team."
+          export MUL_REQUEST_COUNT={{ .Values.global.tests.loadTestCount }}
+          export TEST_DOC=${TEST_WORKSPACE}/test.txt
+          export CURL="curl -k"
+          export LOG_FILE=${TEST_WORKSPACE}/test.log
+          mkdir $TEST_WORKSPACE
+          cd $TEST_WORKSPACE
+          export TEST_MODELID=$(curl -k https://${API_ENDPOINT}${BASE_PATH}/models?version=2018-05-01 | jq -r '.models[0].model_id')
+
+          printTestStart () {
+           echo ""                                   2>&1 | tee ${LOG_FILE} -a
+           echo "#################################"  2>&1 | tee ${LOG_FILE} -a
+           echo "## Test $1: $2 "                    2>&1 | tee ${LOG_FILE} -a
+           echo "#################################"  2>&1 | tee ${LOG_FILE} -a
+          }
+
+          verifyResponseContains () {
+            echo -e "\nVerifying HTTP response"  2>&1 | tee ${LOG_FILE} -a
+            if grep -Fq $1 ${LOG_FILE}
+              then
+                echo "Test PASSED"  2>&1 | tee ${LOG_FILE} -a
+              else
+                echo "Test FAILED"  2>&1 | tee ${LOG_FILE} -a
+                exit 1
+            fi
+          }
+
+          requestCurlGetAPI () {
+            requestCurlGet ${API_ENDPOINT} $@
+          }
+
+          requestCurlGetDOC () {
+            requestCurlGet ${DOC_ENDPOINT} $@
+          }
+
+          requestCurlDeleteDOC () {
+            requestCurlGet ${DOC_ENDPOINT} $@ "" "DELETE"
+          }
+
+          requestCurlGet () {
+            ENDPOINT=${1}
+            RESOURCE=${2}
+            QUERY_PARAMS=${3:-""}
+            METHOD=${4:-""}
+
+            [  ! -z "${QUERY_PARAMS}" ] && QUERY_PARAMS="&${QUERY_PARAMS}"
+            [  ! -z "${METHOD}" ] && METHOD="-X ${METHOD}"
+
+            echo "Initiating HTTP request - ${RESOURCE}"  2>&1 | tee ${LOG_FILE} -a
+            echo "${CURL} https://${ENDPOINT}${BASE_PATH}${RESOURCE}?${VERSION}${QUERY_PARAMS}" -H "${AUTH_HEADER}" ${METHOD} 2>&1 | tee ${LOG_FILE} -a
+            ${CURL} https://${ENDPOINT}${BASE_PATH}${RESOURCE}?${VERSION}${QUERY_PARAMS}  -H "${AUTH_HEADER}" ${METHOD} 2>&1 | tee ${LOG_FILE} -a
+          }
+
+          requestCurlPostAPI () {
+            RESOURCE=${1}
+            QUERY_PARAMS=${2:-""}
+            HEADER=${3:-""}
+            BODY=${4:-""}
+            [  ! -z "${QUERY_PARAMS}" ] && QUERY_PARAMS="&${QUERY_PARAMS}"
+            [  ! -z "${HEADER}" ] && HEADER="-H ${HEADER}"
+
+            echo "Initiating HTTP request - ${RESOURCE}"  2>&1 | tee ${LOG_FILE} -a
+            echo "${CURL} https://${API_ENDPOINT}${BASE_PATH}${RESOURCE}?${VERSION}${QUERY_PARAMS} -H "${AUTH_HEADER}" ${HEADER} -d ${BODY}" 2>&1 | tee ${LOG_FILE} -a
+            ${CURL} https://${API_ENDPOINT}${BASE_PATH}${RESOURCE}?${VERSION}${QUERY_PARAMS} -H "${AUTH_HEADER}" ${HEADER} -d "${BODY}"  2>&1 | tee ${LOG_FILE} -a
+          }
+
+          requestCurlPostDOC () {
+
+            RESOURCE=${1}
+            FORM_PARAM1=${2:-""}
+            FORM_PARAM2=${3:-""}
+
+            [  ! -z "${FORM_PARAM1}" ] && FORM_PARAM1="-F ${FORM_PARAM1}"
+            [  ! -z "${FORM_PARAM2}" ] && FORM_PARAM2="-F ${FORM_PARAM2}"
+
+            echo "Initiating HTTP request - ${RESOURCE}"  2>&1 | tee ${LOG_FILE} -a
+            echo "${CURL} https://${DOC_ENDPOINT}${BASE_PATH}${RESOURCE}?${VERSION} -H "${AUTH_HEADER}" ${FORM_PARAM1} ${FORM_PARAM2}" 2>&1 | tee ${LOG_FILE} -a
+            ${CURL} https://${DOC_ENDPOINT}${BASE_PATH}${RESOURCE}?${VERSION} -H "${AUTH_HEADER}" ${FORM_PARAM1} ${FORM_PARAM2}  2>&1 | tee ${LOG_FILE} -a
+          }
+
+          waitForDocumentProcessing () {
+            DOCID=$1
+            while :
+            do
+              if tail -15 ${LOG_FILE} | grep -Fq "available"
+              then
+                 break
+              elif tail -15 ${LOG_FILE} | grep -Fq "error"
+              then
+                 break
+              else
+                 sleep 15
+                 requestCurlGetDOC "/documents/${DOCID}"
+              fi
+            done
+          }
+
+          ##############################
+          ## TEST Language Translator ##
+          ##############################
+          printTestStart "CP4D" "LT"
+          ########Get Identifiable Languages#################
+          printTestStart "1" "Get List Identifiable Languages"
+          requestCurlGetAPI "/identifiable_languages"
+          verifyResponseContains "languages"
+          ########Post Identify Language#################
+          printTestStart "2" "Post Identify Language"
+          IDENTIFY_BODY="${TEST_TEXT}"
+          requestCurlPostAPI "/identify" "" "content-type:text/plain" "${IDENTIFY_BODY}"
+          verifyResponseContains "confidence"
+          ########Get List Models#################
+          printTestStart "3" "Get List Models"
+          requestCurlGetAPI "/models"
+          verifyResponseContains "available"
+          ########Post Translate Text#################
+          printTestStart "4" "Post Translate Text"
+          TRANSLATE_JSON='{"text":"'""${TEST_TEXT}""'","model_id":"'""${TEST_MODELID}""'"}'
+          requestCurlPostAPI "/translate" "" "content-type:application/json" "${TRANSLATE_JSON}"
+          verifyResponseContains "translations"
+          verifyResponseContains "word_count"
+          #########Post Document for Translation####################
+          printTestStart "5" "Post Document for Translation"
+          echo "${TEST_TEXT}" > "${TEST_DOC}"
+          requestCurlPostDOC "/documents" "model_id=${TEST_MODELID}" "file=@${TEST_DOC}"
+          verifyResponseContains "document_id"
+          DOCID=`awk '/"document_id"/{print $NF}' ${LOG_FILE} | tr -d '",'`
+          ########Get Document Status######################
+          printTestStart "6" "Get Document Status"
+          requestCurlGetDOC "/documents/${DOCID}"
+          waitForDocumentProcessing "${DOCID}"
+          verifyResponseContains "available"
+          ########Delete Document######################
+          printTestStart "7" "Delete Document"
+          requestCurlDeleteDOC "/documents/${DOCID}"
+          ########Post Translate Text with Multiple Request########
+          printTestStart "8" "Post Translate Text with multiple requests"
+
+          export TEST_TEXT="test"
+          export NUM_REQUESTS=1000
+          export CONCURRENT_REQUESTS=10
+          export LOAD_LOG="/tmp/lt-load.log"
+
+          # define bash function that executes the curl command for one request of the load test
+          load() {
+            CACHE_MODE="no";
+            if (( $RANDOM % 2 )); then CACHE_MODE="rw"; fi;
+            HTTP_STATUS=$(${CURL} --silent --fail -o /dev/null -w "%{http_code}" -H ${AUTH_HEADER} -H "Content-type:application/json" -d "{\"text\": \"${TEST_TEXT}\", \"model_id\": \"${TEST_MODELID}\", \"cm\":\"$CACHE_MODE\"}" https://${API_ENDPOINT}${BASE_PATH}/translate?${VERSION})
+            EXIT_CODE=$?
+            echo "$HTTP_STATUS $EXIT_CODE $CACHE_MODE" >> "${LOAD_LOG}"
+          }
+
+          # we need to export the bash function so that parallel can find it later
+          export -f load
+          rm -f "${LOAD_LOG}"
+          start_time=`date +%s`
+
+          # make sure parallel uses the bash, then execute the load function in parallel
+          SHELL=$(type -p bash) seq 1 ${NUM_REQUESTS} | parallel -n0 -j ${CONCURRENT_REQUESTS} load
+
+          # count number of failures (non 200 http return code)
+          FAILURES=$(cut -d ' ' -f1 ${LOAD_LOG} | grep -v 200 | wc -l | awk '{print $1}')
+
+          # max 2 failures allowed
+          if (( $FAILURES > 2))
+          then
+            echo "
+              ------ Test Result ------
+              Request: Translate Load Test
+              Processed: ${NUM_REQUESTS} requests
+              Time: $(expr `date +%s` - $start_time) sec
+              Result: More than 2 requests failed.
+              Number of Calls failed: $FAILURES
+              -------------------------"
+            exit 1
+          else
+            echo "
+              ------ Test Result ------
+              Request: Translate Load Test
+              Processed: ${NUM_REQUESTS} requests
+              Time: $(expr `date +%s` - $start_time) sec
+              Result: PASSED
+              -------------------------"
+          fi
+
+          echo "################ Congratulations successfully passed all applicable scenarios!! ################"
+  affinity:
+{{ include "ibm-watson-lt.affinity" $ | trim | indent 4 }}
+  restartPolicy: Never
+
+
+

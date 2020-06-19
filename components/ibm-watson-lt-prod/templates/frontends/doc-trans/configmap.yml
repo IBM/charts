@@ -1,0 +1,28 @@
+{{- include "sch.config.init" (list . "ibm-watson-lt.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.docTrans.name -}}
+{{- $comp := .Values.documents -}}
+{{- if $comp.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ include "sch.names.fullCompName" (list . $compName "config") }}-config"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+data:
+  log4j2.xml: |
+    <Configuration status="WARN" monitorInterval="30">
+        <Appenders>
+            <Console name="Console" target="SYSTEM_OUT">
+                <PatternLayout pattern="%d{ISO8601} [%t] %-5level %logger{36} - %msg %n" />
+            </Console>
+            <Console name="JsonConsole" target="SYSTEM_OUT">
+                <JsonLayout compact="true" eventEol="true" properties="true" />
+            </Console>
+        </Appenders>
+        <Loggers>
+            <Root level={{ $comp.config.rootLogLevel | quote }}>
+                <AppenderRef ref="JsonConsole" />
+            </Root>
+        </Loggers>
+    </Configuration>
+{{- end -}}
