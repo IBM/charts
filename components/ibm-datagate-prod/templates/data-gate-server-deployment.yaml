@@ -1,0 +1,324 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "dg.fullname" . }}-data-gate
+  labels:
+    app: {{ template "dg.fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+    icpdsupport/addOnName: dg
+    icpd-addon/status: "{{ .Values.zenServiceInstanceId | int64 }}"
+{{ include "dg.metadataLabels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.images.replicas }}
+  selector:
+    matchLabels:
+      app: {{ template "dg.fullname" . }}
+  template:
+    metadata:
+      annotations:
+        {{- include "datagate.annotations" .  | indent 8 }}
+      labels:
+        app: {{ template "dg.fullname" . }}
+        release: "{{ .Release.Name }}"
+        icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+        icpdsupport/addOnName: dg
+        data-gate-status: {{ template "dg.fullname" . }}-data-gate-server
+        chart: "{{ .Chart.Name }}"
+{{ include "dg.metadataLabels" . | indent 8 }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: {{ default "default" .Values.targetDbInstance }}
+            topologyKey: kubernetes.io/hostname
+      initContainers:
+      - name: config-db2u
+        image: "{{ .Values.images.initconfig.image.repository }}:{{ .Values.images.initconfig.image.tag }}"
+        args:
+          - "{{ default "default" .Values.targetDbInstance }}"
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: true
+          runAsUser: 1000326001
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          limits:
+            memory: {{ .Values.images.initconfig.limit.memory }}
+            cpu: {{ .Values.images.initconfig.limit.cpu }}
+          requests:
+            memory: {{ .Values.images.initconfig.request.memory }}
+            cpu: {{ .Values.images.initconfig.request.cpu }}
+      - name: data-gate-stunnel-init
+        image: "{{ .Values.images.stunnelinit.image.repository }}:{{ .Values.images.stunnelinit.image.tag }}"
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: true
+          runAsUser: 1000321001
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          limits:
+            memory: {{ .Values.images.stunnelinit.limit.memory }}
+            cpu: {{ .Values.images.stunnelinit.limit.cpu }}
+          requests:
+            memory: {{ .Values.images.stunnelinit.request.memory }}
+            cpu: {{ .Values.images.stunnelinit.request.cpu }}
+        volumeMounts:
+        - mountPath: /etc/stunnel
+          name: {{ template "dg.fullname" . }}-shared-pvc
+      containers:
+      - name: data-gate-server
+        image: "{{ .Values.images.server.image.repository }}:{{ .Values.images.server.image.tag }}"
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: true
+          runAsUser: 1000326001
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: DB2_INSTANCE_ID
+          value: {{ default "default" .Values.targetDbInstance }}
+        - name: ZEN_SERVICE_INSTANCE
+          value: {{ template "dg.fullname" . }}
+        livenessProbe:
+          timeoutSeconds: 10
+          initialDelaySeconds: 120
+          exec:
+            command:
+            - "/opt/ibm/dwa/bin/installation/accelerator/data-gate-server.liveness.sh"
+          periodSeconds: 60
+          successThreshold: 1
+          failureThreshold: 5
+        readinessProbe:
+          timeoutSeconds: 10
+          initialDelaySeconds: 120
+          exec:
+            command:
+            - "/opt/ibm/dwa/bin/installation/accelerator/data-gate-server.liveness.sh"
+          periodSeconds: 60
+          successThreshold: 1
+          failureThreshold: 5
+        resources:
+          limits:
+            memory: {{ .Values.images.server.limit.memory }}
+            cpu: {{ .Values.images.server.limit.cpu }}
+          requests:
+            memory: {{ .Values.images.server.request.memory }}
+            cpu: {{ .Values.images.server.request.cpu }}
+        ports:
+        - name: liveness-port
+          containerPort: 1400
+        - containerPort: 1401
+        volumeMounts:
+        - mountPath: /head
+          name: {{ template "dg.fullname" . }}-shared-pvc
+        - mountPath: /mnt/blumeta0
+          name: {{ .Values.targetDbInstance }}-db2u-pvc
+        - mountPath: /etc/ldapRootPwdSecret
+          name: ldap-secret
+          readOnly: true
+      - name: data-gate-stunnel
+        image: "{{ .Values.images.stunnel.image.repository }}:{{ .Values.images.stunnel.image.tag }}"
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: true
+          runAsUser: 1000321001
+          capabilities:
+            drop:
+            - ALL
+        ports:
+        - containerPort: 11400
+        - containerPort: 11401
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          timeoutSeconds: 3
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          successThreshold: 1
+          failureThreshold: 5
+        readinessProbe:
+          tcpSocket:
+            path: /certificate
+            port: 8080
+          timeoutSeconds: 5
+          initialDelaySeconds: 5
+          periodSeconds: 30
+          successThreshold: 1
+          failureThreshold: 5
+        resources:
+          limits:
+            memory: {{ .Values.images.stunnel.limit.memory }}
+            cpu: {{ .Values.images.stunnel.limit.cpu }}
+          requests:
+            memory: {{ .Values.images.stunnel.request.memory }}
+            cpu: {{ .Values.images.stunnel.request.cpu }}
+        volumeMounts:
+        - mountPath: /etc/stunnel
+          name: {{ template "dg.fullname" . }}-shared-pvc
+      - name: data-gate-apply
+        image: "{{ .Values.images.apply.image.repository }}:{{ .Values.images.apply.image.tag }}"
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: true
+          runAsUser: 1000326001
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: DB2_INSTANCE_ID
+          value: {{ default "default" .Values.targetDbInstance }}
+        - name: APPLY_MEMORY
+          value: {{ .Values.images.apply.limit.memory }}
+        livenessProbe:
+          timeoutSeconds: 10
+          initialDelaySeconds: 20
+          exec:
+            command:
+            - "/opt/ibm/dwa/bin/data-gate-apply.liveness.sh"
+          periodSeconds: 30
+          successThreshold: 1
+          failureThreshold: 5
+        readinessProbe:
+          timeoutSeconds: 5
+          initialDelaySeconds: 5
+          exec:
+            command:
+            - "/opt/ibm/dwa/bin/data-gate-apply.liveness.sh"
+          periodSeconds: 30
+          successThreshold: 1
+          failureThreshold: 5
+        resources:
+          requests:
+            cpu: {{ .Values.images.apply.request.cpu }}
+            memory: {{ .Values.images.apply.request.memory }}
+          limits:
+            cpu: {{ .Values.images.apply.limit.cpu }}
+            memory: {{ .Values.images.apply.limit.memory }}
+        ports:
+        - containerPort: 7091
+        volumeMounts:
+        - mountPath: /head
+          name: {{ template "dg.fullname" . }}-shared-pvc
+        - mountPath: /mnt/blumeta0
+          name: {{ .Values.targetDbInstance }}-db2u-pvc
+        - mountPath: /etc/ldapRootPwdSecret
+          name: ldap-secret
+          readOnly: true
+      - name: data-gate-api
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: true
+          runAsUser: 1000326001
+          capabilities:
+            drop:
+            - ALL
+        command: ["/bin/sh", "-c"]
+        args: ["sh /opt/ibm/dwa/bin/installation/clone-api/data-gate-api-setup.sh; tail -f /dev/null;"]
+        image: "{{ .Values.images.api.image.repository }}:{{ .Values.images.api.image.tag }}"
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        env:
+        - name: PLATFORM_DATAGATE
+          value: PLATFORM_ICP4D_DATAGATE
+        - name: ZEN_NAMESPACE
+          value: {{ .Values.baseNamespace }}
+        - name: ZEN_SERVICE_INSTANCE
+          value: {{ template "dg.fullname" . }}
+        - name: ZEN_SERVICE_INSTANCE_NAME
+          value: {{ .Values.dataGateInstanceName }}
+        - name: DATAGATE_ROUTE_HOSTNAME
+          value: {{ .Values.route.dataGateRouteHostName }}
+        - name: DATAGATE_ROUTE_PORT
+          value: {{ .Values.route.dataGateRoutePort | int64 | toString | quote }}
+        - name: DEFAULT_ROUTING_SUBDOMAIN
+          value: {{ .Values.defaultRouteSubdomain }}
+        ports:
+        - name: api-port
+          containerPort: 8188
+        volumeMounts:
+        - mountPath: /head
+          name: {{ template "dg.fullname" . }}-shared-pvc
+        livenessProbe:
+          tcpSocket:
+            port: api-port
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /clone_system/is_prepared
+            port: 8188
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        resources:
+          limits:
+            memory: {{ .Values.images.api.limit.memory }}
+            cpu: {{ .Values.images.api.limit.cpu }}
+          requests:
+            memory: {{ .Values.images.api.request.memory }}
+            cpu: {{ .Values.images.api.request.cpu }}
+      serviceAccount: {{ default "default" .Values.serviceAccount }}
+      serviceAccountName: {{ default "default" .Values.serviceAccount }}
+      tolerations:
+        - key: "icp4data"
+          operator: "Exists"
+          effect: "NoSchedule"
+      volumes:
+      - name: {{ template "dg.fullname" . }}-shared-pvc
+        persistentVolumeClaim:
+          {{- if eq .Values.storage.type "existingClaim" }}
+          claimName: {{ .Values.storage.existingClaim.name }}
+          {{- else if eq .Values.storage.type "storageClass" }}
+          claimName: {{ template "dg.fullname" . }}-shared-pvc
+          {{- else }}
+          claimName: {{ template "dg.fullname" . }}-{{ .Values.storage.nfs.name }}
+          {{- end }}
+      - name: {{ .Values.targetDbInstance }}-db2u-pvc
+        {{- if eq .Values.db2u.volumeType "hostPath" }}
+        hostPath:
+          path: {{ .Values.db2u.hostPath.path }}
+          type: {{ .Values.db2u.hostPath.type }}
+        {{- else }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.db2u.pvc.name }}
+        {{- end }}
+      - name: ldap-secret
+        secret:
+          defaultMode: 292
+          secretName: {{ default "default" .Values.targetDbInstance }}-db2u-ldap
