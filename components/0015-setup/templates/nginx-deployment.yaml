@@ -23,7 +23,10 @@ spec:
         {{- include "zenhelper.annotations" . | indent 8 }}
     spec:
       securityContext:
+        runAsNonRoot: true
+        {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
         runAsUser: 1000321000
+        {{- end }}
       serviceAccountName: {{ .Values.global.viewer.sa }}
       terminationGracePeriodSeconds: 0
       affinity:
@@ -35,6 +38,14 @@ spec:
       {{- end }}
       containers:
       - name: ibm-nginx-container
+        securityContext:
+          runAsNonRoot: true
+          {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 1000321000
+          {{- end }}
+          capabilities:
+            drop:
+            - ALL
         image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.nginxRepo.image.repository }}:{{ .Values.global.image.tag }}"
         imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
         command: ["/scripts/startup.sh"]
@@ -42,6 +53,20 @@ spec:
         - configMapRef:
             name: product-configmap
         env:
+        - name: NODENAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: SERVICEACCOUNT
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.serviceAccountName
+        - name: PODIPADDRESS
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: CONTAINERNAME
+          value: ibm-nginx-container
         - name: RESOLVER
           value: "{{ .Values.nginxRepo.resolver }}"
         - name: NODE_ENV

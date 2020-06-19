@@ -23,7 +23,10 @@ spec:
         {{- include "zenhelper.annotations" . | indent 8 }}
     spec:
       securityContext:
+        runAsNonRoot: true
+        {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
         runAsUser: 1000321000
+        {{- end }}
       serviceAccountName: {{ .Values.global.editor.sa }}
       terminationGracePeriodSeconds: 0
       affinity:
@@ -43,10 +46,18 @@ spec:
         image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenRequisite.image.repository }}:{{ .Values.global.image.tag }}"
         imagePullPolicy: IfNotPresent
         name: change-permissions
+        securityContext:
+          runAsNonRoot: true
+          {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 1000321000
+          {{- end }}
+          capabilities:
+            drop:
+            - ALL
         resources:
           limits:
             cpu: '2'
-            memory: 1Gi
+            memory: 2Gi
           requests:
             cpu: 100m
             memory: 256Mi
@@ -57,6 +68,14 @@ spec:
           name: metastore-volume
       containers:
       - name: zen-core-api-container
+        securityContext:
+          runAsNonRoot: true
+          {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 1000321000
+          {{- end }}
+          capabilities:
+            drop:
+            - ALL
         image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenCoreApi.image.repository }}:{{ .Values.global.image.tag }}"
         imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
         command:
@@ -81,11 +100,30 @@ spec:
         - "/etc/internal-tls/tls.crt"
         - --tls-key
         - "/etc/internal-tls/tls.key"
+        envFrom:
+        - configMapRef:
+            name: product-configmap
         env:
         - name: TILLER_NAMESPACE
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        - name: NODENAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: SERVICEACCOUNT
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.serviceAccountName
+        - name: SERVICENAME
+          value: zen-core-api
+        - name: CONTAINERNAME
+          value: zen-core-api-container
         - name: TILLER_PORT
           value: {{ .Values.zenCoreApi.tillerPort | quote }}
         - name: NO_TLS
@@ -112,13 +150,23 @@ spec:
           value: {{ .Values.global.icp4dEdition}}
         - name: METASTORE_CERT_DIR
           value: "/tmp/metastore"
+        - name: VOLUMES_MOUNT_PATH
+          value: "/user-home"
+        - name: ENABLE_PLATFORM_AUTH
+          value: "true"
         - name: ICPD_CONTROLPLANE_NAMESPACE
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        - name: PODIPADDRESS
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
         resources:
 {{ toYaml .Values.zenCoreApi.resources | indent 12 }}
         volumeMounts:
+        - mountPath: /var/tmp
+          name: multipart-formdata-staging-path
         - mountPath: /var/run/sharedsecrets
           name: zen-service-broker-secret
         - mountPath: /tmp/metastore
@@ -139,10 +187,13 @@ spec:
           protocol: TCP
         livenessProbe:
           httpGet:
-            path: /v1/monitor
+            path: /v1/health
             port: 4444
             scheme: HTTPS
           initialDelaySeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 1
+          successThreshold: 1
           periodSeconds: 30
         readinessProbe:
           httpGet:
@@ -152,6 +203,8 @@ spec:
           initialDelaySeconds: 30
           periodSeconds: 30
       volumes:
+      - emptyDir: {}
+        name: multipart-formdata-staging-path
       - emptyDir: {}
         name: metastore-volume
       - name: zen-service-broker-secret

@@ -22,12 +22,21 @@ spec:
       annotations:
         {{- include "zenhelper.annotations" . | indent 8 }}
     spec:
+      securityContext:
+        runAsNonRoot: true
+      serviceAccountName: {{ .Values.global.viewer.sa }}
+      automountServiceAccountToken: false
       terminationGracePeriodSeconds: 0
       affinity:
         {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
         {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
       containers:
       - name: zen-content-container
+        securityContext:
+        runAsNonRoot: true
+        capabilities:
+          drop:
+            - ALL 
         image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenContent.image.repository }}:{{ .Values.global.image.tag }}"
         imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
         command: ["/content/bin/authproxy", "-config","/content/etc/config.json"]

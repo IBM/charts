@@ -4,9 +4,9 @@
 Create the default zen base chart annotations
 */}}
 {{- define "zenhelper.annotations" }}
-productName: IBM Cloud Pak for Data
-productID: ICP4D-IBMCloudPrivateForData_1210_perpetual_00000
-productVersion: 1.2.1.0
+productName: "IBM Common Core Services for IBM Cloud Pak for Data"
+productID: "shared infrastructure"
+productVersion: "3.0"
 {{- end }}
 
 
