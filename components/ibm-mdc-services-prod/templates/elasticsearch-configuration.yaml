@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ .Values.elasticsearch.name }}-configuration
+  labels:
+    app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    icpdsupport/app : {{ .Values.global.productLabelName }}
+    icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+    app.kubernetes.io/component: {{ .Values.elasticsearch.name }}
+    app.kubernetes.io/part-of: {{ .Values.elasticsearch.name }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "5"
+data:
+  probe.sh: |
+    #!/usr/bin/env bash
+    curl --fail -u elastic:${ELASTIC_PASSWORD} https://${HOSTNAME}:${{ .Values.elasticsearch.name | upper | replace "-" "_" }}_SERVICE_PORT_HTTP/_cluster/health -k -s -o /dev/null -w "%{http_code}"
+  connection-info.json: |
+    {
+      "server": "{{ .Values.elasticsearch.name }}",
+      "scheme": "https",
+      "port": "9200"
+    }

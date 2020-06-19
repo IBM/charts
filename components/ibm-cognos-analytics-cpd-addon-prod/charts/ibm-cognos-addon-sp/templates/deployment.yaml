@@ -1,7 +1,7 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: "{{  .Chart.Name }}-deployment"
+  name: "{{ .Chart.Name }}-deployment"
   labels:
     chart: '{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}'
 spec:
@@ -15,13 +15,10 @@ spec:
   template:
     metadata:
       labels:
-        app: "{{  .Chart.Name }}-selector"
+        app: "{{ .Chart.Name }}-selector"
         release: {{ .Release.Name }}
       annotations:
-        productID: ICP4D-addon-{{ .Values.metering.productID }}
-        productName: {{ .Values.metering.productName }}
-        productVersion: {{ .Values.metering.productVersion }}
-
+{{ toYaml .Values.global.metering | indent 8 }}
     spec:
 {{ toYaml .Values.hostOptions | indent 6 }}
     {{- with .Values.affinity }}
@@ -51,10 +48,15 @@ spec:
           httpGet:
             path: /health
             port: {{ .Values.service.servicePort }}
+            scheme: HTTP
           initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds}}
           periodSeconds: {{ .Values.readinessProbe.periodSeconds}}
         ports:
         - containerPort: {{ .Values.service.servicePort}}
+#        - containerPort: {{ .Values.service.httpsPort}}
+        volumeMounts:
+        - name: internal-tls
+          mountPath: /etc/internal-tls
         resources:
 {{ toYaml .Values.image.resources | indent 12 }}
         securityContext:
@@ -68,4 +70,16 @@ spec:
           - name: KNJ_LOG_TO_CONSOLE
             value: "true"
           - name: LOG_LEVEL
-            value: "debug"
+            value: "info"
+          - name: TLS_ENABLED
+            value: "true"
+          - name: TLS_CERTPATH
+            value: {{ .Values.global.tls.secretCertPath | quote }}
+          - name: TLS_KEYPATH
+            value: {{ .Values.global.tls.secretKeyPath | quote }}
+        command: [ "/app/run-dev" ]
+      volumes:
+      - name: internal-tls
+        secret:
+          defaultMode: 420
+          secretName: {{ .Values.global.tls.secretName }}

@@ -1,0 +1,123 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.couchdb.name }}-create-indexes
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    icpdsupport/app : {{ .Values.global.productLabelName }}
+    icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+    app.kubernetes.io/component: {{ .Values.couchdb.name }}-create-indexes
+    app.kubernetes.io/part-of: {{ .Values.couchdb.name }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "8"
+spec:
+  template:
+    metadata:
+      annotations:
+        productName: IBM Master Data Management
+        productID: MDM1000200300
+        productVersion: 1.0.0
+        productMetric: VIRTUAL_PROCESSOR_CORE
+        productChargedContainers: All
+        cloudpakName: "IBM Cloud Pak for Data"
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion: 3.0.1
+      labels:
+        app: {{ .Values.global.productLabelName }}
+        app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        release: {{ .Release.Name }}
+        icpdsupport/app : {{ .Values.global.productLabelName }}
+        icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+        icpdsupport/addOnName: "{{ .Values.zenServiceInstanceType }}"
+        app.kubernetes.io/component: {{ .Values.couchdb.name }}-create-indexes
+        app.kubernetes.io/part-of: {{ .Values.couchdb.name }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccount: {{ .Values.sa.viewer }}
+      serviceAccountName: {{ .Values.sa.viewer }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+      {{ if eq .Values.global.remoteDockerRepo true }}
+      imagePullSecrets:
+      - name: {{ .Values.global.imagePullSecretName }}
+      {{ end }}
+      containers:
+      - name: {{ .Values.couchdb.name }}-create-indexes
+        image: {{ if .Values.global.docker_registry_prefix }}{{ trimSuffix "/" .Values.global.docker_registry_prefix }}/{{ end }}{{ .Values.couchdb.image }}:{{ .Values.couchdb.tag }}
+        imagePullPolicy: {{ .Values.couchdb.imagePullPolicy }}
+        securityContext:
+          runAsUser: 1000321000
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        command: ["sh", "-c", "curl -f -s --cacert /etc/couchdb/cert/metadata.crt https://{{ .Values.couchdb.name }}:6984/${DATABASE_NAME}/_index -X POST -H 'Content-Type: application/json' -u ${ADMIN_USERNAME}:${ADMIN_PASSWORD} -d @/tmp/indexes/index1.json && if [ $? -eq 0 ]; then echo; echo 'CouchDB database index creation 1 completed successfully!'; else echo 'CouchDB database index creation failed!'; exit 1; fi; curl -f -s --cacert /etc/couchdb/cert/metadata.crt https://{{ .Values.couchdb.name }}:6984/${DATABASE_NAME}/_index -X POST -H 'Content-Type: application/json' -u ${ADMIN_USERNAME}:${ADMIN_PASSWORD} -d @/tmp/indexes/index2.json && if [ $? -eq 0 ]; then echo; echo 'CouchDB database index creation 2 completed successfully!'; else echo 'CouchDB database index creation failed!'; exit 1; fi; curl -f -s --cacert /etc/couchdb/cert/metadata.crt https://{{ .Values.couchdb.name }}:6984/${DATABASE_NAME}/_index -X POST -H 'Content-Type: application/json' -u ${ADMIN_USERNAME}:${ADMIN_PASSWORD} -d @/tmp/indexes/index3.json && if [ $? -eq 0 ]; then echo; echo 'CouchDB database index creation 3 completed successfully!'; else echo 'CouchDB database index creation failed!'; exit 1; fi; curl -f -s --cacert /etc/couchdb/cert/metadata.crt https://{{ .Values.couchdb.name }}:6984/${DATABASE_NAME}/_index -X POST -H 'Content-Type: application/json' -u ${ADMIN_USERNAME}:${ADMIN_PASSWORD} -d @/tmp/indexes/index4.json && if [ $? -eq 0 ]; then echo; echo 'CouchDB database index creation 4 completed successfully!'; else echo 'CouchDB database index creation failed!'; exit 1; fi; curl -f -s --cacert /etc/couchdb/cert/metadata.crt https://{{ .Values.couchdb.name }}:6984/${DATABASE_NAME}/_index -X POST -H 'Content-Type: application/json' -u ${ADMIN_USERNAME}:${ADMIN_PASSWORD} -d @/tmp/indexes/index5.json && if [ $? -eq 0 ]; then echo; echo 'CouchDB database index creation 5 completed successfully!'; else echo 'CouchDB database index creation failed!'; exit 1; fi; echo 'All indexes have been created.'; exit 0;"]
+        env:
+          - name: ADMIN_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.couchdb.name }}-secret
+                key: cloudant.username
+          - name: ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.couchdb.name }}-secret
+                key: cloudant.password
+          - name: DATABASE_NAME
+            value: cache
+        volumeMounts:
+        - name: couchdb-create-indexes-configuration
+          mountPath: /tmp/indexes
+        - name: couchdb-secret
+          mountPath: /etc/couchdb/cert
+        resources:
+          limits:
+            cpu: {{ .Values.couchdb.job.requests.cpu }}
+            memory: {{ .Values.couchdb.job.requests.memory }}
+          requests:
+            cpu: {{ .Values.couchdb.job.limits.cpu }}
+            memory: {{ .Values.couchdb.job.limits.memory }}
+      volumes:
+      - name: couchdb-create-indexes-configuration
+        configMap:
+          name: {{ .Values.couchdb.name }}-create-indexes-configuration
+          defaultMode: 0744
+          items:
+          - key: index1
+            path: index1.json
+          - key: index2
+            path: index2.json
+          - key: index3
+            path: index3.json
+          - key: index4
+            path: index4.json
+          - key: index5
+            path: index5.json
+      - name: couchdb-secret
+        secret:
+          secretName: {{ .Values.couchdb.name }}-secret
+          items:
+            - key: cloudant.crt
+              path: metadata.crt
+      restartPolicy: Never
+  backoffLimit: {{ .Values.couchdb.job.backoffLimit }}

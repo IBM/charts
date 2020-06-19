@@ -1,0 +1,231 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ .Values.cassandra.name }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "6"
+  labels:
+    app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    icpdsupport/app : {{ .Values.global.productLabelName }}
+    icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+    app.kubernetes.io/component: {{ .Values.cassandra.name }}
+    app.kubernetes.io/part-of: {{ .Values.cassandra.name }}
+spec:
+  serviceName: {{ .Values.cassandra.name }}
+  replicas: {{ .Values.cassandra.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: {{ .Values.cassandra.name }}
+      app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+  template:
+    metadata:
+      annotations:
+        productName: IBM Master Data Management
+        productID: MDM1000200300
+        productVersion: 1.0.0
+        productMetric: VIRTUAL_PROCESSOR_CORE
+        productChargedContainers: All
+        cloudpakName: "IBM Cloud Pak for Data"
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion: 3.0.1
+      labels:
+        app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+        app: {{ .Values.global.productLabelName }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        release: {{ .Release.Name }}
+        icpdsupport/app : {{ .Values.global.productLabelName }}
+        icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+        icpdsupport/addOnName: "{{ .Values.zenServiceInstanceType }}"
+        app.kubernetes.io/component: {{ .Values.cassandra.name }}
+        app.kubernetes.io/part-of: {{ .Values.cassandra.name }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccount: {{ .Values.sa.viewer }}
+      serviceAccountName: {{ .Values.sa.viewer }}
+      securityContext:
+        runAsUser: 1000325000
+        fsGroup: 0
+      terminationGracePeriodSeconds: 1800
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+      {{ if eq .Values.global.remoteDockerRepo true }}
+      imagePullSecrets:
+      - name: {{ .Values.global.imagePullSecretName }}
+      {{ end }}
+      initContainers:
+      - name: init-cassandra-yaml
+        image: {{ if .Values.global.docker_registry_prefix }}{{ trimSuffix "/" .Values.global.docker_registry_prefix }}/{{ end }}{{ .Values.cassandra.image }}:{{ .Values.cassandra.tag }}
+        imagePullPolicy: {{ .Values.cassandra.imagePullPolicy }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 1000325000
+        resources:
+          limits:
+            cpu: {{ .Values.cassandra.limits.cpu }}
+            memory: {{ .Values.cassandra.limits.memory }}
+          requests:
+            cpu: {{ .Values.cassandra.requests.cpu }}
+            memory: {{ .Values.cassandra.requests.memory }}
+        command: ["sh", "-c", "cp -r /opt/cassandra/conf/* /opt/cassandra_temp/ && sed -i -e '/client_encryption_options:/,/cipher_suites:/ s/enabled:.*$/enabled: true/g' /opt/cassandra_temp/cassandra.yaml && sed -i -e '/client_encryption_options:/,/cipher_suites:/ s#keystore:.*$#keystore: /etc/pki/tls/private/cassandra/keystore#g' /opt/cassandra_temp/cassandra.yaml && sed -i -e \"/client_encryption_options:/,/cipher_suites:/ s/keystore_password:.*$/keystore_password: $KEYSTORE_PASSWORD/g\" /opt/cassandra_temp/cassandra.yaml && sed -i -e '/client_encryption_options:/,/cipher_suites:/ s/# require_client_auth/require_client_auth/g' /opt/cassandra_temp/cassandra.yaml && sed -i -e '/client_encryption_options:/,/cipher_suites:/ s,# truststore:.*$,truststore: /etc/pki/tls/private/cassandra/truststore,g' /opt/cassandra_temp/cassandra.yaml && sed -i -e \"/client_encryption_options:/,/cipher_suites:/ s/# truststore_password:.*$/truststore_password: $TRUSTSTORE_PASSWORD/g\" /opt/cassandra_temp/cassandra.yaml && sed -i -e '/client_encryption_options:/,/cipher_suites:/ s/# protocol/protocol/g' /opt/cassandra_temp/cassandra.yaml && sed -i -e '/client_encryption_options:/,/cipher_suites:/ s/# algorithm/algorithm/g' /opt/cassandra_temp/cassandra.yaml && sed -i -e '/client_encryption_options:/,/cipher_suites:/ s/# store_type/store_type/g' /opt/cassandra_temp/cassandra.yaml && sed -i -e '/client_encryption_options:/,/cipher_suites:/ s/# cipher_suites/cipher_suites/g' /opt/cassandra_temp/cassandra.yaml && sed -i -e 's/^authenticator:.*$/authenticator: PasswordAuthenticator/g' /opt/cassandra_temp/cassandra.yaml && sed -i -e 's/authorizer:.*$/authorizer: CassandraAuthorizer/g' /opt/cassandra_temp/cassandra.yaml && sed -i -e 's/auto_snapshot:.*$/auto_snapshot: false/g' /opt/cassandra_temp/cassandra.yaml && sed -i -e 's/# commitlog_total_space_in_mb:.*$/commitlog_total_space_in_mb: 100/g' /opt/cassandra_temp/cassandra.yaml"]
+        env:
+        - name: KEYSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.cassandra.name }}-tls-secret
+              key: keystorepass
+        - name: TRUSTSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.cassandra.name }}-tls-secret
+              key: truststorepass
+        volumeMounts:
+        - name: cassandra-config
+          mountPath: /opt/cassandra_temp
+      containers:
+      - name: {{ .Values.cassandra.name }}
+        image: {{ if .Values.global.docker_registry_prefix }}{{ trimSuffix "/" .Values.global.docker_registry_prefix }}/{{ end }}{{ .Values.cassandra.image }}:{{ .Values.cassandra.tag }}
+        imagePullPolicy: {{ .Values.cassandra.imagePullPolicy }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 1000325000
+        ports:
+        - containerPort: 7000
+          name: intra-node
+        - containerPort: 7001
+          name: tls-intra-node
+        - containerPort: 7199
+          name: jmx
+        - containerPort: 9042
+          name: cql
+        resources:
+          limits:
+            cpu: {{ .Values.cassandra.limits.cpu }}
+            memory: {{ .Values.cassandra.limits.memory }}
+          requests:
+            cpu: {{ .Values.cassandra.requests.cpu }}
+            memory: {{ .Values.cassandra.requests.memory }}
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - nodetool drain
+        env:
+          - name: KEYSTORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.cassandra.name }}-tls-secret
+                key: keystorepass
+          - name: TRUSTSTORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.cassandra.name }}-tls-secret
+                key: truststorepass
+          - name: MAX_HEAP_SIZE
+            value: {{ .Values.cassandra.maxHeapSize }}
+          - name: HEAP_NEWSIZE
+            value: {{ .Values.cassandra.heapNewSize }}
+          - name: CASSANDRA_SEEDS
+            value: "{{ .Values.cassandra.name }}-0.{{ .Values.cassandra.name }}.{{ .Release.Namespace }}.svc.{{ .Values.global.domain }}"
+          - name: CASSANDRA_CLUSTER_NAME
+            value: {{ .Values.cassandra.cluster.name }}
+          - name: CASSANDRA_DC
+            value: {{ .Values.cassandra.cluster.dataCenter }}
+          - name: CASSANDRA_RACK
+            value: {{ .Values.cassandra.cluster.rack }}
+          - name: CASSANDRA_ENDPOINT_SNITCH
+            value: "GossipingPropertyFileSnitch"
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+        readinessProbe:
+          exec:
+            command: ["/bin/bash", "-c", "if [[ $(nodetool status | grep $POD_IP | awk {'print $1'}) == \"UN\" ]]; then exit 0; else exit 1; fi"]
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+        livenessProbe:
+          exec:
+            command: ["/bin/sh", "-c", "nodetool status"]
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 5
+        volumeMounts:
+        - name: data-storage
+          mountPath: /opt/cassandra/data
+        - name: cassandra-tls-secrets
+          mountPath: /etc/pki/tls/private/cassandra
+        - name: cassandra-cqlsh-config
+          mountPath: /etc/cassandra_config/.cassandra
+        - name: cassandra-config
+          mountPath: /opt/cassandra/conf
+      volumes:
+        - name: cassandra-tls-secrets
+          secret:
+            secretName: {{ .Values.cassandra.name }}-tls-secret
+            items:
+              - key: keystore
+                path: keystore
+              - key: truststore
+                path: truststore
+              - key: keystorepem
+                path: keystorepem
+        - name: cassandra-config
+          emptyDir: {}
+        - name: cassandra-cqlsh-config
+          configMap:
+            name: {{ .Values.cassandra.name }}-configuration
+            items:
+            - key: cqlshrc
+              path: cqlshrc
+  volumeClaimTemplates:
+  - metadata:
+      name: data-storage
+    spec:
+      {{- if or .Values.global.persistence.suppressDynamicProvisioning .Values.cassandra.suppressDynamicProvisioning }}
+      storageClassName: ""
+      {{- else if .Values.cassandra.storageClassName }}
+      storageClassName: {{ .Values.cassandra.storageClassName | quote }}
+      {{- else if .Values.global.persistence.storageClassName }}
+      storageClassName: {{ .Values.global.persistence.storageClassName | quote }}
+      {{- end }}
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.cassandra.storage }}

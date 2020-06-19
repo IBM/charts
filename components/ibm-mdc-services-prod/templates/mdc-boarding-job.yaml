@@ -1,0 +1,213 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ .Values.mdc.name }}-onboarding
+  annotations:
+    "helm.sh/hook": "post-install"
+    "helm.sh/hook-weight": "1"
+  labels:
+    app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    icpdsupport/app : {{ .Values.global.productLabelName }}
+    icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+    app.kubernetes.io/component: {{ .Values.mdc.name }}-onboarding
+    app.kubernetes.io/part-of: {{ .Values.mdc.name }}
+spec:
+  template:
+    metadata:
+      annotations:
+        productName: IBM Master Data Management
+        productID: MDM1000200300
+        productVersion: 1.0.0
+        productMetric: VIRTUAL_PROCESSOR_CORE
+        productChargedContainers: All
+        cloudpakName: "IBM Cloud Pak for Data"
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion: 3.0.1
+      labels:
+        app: {{ .Values.global.productLabelName }}
+        app.kubernetes.io/name: {{ .Values.global.productLabelName }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        release: {{ .Release.Name }}
+        icpdsupport/app : {{ .Values.global.productLabelName }}
+        icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+        icpdsupport/addOnName: "{{ .Values.zenServiceInstanceType }}"
+        app.kubernetes.io/component: {{ .Values.mdc.name }}-onboarding
+        app.kubernetes.io/part-of: {{ .Values.mdc.name }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccount: {{ .Values.sa.viewer }}
+      serviceAccountName: {{ .Values.sa.viewer }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+      initContainers:
+      - name: generate-config
+        image: {{ if .Values.global.docker_registry_prefix }}{{ trimSuffix "/" .Values.global.docker_registry_prefix }}/{{ end }}{{ .Values.mdc.image }}:{{ .Values.mdc.tag }}
+        imagePullPolicy: {{ .Values.mdc.imagePullPolicy }}
+        securityContext:
+          runAsUser: 1000325000
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        command: ['sh', '-c', '/usr/operational-cache/bin/generate_config.sh']
+        env:
+          - name: OC_ENV_TYPE
+            value: "CP4D"
+          - name: METADATA_STORE_CERT_FILE
+            value: /secrets/metadata/metadata.crt
+          - name: METADATA_STORE_DATABASE_NAME
+            value: cache
+          - name: METADATA_STORE_CONFIG_FILE
+            value: /usr/operational-cache/conf/cloudant/cloudant.properties
+          - name: WLP_KEY_STORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.mdc.name }}-wlp-secret
+                key: key.store.password
+        volumeMounts:
+        - name: elasticsearch-configuration
+          mountPath: /configmaps/index
+        - name: cassandra-configuration
+          mountPath: /configmaps/data
+        - name: couchdb-configuration
+          mountPath: /configmaps/metadata
+        - name: operational-cache-wlp-secret
+          mountPath: /secrets/wlp
+        - name: operational-cache-staging-configuration
+          mountPath: /staging/operational-cache
+        - name: couchdb-secret
+          mountPath: /secrets/metadata
+        - name: operational-cache-configuration
+          mountPath: /configmaps/operational-cache
+        - name: elasticsearch-tls-secret
+          mountPath: /secrets/index
+        - name: cassandra-tls-secret
+          mountPath: /secrets/data
+        - name: operational-cache-janus-keystore-dir
+          mountPath: /etc/pki/tls/certs/janus
+        resources:
+          requests:
+            cpu: {{ .Values.mdc.generateConfigInit.requests.cpu }}
+            memory: {{ .Values.mdc.generateConfigInit.requests.memory }}
+          limits:
+            cpu: {{ .Values.mdc.generateConfigInit.limits.cpu }}
+            memory: {{ .Values.mdc.generateConfigInit.limits.memory }}
+      containers:
+      - name: {{ .Values.mdc.name }}-onboarding
+        image: {{ if .Values.global.docker_registry_prefix }}{{ trimSuffix "/" .Values.global.docker_registry_prefix }}/{{ end }}{{ .Values.mdc.image }}:{{ .Values.mdc.tag }}
+        imagePullPolicy: {{ .Values.mdc.imagePullPolicy }}
+        securityContext:
+          runAsUser: 1000325000
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        command: ["/bin/sh", "-c", "sleep 10; java -cp /usr/operational-cache/lib/boarding/*:/usr/operational-cache/lib/*:/usr/operational-cache/janus/lib/*:/usr/operational-cache/lib/cos/* -Djavax.net.ssl.trustStore=/usr/operational-cache/wlp/usr/servers/cache-server/resources/security/key.p12 -Djavax.net.ssl.trustStorePassword=${WLP_KEY_STORE_PASSWORD} com.ibm.entity.analytics.operational.cache.boarding.Boarder -f $JANUS_STATIC_CONFIG -i :::::::1:: -a onboard"]
+        env:
+          - name: CLOUDANT_CONFIG
+            value: /usr/operational-cache/conf/cloudant/cloudant.properties
+          - name: METADATA_STORE_CERT_FILE
+            value: /secrets/metadata/metadata.crt
+          - name: JANUS_STATIC_CONFIG
+            value: /usr/operational-cache/conf/janus/janusgraph-static.properties
+          - name: WLP_KEY_STORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.mdc.name }}-wlp-secret
+                key: key.store.password
+        volumeMounts:
+        - name: operational-cache-configuration
+          mountPath: /configmaps/operational-cache
+        - name: operational-cache-staging-configuration
+          mountPath: /staging/operational-cache
+        - name: operational-cache-janus-keystore-dir
+          mountPath: /etc/pki/tls/certs/janus
+        resources:
+          requests:
+            cpu: {{ .Values.mdc.boardingJob.requests.cpu }}
+            memory: {{ .Values.mdc.boardingJob.requests.memory }}
+          limits:
+            cpu: {{ .Values.mdc.boardingJob.limits.cpu }}
+            memory: {{ .Values.mdc.boardingJob.limits.memory }}
+      {{ if eq .Values.global.remoteDockerRepo true }}
+      imagePullSecrets:
+      - name: {{ .Values.global.imagePullSecretName }}
+      {{ end }}
+      volumes:
+        - name: operational-cache-staging-configuration
+          emptyDir: {}
+        - name: operational-cache-janus-keystore-dir
+          emptyDir: {}
+        - name: operational-cache-configuration
+          configMap:
+            name: {{ .Values.mdc.name }}-configuration
+            items:
+              - key: janusgraph-static.properties
+                path: janusgraph-static.properties
+        - name: cassandra-configuration
+          configMap:
+            name: {{ .Values.cassandra.name }}-configuration
+        - name: elasticsearch-configuration
+          configMap:
+            name: {{ .Values.elasticsearch.name }}-configuration
+        - name: couchdb-configuration
+          configMap:
+            name: {{ .Values.couchdb.name }}-configuration
+            items:
+              - key: connection-info.json
+                path: connection-info.json
+        - name: operational-cache-wlp-secret
+          secret:
+            secretName: {{ .Values.mdc.name }}-wlp-secret
+            items:
+              - key: key.p12
+                path: key.p12
+              - key: ltpa.keys
+                path: ltpa.keys
+        - name: couchdb-secret
+          secret:
+            secretName: {{ .Values.couchdb.name }}-secret
+            items:
+              - key: credentials.json
+                path: credentials.json
+              - key: cloudant.crt
+                path: metadata.crt
+        - name: cassandra-tls-secret
+          secret:
+            secretName: {{ .Values.cassandra.name }}-tls-secret
+            items:
+              - key: cassandra.crt
+                path: data.crt
+              - key: credentials.json
+                path: credentials.json
+        - name: elasticsearch-tls-secret
+          secret:
+            secretName: {{ .Values.elasticsearch.name }}-tls-secret
+            items:
+              - key: elasticsearch.crt
+                path: index.crt
+              - key: credentials.json
+                path: credentials.json
+      restartPolicy: Never
+  backoffLimit: {{ .Values.mdc.boardingJob.backoffLimit }}
