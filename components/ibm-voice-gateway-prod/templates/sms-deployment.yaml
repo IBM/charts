@@ -1,0 +1,280 @@
+{{- if eq .Values.sms.enable true }}
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $compName := "sms" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.sms.replicas }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+{{- include "sch.security.securityContext" (list . .sch.chart.securityContextSpec) | indent 6 }}
+     {{- if .Values.global.image.pullSecrets }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecrets }}
+      {{- end }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      {{- if .Values.sms.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.sms.nodeSelector | indent 8 }}
+      {{- end }}
+      volumes:
+      {{- if eq .Values.sms.persistence.volume.transReports.enable true }}
+      - persistentVolumeClaim:
+          claimName: {{ .Release.Name }}-{{ .Values.sms.persistence.volume.transReports.name }}
+        name: {{ template "chart.fullname" . }}-{{ .Values.sms.persistence.volume.transReports.name }}
+      {{- end }}
+      {{- if eq .Values.sms.persistence.volume.usageReports.enable true }}
+      - persistentVolumeClaim:
+          claimName: {{ .Release.Name }}-{{ .Values.sms.persistence.volume.usageReports.name }}
+        name: {{ template "chart.fullname" . }}-{{ .Values.sms.persistence.volume.usageReports.name }}
+      {{- end }}
+      {{- if eq .Values.sms.persistence.volume.logs.enable true }}
+      - persistentVolumeClaim:
+          claimName: {{ .Release.Name }}-{{ .Values.sms.persistence.volume.logs.name }}
+        name: {{ template "chart.fullname" . }}-{{ .Values.sms.persistence.volume.logs.name }}
+      {{- end }}
+
+      # security secret
+      {{- if eq .Values.sms.ssl.enable true }}
+      - name: ssl-trust-store-file
+        secret:
+          secretName: {{ .Values.sms.ssl.trustStoreFileSecret }}
+          items:
+          - key: "trustStoreFile"
+            path: "trustStoreFile"
+      - name: ssl-key-store-file
+        secret:
+          secretName: {{ .Values.sms.ssl.keyStoreFileSecret }}
+          items:
+          - key: "keyStoreFile"
+            path: "keyStoreFile"
+      {{- end }}
+
+      # config secret
+      - name: tenantconfig
+        secret:
+          secretName: {{ .Values.sms.tenantConfigSecretName }}
+          items:
+          - key: tenantConfig
+            path: tenantConfig.json
+
+      {{- if eq .Values.sms.cache.redis.enable true }}
+      # redisson secret
+      - name: secret-redisconfig
+        secret:
+          secretName: {{ .Values.sms.redissonConfigSecretName }}
+          items:
+          - key: secret-redisconfig
+            path: redissonConfig.json
+      {{- end }}
+
+      restartPolicy: Always
+      containers:
+      - name: {{ .Values.sms.image.containerName }}
+        image: "{{ if tpl ( .Values.sms.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.sms.image.repository | toString ) . ) }}{{ end }}/{{ .Values.sms.image.name }}:{{ .Values.sms.image.tag }}"
+        imagePullPolicy: "{{ .Values.sms.image.pullPolicy }}"
+        terminationMessagePath: "/dev/termination-log"
+        resources:
+          requests:
+            cpu: "{{ .Values.sms.resources.requests.cpu }}"
+            memory: "{{ .Values.sms.resources.requests.memory }}"
+          limits:
+            cpu: "{{ .Values.sms.resources.limits.cpu }}"
+            memory: "{{ .Values.sms.resources.limits.memory }}"
+{{- include "sch.security.securityContext" (list . .sch.chart.securityContextContainer) | indent 8 }}
+        ports:
+        - containerPort: {{ .Values.sms.image.containerPort }}
+          protocol: TCP
+        - containerPort: {{ .Values.sms.image.containerPortTls }}
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - "/opt/readiness.sh"
+          initialDelaySeconds: {{ .Values.sms.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.sms.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.sms.readinessProbe.timeoutSeconds }}
+
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.sms.image.containerPort }}
+          initialDelaySeconds: {{ .Values.sms.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.sms.livenessProbe.periodSeconds }}
+
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - sh
+              - -c
+              - sleep 25 ;
+        env:
+        - name: LICENSED_FOR_PRODUCTION_USE
+          value: "true"
+
+        # Multi Tenant
+        - name: MULTI_TENANT_CONFIG_FILE
+          value: "/tenantconfig/tenantConfig.json"
+        - name: REDIS_ENABLED
+          value: "{{ .Values.sms.cache.redis.enable }}"
+        {{ if eq .Values.sms.cache.redis.enable true }}
+        - name: REDISSON_CONFIG_FILE
+          value: "/resources/redisConfig/redissonConfig.json"
+        {{ end }}
+
+        # Logging and Tracing
+        - name: LOG_LEVEL
+          value: "{{ .Values.sms.logging.level }}"
+        - name: LOG_MAX_FILES
+          value: "{{ .Values.sms.logging.maxFiles }}"
+        - name: LOG_MAX_FILE_SIZE
+          value: "{{ .Values.sms.logging.maxFileSize }}"
+        - name: ENABLE_TRANSCRIPTION_MESSAGES
+          value: "{{ .Values.sms.logging.enableTranscriptionMessages }}"
+        - name: LATENCY_REPORTING_THRESHOLD
+          value: "{{ .Values.sms.logging.latencyReportingThreshold }}"
+        - name: MASK_CALLER_ID_FROM_MESSAGES
+          value: "{{ .Values.sms.logging.hideCallerID }}"
+
+        # SMS Provider Proxy
+        {{ if eq .Values.sms.providerProxy.enable true }}
+        - name : SMS_PROXY_HOST
+          value: "{{ .Values.sms.providerProxy.host }}"
+        - name : SMS_PROXY_PORT
+          value: "{{  .Values.sms.providerProxy.port }}"
+        - name : SMS_PROXY_USERNAME
+          value: "{{  .Values.sms.providerProxy.username }}"
+        {{ if  .Values.sms.providerProxy.passwordSecret }}
+        - name: SMS_PROXY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{  .Values.sms.providerProxy.passwordSecret }}
+              key: smsProviderProxyPassword
+        {{ end }}
+        {{ end }}
+
+        # WA Proxy
+        {{ if eq .Values.sms.assistantProxy.enable true }}
+        - name : WCS_PROXY_HOST
+          value: "{{ .Values.sms.assistantProxy.host }}"
+        - name : WCS_PROXY_PORT
+          value: "{{ .Values.sms.assistantProxy.port }}"
+        - name : WCS_PROXY_USERNAME
+          value: "{{ .Values.sms.assistantProxy.username }}"
+        {{ if .Values.sms.assistantProxy.passwordSecret }}
+        - name: WCS_PROXY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.sms.assistantProxy.passwordSecret }}
+              key: wcsProxyPassword
+        {{ end }}
+        {{ end }}
+
+        # Cloudant Proxy
+        {{ if eq .Values.sms.cloudantProxy.enable true }}
+        - name : CLOUDANT_PROXY_URL
+          value: "{{ .Values.sms.cloudantProxy.url }}"
+        - name : CLOUDANT_PROXY_USERNAME
+          value: "{{ .Values.sms.cloudantProxy.username }}"
+        {{ if .Values.sms.cloudantProxy.passwordSecret }}
+        - name: CLOUDANT_PROXY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.sms.cloudantProxy.passwordSecret }}
+              key: cloudantProxyPassword
+        {{ end }}
+        {{ end }}
+
+        # Readiness Credentials
+        {{- if eq .Values.sms.secureReadinessInterface true }}
+        - name : SMS_ADMIN_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.sms.readinessCredentialSecret }}
+              key: smsAdminUsername
+        - name : SMS_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.sms.readinessCredentialSecret }}
+              key: smsAdminPassword
+        {{ end }}
+
+        # Security
+        {{- if eq .Values.sms.ssl.enable true }}
+        - name: SSL_TRUST_STORE_FILE
+          value: "/sslConf/trustStoreFile"
+        - name: SSL_TRUST_FILE_TYPE
+          value: "{{ .Values.sms.ssl.trustFileType }}"
+        - name: SSL_TRUST_PASSPHRASE
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.sms.ssl.trustStorePassphraseSecret }}
+              key: sslTrustPassphrase
+        - name: SSL_KEY_STORE_FILE
+          value: "/sslConf/keyStoreFile"
+        - name: SSL_KEY_FILE_TYPE
+          value: "{{ .Values.sms.ssl.keyFileType }}"
+        - name: SSL_KEY_PASSPHRASE
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.sms.ssl.keyStorePassphraseSecret }}
+              key: sslKeyPassphrase
+        {{- end }}
+        {{- if eq .Values.global.disableSslCertValidation true}}
+        - name: WATSON_CONVERSATION_DISABLE_SSL_CERTIFICATE_VALIDATION
+          value: "true"
+        {{- end }}
+
+        # Reporting
+        {{- if eq .Values.sms.reporting.enable true }}
+        - name : SMSGW_HOST
+          value: {{ .Values.sms.reporting.host }}
+        - name : ENABLE_LIMIT_ON_REPORTING_BACKUP_FILES_PER_TENANT
+          value: {{ .Values.sms.reporting.enableLimitOnReportingBackupFiles }}
+        - name : REPORTING_USAGE_MAX_BACKUP_FILES_PER_TENANT
+          value: {{ .Values.sms.reporting.usageReportingMaxBackupFiles }}
+        - name : REPORTING_TRANSCRIPTION_MAX_BACKUP_FILES_PER_TENANT
+          value: {{ .Values.sms.reporting.transcriptionReportingMaxBackupFiles }}
+        - name : MAX_EVENTS_TO_BATCH
+          value: {{ .Values.sms.reporting.maxEventsToBatch }}
+        {{ end }}
+
+        volumeMounts:
+        {{- if eq .Values.sms.persistence.volume.logs.enable true }}
+        - name: {{ template "chart.fullname" . }}-{{ .Values.sms.persistence.volume.logs.name }}
+          mountPath: "/logs"
+        {{- end }}
+        {{- if eq .Values.sms.ssl.enable true }}
+        - name: ssl-trust-store-file
+          mountPath: "/sslConf/trustStoreFile"
+          subPath: "trustStoreFile"
+        - name: ssl-key-store-file
+          mountPath: "/sslConf/keyStoreFile"
+          subPath: "keyStoreFile"
+        {{- end }}
+        - name: tenantconfig
+          mountPath: "/tenantconfig/tenantConfig.json"
+          subPath: "tenantConfig.json"
+        {{- if eq .Values.sms.cache.redis.enable true }}
+        - name: secret-redisconfig
+          mountPath: "/resources/redisConfig/redissonConfig.json"
+          subPath: "redissonConfig.json"
+        {{- end }}
+{{- end -}}

@@ -1,0 +1,150 @@
+{{- include "sch.config.init" (list . "ibm-watson-lt.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.lid.name -}}
+{{- $comp := .Values.lid -}}
+{{- if $comp.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 50%
+  revisionHistoryLimit: {{ $comp.revisionHistoryLimit }}
+  replicas: {{ $comp.replicas }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      affinity:
+{{ include "ibm-watson-lt.affinity" $ | trim | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.mnlpPodSecurityContext) | indent 6 }}
+      volumes:
+      - name: model-cache
+        emptyDir: {}
+      # secrets
+      - name: grpc-tls
+        secret:
+          defaultMode: 420
+          secretName: {{ include "ibm-watson-lt.tlsSecretName" . | quote }}
+          items:
+          - key: tls.key.pkcs8
+            path: server.key
+          - key: tls.crt
+            path: server.crt.pem
+
+      ### IMAGE PULL SECRET
+{{ include "ibm-watson-lt.pullSecretTemplate" . | indent 6 }}
+
+      ################################################# INIT CONTAINER #############################################
+      initContainers:
+      - name: init
+        {{ include "sch.security.securityContext" (list . .sch.chart.dropAllContainerSecurityContext) | indent 8 }}
+        {{ include "ibm-watson-lt.pullPolicyTemplate" . }}
+        image: {{ include "ibm-watson-lt.repo" . }}{{ $comp.model.name }}:{{ $comp.model.tag }}
+        command:
+        - /bin/bash
+        - -c
+        - cd /models && time tar xf $MODEL_DIR/*.tar && echo "models unpacked successfully to local model cache mount"
+        resources:
+          requests:
+            cpu: 200m
+            memory: 200M
+          limits:
+            memory: 500M
+            cpu: 1000m
+        volumeMounts:
+        - name: model-cache
+          mountPath: /models
+
+      containers:
+      ################################################# LID MODELLOADER CONTAINER #############################################
+      - name: engine
+        {{ include "sch.security.securityContext" (list . .sch.chart.dropAllContainerSecurityContext) | indent 8 }}
+        {{ include "ibm-watson-lt.pullPolicyTemplate" . }}
+        image: {{ include "ibm-watson-lt.repo" . }}{{ $comp.image.name }}:{{ $comp.image.tag }}
+        resources:
+          limits:
+            cpu: {{ $comp.resources.cpuLimitMillis }}m
+            memory: {{ $comp.resources.memoryLimitMB }}Mi
+          requests:
+            cpu: {{ $comp.resources.cpuRequestMillis }}m
+            memory: {{ $comp.resources.memoryRequestMB }}Mi
+
+        workingDir: "/opt/ibm/mnlp"
+        command:
+          - /opt/ibm/mnlp/serve-runtime/scripts/startup/run-standalone.sh
+
+        ports:
+        - name: grpc-external
+          containerPort: 8033
+
+        volumeMounts:
+        - name: grpc-tls
+          mountPath: /etc/ssl/serve/
+        - name: model-cache
+          mountPath: /models
+
+        env:
+        - name: ENGINE_TYPE
+          value: lid
+        - name: MODEL_ID
+          value: {{ $comp.model.id }}
+        - name: MODEL_DIR
+          value: /models/
+        - name: JAVA_OPTS
+          value: "-DLOCAL_CACHE_PATH=/models -Xmx{{ $comp.maxHeap }} -Xms{{ $comp.startingHeap }} -XX:OnOutOfMemoryError='pkill -e -f run-standalone; sleep 10; pkill -9 -e -f run-serve'"
+        - name: ROOT_CERT
+          value: "/etc/ssl/serve/server.crt.pem"
+        - name: GLOG_logtostderr
+          value: "yes"
+        - name: GLOG_stderrthreshold
+          value: "0"
+        - name: GLOG_minloglevel
+          value: "0"
+
+        readinessProbe:
+          exec:
+            command:
+            - grpcurl
+            - -cacert
+            - /etc/ssl/serve/server.crt.pem
+            - -H
+            - mm-model-id:{{ $comp.model.id }}
+            - -H
+            - trace_id:health
+            - -d
+            - '{"text":"test"}'
+            - localhost:8033
+            - mnlp.MnlpBackend.IdentifyLanguage
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          exec:
+            command:
+            - grpcurl
+            - -cacert
+            - /etc/ssl/serve/server.crt.pem
+            - -H
+            - mm-model-id:{{ $comp.model.id }}
+            - -H
+            - trace_id:health
+            - -d
+            - '{"text":"test"}'
+            - localhost:8033
+            - mnlp.MnlpBackend.IdentifyLanguage
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+{{- end -}}

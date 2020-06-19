@@ -1,0 +1,120 @@
+{{- include "sch.config.init" (list . "ibm-watson-lt.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.api.name -}}
+{{- $comp := .Values.api -}}
+{{- if $comp.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      affinity:
+{{ include "ibm-watson-lt.affinity" $ | trim | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.mnlpPodSecurityContext) | indent 6 }}
+
+{{ include "ibm-watson-lt.pullSecretTemplate" . | indent 6 }}
+
+      volumes:
+{{ include "ibm-watson-lt.pg_cert_volume" . | indent 6 }}
+      # templating configmap name; Rest is fixed
+      # configmap volumes
+      - name: api-config
+        configMap:
+          name: "{{ include "sch.names.fullCompName" (list . $compName) }}-config"
+          items:
+          - key: language-translator.properties
+            path: language-translator.properties
+          - key:  log4j2.xml
+            path: log4j2.xml
+
+      - name: model-config
+        configMap:
+          name: "{{ include "sch.names.fullCompName" (list . "model-config") }}"
+          items:
+          - key: model-config.json
+            path: model-config.json
+
+      - name: grpc-tls
+        secret:
+          secretName: {{ include "ibm-watson-lt.tlsSecretName" . | quote }}
+          items:
+          - key: tls.crt
+            path: server.crt.pem
+
+      # container specs
+      containers:
+      - name: api
+        {{ include "sch.security.securityContext" (list . .sch.chart.dropAllContainerSecurityContext) | indent 8 }}
+        {{ include "ibm-watson-lt.pullPolicyTemplate" . }}
+        image: {{ include "ibm-watson-lt.repo" . }}{{ $comp.image.name }}:{{ $comp.image.tag }}
+        resources:
+          limits:
+            cpu: {{ $comp.resources.cpuLimitMillis }}m
+            memory: {{ $comp.resources.memoryLimitMB }}Mi
+          requests:
+            cpu: {{ $comp.resources.cpuRequestMillis }}m
+            memory: {{ $comp.resources.memoryRequestMB }}Mi
+
+        ports:
+        - name: http
+          containerPort: 9080
+        - name: https
+          containerPort: 9443
+        volumeMounts:
+        - name: api-config
+          mountPath: /etc/language-translator/config
+{{ include "ibm-watson-lt.pg_cert_mount" . | indent 8 }}
+        - name: model-config
+          mountPath: /etc/language-translator/model-config
+        - name: grpc-tls
+          mountPath: /etc/ssl/serve/
+        env:
+        - name: JVM_ARGS
+          value: "-Xms128m -Xmx{{ div (mul 8 $comp.resources.memoryLimitMB) 10 }}m"
+        - name: LOG4J_CONFIGURATION_FILE
+          value: /etc/language-translator/config/log4j2.xml
+{{ include "ibm-watson-lt.pgenv_common" . | indent 8 }}
+{{ include "ibm-watson-lt.pgenv_comp" .Values.api | indent 8 }}
+
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+
+        lifecycle:
+          preStop:
+            exec:
+              # SIGTERM triggers a quick exit; gracefully terminate instead
+              command: ["/bin/sh","-c","sleep 300; echo 'waiting 1 minute to initiate shutdown' && sleep 60 && /opt/ibm/docker/stop-server"]
+
+        readinessProbe:
+          httpGet:
+            path: "/health/check?one_time=true"
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        livenessProbe:
+          httpGet:
+            path: "/version?check_liveness=true"
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 300
+          periodSeconds: 30
+{{- end -}}

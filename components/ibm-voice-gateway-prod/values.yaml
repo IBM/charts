@@ -1,0 +1,319 @@
+---
+global:
+  sch:
+    enabled: true
+  dockerRegistryPrefix: "cp.icr.io/cp"
+  storageClassName: ""
+  image:
+    repository: '{{ (tpl ( .Values.global.dockerRegistryPrefix | toString ) . ) | trimSuffix "/" }}/'
+    pullSecrets: ''
+  disableSslCertValidation: false
+
+arch: 'amd64'
+runAsUser: 1001
+schConfigName: 'voice-gateway.sch.chart.config.values'
+
+addon:
+  displayName: 'IBM Voice Gateway Addon for IBM Cloud Pak for Data'
+  productID: 'ICP4D-addon-511663905c334c15af94787db60e564b-voice-gateway'
+  icon: 'https://broker.voiceagent.cloud.ibm.com/images/vgaas_icon_32.svg'
+  version: ''
+  shortDescription: 'Watson Voice Gateway provides a way to integrate a set of orchestrated Watson services with a public or private telephone network by using the Session Initiation Protocol (SIP). It also provides support for SMS integration via twilio.'
+  longDescription: 'Watson Voice Gateway provides a way to integrate a set of orchestrated Watson services with a public or private telephone network by using the Session Initiation Protocol (SIP). The voice gateway enables direct voice interactions over a telephone or through an SMS enabled device with a cognitive self-service agent or the ability to transcribe a phone call between a caller and agent in real-time, enabling the ability to process the conversation with analytics for real-time agent feedback.'
+  deployDocs: 'https://www.ibm.com/support/knowledgecenter/en/SS4U29/deployicp.html'
+  productDocs: 'https://www.ibm.com/support/knowledgecenter/en/SS4U29/welcome_voicegateway.html'
+  serviceId: 'voice-gateway'
+  zenNamespace: 'zen'
+
+replicaCount: 1
+
+tenantConfigSecretName: 'vgw-tenantconfig-secret'
+
+sip:
+  enable: true
+  ## Node labels for sip pod assignment
+  ## ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector
+  nodeSelector: {}
+  resources:
+    requests:
+      cpu: 250m
+      memory: 250Mi
+    limits:
+      cpu: 2000m
+      memory: 8Gi
+
+  codecs:
+    g729:
+      enable: false
+      image:
+        repository: '{{ (tpl ( .Values.global.image.repository | toString ) . ) | trimSuffix "/" }}/'
+        name: 'voice-gateway-codec-g729'
+        containerName: 'vgw-codec-g729'
+        tag: '1.0.6.0'
+      resources:
+        requests:
+          cpu: 250m
+          memory: 250Mi
+        limits:
+          cpu: 1000m
+          memory: 4Gi
+      envVariables:
+        webSocketServerPort: 9001
+        logLevel: 'INFO'
+
+
+image:
+  sipOrchestrator:
+    repository: '{{ (tpl ( .Values.global.image.repository | toString ) . ) | trimSuffix "/" }}/'
+    name: 'voice-gateway-so'
+    containerName: 'vgw-sip-orchestrator'
+    tag: '1.0.6.0'
+  mediaRelay:
+    repository: '{{ (tpl ( .Values.global.image.repository | toString ) . ) | trimSuffix "/" }}/'
+    name: 'voice-gateway-mr'
+    containerName: 'vgw-media-relay'
+    tag: '1.0.6.0'
+  pullPolicy: 'IfNotPresent'
+
+persistence:
+  useDynamicProvisioning: true
+  recordingsVolume:
+    enablePersistentRecordings: false
+    name: 'recordings'
+    storageClassName: '{{ tpl ( .Values.global.storageClassName | toString ) . }}'
+    size: 2Gi
+  logsVolume:
+    enablePersistentLogs: false
+    name: 'persistent-logs'
+    storageClassName: '{{ tpl ( .Values.global.storageClassName | toString ) . }}'
+    size: 2Gi
+
+mediaRelayEnvVariables:
+  sdpAddress: ''
+  mediaRelayWsHost: '0.0.0.0'
+  mediaRelayWsPort: 8080
+  rtpUdpPortRange: '16384-16394'
+  clusterWorkers: 1
+  maxSessions: '0'
+  enableRecording: false
+  stereoRecording: false
+  readinessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 20
+    timeoutSeconds: 20
+  livenessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 35
+    timeoutSeconds: 20
+  mediaRelayLogLevel: 'INFO'
+  mediaRelayLogRotationFileCount: 10
+  mediaRelayLogRotationPeriod: '1d'
+  rtpPacketLossReportingThreshold: 1000
+
+  proxyType: 'http'
+  proxyHost:
+  proxyPort:
+  proxyUsername:
+  proxyPasswordSecret:
+  watsonSttEnableProxy: true
+  watsonTtsEnableProxy: true
+  musicOnHoldEnableProxy: false
+
+  enableMrcp: false
+  unimrcpConfigSecretName: unimrcp-config-secret
+  mrcpv2SipPort: 5555
+
+  enableSsl: false
+  sslClientCACertSecret: client-ca-cert-secret
+
+  enableMutualAuth: false
+  sslClientPkcs12FileSecret: ssl-client-pkcs12-file-secret
+  sslClientPassphraseSecret: ssl-client-passphrase-secret
+
+sipOrchestratorEnvVariables:
+  httpHost: '*'
+  httpPort: 9086
+  httpPortTls: 9446
+  secureAdminInterface: false
+  adminCredentialSecret: admin-credentials
+  mediaRelayHost: 'localhost:8080'
+  sipHost: ''
+  sipPort: 5060
+  sipPortTcp: 5060
+  sipPortTls: 5061
+  readinessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 20
+    timeoutSeconds: 20
+  livenessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 35
+    timeoutSeconds: 20
+  logLevel: 'info'
+  logMaxFiles: 5
+  logMaxFileSize: 100
+  enableAuditMessages: true
+  enableTranscriptionAuditMessages: false
+  latencyReportingThreshold: 1000
+  relayLatencyReportingThreshold: 1000
+
+  proxyHost:
+  proxyPort:
+  proxyUsername:
+  proxyPasswordSecret:
+  trustedIpList:
+
+  cmrHealthCheckFailErrCode:
+
+  consoleLogFormat: 'json'
+  consoleLogLevel: 'info'
+  consoleLogSource: 'message,trace,accessLog,ffdc'
+
+  enableSslorMutualAuth: false
+  sslKeyTrustStoreSecret: trust-store-file-secret
+  sslFileType: 'JKS'
+  sslPassphraseSecret: ssl-passphrase-secret
+
+  enableMetricsAuth: false
+  metricsSamplingInterval: 600
+
+metering:
+  apiKeySecret: metering-api-key-secret
+  enable: true
+  icpMasterNodeIP: 'mycluster.icp'
+  serverURL: 'https://mycluster.icp:8443/meteringapi'
+
+# SMS Gateway
+sms:
+  enable: false
+  replicas: 1
+  ## Node labels for sms pod assignment
+  ## ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector
+  nodeSelector: {}
+  image:
+    repository: '{{ (tpl ( .Values.global.image.repository | toString ) . ) | trimSuffix "/" }}/'
+    name: 'voice-gateway-sms'
+    containerName: 'vgw-sms-gateway'
+    containerPort: 9080
+    servicePort: 30087
+    containerPortTls: 9443
+    servicePortTls: 30047
+    tag: '1.0.6.0'
+    pullPolicy: 'IfNotPresent'
+  resources:
+    requests:
+      cpu: 250m
+      memory: 250Mi
+    limits:
+      cpu: 2000m
+      memory: 8Gi
+  networkPolicy:
+    smsProviderPort: 80
+    smsProviderPortTls: 443
+    disableNonSecurePort: false
+
+  tenantConfigSecretName: 'smsgw-tenantconfig-secret'
+  redissonConfigSecretName: 'secret-redisconfig'
+
+  persistence:
+    volume:
+      useDynamicProvisioning: true
+      logs:
+        enable: false
+        name: 'sms-persistent-logs'
+        storageClassName: '{{ tpl ( .Values.global.storageClassName | toString ) . }}'
+        size: 2Gi
+      transReports:
+        enable: false
+        name: 'transcription-reports'
+        storageClassName: '{{ tpl ( .Values.global.storageClassName | toString ) . }}'
+        size: 2Gi
+      usageReports:
+        enable: false
+        name: 'usage-reports'
+        storageClassName: '{{ tpl ( .Values.global.storageClassName | toString ) . }}'
+        size: 2Gi
+
+  # Tracing and logging
+  logging:
+    level: 'info'
+    maxFiles: 5
+    maxFileSize: 100
+    enableTranscriptionMessages: true
+    latencyReportingThreshold: 1000
+    hideCallerID: false
+
+  secureReadinessInterface: false
+  readinessCredentialSecret: admin-credentials
+
+  readinessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 20
+    timeoutSeconds: 20
+  livenessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 35
+
+
+  # Caching server
+  cache:
+    redis:
+      enable: false
+
+  # SMS provider proxy
+  providerProxy:
+    enable: false
+    host: 'provider-proxy-host'
+    port: '5000'
+    username: 'provider-proxy-username'
+    passwordSecret:
+
+  # Watson Assistant proxy
+  assistantProxy:
+    enable: false
+    host: 'assistant-proxy-host'
+    port: '5001'
+    username: 'assistant-proxy-username'
+    passwordSecret:
+
+  # CloudantProxy
+  cloudantProxy:
+    enable: false
+    url: 'cloudant-proxy-url'
+    username: 'cloudant-proxy-username'
+    passwordSecret:
+
+  # Secure connect to WA / SMS provider
+  ssl:
+    enable: false
+    keyStoreFileSecret: key-store-file-secret
+    keyStorePassphraseSecret: ssl-passphrase-secret
+    keyFileType: 'JKS'
+
+    trustStoreFileSecret: trust-store-file-secret
+    trustStorePassphraseSecret: ssl-trust-passphrase-secret
+    trustFileType: 'JKS'
+
+  # Reporting
+  reporting:
+    enable: false
+    host: 'reporting-host'
+    enableLimitOnReportingBackupFiles: false
+    usageReportingMaxBackupFiles: 100
+    transcriptionReportingMaxBackupFiles: 1000
+    maxEventsToBatch: 500
+
+# Test container
+test:
+  image:
+    repository: '{{ (tpl ( .Values.global.image.repository | toString ) . ) | trimSuffix "/" }}/'
+    name: 'opencontent-common-utils'
+    tag: '1.1.7-amd64'
+    pullPolicy: 'IfNotPresent'
+
+dvt:
+  image:
+    repository: '{{ (tpl ( .Values.global.image.repository | toString ) . ) | trimSuffix "/" }}/'
+    name: 'voice-gateway-dvt'
+    tag: '1.0.6.0'
+    pullPolicy: 'IfNotPresent'

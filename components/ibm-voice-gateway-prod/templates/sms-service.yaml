@@ -1,0 +1,28 @@
+{{- if eq .Values.sms.enable true }}
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $compName := "sms" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: smsgw-service
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  type: NodePort
+  ports:
+  {{- if eq .Values.sms.networkPolicy.disableNonSecurePort false }}
+  - name: http
+    nodePort: {{ .Values.sms.image.servicePort }}
+    port: {{ .Values.sms.image.containerPort }}
+    protocol: TCP
+    targetPort: {{ .Values.sms.image.containerPort }}
+  {{- end }}
+  - name: https
+    nodePort: {{ .Values.sms.image.servicePortTls }}
+    port: {{ .Values.sms.image.containerPortTls }}
+    protocol: TCP
+    targetPort: {{ .Values.sms.image.containerPortTls }}
+  sessionAffinity: None
+  selector:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 -}}
+{{- end }}
