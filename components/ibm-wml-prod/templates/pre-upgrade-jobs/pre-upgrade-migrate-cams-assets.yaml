@@ -1,0 +1,99 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pre-upgrade-migrate-cams-assets
+  labels:
+    app: pre-upgrade-migrate-cams-assets
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}"
+    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      name: pre-upgrade-migrate-cams-assets
+      labels:
+        app: pre-upgrade-migrate-cams-assets
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        app.kubernetes.io/name: "{{ .Release.Name }}"
+        helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+      - name: pre-upgrade-migrate-cams-assets-job
+        image: "{{ .Values.global.docker_registry_prefix}}/{{ .Values.wmlAssets.image.repository }}:{{ .Values.wmlAssets.image.tag }}"
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsUser: {{ .Values.global.user.id }}
+          runAsNonRoot: true
+          privileged: false
+          readOnlyRootFilesystem: false
+        command: ["/bin/sh","-c"]
+        args: ["/assetType/run.sh"]
+        envFrom:
+            - secretRef:
+                name: wdp-service-id
+        env:
+          - name: WDP_BASE_URL
+            valueFrom:
+              configMapKeyRef:
+                key: host-url
+                name: wdp-config
+          - name: WDP_CLOUDANT_CERT
+            valueFrom:
+              secretKeyRef:
+                key: ca.crt.pem
+                name: wdp-cloudant-cert
+          - name: CLOUDANT_USERNAME
+            valueFrom:
+              secretKeyRef:
+                key: username
+                name: wdp-cloudant-creds
+          - name: CLOUDANT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: password
+                name: wdp-cloudant-creds                
+          - name: CLOUDANT_DB
+            value: "mlrepository-db"
+          - name: CLOUDANT_PORT
+            value: "6984"
+          - name: CLOUDANT_HOST
+            value: "https://couchdb-ha-svc"
+        resources:
+          limits:
+            cpu: 1
+            memory: 1Gi
+          requests:
+            cpu: 500m
+            memory: 1Gi
+      restartPolicy: OnFailure

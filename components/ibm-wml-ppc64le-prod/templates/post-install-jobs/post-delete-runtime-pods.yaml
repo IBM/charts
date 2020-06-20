@@ -1,0 +1,76 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: post-delete-runtime-pods
+  labels:
+    app: post-delete-runtime-pods
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}"
+    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-delete-policy": hook-succeeded, hook-failed
+spec:
+  template:
+    metadata:
+      name: post-delete-runtime-pods
+      labels:
+        app: post-delete-runtime-pods
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        app.kubernetes.io/name: "{{ .Release.Name }}"
+        helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - ppc64le
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+      - name: post-delete-runtime-pods-job
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.wmlDeleteRuntime.image.repository }}:{{ .Values.wmlDeleteRuntime.image.tag }}"
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsUser: {{ .Values.global.user.id }}
+          runAsNonRoot: true
+          privileged: false
+          readOnlyRootFilesystem: false
+        volumeMounts:
+        - mountPath: /user-home
+          name: volume-at-index-0
+          readOnly: true
+          subPath: _global_/config/jwt/
+        command: ["/bin/sh","-c"]
+        args: ["kubectl get deployment | grep -i wml-os-rt | awk '{print $1}' | xargs kubectl delete deployment; kubectl get deployment | grep -i wml-app-r-shiny | awk '{print $1}' | xargs kubectl delete deployment; kubectl get deployment | grep -i wml-as-rt | awk '{print $1}' | xargs kubectl delete deployment; kubectl get jobs | grep pre-install-wmlpython | awk '{print $1}' | xargs kubectl delete job; kubectl get jobs | grep cams-as | awk '{print $1}' | xargs kubectl delete job; kubectl get jobs | grep delete-runtime | awk '{print $1}' | xargs kubectl delete job"]
+        resources:
+          limits:
+            cpu: 250m
+            memory: 512M
+          requests:
+            cpu: 200m
+            memory: 256M
+      restartPolicy: OnFailure
+      volumes:
+      - name: volume-at-index-0
+        persistentVolumeClaim:
+          claimName: user-home-pvc
+      restartPolicy: OnFailure    
