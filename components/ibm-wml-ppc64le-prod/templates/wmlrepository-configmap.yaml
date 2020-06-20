@@ -1,0 +1,196 @@
+apiVersion: v1
+data:
+  log4j.properties: |
+    log4j.rootLogger=INFO, fileOut, stdout
+    log4j.logger.security=INFO,securityAppender
+    log4j.logger.activityTracker=INFO, activityTrackerAppender
+    log4j.additivity.activityTracker=false
+
+    log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+    log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+    log4j.appender.stdout.Target=System.out
+    log4j.appender.stdout.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss,SSS}|%-5p|10|%l|%m%n
+
+    log4j.appender.fileOut=org.apache.log4j.RollingFileAppender
+    log4j.appender.fileOut.File=/opt/ibm/repository/logs/repository-all.log
+    log4j.appender.fileOut.layout=org.apache.log4j.PatternLayout
+    log4j.appender.fileOut.MaxFileSize=100MB
+    log4j.appender.fileOut.MaxBackupIndex=10
+    log4j.appender.fileOut.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss,SSS}|%-5p|%C.$%M(%F:%L)|%X{Request-ID}|%m%n
+
+    log4j.appender.repo=org.apache.log4j.RollingFileAppender
+    log4j.appender.repo.File=/opt/ibm/repository/logs/repository.log
+    log4j.appender.repo.layout=org.apache.log4j.PatternLayout
+    log4j.appender.repo.MaxFileSize=100MB
+    log4j.appender.repo.MaxBackupIndex=10
+    log4j.appender.gitrepo.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss,SSS}|%-5p|%C.$%M(%F:%L)|%X{Request-ID}|%m%n
+
+    # Direct security log messages to a security.log file
+    log4j.appender.securityAppender=org.apache.log4j.RollingFileAppender
+    log4j.appender.securityAppender.File=/opt/ibm/repository/logs/security-repository.log
+    log4j.appender.securityAppender.layout=org.apache.log4j.PatternLayout
+    log4j.appender.securityAppender.MaxFileSize=10MB
+    log4j.appender.securityAppender.MaxBackupIndex=10
+    log4j.appender.securityAppender.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss,SSS}|%-5p|%l|%X{Request-ID}|%m%n
+
+
+    log4j.appender.activityTrackerAppender=org.apache.log4j.RollingFileAppender
+    log4j.appender.activityTrackerAppender.File=/var/log/at/repository-at.log
+    log4j.appender.activityTrackerAppender.layout=org.apache.log4j.PatternLayout
+    log4j.appender.activityTrackerAppender.MaxFileSize=10MB
+    log4j.appender.activityTrackerAppender.MaxBackupIndex=10
+    log4j.appender.activityTrackerAppender.layout.ConversionPattern=%m%n
+
+
+    log4j.logger.org.apache.kafka=ERROR
+    log4j.logger.org.apache.http=ERROR
+  mlrepositoryService.conf: |
+    repository-dispatcher {
+      type = "Dispatcher"
+      executor = "fork-join-executor"
+      fork-join-executor {
+        parallelism-min = 6
+        parallelism-factor = 32
+        parallelism-max = 128
+        throughput = 1
+      }
+    }
+
+    service {
+      validateTokenService.ml.pubkey.path = "/opt/ibm/repository/keys/mltoken.pub"
+      validateTokenService.icp.pubkey.path = "/user-home/public.pem"
+      repository {
+        timeout = 118 seconds
+        validationtime = 59 seconds
+        camsvalidationtime = 220 seconds
+        bulkSize = 100
+        cloudant {
+          dbName = "mlrepository-db"
+          port = 6984
+          icp_cloudant_host = "https://couchdb-ha-svc"
+        }
+        self.uri.old = true
+        icp.self.uri = "https://wmlproxyservice:443"
+        http.port = 8080
+        ssl {
+          port = 12505
+          keystore {
+            type = "JKS"
+          }
+        }
+        showDebugMsgsIfEnabled = true
+
+        mgr_start_tracking = false
+        mgr_block_write = false
+        mgr_switch_to_kpbucket = true
+      }
+
+      limits {
+        default.models.limit.count = 1000
+        default.models.limit.size = 2147483648
+        plans = [
+          {
+            id = "5325f63a-683a-47f0-a04e-97e371385588"
+            models.limit.count = 200
+            models.limit.size = 2147483648
+          }
+          {
+            id = "6a4afd93-4e9d-4f4f-92c7-04b9b1542084"
+          }
+        ]
+      }
+
+      iam {
+        url = "dummy"
+        pdp {
+          serviceName = "pm-20-dev"
+          apiKey = ""
+        }
+      }
+      wml_deployment {
+        url = "https://internal-nginx-svc:12443/v4/deployments"
+      }
+    }
+
+    COS
+      {
+        threads = 10
+        upload_size = 16
+        pipelineBucketName = pipeline-fvt
+        modelsBucketName = models-fvt
+        trainingBucketName = training-models-fvt
+        runtimesBucketName = runtimes-fvt
+        libraryBucketName = library-fvt
+        functionsBucketName = functions-dfvt
+
+        wml_pipelineBucketName = wml-pipeline-fvt
+        wml_modelsBucketName = wml-models-fvt
+        wml_trainingBucketName = wml-training-models-fvt
+        wml_functionsBucketName = wml-functions-fvt
+        wml_runtimesBucketName = wml-runtimes-fvt
+        wml_libraryBucketName = wml-libraries-fvt
+      }
+
+    ml-event-client {
+      topicSpace = "misc"
+    }
+
+    rabbitmq {
+      subscriber.timeout.seconds = 10
+      exchange = "wml-repository-fvt"
+      threadpool.size = 50
+      queue = "repository-queue"
+    }
+
+    akka.http {
+      server {
+        parsing = ${akka.http.parsing}
+      }
+
+      client {
+        parsing = ${akka.http.parsing}
+      }
+
+      host-connection-pool {
+        max-open-requests = 256
+        max-connections = 64
+      }
+
+      parsing {
+        max-content-length = 10000m
+      }
+    }
+
+    akka {
+      http.server.request-timeout=240 s
+      http.server.idle-timeout=240 s
+      loglevel = "ERROR"
+
+      actor {
+        default-dispatcher {
+          default-executor {
+            fallback: "fork-join-executor"
+          }
+          executor = "fork-join-executor"
+          fork-join-executor {
+            parallelism-min = 6
+            parallelism-factor = 32
+            parallelism-max = 128
+            throughput = 1
+          }
+        }
+      }
+    }
+kind: ConfigMap
+metadata:
+  name: wmlrepositoryconfigmap
+  labels:
+    app: wmlrepository
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}"
+    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+

@@ -1,0 +1,146 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: wml-etcd
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    heritage: "{{ .Release.Service }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}"
+    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"    
+  name: wml-etcd
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: wml-etcd
+  serviceName: scoring-headless-service
+  template:
+    metadata:
+      annotations:
+        cloudpakId: eb9998dcc5d24e3eb5b6fb488f750fe2
+        cloudpakName: IBM Cloud Pak for Data
+        cloudpakVersion: 3.0.1
+        productChargedContainers: All
+        productID: ICP4D-Watson-Machine-Learning-3-0-1
+        productMetric: VIRTUAL_PROCESSOR_CORE
+        productName: IBM Watson Machine Learning for IBM Cloud Pak for Data
+        productVersion: 3.0.1
+      labels:
+        app: wml-etcd
+        chart: "{{ .Chart.Name }}"
+        heritage: "{{ .Release.Service }}"
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        app.kubernetes.io/name: "{{ .Release.Name }}"
+        helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"        
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      containers:
+      - command:
+        - /usr/local/bin/etcd
+        - --name
+        - wml-etcd
+        - --data-dir
+        - /data
+        - --auto-tls
+        - --listen-client-urls
+        - http://0.0.0.0:2379
+        - --advertise-client-urls
+        - http://wml-etcd:2379
+        env:
+        - name: AGT_ETCD_USERNAME
+          valueFrom:
+            secretKeyRef:
+              key: etcd_username
+              name: etcd-secret
+        - name: AGT_ETCD_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: etcd_password
+              name: etcd-secret
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.wmlEtcd.image.repository }}:{{ .Values.wmlEtcd.image.tag }}"
+        imagePullPolicy: IfNotPresent
+        lifecycle:
+          postStart:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - /usr/local/bin/adduser.sh
+        livenessProbe:
+          failureThreshold: 10
+          httpGet:
+            path: /v2/keys
+            port: 2379
+            scheme: HTTP
+          initialDelaySeconds: 20
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: wml-etcd
+        ports:
+        - containerPort: 2379
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 10
+          httpGet:
+            path: /v2/keys
+            port: 2379
+            scheme: HTTP
+          initialDelaySeconds: 15
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 5
+        resources:
+          limits:
+            cpu: "1"
+            memory: 2Gi
+          requests:
+            cpu: 250m
+            memory: 2Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsUser: {{ .Values.global.user.id }}
+          runAsNonRoot: true
+          privileged: false
+          readOnlyRootFilesystem: false          
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /data
+          name: etcd-pv
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+      {{- if .Values.securityContext.fsGroup }}
+        fsGroup: {{ .Values.securityContext.fsGroup }}
+      {{- end }}      
+        runAsUser: {{ .Values.global.user.id }}
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: etcd-pv
+        persistentVolumeClaim:
+          claimName: etcd-pvc
+

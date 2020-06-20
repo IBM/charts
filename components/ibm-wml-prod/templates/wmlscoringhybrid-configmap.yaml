@@ -1,0 +1,179 @@
+apiVersion: v1
+data:
+  log4j.properties: |
+    log4j.rootLogger=INFO,all,STDOUT
+    log4j.logger.cluster=INFO
+    log4j.logger.security=INFO,securityAppender,STDOUT
+    log4j.additivity.security=false
+    log4j.logger.org.apache.kafka=ERROR,all
+    log4j.logger.com.ibm.analytics.ngp.repository_v3=WARN,all
+    log4j.logger.com.ibm.analytics.ngp.util=WARN,all
+
+    log4j.appender.all=org.apache.log4j.RollingFileAppender
+    log4j.appender.all.File=/opt/ibm/wml-online-scoring/runtimes/hybrid/logs/wml-online-scoring-hybridRuntime.log
+    log4j.appender.all.DatePattern=.yyyy-MM-dd
+    log4j.appender.all.MaxFileSize=5MB
+    log4j.appender.all.MaxBackupIndex=5
+    log4j.appender.all.layout=org.apache.log4j.PatternLayout
+    log4j.appender.all.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss,SSS}|%t|%-5p|%l|%X{Request-ID}|%m%n
+    log4j.logger.com.ibm.ml.scoring.online.ScoringServer=TRACE
+    log4j.logger.akka=TRACE
+
+    log4j.appender.STDOUT=org.apache.log4j.ConsoleAppender
+    log4j.appender.STDOUT.layout=org.apache.log4j.PatternLayout
+    log4j.appender.STDOUT.Target=System.out
+    log4j.appender.STDOUT.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss,SSS}|%t|%-5p|%l|%X{Request-ID}|%m%n
+
+    log4j.appender.securityAppender=org.apache.log4j.DailyRollingFileAppender
+    log4j.appender.securityAppender.File=/opt/ibm/wml-online-scoring/runtimes/hybrid/logs/security-online-scoring-hybridRuntime.log
+    log4j.appender.securityAppender.layout=org.apache.log4j.PatternLayout
+    log4j.appender.securityAppender.MaxFileSize=5MB
+    log4j.appender.securityAppender.MaxBackupIndex=2
+    log4j.appender.securityAppender.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss,SSS}|%t|%-5p|%l|%X{Request-ID}|%m%n
+
+  scoringService.conf: |+
+    akka {
+      loggers = ["akka.event.slf4j.Slf4jLogger"]
+      loglevel = "WARNING"
+
+      log-dead-letters = 10
+      log-dead-letters-during-shutdown = on
+      # log-config-on-start = on
+      http.server.max-connections = 6144
+      http.server.request-timeout = 120 s
+      http.server.idle-timeout = 121 s
+      http.server.parsing.max-content-length = 100m
+
+      actor {
+        default-dispatcher {
+          default-executor {
+            fallback: "fork-join-executor"
+          }
+          executor = "fork-join-executor"
+          fork-join-executor {
+            parallelism-min = 4
+            throughput = 1
+          }
+        }
+      }
+
+      online-scoring-runtime-hybrid {
+        type = "Dispatcher"
+        executor = "thread-pool-executor"
+        thread-pool-executor {
+          core-pool-size-min = 12
+          core-pool-size-max = 12
+          max-pool-size-min = 24
+          max-pool-size-max = 128
+          task-queue-size = 24
+        }
+        throughput = 1
+      }
+
+      http.host-connection-pool {
+        # The maximum number of open requests accepted into the pool across all
+        # materializations of any of its client flows.
+        # Protects against (accidentally) overloading a single pool with too many client flow materializations.
+        # Note that with N concurrent materializations the max number of open request in the pool
+        # will never exceed N * max-connections * pipelining-limit.
+        # Must be a power of 2 and > 0!
+        max-open-requests = 256
+        max-connections = 64
+      }
+
+      //  http.service.interface = "localhost"
+      http.service.port = 16500
+
+      ssl {
+        port = 16500
+        keystore {
+          path = "/opt/ibm/wml-online-scoring/runtimes/hybrid/keys/private/keystore.jks"
+          type = "JKS"
+        }
+        truststore {
+          # working directory for testing expect to be 'ml-online-scoring' dir
+          path = "/opt/ibm/wml-online-scoring/runtimes/hybrid/keys/private/trust-store.jks"
+          type = "JKS"
+          trustStrategy.trustSelfSignedStrategy = true
+        }
+      }
+    }
+
+    grpc {
+      scoring-rt-utils {
+        interface = "wml-scoring-rt-utils"
+        port = 16502
+      }
+
+      service.port = 16501
+      service.dl_interface = "localhost"
+      service.dl_runtime_port = 16503
+    }
+
+    http.service.dl.port = 16504
+
+    watson {
+      sentiment.port = 5443
+    }
+
+    service {
+
+      # Config for Validate Token connection
+      validateTokenService {
+        #public key may be provided via file or url
+        ml.pubkey.path = "/opt/ibm/wml-online-scoring/runtimes/hybrid/keys/mltoken.pub"
+        icp.pubkey.path = "/user-home/_global_/config/jwt/public.pem"
+      }
+
+      wmlService {
+        url = "https://internal-nginx-svc:12443"
+        timeout = 60
+      }
+
+      ml-event-client {
+        topicSpace = "misc"
+        messageProcessParallelism = 20
+        limitPlanEventsTopicName = "wml.api.instances"
+      }
+
+      ml-kafka-client.credentials.path = "/opt/ibm/wml-kafka/kafka-credentials-es.json"
+
+      iam {
+        url = "dummy"
+        pdp {
+          serviceName = "pm-20-devops"
+          apiKey = ""
+        }
+      }
+
+      resiliency {
+        delay = 500  // In millisecodns
+        retries = 3
+      }
+    }
+
+    common {
+      enable-ssl = true
+      memory {
+        threshold = 80.0
+      }
+      cacerts {
+        cert = "/opt/ibm/wml-online-scoring/runtimes/hybrid/cacerts/server.crt"
+        key = "/opt/ibm/wml-online-scoring/runtimes/hybrid/cacerts/server.key"
+      }
+    }
+
+
+kind: ConfigMap
+metadata:
+  name: wmlscoringhybrid
+  labels:
+    app: Watson_Sentiments
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}"
+    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+
