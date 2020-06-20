@@ -1,0 +1,160 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.rankerMonitorAgent.name -}}
+{{- $haywireName := .sch.chart.components.haywire.name -}}
+{{- $app := .Values.global.appName -}}
+{{- $rankerSecretName := include "discovery.ranker.secret" . -}}
+{{- $wireRankerSecret := include "sch.names.fullCompName" (list . .sch.chart.components.rankerSecret.name ) -}}
+{{- $wireConfigName := include "sch.names.fullCompName" (list . "wire-config" ) -}}
+{{- $tdCrudSvcName := include "discovery.wire.trainingCrud.service" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "ranker-monitor-agent" "squad" "wire" "tenant" (tpl .Values.global.tenant .))) | indent 4 }}
+spec:
+  replicas: {{ .Values.wire.rankerMonitorAgent.replicas }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "ranker-monitor-agent" "app.kubernetes.io/name" "ranker-monitor-agent" "squad" "wire" "app" $app "service" "discovery" "tenant" (tpl .Values.global.tenant .))) | indent 6 }}
+  revisionHistoryLimit: 2
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+{{- if .Values.global.metricsCollection.enabled }}
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '{{ .Values.wire.statsd.exporterPrometheusPort }}'
+{{- end }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "ranker-monitor-agent" "app.kubernetes.io/name" "ranker-monitor-agent" "squad" "wire" "app" $app "service" "discovery" "tenant" (tpl .Values.global.tenant .))) | indent 8 }}
+    spec:
+      serviceAccountName: {{ include "discovery.admin.serviceAccount" . }}
+      affinity:
+{{ include "sch.affinity.nodeAffinity" (list . ) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedPodSecurityContext) | indent 6 }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+      volumes:
+      - name: tls
+        secret:
+          secretName: {{ $wireRankerSecret }}
+{{- if .Values.global.metricsCollection.enabled }}
+      - name: {{ .Values.wire.configVolume }}
+        configMap:
+          name: {{ $wireConfigName }}
+{{- end }}
+{{- if not .Values.global.private }}
+      - name: zip-models
+        emptyDir: {}
+{{- end }}
+      containers:
+      - name: {{ $compName }}
+        image: {{ .Values.global.dockerRegistryPrefix }}/
+          {{- .Values.wire.rankerMonitorAgent.image.name }}:
+          {{- .Values.wire.rankerMonitorAgent.image.tag }}
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 8 }}
+        resources:
+          requests:
+            memory: {{ .Values.wire.rankerMonitorAgent.resources.requests.memory | quote }}
+            cpu: {{ .Values.wire.rankerMonitorAgent.resources.requests.cpu | quote }}
+          limits:
+            memory: {{ .Values.wire.rankerMonitorAgent.resources.limits.memory | quote }}
+            cpu: {{ .Values.wire.rankerMonitorAgent.resources.limits.cpu | quote }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        volumeMounts:
+        - mountPath: /app/server.crt
+          name: tls
+          readOnly: true
+          subPath: server.crt
+        - mountPath: /app/ca.crt
+          name: tls
+          readOnly: true
+          subPath: ca.crt
+        - mountPath: /app/server.pem
+          name: tls
+          readOnly: true
+          subPath: server.pem
+{{- if not .Values.global.private }}
+        - name: zip-models
+          mountPath: /tmp/model_files
+{{- end }}
+        env:
+        - name: TRAINING_DATA_HOST
+          value: {{ $tdCrudSvcName | quote }}
+        - name: TRAINING_NOTICE_HOST
+          value: {{ include "sch.names.fullCompName" (list . $haywireName ) | quote }}
+        - name: INTERVAL
+          value: "5"
+        - name: RANKER_ARGS
+          value: "-rank_host {{ include "discovery.wire.rankerRest.hostname" . }} -rank_port 9090"
+        - name: TLS_SERVER_NAME_OVERRIDE
+          value: {{ printf "%s.%s.svc.%s" $tdCrudSvcName .Release.Namespace .Values.global.clusterDomain | quote }}
+{{- if not .Values.global.private }}
+        - name: USE_ELASTICSEARCH_LTR
+          value: "true"
+        - name: COS_BUCKET_SUFFIX
+          value: {{ printf "disco-wire-%s-all" .Values.global.env | quote }}
+        - name: COS_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: {{ $rankerSecretName }}
+              key: cos-endpoint
+        - name: AWS_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ $rankerSecretName }}
+              key: cos-access-key
+        - name: AWS_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ $rankerSecretName }}
+              key: cos-secret-key
+        - name: ELASTIC_URLS
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.mantle.elastic.configmap" . }}
+              key: endpoint
+        - name: ELASTIC_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.mantle.elastic.secret" . }}
+              key: username
+        - name: ELASTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.mantle.elastic.secret" . }}
+              key: password
+        - name: ELASTIC_AUTH
+          value: "$(ELASTIC_USER):$(ELASTIC_PASSWORD)"
+{{- end }}
+        args:
+        - "-training_data_host"
+        - "$(TRAINING_DATA_HOST)"
+        - "-training_notice_host"
+        - "$(TRAINING_NOTICE_HOST)"
+        - "$(RANKER_ARGS)"
+        - "-tls_server_name_override"
+        - "$(TLS_SERVER_NAME_OVERRIDE)"
+        - "-tls_cert_file"
+        - "/app/ca.crt"
+        livenessProbe:
+          exec:
+            command:
+            - cat
+            - APP_VERSION
+          initialDelaySeconds: {{ .Values.wire.rankerMonitorAgent.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.wire.rankerMonitorAgent.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.wire.rankerMonitorAgent.livenessProbe.timeoutSeconds }}
+        readinessProbe:
+          exec:
+            command:
+            - cat
+            - APP_VERSION
+          initialDelaySeconds: {{ .Values.wire.rankerMonitorAgent.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.wire.rankerMonitorAgent.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.wire.rankerMonitorAgent.readinessProbe.timeoutSeconds }}
+{{ include "wire.statsdExporter.container" (list . ) | indent 6 }}

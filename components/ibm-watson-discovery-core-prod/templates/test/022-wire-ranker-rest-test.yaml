@@ -1,0 +1,46 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $rankerRestCompName := .sch.chart.components.rankerRest.name -}}
+{{- $rankerRestTestCompName := .sch.chart.components.rankerRestTest.name -}}
+{{- $namespace := .Release.Namespace -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "sch.names.fullCompName" (list . $rankerRestTestCompName ) }}"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $rankerRestTestCompName (dict "test" "test")) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  serviceAccountName: {{ .Values.global.privilegedServiceAccount.name }}
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . ) | indent 4 }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedPodSecurityContext) | indent 2 }}
+  imagePullSecrets:
+  - name: {{ .Values.global.image.pullSecret }}
+  containers:
+  - name: {{ include "sch.names.fullCompName" (list . $rankerRestTestCompName ) }}
+    image: {{ .Values.global.dockerRegistryPrefix }}/
+      {{- .Values.wire.test.image.name }}:
+      {{- .Values.wire.test.image.tag}}
+    resources:
+      requests:
+        memory: {{ .Values.wire.test.resources.requests.memory }}
+        cpu: {{ .Values.wire.test.resources.requests.cpu }}
+      limits:
+        memory: {{ .Values.wire.test.resources.limits.memory }}
+        cpu: {{ .Values.wire.test.resources.limits.cpu }}
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 4 }}
+    command:
+    - /bin/sh
+    - -c
+    - >-
+      for p in `kubectl -n {{ $namespace }} get po -l app.kubernetes.io/component={{ $rankerRestCompName }},release={{ .Release.Name }} -o name`;
+      do echo "Testing $p"; kubectl -n {{ $namespace }} exec ${p:4} -c {{ $rankerRestCompName }} -- sh -c 'cat build-info.properties';
+      kubectl -n {{ $namespace }} exec ${p:4} -c {{ $rankerRestCompName }} -- sh -c 'cat build-info.properties';
+      if [ $? != 0 ]; then timeout=$(($(date +%s) + {{ .Values.wire.test.timeout }})); while [ $(date +%s) -lt $timeout ];
+      do kubectl -n {{ $namespace }} exec ${p:4} -c {{ $rankerRestCompName }} -- sh -c 'cat build-info.properties'; done; fi;
+      if [ $? != 0 ]; then echo "Test Failed."; return 1; else echo "Test Passed."; fi; done
+  restartPolicy: Never

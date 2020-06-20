@@ -1,0 +1,59 @@
+{{- include "sch.config.init" (list . "wks.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.credsCleanUp.name -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName ) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 4 }}
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 8 }}
+      name: delete-creds
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ template "wks.serviceaccount.name" . }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsPodSecurityContext) | indent 8 }}
+{{- if .Values.creds.imagePullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.creds.imagePullSecret }}
+{{- end }}
+      containers:
+      - name: delete-creds
+{{ include "wks.docker.image.name" (list . .Values.creds.image) | indent 8 }}
+        imagePullPolicy: IfNotPresent
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsPodSecurityContext) | indent 10 }}
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 10m
+          limits:
+            memory: 128Mi
+            cpu: 50m
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          kubectl delete secret {{ include "wks.minio.access.secret.name" . }}
+          kubectl delete secret {{ include "wks.cert.internal.secret.name" . }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}

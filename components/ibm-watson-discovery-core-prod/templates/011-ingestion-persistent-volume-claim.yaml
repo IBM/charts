@@ -1,0 +1,40 @@
+{{- if .Values.global.private -}}
+  {{- if .Values.core.ingestion.mount.enabled -}}
+    {{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+    {{- $compName := .sch.chart.components.wexCore.name }}
+    {{- $pvcName := .sch.chart.components.wexCore.ingestion.pvc.name }}
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "sch.names.persistentVolumeClaimName" (list . $pvcName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    run: {{ $pvcName }}
+spec:
+  {{- if .Values.core.ingestion.mount.useDynamicProvisioning }}
+  # if present, use the storageClassName from the values.yaml, else use the
+  # default storageClass setup by kubernetes Administrator
+  # setting storageClassName to nil means use the default storage class
+  storageClassName: {{ default nil .Values.core.ingestion.mount.storageClassName | quote }}
+  {{- else }}
+  # bind to an existing pv.
+  # setting storageClassName to "" disables dynamic provisioning
+  storageClassName: {{ default "" .Values.core.ingestion.mount.storageClassName | quote }}
+    {{- if .Values.core.ingestion.mount.selector.label }}
+  selector:
+    matchExpressions:
+      - key: {{ .Values.core.ingestion.mount.selector.label | quote }}
+        operator: In
+        values:
+        - {{ .Values.core.ingestion.mount.selector.value | quote }}
+    {{- end }}
+  {{- end }}
+  accessModes:
+    - {{ default "ReadWriteOnce" .Values.core.ingestion.mount.accessModes | quote }}
+  resources:
+    requests:
+      storage: {{ default "1Gi" .Values.core.ingestion.mount.size | quote }}
+  {{- end -}}
+{{- end -}}
+

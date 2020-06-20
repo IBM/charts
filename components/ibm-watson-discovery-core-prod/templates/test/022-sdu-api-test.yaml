@@ -1,0 +1,45 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $sduApiTestcompName := .sch.chart.components.sduApiTest.name -}}
+{{- $compName := .sch.chart.components.sdu.name -}}
+{{- $sduService := include "sch.names.fullCompName" (list . $compName) }}
+{{- $sducompName := .sch.chart.components.sdu.name -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "sch.names.fullCompName" (list . $sduApiTestcompName ) }}"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $sduApiTestcompName (dict "test" "test")) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  serviceAccountName: {{ include "discovery.admin.serviceAccount" . }}
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . ) | indent 4 }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedPodSecurityContext) | indent 2 }}
+  imagePullSecrets:
+  - name: {{ .Values.global.image.pullSecret }}
+  containers:
+  - name: {{ include "sch.names.fullCompName" (list . $sduApiTestcompName ) | quote }}
+    image: {{ .Values.global.dockerRegistryPrefix }}/
+      {{- .Values.sdu.test.image.name }}:
+      {{- .Values.sdu.test.image.tag }}
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 4 }}
+    env:
+    - name: SDU_URL
+      value: {{ printf "https://%s:8080/" $sduService | quote }}
+    resources:
+      # When changing these, be sure to keep the JAVA_TOOL_OPTIONS environment variable within these limits
+      requests:
+        memory: "{{ .Values.sdu.test.resources.requests.memory }}"
+        cpu: "{{ .Values.sdu.test.resources.requests.cpu }}"
+      limits:
+        memory: "{{ .Values.sdu.test.resources.limits.memory }}"
+        cpu: "{{ .Values.sdu.test.resources.limits.cpu }}"
+    command:
+    - "/bin/bash"
+    - "-c"
+    - "curl --fail -k https://{{ include "sch.names.fullCompName" (list . $sducompName) }}:8080/health"
+  restartPolicy: Never

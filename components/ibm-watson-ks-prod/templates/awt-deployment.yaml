@@ -1,0 +1,286 @@
+{{- include "sch.config.init" (list . "wks.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.awt.name -}}
+
+{{- if .Values.awt.create }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName ) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 6 }}
+  replicas: {{ include "wks.awt.replicas" . }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 8 }}
+      annotations:
+{{ include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+    spec:
+      serviceAccountName: {{ template "wks.serviceaccount.name" . }}
+      affinity:
+{{ include "wks.affinity" . | indent 8 }}
+      initContainers:
+      - name: create-db
+{{ include "wks.docker.image.name" (list . .Values.awt.dbInit.image) | indent 8}}
+        imagePullPolicy: {{ .Values.awt.imagePullPolicy }}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsPodSecurityContext) | indent 10 }}
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 10m
+          limits:
+            memory: 128Mi
+            cpu: 50m
+        volumeMounts:
+        - mountPath: /opt/ibm/postgres
+          name: postgres-tls
+        env:
+        - name: PGHOST
+          value: "{{ default (include .Values.global.postgresql.hostNameTpl .) .Values.global.postgresql.fixedHostName }}"
+        - name: PGPORT
+          value: "{{ .Values.global.postgresql.port }}"
+        - name: PGDATABASE
+          value: "{{ .Values.global.postgresql.adminDB }}"
+        - name: PGUSER
+          value: "{{ .Values.global.postgresql.adminUser }}"
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ default (include .Values.global.postgresql.authSecret.nameTpl .) .Values.global.postgresql.authSecret.fixedName }}
+              key: {{ .Values.global.postgresql.authSecret.fieldAdminPassword }}
+        {{- if (and .Values.global.postgresql.sslEnabled .Values.global.postgresql.tlsSecret.fieldRootCertificate) }}
+        - name: PGSSLROOTCERT
+          value: "/opt/ibm/postgres/tls.crt"
+        {{- end }}
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          for i in $(seq 12)
+          do
+            pg_isready && break
+            sleep 10
+          done
+          pg_isready || exit 1
+          if [ -z "$(psql -l | awk '$1 ~ /{{ include "wks.awt.postgresql.db.name" . }}/')" ]
+          then
+            psql -a -c 'CREATE DATABASE {{ include "wks.awt.postgresql.db.name" . }}' || exit 1;
+          fi
+      containers:
+      # tooling
+      - name: aql-web-tooling
+{{ include "wks.docker.image.name" (list . .Values.awt.tooling.image) | indent 8}}
+        imagePullPolicy: {{ .Values.awt.imagePullPolicy }}
+        ports:
+        - containerPort: 9080
+          protocol: TCP
+        resources:
+{{ include "wks.awt.deployments.resources" (list .Values.awt.tooling.resources) | indent 10 }}
+        volumeMounts:
+        # pvc to store data
+        - mountPath: /opt/ibm/watson/aql-web-tooling/target/sandbox
+          name: sandbox
+
+        # key/cert for signing
+        - mountPath: /opt/ibm/watson/security
+          name: ssl-key
+
+        # postgre info
+        - mountPath: /opt/ibm/postgres
+          name: postgres-tls
+
+        env:
+        - name: DEBUG
+          value: "false"
+
+        - name: JAVA_HOME
+          value: /opt/ibm/java
+
+        - name: JVM_OPTS
+          value: -Djvm.options.ta.webtooling.catalog.db.type=PostgreSql -Djvm.options.ta.webtooling.tokenizer=multilingualUniversal -Djvm.options.ta.webtooling.run.mode=ibmcloud -Djvm.options.ta.webtooling.readiness.threshold=260 -Djvm.options.ta.webtooling.export.rbr.version=1.1.0 -Djvm.options.ta.webtooling.export.signer.enabled=false -Djvm.options.ta.webtooling.export.signer.bin=/usr/local/bin/signer
+
+        # signer key
+        - name: SIGNER_KEY
+          {{- if .Values.awt.signer.enabled }}
+          value: /opt/ibm/watson/security/signer.key
+          {{- else }}
+          value: ""
+          {{- end }}
+        # signer key password
+        - name: SIGNER_PASSWORD
+          {{- if .Values.awt.signer.enabled }}
+          valueFrom:
+            secretKeyRef:
+              key: signer_password
+              name: awtsecrets
+          {{- else }}
+          value: ""
+          {{- end }}
+
+        # signer cert
+        - name: SIGNER_CERT
+          {{- if .Values.awt.signer.enabled }}
+          value: /opt/ibm/watson/security/signer.crt
+          {{- else }}
+          value: ""
+          {{- end }}
+
+        # keystore alias used for signing
+        - name: SIGNER_ALIAS
+          value: knowledge-studio
+
+        # used for backup tarball prefix
+        - name: TENANT_NAME
+          value: awt-{{ include "wks.awt.region.name" . }}
+
+        # backup dir (cos pvc)
+        - name: BACKUP_DIR
+          value: /opt/ibm/watson/data
+
+        # backup interval (default hourly)
+        - name: BACKUP_INTERVAL_SEC
+          value: "3600"
+
+        # enable backup?
+        - name: ENABLE_BACKUP
+          value: {{ .Values.awt.backupToCos.enabled | quote }}
+
+        # enable restore from backup on startup?
+        - name: ENABLE_RESTORE
+          value: "false"
+
+        # backend PostgreSQL related value
+        - name: DB_TYPE
+          value: POSTGRESQL
+        - name: POSTGRESQL_USER # TODO: Use super user directory or not
+          value: {{ include "wks.awt.postgresql.auth.secret.userName" . }}
+        - name: POSTGRESQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: {{ include "wks.awt.postgresql.auth.secret.password.fieldName" . }}
+              name: {{ include "wks.awt.postgresql.auth.secret.name" . }}
+        - name: POSTGRESQL_URL
+          value: {{ include "wks.awt.postgresql.jdbc.connString" . }}
+        - name: POSTGRESQL_CACERT
+          valueFrom:
+            secretKeyRef:
+              key: {{ include "wks.awt.postgresql.tls.secret.cert.fieldName" . }}
+              name: {{ include "wks.awt.postgresql.tls.secret.name" . }}
+        - name: POSTGRESQL_CACERT_FILE
+          value: /opt/ibm/postgres/tls.crt
+
+        # try readiness to default page
+        readinessProbe:
+          httpGet:
+            path: /advanced_rules/controller/g2t/cloud/health/readiness
+            port: 9080
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+
+        # try liveneess to default page
+        livenessProbe:
+          httpGet:
+            path: /advanced_rules/controller/g2t/cloud/health/liveness
+            port: 9080
+            scheme: HTTP
+          initialDelaySeconds: 450
+          periodSeconds: 90
+          timeoutSeconds: 10
+          failureThreshold: 5
+
+        # prestop:
+        # stop jetty & get backup
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - ./stop.sh
+
+{{- include "sch.security.securityContext" (list . .sch.chart.securityContext1) | indent 8 }}
+
+      # ssl proxy
+      - name: proxy
+{{ include "wks.docker.image.name" (list . .Values.awt.proxy.image) | indent 8}}
+        imagePullPolicy: {{ .Values.awt.imagePullPolicy }}
+        ports:
+        - containerPort: 9443
+          protocol: TCP
+        resources:
+{{ include "wks.awt.deployments.resources" (list .Values.awt.proxy.resources) | indent 10 }}
+        env:
+        # log level in nginx, /opt/nginx/logs/error.log
+        - name: NGINX_LOG_LEVEL
+          value: info
+
+        # nginx mode, pod for pod proxy
+        - name: MODE
+          value: POD
+
+        # filepath to userlist
+        - name: USER_LIST_FILE_PATH
+          value: /etc/nginx/data/userlist.txt
+
+        volumeMounts:
+        - name: ssl-key
+          mountPath: /etc/nginx/security
+
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 30
+
+{{- include "sch.security.securityContext" (list . .sch.chart.securityContext1) | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+      # user:group 1001:1001
+      securityContext:
+        fsGroup: 1001
+{{- end }}
+      volumes:
+
+      # file pvc
+      - name: sandbox
+        {{- if .Values.awt.persistentVolume.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ include "wks.awt.filePvc.name" . }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+
+      # server keycert & signer keycert secrets
+      - name: ssl-key
+        secret:
+          secretName: {{ include "wks.awt.sslSecret.name" . }}
+
+      # postgre info
+      - name: postgres-tls
+        secret:
+          secretName: {{ include "wks.awt.postgresql.tls.secret.name" . }}
+          items:
+          - key: {{ include "wks.awt.postgresql.tls.secret.cert.fieldName" . }}
+            path: "tls.crt"
+      - name: postgres-auth
+        secret:
+          secretName: {{ include "wks.awt.postgresql.auth.secret.name" . }}
+{{ include "wks.docker.registry.secret" . | indent 6}}
+{{- end }}

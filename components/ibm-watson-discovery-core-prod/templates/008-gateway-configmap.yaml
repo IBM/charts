@@ -1,0 +1,62 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compGatewayName := .sch.chart.components.wexCore.gateway.name }}
+
+{{- $orchestratorServicePort := .sch.chart.components.wexCore.orchestrator.port -}}
+{{- $compSduName := .sch.chart.components.sdu.name }}
+{{- $sduServiceName := include "sch.names.fullCompName" (list . $compSduName ) -}}
+{{- $queryFlowServiceName := include "sch.names.fullCompName" (list . "query-flow") -}}
+{{- $compTrainingRestName := .sch.chart.components.trainingRest.name }}
+{{- $trainingRestServiceName := include "sch.names.fullCompName" (list . $compTrainingRestName ) -}}
+{{- $compCnmName := .sch.chart.components.cnm.apiServer.name }}
+{{- $cnmServiceName := include "sch.names.fullCompName" (list . $compCnmName ) -}}
+{{- $gatewayServicePort := .sch.chart.components.wexCore.gateway.port -}}
+{{- $nginxServicePort := .sch.chart.components.wexCore.gateway.nginx.port -}}
+{{- $managementServicePort := .sch.chart.components.wexCore.management.port -}}
+{{- $ingestionApiServicePort := .sch.chart.components.wexCore.ingestionApi.port -}}
+{{- $minerServicePort := .sch.chart.components.wexCore.minerapp.port -}}
+{{- $adminServicePort := .sch.chart.components.wexCore.minerapp.adminapp.port -}}
+{{- $rapiServicePort := .sch.chart.components.wexCore.rapi.port -}}
+{{- $statelessApiServicePort := .sch.chart.components.wexCore.statelessApi.proxy.port -}}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compGatewayName ) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compGatewayName) | indent 4 }}
+data:
+  WEX_PORT: "{{ $nginxServicePort }}"
+  DEPLOYMENT_TYPE: CLUSTER
+  HADOOP_CONF_DIR: /wexdata/config/hadoop
+  HADOOP_NAMENODE_ADDRESS: "{{ include "discovery.mantle.hdp.nn.service" . }}:9000"
+  YARN_RESOURCEMANAGER_HOSTNAME: {{ include "discovery.mantle.hdp.rm.service" . | quote }}
+  ORCHESTRATOR_SVC: "{{ include "discovery.core.orchestrator.hostname" . }}:{{ $orchestratorServicePort }}"
+  ORCHESTRATOR_HOST: {{ include "discovery.core.orchestrator.hostname" . | quote }}
+  ORCHESTRATOR_SECURE_PORT: "{{ $orchestratorServicePort }}"
+  GATEWAY_API_URL: "{{ include "watson.gateway.endpoint" . }}"
+  MANAGEMENT_SERVER_ENDPOINT: "https://{{ include "discovery.core.management.hostname" . }}:{{ $managementServicePort }}/wex/api/v1"
+  MANAGEMENT_API_URL: "https://{{ include "discovery.core.management.hostname" . }}:{{ $managementServicePort }}"
+  CONTROLLER_N_THREADS: "0"
+  WKSML_HOST: {{ include "discovery.core.wksml.hostname" . | quote }}
+  WKSML_SCHEME: "https"
+  WKSML_PORT: "5194"
+  CHEWY_ENABLED: {{ .Values.global.contentIntelligence.enabled | quote }}
+  SDU_SVC: "{{ $sduServiceName }}:8080"
+  TRAINING_SVC: "{{ $trainingRestServiceName }}:9090"
+  QUERY_FLOW_ENDPOINT: "https://{{ $queryFlowServiceName }}:9090"
+  CNM_SVC: "{{ $cnmServiceName }}:9443"
+{{- if not .Values.global.private }}
+  CONNECTIVITY_SVC: "{{ printf "discovery-connectivity-%s" .Values.global.tenant }}:8443"
+{{- end }}
+  PGDATABASE: {{ .Values.core.database.name | default "dadmin" | quote }}
+  AMA_ZING_API_ENDPOINT: "https://{{ include "discovery.core.ingestionApi.hostname" . }}:{{ $ingestionApiServicePort }}/ama-zing/api/v1"
+  AMA_ZING_API_URL: "https://{{ include "discovery.core.ingestionApi.hostname" . }}:{{ $ingestionApiServicePort }}"
+  WD_GATEWAY_API_URL: "https://{{ include "discovery.core.gateway.hostname" . }}:{{ $nginxServicePort }}"
+  WDAPI_SVC: "{{ include "discovery.core.gateway.hostname" . }}:{{ $gatewayServicePort }}"
+  ZING_SVC: "{{ include "discovery.core.ingestionApi.hostname" . }}:{{ $ingestionApiServicePort }}"
+  MANAGEMENT_SVC: "{{ include "discovery.core.management.hostname" . }}:{{ $managementServicePort }}"
+  MINER_SVC: "{{ include "discovery.core.minerapp.hostname" . }}:{{ $minerServicePort }}"
+  ADMIN_SVC: "{{ include "discovery.core.minerapp.hostname" . }}:{{ $adminServicePort }}"
+  RAPI_SVC: "{{ include "discovery.core.rapi.hostname" . }}:{{ $rapiServicePort }}"
+  PROXY_SVC: "{{ include "discovery.core.gateway.hostname" . }}:{{ $nginxServicePort }}"
+  STATELESS_API_SVC: "{{ include "discovery.core.statelessApi.hostname" . }}:{{ $statelessApiServicePort }}"

@@ -1,0 +1,32 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $app := .Values.global.appName }}
+{{- $wireConfigName := include "sch.names.fullCompName" (list . "wire-config" ) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $wireConfigName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "wire" (dict "app.kubernetes.io/name" "wire" "squad" "wire" "service" "discovery")) | indent 4 }}
+data:
+  statsd_exporter_mapping.yml: |
+    mappings: 
+        - match: "*.count.*"
+          name: "${1}_count_metrics"
+          match_metric_type: counter
+          labels:
+            metric: "$2"
+        - match: "*.time.*"
+          name: "${1}_time_metrics"
+          match_metric_type: timer
+          timer_type: summary
+          labels:
+            metric: "$2"
+        - match: "*.gauge.*"
+          name: "${1}_guage_metrics"
+          match_metric_type: gauge
+          labels:
+            metric: "$2"
+        - match: "."
+          match_type: regex
+          action: drop
+          name: "dropped"

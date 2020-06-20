@@ -1,0 +1,90 @@
+{{- include "sch.config.init" (list . "wks.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.dispatcher.name -}}
+{{- $keystorePass := randAlphaNum 10 }}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName ) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 6 }}
+  replicas: {{ .Values.dispatcher.replicas }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+    spec:
+      serviceAccountName: {{ template "wks.serviceaccount.name" . }}
+      affinity:
+{{ include "wks.affinity" . | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      # TODO: should we add service account name?
+      containers:
+      - name: dispatcher
+{{ include "wks.docker.image.name" (list . .Values.dispatcher.image) | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.securityContext1) | indent 8 }}
+        ports:
+        - containerPort: 9443
+          protocol: TCP
+        resources:
+          limits:
+            cpu: {{ .Values.dispatcher.resources.limits.cpu }}
+            memory: {{ .Values.dispatcher.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.dispatcher.resources.requests.cpu }}
+            memory: {{ .Values.dispatcher.resources.requests.memory }}
+        env:
+        - name: CLOUD_ENVIRONMENT
+          value: "icp"
+        - name: ESCLOUD_APP_PORT
+          value: "9443"
+        - name: DISPATCH_CONTEXT
+          value: "service"
+        - name: TMP_DEPLOY_TIMESTAMP
+          value: "Thu Jun  4 04:59:39 UTC 2020"
+        - name: K8S_POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: K8S_WKS_SVC
+          value: {{ include "wks.frontend.svc.name" . }}
+{{ include "wks.keystore.envvars" (list . $keystorePass) | indent 8 }}
+        livenessProbe:
+          httpGet:
+            path: "/dispatcher/api/v3/status"
+            port: 9443
+            httpHeaders:
+            - name: "X-WKS-Internal-Request"
+              value: "curl"
+            scheme: HTTPS
+          initialDelaySeconds: 180
+          timeoutSeconds: 5
+          periodSeconds: 180
+        readinessProbe:
+          httpGet:
+            path: "/dispatcher/api/v3/status"
+            port: 9443
+            httpHeaders:
+            - name: "X-WKS-Internal-Request"
+              value: "curl"
+            scheme: HTTPS
+          initialDelaySeconds: 1
+          timeoutSeconds: 5
+          periodSeconds: 5
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 15"]
+        volumeMounts:
+{{ include "wks.keystore.volumemount" . | indent 8 }}
+      initContainers:
+{{ include "wks.keystoregen.initcontainer" (list . $keystorePass) | indent 6 }}
+      volumes:
+{{ include "wks.keystoregen.volumes" . | indent 6 }}
+{{ include "wks.docker.registry.secret" . | indent 6 }}

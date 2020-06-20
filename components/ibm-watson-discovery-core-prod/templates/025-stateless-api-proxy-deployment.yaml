@@ -1,0 +1,103 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.wexCore.name }}
+{{- $subCompName := .sch.chart.components.wexCore.statelessApi.proxy.name }}
+{{- $compGatewayName := .sch.chart.components.wexCore.gateway.name }}
+{{- $compRuntimeName := .sch.chart.components.wexCore.statelessApi.runtime.name }}
+{{- $runtimeServicePort := .sch.chart.components.wexCore.statelessApi.runtime.port }}
+{{- $runtimeServiceName := include "sch.names.fullCompName" (list . $compRuntimeName ) }}
+{{- $servicePort := .sch.chart.components.wexCore.statelessApi.proxy.port }}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $subCompName ) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 4 }}
+    run: {{ $subCompName }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 6 }}
+      run: {{ $subCompName }}
+  replicas: {{ include "discovery.core.statelessApi.proxy.replicas" . }}
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 8 }}
+        run: {{ $subCompName }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.global.serviceAccount.name }}
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserSpecSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+        {{- if eq .Values.core.statelessApi.proxy.antiAffinity "hard" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: "kubernetes.io/hostname"
+            labelSelector:
+              matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 16 }}
+                run: {{ $subCompName }}
+        {{- else if eq .Values.core.statelessApi.proxy.antiAffinity "soft" }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 5
+            podAffinityTerm:
+              topologyKey: "kubernetes.io/hostname"
+              labelSelector:
+                matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 18 }}
+                  run: {{ $subCompName }}
+        {{- end }}
+      initContainers:
+{{ include "discovery.core.initContainer.etcdCheck" . | indent 6 }}
+      containers:
+      - name: rest-proxy
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.core.image.statelessApi.proxy.name }}:{{ .Values.core.image.statelessApi.proxy.tag }}"
+        imagePullPolicy: "{{ .Values.global.image.pullPolicy }}"
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserPodSecurityContext) | indent 8 }}
+        env:
+{{ include "discovery.core.etcd.envVars" . | indent 8 }}
+{{ include "discovery.core.s3.envVars" . | indent 8 }}
+        - name: MM_SVC_HOST
+          value: {{ $runtimeServiceName }}
+        - name: MM_SVC_GRPC_PORT
+          value: {{ $runtimeServicePort | quote }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . $compGatewayName ) }}
+        resources:
+{{ toYaml .Values.core.statelessApi.proxy.resources | indent 10 }}
+        volumeMounts:
+        - name: certificate-etcd
+          mountPath: "/opt/tls/etcd"
+          readOnly: true
+        ports:
+        - name: api
+          containerPort: {{ $servicePort }}
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - >
+              curl -k https://localhost:{{ $servicePort }}/proxy/api/v1/ready &&
+              ps -ef | grep -v grep | grep -q com.ibm.es.ama.api.stateless.watcher.CollectionWatcher
+{{ toYaml .Values.core.statelessApi.proxy.readinessProbe | indent 10 }}
+        livenessProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - >
+              curl -k https://localhost:{{ $servicePort }}/proxy/api/v1/live &&
+              ps -ef | grep -v grep | grep -q com.ibm.es.ama.api.stateless.watcher.CollectionWatcher
+{{ toYaml .Values.core.statelessApi.proxy.livenessProbe | indent 10 }}
+      volumes:
+      - name: certificate-etcd
+        secret:
+          secretName: {{ include "discovery.crust.etcd.ca" . }}

@@ -1,0 +1,41 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $trainingRestTestcompName := .sch.chart.components.trainingRestTest.name -}}
+{{- $trainingRestcompName := .sch.chart.components.trainingRest.name -}}
+{{- $namespace := .Release.Namespace -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "sch.names.fullCompName" (list . $trainingRestTestcompName ) }}"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $trainingRestTestcompName (dict "test" "test")) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  serviceAccountName: {{ .Values.global.privilegedServiceAccount.name }}
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . ) | indent 4 }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedPodSecurityContext) | indent 2 }}
+  imagePullSecrets:
+  - name: {{ .Values.global.image.pullSecret }}
+  containers:
+  - name: "{{ include "sch.names.fullCompName" (list . $trainingRestTestcompName ) }}"
+    image: {{ .Values.global.dockerRegistryPrefix }}/
+      {{- .Values.wire.test.image.name }}:
+      {{- .Values.wire.test.image.tag}}
+    resources:
+      requests:
+        memory: {{ .Values.wire.test.resources.requests.memory }}
+        cpu: {{ .Values.wire.test.resources.requests.cpu }}
+      limits:
+        memory: {{ .Values.wire.test.resources.limits.memory }}
+        cpu: {{ .Values.wire.test.resources.limits.cpu }}
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 4 }}
+    command:
+    - "/bin/bash"
+    - "-c"
+    - 'wget --no-check-certificate --spider https://{{ include "sch.names.fullCompName" (list . $trainingRestcompName) }}:9090/health
+    && wget --no-check-certificate --spider https://{{ include "sch.names.fullCompName" (list . $trainingRestcompName) }}:9090/readiness'
+  restartPolicy: Never

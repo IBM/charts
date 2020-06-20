@@ -1,0 +1,124 @@
+{{- if .Values.global.private }}
+  {{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+  {{- $compName := .sch.chart.components.rankerRest.name -}}
+  {{- $app := .Values.global.appName }}
+  {{- $rankerSecretName := include "discovery.ranker.secret" . }}
+  {{- $wireRankerSecret := include "sch.names.fullCompName" (list . .sch.chart.components.rankerSecret.name ) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "rest" "squad" "wire" "service" "discovery")) | indent 4 }}
+spec:
+  replicas: {{ include "discovery.wire.rankerRestReplicas" . }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "rest" "squad" "wire" "app" $app "service" "discovery")) | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "rest" "squad" "wire" "app" $app "service" "discovery")) | indent 8 }}
+    spec:
+      serviceAccountName: {{ include "discovery.admin.serviceAccount" . }}
+      affinity:
+{{ include "sch.affinity.nodeAffinity" (list . ) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedPodSecurityContext) | indent 6 }}
+      volumes:
+      - name: config
+        secret:
+          secretName: {{ $wireRankerSecret }}
+      - name: jks
+        secret:
+          secretName: {{ include "discovery.core.javaKeyStore" . }}
+      - name: mc-config-dir
+        emptyDir: {}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+      initContainers:
+{{ include "discovery.minioInitContainer" . | indent 6 }}
+      containers:
+      - name: {{ $compName }}
+        image: {{ .Values.global.dockerRegistryPrefix }}/
+          {{- .Values.wire.rankerRest.image.name }}:
+          {{- .Values.wire.rankerRest.image.tag }}
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 8 }}
+        resources:
+{{ toYaml .Values.wire.rankerRest.resources | trim | indent 10 }}
+        ports:
+        - containerPort: {{ .Values.wire.rankerRest.port }}
+          protocol: TCP
+        volumeMounts:
+        - name: config
+          readOnly: true
+          mountPath: /etcd
+        - name: jks
+          mountPath: /opt/bluegoat/karyon/ssl/keystore.jks
+          readOnly: true
+          subPath: keystore.jks
+        - name: jks
+          mountPath: /opt/bluegoat/karyon/ssl/litelinks-truststore.jks
+          readOnly: true
+          subPath: master.jks
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        env:
+        - name: env
+          value: '{{ .Values.wire.rankerRest.env }}'
+        - name: LOG_LEVEL
+          value: '{{ .Values.wire.rankerRest.logLevel }}'
+        - name: LL_DISCOVERY
+          value: '{{ .Values.wire.rankerRest.llDiscovery }}'
+        - name: KV_STORE
+          value: '{{ .Values.wire.rankerRest.kvStore }}'
+        - name: MASTER_SERVICE_NAME
+          value: '{{ .Values.wire.rankerRest.masterServiceName }}'
+        - name: JAVA_TOOL_OPTIONS
+          value: '{{ .Values.wire.rankerRest.javaOpts }}'
+        {{ if .Values.wire.rankerRest.isEnabledCos -}}
+        - name: CLOUD_OBJECTSTORE
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.wire.cosSecretName" . | quote }}
+              key: cloud_objstore
+        {{- end }}
+        - name: WIRE_PAGER_DUTY_INTEGRATION_KEY_HIGH
+          valueFrom:
+            secretKeyRef:
+              name: {{ $rankerSecretName }}
+              key: pagerduty-key-high
+        - name: WIRE_PAGER_DUTY_INTEGRATION_KEY_LOW
+          valueFrom:
+            secretKeyRef:
+              name: {{ $rankerSecretName }}
+              key: pagerduty-key-low
+        - name: WIRE_PLAYBOOK_URL
+          value: '{{ .Values.wire.rankerRest.playbookUrl }}'
+        {{ if .Values.pagerdutyURL }}
+        - name: PAGERDUTY_URL
+          value: '{{ .Values.pagerdutyURL }}'
+        {{ end }}
+        - name: ETCD_TIMEOUT
+          value: '{{ .Values.wire.rankerRest.restEtcdTimeout }}'
+        livenessProbe:
+          exec:
+            command:
+            - cat
+            - build-info.properties
+          initialDelaySeconds: {{ .Values.wire.rankerRest.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.wire.rankerRest.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.wire.rankerRest.livenessProbe.timeoutSeconds }}
+        readinessProbe:
+          exec:
+            command:
+            - cat
+            - build-info.properties
+          initialDelaySeconds: {{ .Values.wire.rankerRest.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.wire.rankerRest.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.wire.rankerRest.readinessProbe.timeoutSeconds }}
+{{ include "wire.statsdExporter.container" (list . ) | indent 6 }}
+{{- end }}

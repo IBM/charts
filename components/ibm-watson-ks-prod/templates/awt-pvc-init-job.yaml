@@ -1,0 +1,55 @@
+
+{{- include "sch.config.init" (list . "wks.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.pvcInitAwt.name -}}
+
+{{- if .Values.awt.create }}
+{{- if .Values.awt.persistentVolume.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 4 }}
+  name: {{ include "sch.names.fullCompName" (list . $compName ) | quote }}
+spec:
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 8 }}
+      name: {{ include "wks.awt.filePvc.name" . }}
+    spec:
+      serviceAccountName: {{ template "wks.serviceaccount.name" . }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . ) | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      containers:
+      - args:
+        - -c
+        - |
+          ls -l /sandbox
+          chown -R 1001:1001 /sandbox
+          ls -l /sandbox
+        command:
+        - /bin/bash
+{{ include "wks.docker.image.name" (list . .Values.awt.tooling.image) | indent 8}}
+        imagePullPolicy: {{ .Values.awt.imagePullPolicy }}
+        name: {{ include "wks.awt.filePvc.name" . }}
+        volumeMounts:
+        - mountPath: /sandbox
+          name: awt-pvc
+{{- include "sch.security.securityContext" (list . .sch.chart.securityContext1) | indent 8 }}
+        resources:
+          limits:
+            cpu: 250m
+            memory: 512Mi
+          requests:
+            cpu: 250m
+            memory: 512Mi
+      restartPolicy: Never
+      volumes:
+      - name: awt-pvc
+        persistentVolumeClaim:
+          claimName: {{ include "wks.awt.filePvc.name" . }}
+{{- end }}
+{{- end }}

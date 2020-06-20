@@ -1,0 +1,142 @@
+{{- include "sch.config.init" (list . "wks.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.frontend.name -}}
+{{- $keystorePass := randAlphaNum 10 }}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullName" (list .) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 6 }}
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 8 }}
+        wdc.ibm.com/network-access: wks
+        health-check: wks
+        service: knowledge-studio
+    spec:
+      serviceAccountName: {{ template "wks.serviceaccount.name" . }}
+      affinity:
+{{ include "wks.affinity" . | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      # TODO: should we add service account name?
+      containers:
+      - name: wks-v3
+{{ include "wks.docker.image.name" (list . .Values.image) | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.securityContext1) | indent 8 }}
+        ports:
+        - containerPort: {{ .Values.service.targetPort }}
+          protocol: TCP
+        resources:
+          limits:
+            cpu: {{ .Values.resources.limits.cpu }}
+            memory: {{ .Values.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.resources.requests.cpu }}
+            memory: {{ .Values.resources.requests.memory }}
+        env:
+        - name: CLOUD_ENVIRONMENT
+          value: "icp"
+        - name: WKS_PORT
+          value: "{{ .Values.service.targetPort }}"
+        - name: STORAGE_ENVIRONMENT
+          value: "cos"
+        - name: SERVICE_DISCOVERY_ENVIRONMENT
+          value: "kubedns"
+        - name: PROVISIONING_ENVIRONMENT
+          value: "cf_rc"
+        - name: IUI_SUPPORT
+          value: "false"
+        - name: TMP_DEPLOY_TIMESTAMP
+          value: "Thu Jun  4 04:59:39 UTC 2020"
+{{ include "wks.envvar.enable.newfeature" . | indent 8 }}
+{{ include "wks.keystore.envvars" (list . $keystorePass) | indent 8 }}
+        livenessProbe:
+          httpGet:
+            path: "/wks/api/v10/monitor/wks"
+            port: {{ .Values.service.targetPort }}
+            httpHeaders:
+            - name: "X-WKS-Internal-Request"
+              value: "test"
+            - name: "X-Watson-UserInfo"
+              value: "UserId=k8s_health_check"
+            scheme: HTTPS
+          initialDelaySeconds: 120
+          periodSeconds: 180
+          timeoutSeconds: 60
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: "/wks/api/v10/monitor/wks"
+            port: {{ .Values.service.targetPort }}
+            httpHeaders:
+            - name: "X-WKS-Internal-Request"
+              value: "test"
+            - name: "X-Watson-UserInfo"
+              value: "UserId=k8s_health_check"
+            scheme: HTTPS
+          initialDelaySeconds: 60
+          periodSeconds: 90
+          timeoutSeconds: 60
+          failureThreshold: 3
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 15"]
+        volumeMounts:
+        - name: wksconfigs
+          mountPath: "/mnt/configs"
+          readOnly: true
+        - name: mongo-ca-secrets
+          mountPath: "/mnt/mongo-ca-secrets"
+          readOnly: true
+        - name: wks-icp-mongo-config
+          mountPath: "/mnt/wks-icp-mongo-config"
+          readOnly: true
+        - name: mongo-admin-secrets
+          mountPath: "/mnt/mongo-admin-secrets"
+          readOnly: true
+        - name: minio-access-secrets
+          mountPath: "/mnt/minio-access-secrets"
+          readOnly: true
+        - name: wks-icp-minio-config
+          mountPath: "/mnt/wks-icp-minio-config"
+          readOnly: true
+        - name: wks-icp-dependent-service-config
+          mountPath: "/mnt/wks-icp-dependent-service-config"
+          readOnly: true
+{{ include "wks.keystore.volumemount" . | indent 8 }}
+      initContainers:
+{{ include "wks.keystoregen.initcontainer" (list . $keystorePass) | indent 6 }}
+      volumes:
+      - name: wks-icp-mongo-config
+        configMap:
+          name: {{ include "wks.frontend.mongodb.config" . | quote }}
+      - name: mongo-admin-secrets
+        secret:
+          secretName: {{ include "wks.mongodb.admin.secretName" . }}
+      - name: mongo-ca-secrets
+        secret:
+          secretName: {{ include "wks.mongodb.cert.secretName" . | quote }}
+      - name: minio-access-secrets
+        secret:
+          secretName: {{ include "wks.minio.access.secret.name" . }}
+      - name: wks-icp-minio-config
+        configMap:
+          name: {{ include "wks.frontend.minio.config" . | quote }}
+      - name: wks-icp-dependent-service-config
+        configMap:
+          name: {{ include "wks.frontend.dependent.service.config" . | quote }}
+{{ include "wks.keystoregen.volumes" . | indent 6 }}
+      - name: wksconfigs
+        configMap:
+          name: {{ include "sch.names.fullName" (list .) | quote }}
+{{ include "wks.docker.registry.secret" . | indent 6 }}

@@ -1,0 +1,198 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.wexCore.name }}
+{{- $compConverterName := .sch.chart.components.wexCore.converter.name }}
+{{- $statefulSetName := include "sch.names.statefulSetName" (list . $compConverterName) -}}
+
+{{- $managementServicePort := .sch.chart.components.wexCore.management.port -}}
+
+{{- $compSduName := .sch.chart.components.sdu.name }}
+{{- $sduServiceName := include "sch.names.fullCompName" (list . $compSduName ) -}}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $statefulSetName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 4 }}
+    run: {{ $compConverterName }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 6 }}
+      run: {{ $compConverterName }}
+  serviceName: {{ include "sch.names.fullCompName" (list . $compConverterName ) }}
+  replicas: {{ include "discovery.core.converter.replicas" . }}
+  updateStrategy:
+    type: RollingUpdate
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 8 }}
+        run: {{ $compConverterName }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        prometheus.io/port: {{ .Values.core.converter.metrics.prometheusPort | quote }}
+        prometheus.io/scrape: {{ .Values.global.metricsCollection.enabled | quote }}
+    spec:
+      serviceAccountName: {{ .Values.global.serviceAccount.name }}
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserSpecSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+        {{- if eq .Values.core.converter.antiAffinity "hard" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: "kubernetes.io/hostname"
+            labelSelector:
+              matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 16 }}
+                run: {{ $compConverterName }}
+        {{- else if eq .Values.core.converter.antiAffinity "soft" }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 5
+            podAffinityTerm:
+              topologyKey: "kubernetes.io/hostname"
+              labelSelector:
+                matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 18 }}
+                  run: {{ $compConverterName }}
+        {{- end }}
+      initContainers:
+{{ include "discovery.core.initContainer.managementCheck" . | indent 6 }}
+{{ include "discovery.core.initContainer.rabbitmqCheck" . | indent 6 }}
+      containers:
+      - name: converter
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.core.image.ingestion.name }}:{{ .Values.core.image.ingestion.tag }}"
+        imagePullPolicy: "{{ .Values.global.image.pullPolicy }}"
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserPodSecurityContext) | indent 8 }}
+        env:
+        - name: INGESTION_POD_MODE
+          value: "CONVERTER"
+        - name: ENABLE_METRICS
+          value: {{ .Values.global.metricsCollection.enabled | quote }}
+        - name: MANAGEMENT_SERVER_ENDPOINT
+          value: "https://{{ include "discovery.core.management.hostname" . }}:{{ $managementServicePort }}/wex/api/v1"
+        - name: SDU_SERVER_ENDPOINT
+          value: "https://{{ $sduServiceName }}:8080/api/v3"
+        - name: SSL_CERTFILE
+          value: "/opt/tls/wlp/tls.crt"
+        - name: CONTROLLER_N_THREADS
+          value: "{{ .Values.core.crawler.numberOfCrawlerInstances }}"
+        - name: CONVERTER_EXECUTORS
+          value: "{{ .Values.core.converter.numberOfConverterThreads }}"
+        - name: PIPELINE_EXEC_MODE
+          value: "DATA_PIPELINE"
+        - name: DATAPIPELINE_PROCESSOR_THREAD
+          value: "1"
+        - name: PIPELINE_NUM_THREADS
+          value: "UploadedFileConverter=1,ContentTypeConverter=1,FileExtToMimeTypeConverter=1,BinaryDetectConverter=1,GuessContentConverter=1,EncodingConverter=3,SDUDocumentRemover=1,ZipConverter=1,GZipConverter=1,TarConverter=1,MetadataConverter=3,ContentsToJsonConverter=1,SDUConverter=10,TikaConverter=1,JsonNormalizationConverter=1,JsonToAxmlConverter=1,CsvToAxmlConverter=1,HTMLCleanerConverter=1,HTMLConverter=3,FieldFilter=1,JsonMergeConverter=1,FieldNameValidator=1,FieldValueValidator=3,DocumentFilter=1"
+        - name: NOTICE_SERVER_ENDPOINT
+          value: "{{ include "sch.names.fullCompName" (list . .sch.chart.components.haywire.name ) }}:{{ .Values.notices.port }}"
+        - name: SDU_DB_NAME
+          value: "sdu"
+{{ include "discovery.core.sdu.envVars" . | indent 8 }}
+        - name: ENABLE_SEGMENT_EVENTS
+          value: {{ .Values.global.segment.enabled | quote }}
+{{- if .Values.global.segment.enabled }}
+        - name: SEGMENT_WRITE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.segment.secretName | quote }}
+              key: key
+{{- end }}
+        - name: CK_SECRET_CK
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.core.ck.secret" . }}
+              key: CK
+        - name: CRAWLER_PUBLISHER_TYPE
+          value: {{ .Values.core.crawler.crawlerPublisherType | quote }}
+        - name: CONVERTER_PIPELINE_THREADS
+          value: {{ .Values.core.converter.converterPipelineThreads | quote }}
+        - name: CONVERTER_PIPELINE_DOCUMENTS
+          value: {{ .Values.core.converter.converterPipelineDocuments | quote }}
+        - name: CONVERTER_DOCUMENT_STORE_SHARDS
+          value: {{ .Values.core.converter.converterDocumentStoreShards | quote }}
+{{ include "discovery.core.etcd.envVars" . | indent 8 }}
+{{ include "discovery.core.pg.envVars" . | indent 8 }}
+{{ include "discovery.core.rabbitmq.envVars" . | indent 8 }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . $compName ) }}
+        resources:
+{{ toYaml .Values.core.converter.resources | indent 12 }}
+        volumeMounts:
+        - name: data
+          mountPath: /wexdata
+        {{- if .Values.core.tls.wlp.enabled }}
+        - name: certificate-wlp
+          mountPath: "/opt/tls/wlp"
+          readOnly: true
+        {{- end }}
+        - name: certificate-rabbitmq
+          mountPath: "/opt/tls/rabbitmq"
+          readOnly: true
+        readinessProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - >
+              ps -ef | grep -v grep | grep -q com.ibm.es.ama.zing.converter.AmaIngestionConverter
+          initialDelaySeconds: {{ .Values.core.converter.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.core.converter.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.core.converter.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.core.converter.readinessProbe.failureThreshold }}
+        livenessProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - >
+              ps -ef | grep -v grep | grep -q com.ibm.es.ama.zing.converter.AmaIngestionConverter
+          initialDelaySeconds: {{ .Values.core.converter.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.core.converter.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.core.converter.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.core.converter.livenessProbe.failureThreshold }}
+      - name: webpagecleaner
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.core.image.webpagecleaner.name }}:{{ .Values.core.image.webpagecleaner.tag }}"
+        imagePullPolicy: "{{ .Values.global.image.pullPolicy }}"
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserPodSecurityContext) | indent 8 }}
+        ports:
+        - name: api-tls
+          containerPort: 4443
+          protocol: TCP
+        resources:
+{{ toYaml .Values.core.webpagecleaner.resources | indent 10 }}
+        volumeMounts:
+        - name: data
+          mountPath: /wexdata
+        readinessProbe:
+          httpGet:
+            path: /v1/health
+            port: api-tls
+            scheme: HTTPS
+          initialDelaySeconds: {{ .Values.core.webpagecleaner.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.core.webpagecleaner.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.core.webpagecleaner.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.core.webpagecleaner.readinessProbe.failureThreshold }}
+        livenessProbe:
+          httpGet:
+            path: /v1/health
+            port: api-tls
+            scheme: HTTPS
+          initialDelaySeconds: {{ .Values.core.webpagecleaner.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.core.webpagecleaner.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.core.webpagecleaner.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.core.webpagecleaner.livenessProbe.failureThreshold }}
+      volumes:
+      - name: data
+        emptyDir: {}
+      {{- if .Values.core.tls.wlp.enabled }}
+      - name: certificate-wlp
+        secret:
+          secretName: {{ include "discovery.admin.tls" . }}
+      {{- end }}
+      - name: certificate-rabbitmq
+        secret:
+          secretName: {{ include "discovery.crust.rabbitmq.ca" . }}
