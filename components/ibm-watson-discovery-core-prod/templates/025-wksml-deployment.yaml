@@ -1,0 +1,108 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.wexCore.name }}
+{{- $compWksmlName := .sch.chart.components.wexCore.wksml.name }}
+{{- $statefulSetName := include "sch.names.statefulSetName" (list . $compWksmlName) -}}
+{{- $servicePort := .sch.chart.components.wexCore.wksml.port }}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $statefulSetName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 4 }}
+    run: {{ $compWksmlName }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 6 }}
+      run: {{ $compWksmlName }}
+  replicas: {{ include "discovery.core.wksml.replicas" . }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 8 }}
+        run: {{ $compWksmlName }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.global.serviceAccount.name }}
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserSpecSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+        {{- if eq .Values.core.wksml.antiAffinity "hard" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: "kubernetes.io/hostname"
+            labelSelector:
+              matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 16 }}
+                run: {{ $compWksmlName }}
+        {{- else if eq .Values.core.wksml.antiAffinity "soft" }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 5
+            podAffinityTerm:
+              topologyKey: "kubernetes.io/hostname"
+              labelSelector:
+                matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 18 }}
+                  run: {{ $compWksmlName }}
+        {{- end }}
+      containers:
+      - name: wksml
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.core.image.wksml.name }}:{{ .Values.core.image.wksml.tag }}"
+        imagePullPolicy: "{{ .Values.global.image.pullPolicy }}"
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserPodSecurityContext) | indent 8 }}
+        env:
+        - name: WLP_MAX_HEAP
+          value: {{ .Values.core.wksml.wlpMaxHeap | quote }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . $compName ) }}
+        ports:
+        - name: api-tls
+          containerPort: {{ $servicePort }}
+          protocol: TCP
+        resources:
+{{ toYaml .Values.core.wksml.resources | indent 10 }}
+        volumeMounts:
+        - name: data
+          mountPath: /wexdata
+        {{- if .Values.core.tls.wlp.enabled }}
+        - name: certificate
+          mountPath: "/opt/tls/wlp"
+          readOnly: true
+        {{- end }}
+        readinessProbe:
+          httpGet:
+            path: /sire/api/v1/models
+            {{- if .Values.core.tls.wlp.enabled }}
+            port: api-tls
+            scheme: HTTPS
+            {{- else }}
+            port: api
+            {{- end }}
+          initialDelaySeconds: {{ .Values.core.wksml.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.core.wksml.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.core.wksml.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.core.wksml.readinessProbe.failureThreshold }}
+        livenessProbe:
+          httpGet:
+            path: /sire/api/v1/models
+            {{- if .Values.core.tls.wlp.enabled }}
+            port: api-tls
+            scheme: HTTPS
+            {{- else }}
+            port: api
+            {{- end }}
+          initialDelaySeconds: {{ .Values.core.wksml.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.core.wksml.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.core.wksml.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.core.wksml.livenessProbe.failureThreshold }}
+      volumes:
+      - name: data
+        emptyDir: {}
+      {{- if .Values.core.tls.wlp.enabled }}
+      - name: certificate
+        secret:
+          secretName: {{ include "discovery.admin.tls" . }}
+      {{- end }}

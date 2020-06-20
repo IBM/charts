@@ -1,0 +1,64 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.wexCore.statelessApi.credGen.name -}}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName ) | quote }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+      labels:
+{{  include "sch.metadata.labels.standard" (list . $compName)  | indent 8 }}
+    spec:
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      restartPolicy: Never
+      serviceAccountName: {{ .Values.global.privilegedServiceAccount.name }}
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserSpecSecurityContext) | indent 6 }}
+      containers:
+      - name: stateless-api-cred-gen
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.core.image.statelessApiCredGen.name }}:{{ .Values.core.image.statelessApiCredGen.tag }}"
+        imagePullPolicy: "{{ .Values.global.image.pullPolicy }}"
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserPodSecurityContext) | indent 8 }}
+        resources:
+{{ toYaml .Values.core.statelessApiCredGen.resources | indent 10 }}
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          ################ Script to generate etcd connection secret ##############
+          certificate=$(cat "${ETCDCTL_CACERT}")
+          etcd_connection=$(printf '{"endpoints":"%s","userid":"%s","password":"%s","root_prefix":"/sapi","certificate":"%s"}' "${ETCDCTL_ENDPOINTS}" "${ETCD_USER}" "${ETCD_PASSWORD}" "${certificate}"| base64 -w 0)
+          kubectl apply -f - <<END
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            name: {{ include "discovery.core.statelessApi.secret" . }}
+            labels:
+{{  include "sch.metadata.labels.standard" (list . (include "discovery.core.statelessApi.secret" .))  | indent 14 }}
+          data:
+            etcd_connection: "${etcd_connection}"
+          END
+          ################ End of Script ##############
+        volumeMounts:
+        - name: certificate-etcd
+          mountPath: "/opt/tls/etcd"
+          readOnly: true
+        env:
+{{ include "discovery.core.etcd.envVars" . | indent 8 }}
+      volumes:
+      - name: certificate-etcd
+        secret:
+          secretName: {{ include "discovery.crust.etcd.ca" . }}

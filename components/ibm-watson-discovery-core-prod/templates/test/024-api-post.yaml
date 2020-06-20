@@ -1,0 +1,37 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $apiTestcompName := .sch.chart.components.apiTest.name -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "sch.names.fullCompName" (list . $apiTestcompName ) }}"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $apiTestcompName (dict "test" "test")) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  serviceAccountName: {{ include "discovery.admin.serviceAccount" . }}
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . ) | indent 4 }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedPodSecurityContext) | indent 2 }}
+  imagePullSecrets:
+  - name: {{ .Values.global.image.pullSecret }}
+  containers:
+  - name: {{ include "sch.names.fullCompName" (list . $apiTestcompName ) | quote }}
+    image: {{ .Values.global.dockerRegistryPrefix }}/
+      {{- .Values.apiTest.image.name }}:
+      {{- .Values.apiTest.image.tag }}
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 4 }}
+    env:
+    - name: DISCOVERY_URL
+      value: {{ printf "https://ibm-nginx-svc:443" }}
+    resources:
+      requests:
+        memory: "{{ .Values.apiTest.resources.requests.memory }}"
+        cpu: "{{ .Values.apiTest.resources.requests.cpu }}"
+      limits:
+        memory: "{{ .Values.apiTest.resources.limits.memory }}"
+        cpu: "{{ .Values.apiTest.resources.limits.cpu }}"
+  restartPolicy: Never

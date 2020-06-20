@@ -1,0 +1,853 @@
+
+# Default values for wks.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+############################################################
+# license agreement
+############################################################
+
+# must be overrided with 'accept' to install
+license: "accept"
+
+
+############################################################
+# global configs
+############################################################
+
+global:
+  appName: "ibm-watson-ks"
+  productName: "watson-knowledge-studio"
+  license: true
+
+  umbrellaChartMetering:
+    productName: "Watson Knowledge Studio"
+    productID: "ICP4D-addon-d0aa88f38e644eb0975dafa7cae6f032-knowledge-studio"
+    productVersion: "1.1.2"
+    productMetric: "VIRTUAL_PROCESSOR_CORE"
+    productChargedContainers: "All"
+    cloudpakName: "IBM Cloud Pak for Data"
+    cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    cloudpakVersion: "3.0.0"
+    productCloudpakRatio: ""
+
+  metering:
+    productName: "Watson Knowledge Studio"
+    productID: "ICP4D-addon-d0aa88f38e644eb0975dafa7cae6f032-knowledge-studio"
+    productVersion: "1.1.2"
+    productMetric: "VIRTUAL_PROCESSOR_CORE"
+    productChargedContainers: "All"
+    cloudpakName: "IBM Cloud Pak for Data"
+    cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    cloudpakVersion: "3.0.0"
+    productCloudpakRatio: ""
+
+  # Prevent duplicated templates by excluding sub-chart's sch charts
+  sch:
+    enabled: false
+
+  # set kubernetes cluster domain where this chart is installed
+  clusterDomain: "cluster.local"
+
+  # used by WKS frontend
+  dockerRegistrySecret: ""
+
+  # used by most sub charts
+  dockerRegistryPrefix: "cp.icr.io/cp/knowledge-studio"
+
+  # used by mma and wcn-addon
+  imagePullSecretName: ""
+
+  image:
+    pullSecret: ""
+
+  # MinIO, PostgreSQL, MongoDB, ETCD, AWT storage class name
+  storageClassName: "nfs-client"
+
+  # sire chart deploys 2 replicas for each component
+  highAvailabilityMode: true
+
+  # for mma chart
+  # TODO: align naming converntion with WKS chart
+  tls:
+    secret:
+      nameTpl: "wks.cert.internal.secret.name"
+      fieldServerCertificate: "tls.crt"
+      fieldServerKey: "tls.key"
+  mma:
+    v1Port: 4000
+
+  s3:
+    accessSecret:
+      nameTpl: "wks.minio.access.secret.name"
+    # for sire chart
+    sslEnabled: true
+    endpointTpl: "wks.minio.endpoint"
+    bucketTpl: "wks.minio.bucket.name"
+    defaultBucket:
+      # must be synced with minio.defaultBucket.name
+      # work around for reading this value from child charts
+      name: "wks-icp"
+    tlsSecret:
+      nameTpl: "wks.minio.tls.secret.name"
+      fieldRootCertificate: "tls.cacrt"
+
+  postgres:
+    authSecret:
+      nameTpl: "wks.postgresql.auth.secret.name"
+      suPasswordField: "pg_su_password"
+    nameOverride: "ibm-postgresql"
+    tls:
+      hostnameTpl: "wks.postgresql.service.endpoint"
+      secretNameTpl: "wks.postgresql.tls.secret.name"
+
+  postgresql:
+    authSecret:
+      # TODO: define named template for this
+      nameTpl: "wks.postgresql.auth.secret.name"
+      fieldAdminPassword: "pg_su_password"
+      fieldJobqPassword: "pg_su_password"
+    tlsSecret:
+      nameTpl: "wks.postgresql.tls.secret.name"
+      fieldRootCertificate: "tls.crt"
+    sslEnabled: true
+    adminDB: "postgres"
+    adminUser: "stolon"
+    port: 5432
+    hostNameTpl: "wks.postgresql.service.endpoint"
+
+  tests:
+    image:
+      repository: opencontent-common-utils
+      tag: 1.1.7
+
+  existingServiceAccount: "wks-ibm-watson-ks"
+
+cp4dConsolePort: 31843
+
+############################################################
+# WKS chart configs
+############################################################
+
+# number of replicas of WKS deployment
+replicaCount: 2
+
+image:
+  repository: "frontend-icp"
+  tag: release-3-54-2-20200604-0201-3
+
+dvt:
+  image:
+    repository: "wkstoolbox"
+    tag: ubi-master-20200521-0753-8
+  timeoutSec: 30
+
+service:
+  type: ClusterIP
+  port: 19443
+  targetPort: 18443
+
+# WKS Frontend resources
+resources:
+  limits:
+    cpu: 3.9
+    memory: 4000Mi
+  requests:
+    cpu: 950m
+    memory: 4000Mi
+
+affinity: {}
+
+frontend:
+  createDefaultTenant: false
+  region: "rzhz11"
+  initialUser: "admin"
+
+broker:
+  replicas: 2
+  image:
+    repository: "sbsep"
+    tag: release-3-54-2-20200604-0201-3
+  resources:
+    limits:
+      cpu: 1.9
+      memory: 2Gi
+    requests:
+      cpu: 0.1
+      memory: 2Gi
+
+dispatcher:
+  replicas: 2
+  image:
+    repository: "dispatcher"
+    tag: release-3-54-2-20200604-0201-3
+  resources:
+    limits:
+      cpu: 2.0
+      memory: 2Gi
+    requests:
+      cpu: 0.1
+      memory: 2Gi
+
+initContainer:
+  keystoreGen:
+    image:
+      repository: "wks-ibmjdk8-rhubi8"
+      tag: master-20200513-1826-31
+  resources:
+    limits:
+      cpu: 2.0
+      memory: 2Gi
+    requests:
+      cpu: 0.1
+      memory: 2Gi
+
+creds:
+  image:
+    repository: "opencontent-icp-cert-gen-1"
+    tag: "1.1.4"
+
+
+# named template ibm-wks-nosql.svc.statefulsetName depends on .Values.clusterDomain
+clusterDomain: '{{ .Values.global.clusterDomain }}'
+
+############################################################
+# Sub-chart configs
+############################################################
+
+sch:
+  image:
+    repository: ""
+    pullSecret: ""
+
+
+mongodb:
+  replicas: 3
+  image:
+    # Fill in this, in case global.image.pullSecret is conflicted with other charts.
+    pullSecret: ""
+  config:
+    image:
+      name: "opencontent-mongodb-config-copy"
+      tag: "1.1.4"
+  mongodbInstall:
+    image:
+      name: "opencontent-mongodb-install"
+      tag: "1.1.3"
+  mongodb:
+    image:
+      name: "opencontent-mongodb-3"
+      tag: "1.1.5"
+  creds:
+    image:
+      name: "opencontent-icp-cert-gen-1"
+      tag: "1.1.4"
+  # service:
+  #   port: 27017
+  test:
+    image:
+      name: "opencontent-bats"
+      tag: "1.1.3"
+
+  #keep - if set to true, helm delete does not remove the generated resources (the mongodb will continue to run in kubernetes but will not be managedd by the helm.)
+  #keep - Templates are supported.
+  keep: false
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 512Mi
+
+  persistentVolume:
+    enabled: true
+    useDynamicProvisioning: true
+    ## mongodb-replicaset data Persistent Volume Storage Class
+    ## If defined, storageClassName: <storageClass>
+    ## If set to "-", storageClassName: "", which disables dynamic provisioning
+    ## If undefined (the default) or set to null, no storageClassName spec is
+    ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
+    ##   GKE, AWS & OpenStack)
+    ##
+    accessModes:
+      - ReadWriteOnce
+    size: 20Gi
+    selector:
+      label: ""
+      value: ""
+    annotations: {}
+
+  tls:
+    enabled: true
+  metering: '{{ .Values.global.umbrellaChartMetering | toYaml }}'
+
+  rbac:
+    create: false
+  serviceAccount:
+    create: false
+    name: '{{ include "wks.serviceaccount.name" . }}'
+
+  clusterDomain: '{{ .Values.global.clusterDomain }}'
+
+  affinityMongodb: {}
+
+# securityContext:
+#   mongodb:
+#     runAsUser: 999
+#     runAsGroup: 998
+#     fsGroup: 998
+#   creds:
+#     runAsUser: 523
+
+minio:
+  replicas: 4
+  existingSecret: '{{ include "wks.minio.access.secret.name" . }}'
+
+  minio:
+    image:
+      name: "opencontent-minio"
+      tag: "1.1.3"
+  minioClient:
+    image:
+      name: "opencontent-minio-client"
+      tag: "1.0.3"
+  creds:
+    image:
+      name: "opencontent-icp-cert-gen-1"
+      tag: "1.1.4"
+  resources:
+    requests:
+      cpu: 200m
+
+  ## Enable persistence using Persistent Volume Claims
+  ## ref: http://kubernetes.io/docs/user-guide/persistent-volumes/
+  ##
+  persistence:
+    enabled: true
+
+    ## A manually managed Persistent Volume and Claim
+    ## Requires persistence.enabled: true
+    ## If defined, PVC must be created manually before volume will be bound
+    existingClaim: ~
+
+    ## minio data Persistent Volume Storage Class
+    ## If defined, storageClassName: <storageClass>
+    ## If set to "-", storageClassName: "", which disables dynamic provisioning
+    ## If undefined (the default) or set to null, no storageClassName spec is
+    ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
+    ##   GKE, AWS & OpenStack)
+    ##
+    ## Storage class of PV to bind. By default it looks for standard storage class.
+    ## If the PV uses a different storage class, specify that here.
+    useDynamicProvisioning: true
+    accessMode: ReadWriteOnce
+    size: 50Gi
+
+    ## If subPath is set mount a sub folder of a volume instead of the root of the volume.
+    ## This is especially handy for volume plugins that don't natively support sub mounting (like glusterfs).
+    ##
+    subPath: ""
+
+  service:
+    port: 9000
+
+  affinityMinio: {}
+
+  tls:
+    enabled: true
+  buckets:
+    - name: wks-icp
+      policy: none
+      purge: false
+  rbac:
+    create: false
+  serviceAccount:
+    create: false
+    name: '{{ include "wks.serviceaccount.name" . }}'
+
+
+postgresql:
+  create: true
+  postgres:
+    image:
+      name: "opencontent-postgres-stolon"
+  creds:
+    image:
+      name: "opencontent-icp-cert-gen-1"
+      tag: 1.1.4
+    resources:
+      requests:
+        memory: 128Mi
+        cpu: 100m
+      limits:
+        memory: 512Mi
+        cpu: 500m
+  createCluster:
+    resources:
+      requests:
+        memory: 128Mi
+        cpu: 100m
+      limits:
+        memory: 512Mi
+        cpu: 500m
+  ports:
+    internalPort: 5432
+    externalPort: 5432
+  auth:
+    # DO NOT SET pgSuperuserName or everything will break!
+    pgSuperuserName: "stolon"
+  tls:
+    enabled: true
+  sentinel:
+    replicas: 2
+    affinity: {}
+  proxy:
+    replicas: 2
+    affinity: {}
+  keeper:
+    replicas: 2
+    affinity: {}
+    resources:
+      limits:
+        cpu: "1000m"
+        memory: "512Mi"
+  persistence:
+    ## Enable persistence using Persistent Volume Claims.
+    ##
+    enabled: true
+
+    # useDynamicProvisioning - if enabled the dataPVC.storageClassName volumes will be dynamicaly created (if the storage class can be created automatically).
+    #  If disabled either dataPVC.selectot.label should be specify and then the PVC will bound to precreated PV based on labels or dataPVC.storageClassName should be empty and then cluster admin has to bound the PVC to existing PV manually
+    useDynamicProvisioning: true
+
+    ## Persistent Volume Access Mode.
+    ##
+    accessMode: ReadWriteOnce
+
+    ## Persistent Volume Storage Size.
+    ##
+    size: 10Gi
+
+  dataPVC:
+    # name - name (prefix) of the created PVC
+    name: stolon-data
+
+    # selector - if you not using dynamic provisioning, you can use selectors to refine the binding process. You cannot specify a selector if your using dynamic provisioning.
+    selector:
+      # label - label that the PV should have to be boundable to created PVCs
+      label: ""
+      # value - value of the label that the PV should have to be boundable to created PVCs
+      value: ""
+  rbac:
+    create: false
+  serviceAccount:
+    create: false
+    name: '{{ include "wks.serviceaccount.name" . }}'
+  metering: '{{ .Values.global.umbrellaChartMetering | toYaml }}'
+  livenessProbe:
+    initialDelaySeconds: 15
+    timeoutSeconds: 10
+    failureThreshold: 50
+    periodSeconds: 10
+    successThreshold: 1
+  readinessProbe:
+    initialDelaySeconds: 10
+    timeoutSeconds: 10
+    failureThreshold: 50
+    periodSeconds: 10
+    successThreshold: 1
+
+
+sire:
+  affinity: {}
+  jobq:
+    enabled: true
+    image:
+      repository: "jobq"
+    tenants:
+      train:
+        max_queued_and_active_per_user: 10
+        max_active_per_user: 2
+      evaluate:
+        max_queued_and_active_per_user: 10
+        max_active_per_user: 2
+    pgInit:
+      backoffLimit: 30
+    existingServiceAccount: '{{ include "wks.serviceaccount.name" . }}'
+  trainFacade:
+    enabled: true
+    image:
+      repository: "sire-train-facade"
+    createS3BucketIfNotExists: false
+  trainJob:
+    image:
+      repository: "sire-train-runtime"
+  batchApplyJob:
+    image:
+      repository: "sire-train-runtime"
+  sireg:
+    enabled: true
+    securePort: 443
+    image:
+      repository: "sireg"
+    languages:
+      en:
+        enabled: true
+      ar:
+        enabled: true
+      de:
+        enabled: true
+      es:
+        enabled: true
+      fr:
+        enabled: true
+      it:
+        enabled: true
+      ja:
+        enabled: true
+      ko:
+        enabled: true
+      nl:
+        enabled: true
+      pt:
+        enabled: true
+      zh:
+        enabled: true
+      zht:
+        enabled: true
+  useFixedTemplates: false
+
+mma:
+  create: true
+  modelManagementApi:
+    image:
+      repository: model-management-api
+      tag: 1.0.1208-gabbf56cc.20-05-13-180717.icp-master
+    resources:
+      requests:
+        cpu: 200m
+
+  # Number of MMA pods to be deployed in the Helm release
+  replicas: 2
+
+  serviceAccount:
+    name: '{{ include "wks.serviceaccount.name" . }}'
+
+  postgres:
+    # TODO; MMA chart should receive the named template as postgresql host name
+    # Now we hard code the product name of postgresql chart
+    nameOverride: "ibm-postgresql"
+    image:
+      name: "opencontent-postgres-stolon"
+      tag: "2.0.1"
+
+  product:
+    name: "Watson Knowledge Studio"
+    id: "ICP4D-addon-d0aa88f38e644eb0975dafa7cae6f032-knowledge-studio"
+    version: "1.1.2"
+
+###############################################################
+glimpse:
+  create: true
+  isCP4D: true
+
+  existingServiceAccount: '{{ include "wks.serviceaccount.name" . }}'
+
+  affinity: {}
+
+  creds:
+    image:
+      repository: '{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}'
+      name: "opencontent-icp-cert-gen-1"
+      tag: "1.1.4"
+
+  builder:
+    image:
+      repository: '{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/wks-glimpse-ene-builder'
+      tag: release-1-0-12-20200522-0127-1
+    replicas: 2
+    resources:
+      requests:
+        cpu: 100m
+        memory: 1000M
+      limits:
+        cpu: 4000m
+        memory: 8000M
+
+  query:
+    replicas: 2
+
+    modelmesh:
+      image:
+        repository: '{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/model-mesh'
+        tag: master-20200601-301
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          cpu: 7500m
+          memory: 1536Mi
+    glimpse:
+      image:
+        repository: '{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/wks-ene-expand'
+        tag: release-1-0-12-20200522-0127-1
+      resources:
+        requests:
+          cpu: 150m
+          memory: 1000M
+        limits:
+          cpu: 4000m
+          memory: 8000M
+
+  s3:
+    authSecret: '{{ include "wks.minio.access.secret.name" . }}'
+    fieldSecretKey: secretkey
+    fieldAccessKey: accesskey
+    endpoint: '{{ include "wks.minio.endpoint" . }}'
+
+  etcd:
+    connSecret: ""
+    fieldConnString: ""
+    # If connSecret or fieldConnString is not provided, you need fill the following fields
+    endpoint: '{{- include "wks.etcd.service.endpoint" . -}}'
+    auth:
+      secret: '{{- include "wks.etcd.auth.secret.name" . -}}'
+      fieldUsername: 'username'
+      fieldPassword: 'password'
+
+    tls:
+      secret: '{{- include "wks.etcd.tls.secret.name" . -}}'
+      fieldCert: 'tls.crt' # Need to escape '.' to be used as jsonpath
+
+
+  tls:
+    # If the secret field is empty, this chart generate tls secret
+    existingSecret: ""
+
+  helmTest:
+    image:
+      repository: '{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/opencontent-icp-cert-gen-1'
+      tag: "1.1.4"
+##############
+## etcd ######
+##############
+  # Default values for etcd.
+  # This is a YAML-formatted file.
+  # Declare variables to be passed into your templates.
+
+  # nameOverride - Specifies the suffix in the kubernetes names after the .Release.name. The default suffix ibm-wcd-etcd is used if the override is emptys.
+etcd:
+  nameOverride: ""
+
+  # if true, don't delete the datastore objects during a helm delete
+  keep: false
+
+  affinityEtcd: {}
+
+  replicaCount: 3
+
+  image:
+    name: opencontent-etcd-3
+    tag: 1.1.4
+    pullPolicy: IfNotPresent
+
+  certgen:
+    image:
+      name: opencontent-icp-cert-gen-1
+      tag: 1.1.4
+      pullPolicy: IfNotPresent
+
+  resources:
+    requests:
+      cpu: 0.1
+      memory: 250M
+    limits:
+      cpu: 2
+      memory: 2Gi
+
+  maxEtcdThreads: 2
+
+  autoCompaction:
+    retention: "1"
+    mode: "revision"
+
+  auth:
+    enabled: true
+    existingRootSecret: ""
+
+  rbac:
+    create: false
+    existingServiceAccount: '{{ include "wks.serviceaccount.name" . }}'
+
+  persistence:
+    enabled: true
+
+  dataPVC:
+    accessMode: ReadWriteOnce
+    # name - name (prefix) of the created PVC
+    name: data
+
+    # selector - if you not using dynamic provisioning, you can use selectors to refine the binding process. You cannot specify a selector if your using dynamic provisioning.
+    selector:
+      # label - label that the PV should have to be boundable to created PVCs
+      label: ""
+      # value - value of the label that the PV should have to be boundable to created PVCs
+      value: ""
+
+    size: 10Gi
+
+  tls:
+    enabled: true
+    existingTlsSecret: ""
+
+  clusterDomain: '{{ .Values.global.clusterDomain }}'
+
+  metering:
+    productName: "Watson Knowledge Studio"
+    productID: "ICP4D-addon-d0aa88f38e644eb0975dafa7cae6f032-knowledge-studio"
+    productVersion: "1.1.2"
+    productMetric: "VIRTUAL_PROCESSOR_CORE"
+    productChargedContainers: "All"
+    cloudpakName: "IBM Cloud Pak for Data"
+    cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    cloudpakVersion: "3.0.0"
+    productCloudpakRatio: ""
+
+###############################################################
+
+
+###############################################################
+# awt
+###############################################################
+
+awt:
+  create: true
+  replicas: 2
+  signer:
+    enabled: false
+  backupToCos:
+    enabled: false
+  port: "9443"
+  imagePullPolicy: IfNotPresent
+  tooling:
+    image:
+      repository: "aql-web-tooling"
+      tag: "ubi-master-1.1.7-202005120348"
+    resources:
+      limits:
+        memory: 6Gi
+        cpu: 2500m
+      requests:
+        memory: 2Gi
+        cpu: 500m
+  proxy:
+    image:
+      repository: "aql-web-tooling-proxy"
+      tag: "ubi-0.1.4-202005132239"
+    resources:
+      limits:
+        memory: 500Mi
+        cpu: 500m
+      requests:
+        memory: 256Mi
+        cpu: 50m
+  dbInit:
+    image:
+      repository: "opencontent-postgres-stolon"
+      tag: "2.0.1"
+  persistentVolume:
+    enabled: true
+    useDynamicProvisioning: false
+    storageClassName: ""
+    size: 20Gi
+
+###############################################################
+
+
+wcn:
+  create: true
+
+  serviceAccount:
+    name: '{{ include "wks.serviceaccount.name" . }}'
+  privilegedServiceAccount:
+    name: '{{ include "wks.serviceaccount.name" . }}'
+
+  affinity: {}
+
+  addon:
+    displayName: "Watson Knowledge Studio"
+    version: 1.1.2
+    shortDescription: "Teach Watson the language of your domain."
+    longDescription: "Make Watson smarter—use unstructured data to teach Watson the language of your business. The Watson Knowledge Studio add-on uses AI to identify entities, relationships, and other linguistic elements that are are unique to your industry.<br><br>Put Watson’s new knowledge to work when you deploy these add-ons:<br><br><ul><li>Watson Discovery</li><li>Watson Natural Language Understanding</li></ul>"
+    deployDocs: https://docs-icpdata.mybluemix.net/docs/content/SSQNUZ_current/com.ibm.icpdata.doc/watson/knowledge-studio-install.html
+    productDocs: https://docs-icpdata.mybluemix.net/docs/content/SSQNUZ_current/com.ibm.icpdata.doc/watson/knowledge-studio.html
+    gettingStartedDocs: https://cloud.ibm.com/docs/services/watson-knowledge-studio-data
+    apiReferenceDocs: ''
+    productImages: 3
+    # addon.serviceId -
+    # bluemix name: assistant, discovery, natural-language-understanding, knowledge-studio, etc..
+    serviceId: "knowledge-studio"
+    showCredentials: false
+    networkPolicy:
+      enabled: true
+    tls:
+      image:
+        repository: "opencontent-common-utils"
+        tag: 1.1.7
+
+  addonService:
+    name: wcn-addon
+    nameTemplate: ""
+    image:
+      repository: "watson-gateway"
+      tag: 3.4.1
+    zenNamespace: '{{ .Release.Namespace }}'
+
+  backendService:
+    exposeAPI: false
+    name: '{{ include "wks.broker.svc.name" . }}'
+    # nameTemplate: "wks.broker.svc.name"
+    port: 10230
+    secure: true
+    brokerPath: "/knowledge-studio/bluemix/broker/v2/service_instances"
+    rewriteTarget: "/knowledge-studio/tools/dashboard/api/wks/"
+    nginxDirectives:
+      - "proxy_set_header  X-Rewrite-URL $request_uri;"
+
+  additionalServices:
+    - name: '{{ include "wks.dispatcher.svc.name" . }}'
+      exposeAPI: false
+      port: 9443
+      path: "/tooling/"
+      rewriteTarget: "/"
+      secure: true
+      nginxDirectives:
+        - "proxy_set_header  X-Rewrite-URL $request_uri;"
+    - name: '{{ include "wks.dispatcher.svc.name" . }}'
+      exposeAPI: false
+      port: 9443
+      path: "/default/tooling/"
+      rewriteTarget: "/"
+      secure: true
+      nginxDirectives:
+        - "proxy_set_header  X-WKS-Default-Instance true;"
+        - "proxy_set_header  X-Rewrite-URL $request_uri;"
+
+  tooling:
+    enabled: false
+
+  clusterDomain: '{{ .Values.global.clusterDomain }}'
+
+  metering:
+    productName: '{{ .Values.global.umbrellaChartMetering.productName }}'
+    productID: '{{ .Values.global.umbrellaChartMetering.productID }}'
+    productVersion: '{{ .Values.global.umbrellaChartMetering.productVersion }}'
+    productMetric: "VIRTUAL_PROCESSOR_CORE"
+    productChargedContainers: "All"
+    cloudpakName: "IBM Cloud Pak for Data"
+    cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    cloudpakVersion: "3.0.0"
+    productCloudpakRatio: ""

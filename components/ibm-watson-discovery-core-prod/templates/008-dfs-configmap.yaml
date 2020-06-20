@@ -1,0 +1,69 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "discovery.dfs.configmapName" . }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . (include "discovery.dfs.configmapName" .) (dict "service" "discovery")) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "-2"
+    "helm.sh/hook-delete-policy": "before-hook-creation"
+data:
+  kgdb_db_name: dfs_induction
+  kgdb_schemaname: public
+  kgdb_deploymentname: discovery-postgresql
+  kgdb_max_active_connections: "10"
+  kgdb_connection_timeout_millis: "10000"
+  kgdb_connection_pool_timeout_millis: "10000"
+  etcd_namespace: "/all/dfs"
+  etcd_deployment_name: "discovery-etcd"
+  wex_etcd_namespace: "/wex/global"
+{{- if .Values.global.private }}
+  cos_ca_cert_path: "/tmp/public/public.key"
+{{- end }}
+  cos_region: "{{ .Values.dfs.env.cosRegion }}"
+  cos_bucket_name: {{ include "discovery.dfs.bucketName" . | quote }}
+  cos_connection_timeout_millis: "{{ .Values.dfs.env.minioTimeoutMil }}"
+  dlaas_service_url: {{ include "dlaas.hostPort" . | quote }}
+  dlaas_authority: "dlaas.ibm.com"
+  dlaas_user_id: "discovery-dfs"
+  dlaas_framework_name: "{{ .Values.dfs.learner.image.name }}"
+  dlaas_framework_version: "{{ .Values.dfs.learner.image.tag }}"
+  dlaas_framework_image_registry: {{ include "dlaas.learner.dockerRegistry" . | quote }}
+  dlaas_framework_image_namespace: {{ include "dlaas.learner.dockerRegistryNamespace" . | quote }}
+  dlaas_framework_service: "discovery-dfs"
+  dlaas_framework_squad: "dfs"
+  dlaas_datastore_type: "s3_datastore"
+  train_job_required_cpus: "{{ .Values.dfs.learner.resources.cpu }}"
+  train_job_required_gpus: "0"
+  train_job_memory_in_mibs: "{{ .Values.dfs.learner.resources.memoryInMb }}"
+  train_job_gensim_min_count: "{{ .Values.dfs.env.training.minCountIncremental }}"
+  train_job_retrain_min_count: "{{ .Values.dfs.env.training.minCountRetrain }}"
+  train_job_workers: "4"
+  train_job_type_model_epochs: "3"
+  train_job_type_model_window: "2"
+  train_job_topic_model_epochs: "3"
+  train_job_topic_model_window: "30"
+  train_models_to_train: "topic_model"
+  train_trigger_condition_shift_version: "2"
+  train_trigger_initial_backlog_threshold: "10"
+  train_trigger_initial_periodic_interval_secs: "600"
+  train_trigger_backlog_threshold: "1000"
+  train_trigger_periodic_interval_secs: "1800"
+  train_trigger_retrain_interval_hours: "24"
+  train_trigger_global_jobs_limit: "{{ .Values.dfs.env.training.maxTrainPods }}"
+  train_trigger_global_retrain_limit: "{{ .Values.dfs.env.training.maxTrainPodsForRetrain }}"
+  parse_scheduler_periodic_interval_millis: "{{ .Values.dfs.env.dataPrep.intervalMil }}"
+  parse_scheduler_progress_expiration_seconds:  "3600"
+  parse_scheduler_batch_fetch_limit: "{{ .Values.dfs.env.dataPrep.batchSize }}"
+  parse_scheduler_concurrent_request_limit: "10"
+  parse_systemt_compiled_tam_path:  "/srv/kg_induction/parse/resources/systemt"
+  monitor_scheduler_interval_in_millis: "10000"
+  monitor_max_model_size_mibs: "{{ .Values.dfs.env.training.maxModelSizeMib }}"
+  train_client_server_port: "50058"
+  serve_facets_count_before_filter: "{{ .Values.dfs.env.serve.minFetch }}"
+  scheduler_enrichment_periodic_interval_millis: "{{ .Values.dfs.env.ingestion.intervalMil }}"
+  scheduler_enrichment_batch_fetch_limit: "{{ .Values.dfs.env.ingestion.batchSize }}"
+  gateway_hostname: {{ include "discovery.core.gatewayService" . }}
+  gateway_port: {{ .sch.chart.components.wexCore.gateway.nginx.port | quote }}

@@ -1,0 +1,102 @@
+{{- include "sch.config.init" (list . "wks.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.credsGenAwt.name -}}
+
+{{- if .Values.awt.create }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName ) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "100"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 8 }}
+      name: {{ $compName }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName: {{ template "wks.serviceaccount.name" . }}
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsPodSecurityContext) | indent 8 }}
+{{- if .Values.creds.imagePullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.creds.imagePullSecret }}
+{{- end }}
+      containers:
+      - name: cred-gen
+{{ include "wks.docker.image.name" (list . .Values.creds.image) | indent 8 }}
+        imagePullPolicy: {{ .Values.awt.imagePullPolicy }}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsPodSecurityContext) | indent 10 }}
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: 512Mi
+            cpu: 500m
+          limits:
+            memory: 512Mi
+            cpu: 1000m
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          openssl genrsa -out ca.key 2048
+          openssl req -x509 -new -nodes -key ca.key -subj "/CN={{ include "sch.names.fullName" (list .) }}" -days 3650 -reqexts v3_req -extensions v3_ca -out ca.crt
+          cat >openssl.cnf <<EOL
+          [req]
+          req_extensions = v3_req
+          distinguished_name = req_distinguished_name
+          [req_distinguished_name]
+          [ v3_req ]
+          basicConstraints = CA:FALSE
+          keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+          subjectAltName = @alt_names
+          [alt_names]
+          DNS.1 = {{ include "sch.names.fullName" (list .) }}
+          DNS.2 = *.{{ include "wks.k8s.svc.domain" . }}
+          DNS.3 = *.{{ include "wks.awt.service.fullName" .}}
+          DNS.4 = localhost
+          DNS.5 = 127.0.0.1
+          EOL
+          openssl genrsa -out server.key 2048
+          openssl req -new -key server.key -out server.csr -subj "/CN={{ include "sch.names.fullName" (list .) }}" -config openssl.cnf
+          openssl x509 -req -in server.csr \
+            -CA ca.crt -CAkey ca.key -CAcreateserial \
+            -out server.crt -days 3650 -extensions v3_req -extfile openssl.cnf
+          cat <<EOF | kubectl create -n {{ .Release.Namespace }} -f -
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 14 }}
+            name: {{ include "wks.awt.sslSecret.name" . }}
+          data:
+            ca.crt: $(cat ca.crt | base64 | tr -d '\n')
+            server.crt: $(cat server.crt | base64 | tr -d '\n')
+            server.key: $(cat server.key | base64 | tr -d '\n')
+            #TODO: Signer, currently create a signer.crt for pass aql setup process
+            {{- if .Values.awt.signer.enabled }}
+            #signer.crt:
+            #signer.key:
+            #signer_password:
+            {{- end }}
+          EOF
+      restartPolicy: Never
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+{{- end }}

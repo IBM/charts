@@ -1,0 +1,147 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.wexCore.name }}
+{{- $compOrchestratorName := .sch.chart.components.wexCore.orchestrator.name }}
+{{- $statefulSetName := include "sch.names.statefulSetName" (list . $compOrchestratorName) -}}
+{{- $servicePort := .sch.chart.components.wexCore.orchestrator.port }}
+
+{{- $gatewayServicePort := .sch.chart.components.wexCore.gateway.port -}}
+{{- $managementServicePort := .sch.chart.components.wexCore.management.port -}}
+{{- $ingestionApiServicePort := .sch.chart.components.wexCore.ingestionApi.port -}}
+{{- $nginxServicePort := .sch.chart.components.wexCore.gateway.nginx.port -}}
+
+{{- $elasticConfigMapName := include "discovery.mantle.elastic.configmap" . }}
+{{- $etcdConfigMapName := include "discovery.crust.etcd.configmap" . }}
+{{- $postgresqlConfigMapName := include "discovery.crust.postgresql.configmap" . }}
+{{- $compMinioConfigMap :=  include "discovery.crust.minio.configmap" . -}}
+{{- $compMinioCredentialSecretName := include "discovery.crust.minio.secret" . -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $statefulSetName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 4 }}
+    run: {{ $compOrchestratorName }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 6 }}
+      run: {{ $compOrchestratorName }}
+  replicas: {{ include "discovery.core.orchestrator.replicas" . }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 8 }}
+        run: {{ $compOrchestratorName }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.global.serviceAccount.name }}
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserSpecSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      initContainers:
+{{ include "discovery.core.initContainer.managementCheck" . | indent 6 }}
+      containers:
+      - name: orchestrator
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.core.image.orchestrator.name }}:{{ .Values.core.image.orchestrator.tag }}"
+        imagePullPolicy: "{{ .Values.global.image.pullPolicy }}"
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserPodSecurityContext) | indent 8 }}
+        env:
+        - name: WEX_PORT
+          value: "{{ $nginxServicePort }}"
+        - name: DEPLOYMENT_TYPE
+          value: CLUSTER
+        - name: HADOOP_CONF_DIR
+          value: /wexdata/config/hadoop
+        - name: HADOOP_NAMENODE_ADDRESS
+          value: "{{ include "discovery.mantle.hdp.nn.service" . }}:9000"
+        - name: YARN_RESOURCEMANAGER_HOSTNAME
+          value: {{ include "discovery.mantle.hdp.rm.service" . | quote }}
+        - name: MANAGEMENT_SERVER_ENDPOINT
+          value: "https://{{ include "discovery.core.management.hostname" . }}:{{ $managementServicePort }}/wex/api/v1"
+        - name: AMA_ZING_API_ENDPOINT
+          value: "https://{{ include "discovery.core.ingestionApi.hostname" . }}:{{ $ingestionApiServicePort }}/ama-zing/api/v1"
+        - name: ORCHESTRATOR_HOST
+          value: {{ include "discovery.core.orchestrator.hostname" . | quote }}
+        - name: ORCHESTRATOR_PORT
+          value: "{{ $servicePort }}"
+        - name: WKSML_HOST
+          value: {{ include "discovery.core.wksml.hostname" . | quote }}
+        - name: WKSML_SCHEME
+          value: "https"
+        - name: WKSML_PORT
+          value: "5194"
+        - name: WDAPI_SERVER_ENDPOINT
+          value: "https://{{ include "discovery.core.gateway.hostname" . }}:{{ $gatewayServicePort }}"
+        - name: CHEWY_ENABLED
+          value: {{ .Values.global.contentIntelligence.enabled | quote }}
+{{ include "discovery.core.etcd.envVars" . | indent 8 }}
+{{ include "discovery.core.pg.envVars" . | indent 8 }}
+{{ include "discovery.core.elastic.envVars" . | indent 8 }}
+{{ include "discovery.core.s3.envVars" . | indent 8 }}
+        - name: DOCPROC_PYSPARK_PYTHON
+          value: /opt/ibm/discovery/virtualenvs/watson_nlp/bin/python3
+        - name: ENABLE_SEGMENT_EVENTS
+          value: {{ .Values.global.segment.enabled | quote }}
+{{- if .Values.global.segment.enabled }}
+        - name: SEGMENT_WRITE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.segment.secretName | quote }}
+              key: key
+{{- end }}
+        - name: ENABLE_METRICS
+          value: {{ .Values.global.metricsCollection.enabled | quote }}
+        - name: METRICS_CLIENT_HOST
+          value: {{ .Values.core.orchestrator.metrics.host | quote }}
+        - name: METRICS_CLIENT_PORT
+          value: {{ .Values.core.orchestrator.metrics.port | quote }}
+        - name: METRICS_CLIENT_TYPE
+          value: {{ .Values.core.orchestrator.metrics.client | quote }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . $compName ) }}
+        ports:
+        - name: api-tls
+          containerPort: {{ $servicePort }}
+          protocol: TCP
+        resources:
+{{ toYaml .Values.core.orchestrator.resources | indent 10 }}
+        volumeMounts:
+        - name: data
+          mountPath: /wexdata
+        {{- if .Values.core.tls.wlp.enabled }}
+        - name: certificate-wlp
+          mountPath: "/opt/tls/wlp"
+          readOnly: true
+        {{- end }}
+        readinessProbe:
+          httpGet:
+            path: /orchestrator/api/v1/control/info
+            port: api-tls
+            scheme: HTTPS
+          initialDelaySeconds: {{ .Values.core.orchestrator.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.core.orchestrator.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.core.orchestrator.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.core.orchestrator.readinessProbe.failureThreshold }}
+        livenessProbe:
+          httpGet:
+            path: /orchestrator/api/v1/control/info
+            port: api-tls
+            scheme: HTTPS
+          initialDelaySeconds: {{ .Values.core.orchestrator.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.core.orchestrator.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.core.orchestrator.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.core.orchestrator.livenessProbe.failureThreshold }}
+      volumes:
+      - name: data
+        emptyDir: {}
+      {{- if .Values.core.tls.wlp.enabled }}
+      - name: certificate-wlp
+        secret:
+          secretName: {{ include "discovery.admin.tls" . }}
+      {{- end }}
+      - name: certificate-elastic
+        secret:
+          secretName: {{ include "discovery.mantle.elastic.ca" . }}

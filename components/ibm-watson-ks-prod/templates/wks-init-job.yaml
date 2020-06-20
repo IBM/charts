@@ -1,0 +1,52 @@
+{{- if .Values.frontend.createDefaultTenant }}
+{{- include "sch.config.init" (list . "wks.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.init.name -}}
+{{- $initScriptBinDir := "/wks-init-scripts/bin" }}
+{{- $wksEndpoint := printf "https://%s:%d" (include "sch.names.fullName" (list .)) (int .Values.service.port) }}
+{{- $wksDefaultTenantId := "tn42h00y2r19t25p" }}
+{{- $initJobCfg := .Values.dvt }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "sch.names.fullName" (list .) }}-setup
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 4 }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+spec:
+  activeDeadlineSeconds: 600
+  #backoffLimit: 1
+  template:
+    metadata:
+      name: {{ template "sch.names.fullName" (list .) }}-setup
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 8 }}
+    spec:
+      serviceAccountName: {{ template "wks.serviceaccount.name" . }}
+      affinity:
+{{ include "sch.affinity.nodeAffinity" (list . ) | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      containers:
+      - name: wks-setup
+{{ include "wks.docker.image.name" (list . $initJobCfg.image) | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.securityContext1) | indent 8 }}
+        command:
+          - wkstoolbox
+        args:
+          - icpinit
+          - --host
+          - {{ $wksEndpoint }}
+          - --user
+          - {{ .Values.frontend.initialUser }}
+        resources:
+          limits:
+            cpu: 250m
+            memory: 512Mi
+          requests:
+            cpu: 250m
+            memory: 512Mi
+      restartPolicy: OnFailure
+{{ include "wks.docker.registry.secret" . | indent 6 }}
+{{- end }}

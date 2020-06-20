@@ -1,0 +1,520 @@
+global:
+  appName: discovery
+  clusterDomain: cluster.local
+  components:
+    ibm-watson-discovery-admin-prod:
+      releaseName: admin
+    ibm-watson-discovery-core-prod:
+      releaseName: core
+    ibm-watson-discovery-crust-prod:
+      releaseName: crust
+    ibm-watson-discovery-mantle-prod:
+      releaseName: mantle
+  contentIntelligence:
+    enabled: false
+    metering:
+      productID: 81e54c36fe3a47bd91c355cc2efbd607
+      productName: IBM Cloud Pak for Data Watson Discovery Content Intelligence for
+        NP Env
+  crust:
+    etcd:
+      configmap: ""
+      secret: ""
+    objectStorage:
+      configmap: ""
+      secret: ""
+    postgresql:
+      configmap: ""
+      secret: ""
+  deploymentType: Development
+  dlaasExistingPostgresDisabled: false
+  dockerRegistryPrefix: ""
+  image:
+    pullPolicy: IfNotPresent
+    pullSecret: ""
+  imagePullSecret: ""
+  mantle:
+    elastic:
+      configmap: ""
+      secret: ""
+  metering:
+    cloudpakId: eb9998dcc5d24e3eb5b6fb488f750fe2
+    cloudpakName: IBM Cloud Pak for Data
+    cloudpakVersion: 3.0.0
+    productChargedContainers: All
+    productID: ab5ebda6ea88497a957ced3fbd9aec3a
+    productMetric: VIRTUAL_PROCESSOR_CORE
+    productName: IBM Cloud Pak for Data Watson Discovery Base
+    productVersion: 2.1.3
+  metricsCollection:
+    enabled: false
+  private: true
+  privilegedRbac:
+    create: false
+  privilegedServiceAccount:
+    create: false
+    name: cpd-editor-sa
+  sch:
+    enabled: false
+  serviceAccount:
+    name: cpd-viewer-sa
+  storageClassName: ""
+  tenant: private
+  tlsJob:
+    image:
+      repository: opencontent-icp-cert-gen-1
+      tag: 1.1.4
+
+dlaas:
+  configJob:
+    image:
+      name: opencontent-postgres-stolon
+      tag: 2.0.1
+    resources:
+      limits:
+        cpu: 500m
+        memory: 256Mi
+      requests:
+        cpu: 200m
+        memory: 128Mi
+    timeoutSeconds: 600
+  dlaasLCM:
+    certs:
+      name: opencontent-icp-cert-gen-1
+      repository: ""
+      tag: 1.1.4
+    config:
+      replicaCount: 1
+    image:
+      name: lifecycle-manager-service
+      pullSecret: ""
+      repository: ""
+      tag: rhubi-PR-1358-1
+    learner:
+      pullSecret: ""
+      repository: ""
+    resources:
+      cpu: 0.05
+      memory: 256
+  dlaasRatelimiter:
+    image:
+      name: ratelimiter
+      repository: ""
+      tag: rhubi-master-147
+  dlaasTrainer:
+    certs:
+      name: opencontent-icp-cert-gen-1
+      repository: ""
+      resources:
+        cpu: 0.1
+        memory: 512
+      tag: 1.1.4
+    config:
+      replicaCount: 1
+    image:
+      name: trainer-v2-service
+      repository: ""
+      tag: rhubi-master-495
+    postgresql:
+      existing:
+        authSecretData: pg_su_password
+        authSecretName: '{{ include "discovery.crust.postgresql.secret" . }}'
+        database: dlaas
+        host: '{{ include "discovery.crust.postgresql.host" . }}'
+        pgUsername: dadmin
+        port: '{{ include "discovery.crust.postgresql.port" . }}'
+        tlsSecretName: '{{ include "discovery.admin.tlsSecret" . }}'
+      name: opencontent-postgres-stolon
+      repository: ""
+      tag: 2.0.1
+    resources:
+      cpu: 0.05
+      memory: 256
+    services:
+      trainer:
+        network:
+          exposeExternally: false
+          port: ""
+elastic:
+  antiAffinity: soft
+  clientNode:
+    dataRoleEnabled: false
+    ingestRoleEnabled: false
+    javaOptions: ""
+    masterRoleEnabled: false
+    maxHeap: 448m
+    persistence:
+      size: null
+    replica: null
+    resources:
+      limits:
+        cpu: "2"
+        memory: 1228Mi
+      requests:
+        cpu: 50m
+        memory: 768Mi
+  credCleanUpJob:
+    activeDeadlineSeconds: 300
+  credGenJob:
+    activeDeadlineSeconds: 300
+  dataNode:
+    dataRoleEnabled: true
+    ingestRoleEnabled: false
+    javaOptions: ""
+    masterRoleEnabled: false
+    maxHeap: 4g
+    persistence:
+      size: 40Gi
+    replica: null
+    resources:
+      limits:
+        cpu: "2"
+        memory: 8Gi
+      requests:
+        cpu: 500m
+        memory: 6Gi
+  dfs:
+    hostPort: '{{ include "discovery.core.dfs.hostPort" . }}'
+  enabled: true
+  image:
+    pullPolicy: Always
+    repository: wd-elastic
+    tag: 12.0.4-1017
+  livenessProbe:
+    failureThreshold: 5
+    initialDelaySeconds: 210
+    periodSeconds: 20
+    timeoutSeconds: 15
+  masterNode:
+    dataRoleEnabled: false
+    ingestRoleEnabled: false
+    javaOptions: ""
+    masterRoleEnabled: true
+    maxHeap: 256m
+    persistence:
+      size: 2Gi
+    replica: null
+    resources:
+      limits:
+        cpu: "1"
+        memory: 640Mi
+      requests:
+        cpu: 50m
+        memory: 640Mi
+  minAvailable: 1
+  minio:
+    existingConfigMap: '{{ include "discovery.crust.minio.configmap" . }}'
+    existingSecret: '{{ include "discovery.crust.minio.secret" . }}'
+  nginx:
+    image:
+      pullPolicy: Always
+      repository: wd-nginx
+      tag: 12.0.4-1008
+    resources:
+      limits:
+        cpu: 2
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  persistence:
+    selector:
+      label: ""
+      value: ""
+    storageClassName: ""
+    useDynamicProvisioning: true
+  rbac:
+    create: false
+  reRankingLocallyEnabledFlag: false
+  readinessProbe:
+    failureThreshold: 5
+    initialDelaySeconds: 30
+    periodSeconds: 15
+    timeoutSeconds: 10
+  serveRanker:
+    hostPort: '{{ include "discovery.core.serveRanker.hostPort" . }}'
+  service:
+    port: 9200
+  test:
+    activeDeadlineSeconds: 180
+    resources:
+      limits:
+        cpu: 8
+        memory: 200Mi
+      requests:
+        cpu: 100m
+        memory: 100Mi
+  tls:
+    existingTlsSecret: '{{ include "discovery.admin.tlsSecret" . }}'
+  trainingDataCrud:
+    hostPort: '{{ include "discovery.core.trainingDataCrud.hostPort" . }}'
+  wexCore:
+    management:
+      service: '{{ include "discovery.core.management.service" . }}'
+glimpse:
+  builder:
+    grpcClient:
+      mmeshTargetNameOverride: '{{ if .Values.global.private }}glimpse-query-svc{{
+        else }}{{ include "glimpse.queryServer.service.name" . }}{{ end }}'
+    image:
+      repository: '{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/wks-glimpse-ene-builder'
+      tag: release-1-0-12-20200522-0127-1
+    imagePullSecrets: ""
+    replicas: '{{ include "discovery.glimpse.replicas" . }}'
+    resources:
+      limits:
+        cpu: 2
+        memory: 4Gi
+      requests:
+        cpu: 200m
+        memory: 1Gi
+  create: true
+  creds:
+    image:
+      name: opencontent-icp-cert-gen-1
+      repository: '{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}'
+      tag: 1.1.4
+    imagePullSecret: ""
+  etcd:
+    auth:
+      fieldPassword: password
+      fieldUsername: username
+      secret: '{{ include "discovery.crust.etcd.secret" . }}'
+    connSecret: ""
+    endpoint: '{{ include "discovery.crust.etcd.service" . }}:2379'
+    tls:
+      fieldCert: tls.crt
+      secret: '{{ include "discovery.admin.tlsSecret" . }}'
+  existingServiceAccount: '{{ .Values.global.privilegedServiceAccount.name }}'
+  helmTest:
+    image:
+      repository: '{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/opencontent-icp-cert-gen-1'
+      tag: 1.1.4
+    resources:
+      limits:
+        cpu: 1
+        memory: 200Mi
+      requests:
+        cpu: 200m
+        memory: 200Mi
+  labels:
+    service: discovery
+  query:
+    glimpse:
+      image:
+        repository: '{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/wks-ene-expand'
+        tag: release-1-0-12-20200522-0127-1
+      resources:
+        limits:
+          cpu: 1000m
+          memory: 4000Mi
+        requests:
+          cpu: 150m
+          memory: 2324Mi
+    imagePullSecrets: ""
+    initContainers:
+      etcdHealthCheck:
+        create: true
+        image:
+          repository: '{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/opencontent-etcd-3'
+          tag: 1.1.4
+        resources:
+          limits:
+            cpu: 150m
+            memory: 250Mi
+          requests:
+            cpu: 100m
+            memory: 150Mi
+    modelmesh:
+      image:
+        repository: '{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/model-mesh'
+        tag: master-20200601-301
+      resources:
+        limits:
+          cpu: 200m
+          memory: 1500Mi
+        requests:
+          cpu: 50m
+          memory: 512Mi
+    replicas: '{{ include "discovery.glimpse.replicas" . }}'
+  s3:
+    authSecret: '{{ include "discovery.crust.minio.secret" . }}'
+    endpoint: '{{ include "discovery.crust.minio.hostPort" . }}'
+    fieldAccessKey: accesskey
+    fieldSecretKey: secretkey
+  streamLogToFile: false
+  tls:
+    existingSecret: '{{ include "discovery.admin.tlsSecret" . }}'
+    fieldServerCertificate: tls.crt
+    fieldServerKey: pkcs8.key
+hdp:
+  dfsReplication: 2
+  elastic:
+    existingConfigMap: '{{ include "discovery.mantle.elastic.configmap" . }}'
+    existingSecret: '{{ include "discovery.mantle.elastic.secret" . }}'
+  enableHdfs: false
+  etcd:
+    existingConfigMap: '{{ include "discovery.crust.etcd.configmap" . }}'
+    existingSecret: '{{ include "discovery.crust.etcd.secret" . }}'
+  image:
+    pullPolicy: Always
+    repository: wd-hdp
+    tag: 12.0.4-1019
+  log:
+    aggregation:
+      retainCheckIntervalSeconds: 86400
+      retainSeconds: 604800
+  logger:
+    enabled: true
+    image:
+      repository: logging-server
+      tag: 0.0.11
+    livenessProbe:
+      failureThreshold: 6
+      initialDelaySeconds: 20
+      periodSeconds: 60
+      timeoutSeconds: 20
+    readinessProbe:
+      failureThreshold: 6
+      initialDelaySeconds: 20
+      periodSeconds: 15
+      timeoutSeconds: 20
+    resources:
+      limits:
+        cpu: 200m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+  maxMemoryMB: 1024
+  minio:
+    existingConfigMap: '{{ include "discovery.crust.minio.configmap" . }}'
+    existingSecret: '{{ include "discovery.crust.minio.secret" . }}'
+  nn:
+    livenessProbe:
+      failureThreshold: 12
+      initialDelaySeconds: 200
+      periodSeconds: 30
+      timeoutSeconds: 25
+    persistence:
+      selector:
+        label: ""
+        value: ""
+      size: 10Gi
+    readinessProbe:
+      failureThreshold: 12
+      initialDelaySeconds: 30
+      periodSeconds: 30
+      timeoutSeconds: 25
+    replica: null
+    resources:
+      limits:
+        cpu: 1
+        memory: 4Gi
+      requests:
+        cpu: 500m
+        memory: 2Gi
+  persistence:
+    storageClassName: ""
+    useDynamicProvisioning: true
+  postgresql:
+    existingConfigMap: '{{ include "discovery.crust.postgresql.configmap" . }}'
+    existingSecret: '{{ include "discovery.crust.postgresql.secret" . }}'
+  rm:
+    livenessProbe:
+      failureThreshold: 12
+      initialDelaySeconds: 200
+      periodSeconds: 30
+      timeoutSeconds: 25
+    readinessProbe:
+      failureThreshold: 12
+      initialDelaySeconds: 30
+      periodSeconds: 30
+      timeoutSeconds: 25
+    replica: null
+    resources:
+      limits:
+        cpu: 500m
+        memory: 4Gi
+      requests:
+        cpu: 200m
+        memory: 2Gi
+  statsd:
+    enabled: false
+    image:
+      repository: rhubi-statsd-exporter
+      tag: 1.5.1
+    livenessProbe:
+      failureThreshold: 6
+      initialDelaySeconds: 20
+      periodSeconds: 60
+      timeoutSeconds: 20
+    readinessProbe:
+      failureThreshold: 6
+      initialDelaySeconds: 20
+      periodSeconds: 60
+      timeoutSeconds: 20
+    resources:
+      limits:
+        cpu: 200m
+        memory: 250Mi
+      requests:
+        cpu: 50m
+        memory: 100Mi
+  test:
+    activeDeadlineSeconds: 180
+    resources:
+      limits:
+        cpu: 8
+        memory: 200Mi
+      requests:
+        cpu: 100m
+        memory: 100Mi
+  watsonNLP:
+    image:
+      pullPolicy: Always
+      repository: watson-nlp-models
+      tag: 0.1.2-75-c5cfd12
+  wexCore:
+    management:
+      service: '{{ include "discovery.core.management.service" . }}'
+  worker:
+    antiAffinity: soft
+    initContainer:
+      resources:
+        limits:
+          cpu: 500m
+          memory: 250Mi
+        requests:
+          cpu: 100m
+          memory: 50Mi
+    livenessProbe:
+      failureThreshold: 6
+      initialDelaySeconds: 120
+      periodSeconds: 180
+      timeoutSeconds: 120
+    nm:
+      cpu: 8
+      memoryMB: 10240
+    persistence:
+      selector:
+        label: ""
+        value: ""
+      size: 100Gi
+    readinessProbe:
+      failureThreshold: 6
+      initialDelaySeconds: 30
+      periodSeconds: 30
+      timeoutSeconds: 25
+    replica: null
+    resources:
+      limits:
+        cpu: 8
+        memory: 18Gi
+      requests:
+        cpu: 2
+        memory: 13Gi
+  yMaxMemoryMB: 1024
+mantle:
+  networkPolicy:
+    create: true

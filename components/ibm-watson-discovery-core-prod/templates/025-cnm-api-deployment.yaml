@@ -1,0 +1,217 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.cnm.apiServer.name -}}
+{{- $apiServer := .Values.cnm.apiServer -}}
+{{- $dbInit := .Values.cnm.db.init }}
+{{- $dbCreate := .Values.cnm.db.create }}
+{{- $keystorePass := randAlphaNum 10 }}
+{{- $httpClient := $apiServer.httpClient -}}
+{{- $glimpse := $apiServer.glimpse -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName ) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "service" "discovery" "app" $compName "tenant" (tpl .Values.global.tenant .))) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "service" "discovery" "app" $compName "tenant" (tpl .Values.global.tenant .))) | indent 6 }}
+  replicas: {{ include "discovery.cnm.apiServer.replicas" .}}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "service" "discovery" "app" $compName "tenant" (tpl .Values.global.tenant .))) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        prometheus.io/path: /cnm-api/actuator/prometheus
+        prometheus.io/port: {{ $apiServer.ports.server.containerPort | quote }}
+        prometheus.io/scheme: https
+        prometheus.io/scrape: "true"
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedPodSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      serviceAccountName: {{ include "discovery.admin.serviceAccount" . }}
+      containers:
+      - name: cnm-api-server
+        image: {{ .Values.global.dockerRegistryPrefix }}/
+          {{- .Values.cnm.apiServer.image.name }}:
+          {{- .Values.cnm.apiServer.image.tag }}
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 8 }}
+        ports:
+        - name: api-server
+          containerPort: {{ $apiServer.ports.server.containerPort }}
+          protocol:  {{ $apiServer.ports.server.protocol }}
+        resources:
+{{ $apiServer.resources | toYaml | indent 10 }}
+        env:
+        - name: BO_LOG_LEVEL
+          value: {{ $apiServer.logLevel }}
+        - name: HTTP_MAX_IDLE_CONNECTIONS
+          value: {{ int64 $httpClient.maxIdleConnections | quote }}
+        - name: HTTP_KEEP_ALIVE_DURATION_SEC
+          value: {{ int64 $httpClient.keepAliveDurationSec | quote }}
+        - name: HTTP_CONNECT_TIMEOUT_SEC
+          value: {{ int64 $httpClient.connectTimeoutSec | quote }}
+        - name: HTTP_READ_TIMEOUT_SEC
+          value: {{ int64 $httpClient.readTimeoutSec | quote }}
+        - name: HTTP_WRITE_TIMEOUT_SEC
+          value: {{ int64 $httpClient.writeTimeoutSec | quote }}
+        - name: WEX_API_URL
+          value: {{ include "discovery.core.gatewayEndpoint" . | quote }}
+        - name: CNM_TMP_DIR
+          value: "/cnmdata/tmp"
+        - name: S3_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.crust.minio.secret" . }}
+              key: accesskey
+        - name: S3_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.crust.minio.secret" . }}
+              key: secretkey
+        - name: S3_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.crust.minio.configmap" . }}
+              key: endpoint
+        - name: S3_BUCKET_DEFAULT
+          value: {{ .Values.cnm.minio.bucket }}
+        - name: S3_BUCKET_EXPORTED_DOCUMENTS
+          value: {{ .Values.cnm.minio.bucketDocExport }}
+        - name: S3_CONNECTION_TIMEOUT_MSEC
+          value: {{ int64 $apiServer.s3Client.connectionTimeoutMsec | quote }}
+        - name: S3_SOCKET_TIMEOUT_MSEC
+          value: {{ int64 $apiServer.s3Client.socketTimeoutMsec | quote }}
+        - name: KEYSTORE_PATH
+          value: /mnt/keystores/keystore.jks
+        - name: KEYSTORE_PASSWORD
+          value: {{ $keystorePass }}
+        - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+          value: "/override-application.yml"
+        - name: CNM_CLAN
+          value: {{ tpl .Values.global.tenant . | quote }}
+        - name: CNM_CP4D
+          value: {{ .Values.global.private | quote }}
+        - name: WLP_LOGGING_CONSOLE_FORMAT
+          value: "json"
+        - name: WLP_LOGGING_CONSOLE_LOGLEVEL
+          value: "info"
+        - name: WLP_LOGGING_CONSOLE_SOURCE
+          value: "trace,ffdc,message"
+        - name: WLP_LOGGING_JSON_FIELD_MAPPINGS
+          value: "ibm_datetime:time,loglevel:level"
+        - name: WLP_LOGGING_MESSAGE_FORMAT
+          value: "json"
+        - name: WLP_LOGGING_MESSAGE_SOURCE
+          value: ""
+{{ include "discovery.cnm.postgresql.envvars" (list . $apiServer.database.name) | indent 8 }}
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 15"]
+        livenessProbe:
+          httpGet:
+            path: /cnm-api/v1/health/liveness
+            port: api-server
+            scheme: HTTPS
+{{ $apiServer.livenessProbe | toYaml | indent 10 }}
+        readinessProbe:
+          httpGet:
+            path: /cnm-api/v1/health/readiness
+            port: api-server
+            scheme: HTTPS
+{{ $apiServer.readinessProbe | toYaml | indent 10 }}
+        volumeMounts:
+        - name: keystore-volume
+          mountPath: /mnt/keystores
+        - name: tmpdir
+          mountPath: /cnmdata/tmp
+        - name: app-config-override
+          mountPath: /override-application.yml
+          subPath: override-application.yml
+      initContainers:
+      - name: cnm-db-create
+        image: {{ .Values.global.dockerRegistryPrefix }}/
+          {{- $dbCreate.image.name }}:
+          {{- $dbCreate.image.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        env:
+{{ include "discovery.cnm.postgresql.envvars" (list . .Values.global.postgres.adminDB) | indent 8 }}
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 8 }}
+        resources:
+{{ $dbCreate.resources | toYaml | indent 10 }}
+        command:
+        - "/bin/bash"
+        - "-c"
+        - |
+          set +eo pipefail
+          until pg_isready; do
+            echo "waiting for postgres up..."
+            sleep 5s
+          done
+          # create database if it does not exist
+          psql -tc "SELECT 1 FROM pg_database WHERE datname = '{{ $apiServer.database.name }}'" | grep -q 1 || psql -a -v "ON_ERROR_STOP=1" -c "CREATE DATABASE {{ $apiServer.database.name }}"
+      - name: cnm-db-init
+        image: {{ .Values.global.dockerRegistryPrefix }}/
+          {{- $dbInit.image.name }}:
+          {{- $dbInit.image.tag }}
+        env:
+{{ include "discovery.cnm.postgresql.envvars" (list . $apiServer.database.name) | indent 8 }}
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 8 }}
+        resources:
+{{ $dbInit.resources | toYaml | indent 10 }}
+      - name: pem-to-keystore
+        image: {{ .Values.global.dockerRegistryPrefix }}/
+          {{- .Values.cnm.keystoreGen.image.name }}:
+          {{- .Values.cnm.keystoreGen.image.tag }}
+        resources:
+{{ .Values.cnm.keystoreGen.resources | toYaml | indent 10 }}
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 8 }}
+        env:
+        - name: keyfile
+          value: /mnt/tlscerts/tls.key
+        - name: crtfile
+          value: /mnt/tlscerts/tls.crt
+        - name: keystore_pkcs12
+          value: /mnt/keystores/keystore.pkcs12
+        - name: keystore_jks
+          value: /mnt/keystores/keystore.jks
+        - name: keystore_passfile
+          value: /mnt/keystores/password
+        - name: password
+          value: {{ $keystorePass }}
+        command:
+        - '/bin/bash'
+        args:
+        - "-c"
+        - |
+          openssl pkcs12 -export -inkey $keyfile -in $crtfile -out $keystore_pkcs12 -password pass:$password \
+            && keytool -importkeystore -noprompt -srckeystore $keystore_pkcs12 -srcstoretype pkcs12 -destkeystore $keystore_jks -storepass $password -srcstorepass $password
+        volumeMounts:
+        - name: keystore-volume
+          mountPath: /mnt/keystores/
+        - name: service-certs
+          mountPath: /mnt/tlscerts/
+      volumes:
+      - name: keystore-volume
+        emptyDir: {}
+      - name: service-certs
+        secret:
+          secretName: {{ template "discovery.admin.tls" . }}
+          items:
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.key
+            path: tls.key
+          - key: tls.cacrt
+            path: ca.crt
+      - name: tmpdir
+        emptyDir: {}
+      - name: app-config-override
+        configMap:
+          name: "{{ include "sch.names.fullCompName" (list . $compName ) }}"

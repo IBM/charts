@@ -1,0 +1,336 @@
+global:
+  appName: discovery
+  clusterDomain: cluster.local
+  components:
+    ibm-watson-discovery-admin-prod:
+      releaseName: admin
+    ibm-watson-discovery-core-prod:
+      releaseName: core
+    ibm-watson-discovery-crust-prod:
+      releaseName: crust
+    ibm-watson-discovery-mantle-prod:
+      releaseName: mantle
+  contentIntelligence:
+    enabled: false
+    metering:
+      productID: 81e54c36fe3a47bd91c355cc2efbd607
+      productName: IBM Cloud Pak for Data Watson Discovery Content Intelligence for
+        NP Env
+  deploymentType: Development
+  dockerRegistryPrefix: ""
+  image:
+    pullPolicy: IfNotPresent
+    pullSecret: ""
+  imagePullSecret: ""
+  license: true
+  metering:
+    cloudpakId: eb9998dcc5d24e3eb5b6fb488f750fe2
+    cloudpakName: IBM Cloud Pak for Data
+    cloudpakVersion: 3.0.0
+    productChargedContainers: All
+    productID: ab5ebda6ea88497a957ced3fbd9aec3a
+    productMetric: VIRTUAL_PROCESSOR_CORE
+    productName: IBM Cloud Pak for Data Watson Discovery Base
+    productVersion: 2.1.3
+  privilegedServiceAccount:
+    name: cpd-editor-sa
+  sch:
+    enabled: false
+  serviceAccount:
+    name: cpd-viewer-sa
+  storageClassName: ""
+  tenant: private
+
+crust:
+  networkPolicy:
+    create: true
+etcd:
+  activeDeadlineSeconds:
+    credGen: 600
+    enableAuth: 1200
+  antiAffinity:
+    policy: soft
+    topologyKey: kubernetes.io/hostname
+  autoCompaction:
+    mode: revision
+    retention: "1"
+  backoffLimit:
+    credGen: 5
+    enableAuth: 5
+  certgen:
+    image:
+      name: opencontent-icp-cert-gen-1
+      pullPolicy: IfNotPresent
+      tag: 1.1.4
+  dataPVC:
+    accessMode: ReadWriteOnce
+    selector:
+      label: ""
+      value: ""
+    size: 10Gi
+  etcdctlDialTimeout: 60s
+  hooks:
+    auth:
+      enable: true
+      weight: "0"
+    credential:
+      cleanup:
+        weight: "-5"
+      create:
+        weight: "3"
+  image:
+    name: opencontent-etcd-3
+    pullPolicy: IfNotPresent
+    tag: 1.1.4
+  keep: false
+  livenessProbe:
+    failureThreshold: 5
+    initialDelaySeconds: 15
+    periodSeconds: 55
+    successThreshold: 1
+    timeoutSeconds: 60
+  maxEtcdThreads: 2
+  metering:
+    cloudpakId: '{{ .Values.global.metering.cloudpakId }}'
+    cloudpakName: '{{ .Values.global.metering.cloudpakName }}'
+    cloudpakVersion: '{{ .Values.global.metering.cloudpakVersion }}'
+    productChargedContainers: '{{ .Values.global.metering.productChargedContainers
+      }}'
+    productID: '{{ .Values.global.metering.productID }}'
+    productMetric: '{{ .Values.global.metering.productMetric }}'
+    productName: '{{ .Values.global.metering.productName }}'
+    productVersion: '{{ .Values.global.metering.productVersion }}'
+  nameOverride: discovery-etcd
+  persistence:
+    enabled: true
+    useDynamicProvisioning: true
+  readinessProbe:
+    failureThreshold: 5
+    initialDelaySeconds: 15
+    periodSeconds: 25
+    successThreshold: 1
+    timeoutSeconds: 30
+  replicaCount: 3
+  resources:
+    limits:
+      cpu: 4
+      memory: 4Gi
+    requests:
+      cpu: 500m
+      memory: 2Gi
+  tls:
+    enabled: true
+    existingTlsSecret: '{{ include "discovery.admin.tlsSecret" . }}'
+minio:
+  buckets:
+  - name: ranker-wire-all
+    policy: none
+    purge: false
+  - name: cnm
+    policy: none
+    purge: false
+  - name: exported-documents
+    policy: none
+    purge: false
+  - name: common
+    policy: none
+    purge: false
+  - name: elastic-backup
+    policy: none
+    purge: false
+  creds:
+    image:
+      name: opencontent-icp-cert-gen-1
+      tag: 1.1.4
+  defaultBucket:
+    enabled: false
+  existingSecret: '{{ include "minio.secret" . }}'
+  minio:
+    image:
+      name: opencontent-minio
+      tag: 1.1.3
+  minioClient:
+    image:
+      name: opencontent-minio-client
+      tag: 1.0.3
+  nameOverride: discovery-minio
+  persistence:
+    enabled: true
+    size: 100Gi
+    useDynamicProvisioning: true
+  resources:
+    limits:
+      cpu: 4
+      memory: 3Gi
+    requests:
+      cpu: 250m
+      memory: 1Gi
+  secretGen:
+    image:
+      name: opencontent-icp-cert-gen-1
+      tag: 1.1.4
+    resources:
+      limits:
+        cpu: 500m
+        memory: 256Mi
+      requests:
+        cpu: 200m
+        memory: 128Mi
+  sse:
+    enabled: true
+    masterKeyName: sseMasterKey
+    masterKeySecret: '{{ include "minio.secret" . }}'
+  tls:
+    certSecret: '{{ include "discovery.admin.tlsSecret" . }}'
+    enabled: true
+    existingTlsSecret: '{{ include "discovery.admin.tlsSecret" . }}'
+postgresql:
+  antiAffinity:
+    policy: soft
+    topologyKey: kubernetes.io/hostname
+  auth:
+    pgSuperuserName: dadmin
+  createCluster:
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 200m
+        memory: 256Mi
+  creds:
+    image:
+      name: opencontent-icp-cert-gen-1
+      tag: 1.1.4
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 200m
+        memory: 256Mi
+  dataPVC:
+    selector:
+      label: ""
+      value: ""
+  keeper:
+    podDisruptionBudget:
+      minAvailable: 1
+    podManagementPolicy: Parallel
+    replicas: 2
+    resources:
+      limits:
+        cpu: 2
+        memory: 3072Mi
+      requests:
+        cpu: 200m
+        memory: 3072Mi
+  livenessProbe:
+    failureThreshold: 30
+    initialDelaySeconds: 45
+    periodSeconds: 30
+    successThreshold: 1
+    timeoutSeconds: 60
+  maxConnections: 100
+  nameOverride: discovery-postgresql
+  persistence:
+    accessMode: ReadWriteOnce
+    enabled: true
+    size: 30Gi
+    useDynamicProvisioning: true
+  postgres:
+    image:
+      name: opencontent-postgres-stolon
+      tag: 2.0.1
+  proxy:
+    podDisruptionBudget:
+      minAvailable: 1
+    replicas: 2
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 50m
+        memory: 256Mi
+  readinessProbe:
+    failureThreshold: 30
+    initialDelaySeconds: 45
+    periodSeconds: 30
+    successThreshold: 1
+    timeoutSeconds: 60
+  sentinel:
+    podDisruptionBudget:
+      minAvailable: 1
+    replicas: 3
+    resources:
+      limits:
+        cpu: 300m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+  slowQueries:
+    enabled: false
+    minDuration: 300
+  store:
+    backend: kubernetes
+    endpoints: ""
+    kubeResourceKind: ""
+  tls:
+    enabled: true
+    tlsSecretName: '{{ include "discovery.admin.tlsSecret" . }}'
+rabbitmq:
+  amqpsNodePort: 5671
+  auth:
+    managementUsername: management
+    rabbitmqUsername: admin
+  config:
+    image:
+      name: opencontent-rabbitmq-config-copy
+      tag: 1.1.4
+  creds:
+    image:
+      name: opencontent-icp-cert-gen-1
+      tag: 1.1.4
+  initContainer:
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  livenessProbe:
+    failureThreshold: 6
+    initialDelaySeconds: 120
+    periodSeconds: 10
+    timeoutSeconds: 5
+  nameOverride: discovery-rabbitmq
+  persistentVolume:
+    accessModes: ReadWriteOnce
+    enabled: true
+    size: 5Gi
+    useDynamicProvisioning: true
+  rabbitmq:
+    image:
+      name: opencontent-rabbitmq-3
+      tag: 1.1.4
+  rabbitmqManagerPort: 15671
+  rabbitmqVhost: /
+  readinessProbe:
+    failureThreshold: 6
+    initialDelaySeconds: 60
+    periodSeconds: 5
+    timeoutSeconds: 3
+  replicas: 2
+  resources:
+    limits:
+      cpu: 200m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 1Gi
+  tls:
+    enabled: true
+    tlsSecretName: '{{ include "discovery.admin.tlsSecret" . }}'

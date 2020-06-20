@@ -1,0 +1,264 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.sdu.name -}}
+{{- $app := .Values.global.appName }}
+{{- $sduService := include "sch.names.fullCompName" (list . $compName) }}
+{{- $replicaCount := include "discovery.sdu.replicas" . -}}
+{{- $sduLogsDir := include "discovery.sdu.logs.dir" . -}}
+{{- $sparkRmHost := include "discovery.mantle.hdp.rm.service" . }}
+{{- $sduStatsdConfigName := include "sch.names.fullCompName" (list . "sdu-statsd-config" ) }}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName (dict "run" "sdu" "squad" "sdu" )) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "sdu" "app.kubernetes.io/name" "sdu" "squad" "sdu" "app" $app "service" "discovery" "tenant" (tpl .Values.global.tenant .))) | indent 4 }}
+spec:
+  serviceName: {{ include "sch.names.fullCompName" (list . $compName ) }}
+  replicas: {{ $replicaCount }}
+  updateStrategy:
+    type: RollingUpdate
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "sdu" "app.kubernetes.io/name" "sdu" "squad" "sdu" "app" $app "service" "discovery" "tenant" (tpl .Values.global.tenant .))) | indent 6 }}
+  revisionHistoryLimit: 2
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        prometheus.io/scrape: '{{ $.Values.global.metricsCollection.enabled }}'
+        prometheus.io/port: '9102'
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "sdu" "app.kubernetes.io/name" "sdu" "squad" "sdu" "app" $app "service" "discovery" "tenant" (tpl .Values.global.tenant .))) | indent 8 }}
+    spec:
+      serviceAccountName: {{ include "discovery.admin.serviceAccount" . }}
+      affinity:
+{{ include "sch.affinity.nodeAffinity" (list . ) | indent 8 }}
+
+{{ include "sch.security.securityContext" (list . .sch.chart.wexUserSpecSecurityContext) | indent 6 }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+      initContainers:
+      - name: sdu-db-init
+        image: {{ .Values.global.dockerRegistryPrefix }}/
+          {{- .Values.sdu.dbInit.image.name }}:
+          {{- .Values.sdu.dbInit.image.tag }}
+{{ include "sch.security.securityContext" (list . .sch.chart.wexUserPodSecurityContext) | indent 8 }}
+        resources:
+          # When changing these, be sure to keep the JAVA_TOOL_OPTIONS environment variable within these limits
+          requests:
+            memory: "{{ .Values.sdu.dbInit.resources.requests.memory }}"
+            cpu: "{{ .Values.sdu.dbInit.resources.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.sdu.dbInit.resources.limits.memory }}"
+            cpu: "{{ .Values.sdu.dbInit.resources.limits.cpu }}"
+        env:
+        - name: SDU_DB_NAME
+          value: "sdu"
+        - name: SDU_DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.crust.postgresql.configmap" . }}
+              key: host
+        - name: SDU_DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.crust.postgresql.configmap" . }}
+              key: port
+        - name: SDU_DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.crust.postgresql.configmap" . }}
+              key: username
+        - name: SDU_DB_PWD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.crust.postgresql.secret" . }}
+              key: pg_su_password
+        - name: POSTGRES_CERT
+          value: ""
+        - name: PGSSLMODE
+          value: "allow"
+      containers:
+      - name: sdu
+        image: {{ .Values.global.dockerRegistryPrefix }}/
+          {{- .Values.sdu.image.name }}:
+          {{- .Values.sdu.image.tag }}
+{{ include "sch.security.securityContext" (list . .sch.chart.wexUserPodSecurityContext) | indent 8 }}
+        resources:
+          # When changing these, be sure to keep the JAVA_TOOL_OPTIONS environment variable within these limits
+          requests:
+            memory: "{{ .Values.sdu.resources.requests.memory }}"
+            cpu: "{{ .Values.sdu.resources.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.sdu.resources.limits.memory }}"
+            cpu: "{{ .Values.sdu.resources.limits.cpu }}"
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        volumeMounts:
+{{- if .Values.sdu.ssl.enabled }}
+        - name: sdu-certs
+          mountPath: /etc/sdu-certs
+{{- end }}
+{{- if .Values.sdu.scratchDir.enabled }}
+        - name:  {{ .Values.sdu.scratchDir.volumeName }}
+          mountPath:  {{ .Values.sdu.scratchDir.path }}
+{{- end }}
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+{{- if .Values.sdu.ssl.enabled }}
+        - name: SSL_CERTFILE
+          value: "/etc/sdu-certs/tls.crt"
+        - name: SSL_KEYFILE
+          value: "/etc/sdu-certs/tls.key"
+{{- end }}
+        - name: SDU_SELF_URL
+          value: {{ printf "https://%s:8080" $sduService | quote }}
+        - name: SDU_DB_NAME
+          value: "sdu"
+        - name: SDU_DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.crust.postgresql.configmap" . }}
+              key: host
+        - name: SDU_DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.crust.postgresql.configmap" . }}
+              key: port
+        - name: SDU_DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.crust.postgresql.configmap" . }}
+              key: username
+        - name: SDU_DB_PWD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.crust.postgresql.secret" . }}
+              key: pg_su_password
+        - name: POSTGRES_CERT
+          value: ""
+        - name: SPARK_ENABLED
+          value: "true"
+        - name: ETCD_SPARK_ENABLED
+          value: "true"
+        - name: YARN_NN_HOST
+          value: {{ include "discovery.mantle.hdp.nn.service" . }}
+        - name: YARN_RM_HOST
+          value: {{ $sparkRmHost }}
+        - name: YARN_RM_ENDPOINT
+          value: {{ printf "http://%s:8088" $sparkRmHost | quote }}
+{{- if .Values.sdu.fastpath.enabled }}
+        - name: SDU_FASTPATH_PIPELINE_ENABLED
+          value: "true"
+{{- end }}
+{{- if .Values.sdu.scratchDir.enabled }}
+        - name: SDU_SCRATCH
+          value: "{{ .Values.sdu.scratchDir.path }}"
+{{- end }}
+        - name: ETCD_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.crust.etcd.configmap" . }}
+              key: host
+        - name: ETCD_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.crust.etcd.configmap" . }}
+              key: port
+        - name: ETCD_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.crust.etcd.secret" . | quote }}
+              key: username
+        - name: ETCD_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.crust.etcd.secret" . | quote }}
+              key: password
+        - name: ETCD_USE_TLS
+          value: "true"
+        - name: SDU_OBJSTORE_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.crust.minio.configmap" . }}
+              key: endpoint
+        - name: SDU_OBJSTORE_ACCESSKEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.crust.minio.secret" . }}
+              key: accesskey
+        - name: SDU_OBJSTORE_SECRETKEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.crust.minio.secret" . }}
+              key: secretkey
+        - name: SDU_OBJSTORE_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.crust.minio.configmap" . }}
+              key: sdu
+{{- if .Values.sdu.sparkS3 }}
+        - name: SDU_SPARK_ARCHIVE_SCHEME
+          value: "s3a"
+        - name: SDU_OBJSTORE_HDP_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.crust.minio.configmap" . }}
+              key: bucketCommon
+{{- end }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . "sdu-config") }}
+        livenessProbe:
+          exec:
+            command:
+            - bash
+            - -ce
+            - |
+              curl -w "%{http_code}" -o /dev/null -m 55 -s -k https://localhost:8080/health | grep 200
+          initialDelaySeconds: {{ .Values.sdu.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.sdu.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.sdu.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.sdu.livenessProbe.failureThreshold }}
+        readinessProbe:
+          exec:
+            command:
+            - bash
+            - -ce
+            - |
+              curl -w "%{http_code}" -o /dev/null -m 55 -s -k https://localhost:8080/health | grep 200
+          initialDelaySeconds: {{ .Values.sdu.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.sdu.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.sdu.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.sdu.readinessProbe.failureThreshold }}
+
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+{{ include "sduStatsdExporter.container" (list . ) | indent 6}}
+      volumes:
+{{- if .Values.sdu.ssl.enabled }}
+      - name: sdu-certs
+        secret:
+          secretName: {{ include "discovery.admin.tls" . }}
+          items:
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.key
+            path: tls.key
+          - key: tls.crt
+            path: db_tls.crt
+{{- end }}
+{{- if .Values.sdu.scratchDir.enabled }}
+      - name:  {{ .Values.sdu.scratchDir.volumeName }}
+        emptyDir: {}
+{{- end }}
+{{- if .Values.global.metricsCollection.enabled }}
+      - name: statsd-exporter-config
+        configMap:
+          name: {{ $sduStatsdConfigName }}
+{{- end }}

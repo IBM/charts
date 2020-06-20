@@ -1,0 +1,90 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.wexCore.name }}
+{{- $compTestName := .sch.chart.components.wexCore.test.name }}
+{{- $compWksmlName := .sch.chart.components.wexCore.wksml.name }}
+{{- $wksmlServiceName := include "sch.names.fullCompName" (list . $compWksmlName ) -}}
+{{- $wksmlServicePort := .sch.chart.components.wexCore.wksml.port }}
+{{- $compGatewayName := .sch.chart.components.wexCore.gateway.name }}
+{{- $gatewayServiceName := include "sch.names.fullCompName" (list . $compGatewayName ) -}}
+{{- $nginxServicePort := .sch.chart.components.wexCore.gateway.nginx.port -}}
+{{- $compOrchestratorName := .sch.chart.components.wexCore.orchestrator.name }}
+{{- $orchestratorServiceName := include "sch.names.fullCompName" (list . $compOrchestratorName ) -}}
+{{- $orchestratorServicePort := .sch.chart.components.wexCore.orchestrator.port -}}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compTestName ) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compTestName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  activeDeadlineSeconds: {{ .Values.core.test.activeDeadlineSeconds }}
+  serviceAccountName: {{ .Values.global.serviceAccount.name }}
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserSpecSecurityContext) | indent 2 }}
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 4 }}
+  restartPolicy: Never
+  containers:
+    - name: test-core
+      image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.core.image.utils.name }}:{{ .Values.core.image.utils.tag }}"
+      imagePullPolicy: "{{ .Values.global.image.pullPolicy }}"
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserPodSecurityContext) | indent 6 }}
+      resources:
+{{ toYaml .Values.core.test.resources | indent 8 }}
+      volumeMounts:
+      {{- if .Values.core.tls.nginx.enabled }}
+      - name: certificate-nginx
+        mountPath: "/opt/tls/nginx"
+        readOnly: true
+      {{- end }}
+      {{- if .Values.core.tls.wlp.enabled }}
+      - name: certificate-wlp
+        mountPath: "/opt/tls/wlp"
+        readOnly: true
+      {{- end }}
+      command:
+      - "bash"
+      - "-c"
+      - |
+        while true; do
+          echo "Waiting for WKSML startup"
+          curl -sl -k https://{{ $wksmlServiceName }}:{{ $wksmlServicePort }}/sire/api/v1/models -w "%{http_code}" -o /dev/null | grep 200
+          if [ $? -eq 0 ]; then
+            echo "WKSML is ready"
+            break
+          fi
+        done
+
+        while true; do
+          echo "Waiting for gateway startup"
+          curl -sL -k https://{{ $gatewayServiceName }}:{{ $nginxServicePort }}/wex/api/v1/collections | grep 'items'
+          if [ $? -eq 0 ]; then
+            echo "Gateway is ready"
+            break
+          fi
+        done
+
+        while true; do
+          echo "Waiting for orchestrator startup"
+          curl -sl -k https://{{ $orchestratorServiceName }}:{{ $orchestratorServicePort }}/orchestrator/api/v1/control/info -w "%{http_code}" -o /dev/null | grep 200
+          if [ $? -eq 0 ]; then
+            echo "Orchestrator is ready"
+            break
+          fi
+        done
+
+        echo "OK"
+  volumes:
+  {{- if .Values.core.tls.nginx.enabled }}
+  - name: certificate-nginx
+    secret:
+      secretName: {{ include "discovery.admin.tls" . }}
+  {{- end }}
+  {{- if .Values.core.tls.wlp.enabled }}
+  - name: certificate-wlp
+    secret:
+      secretName: {{ include "discovery.admin.tls" . }}
+  {{- end }}
+

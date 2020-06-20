@@ -1,0 +1,211 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.trainingAgents.name -}}
+{{- $rankerCleanerAgentCompName := .sch.chart.components.rankerCleanerAgent.name -}}
+{{- $dataDeletionAgentCompName := .sch.chart.components.dataDeletionAgent.name -}}
+{{- $tdCrudName := .sch.chart.components.trainingCrud.name -}}
+{{- $rankerRestName := .sch.chart.components.rankerRest.name -}}
+{{- $app := .Values.global.appName }}
+{{- $rankerSecretName := include "discovery.ranker.secret" . }}
+{{- $wireRankerSecret := include "sch.names.fullCompName" (list . .sch.chart.components.rankerSecret.name ) -}}
+{{- $wireConfigName := include "sch.names.fullCompName" (list . "wire-config" ) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "training-agents" "squad" "wire" "service" "discovery")) | indent 4 }}
+spec:
+  replicas: {{ .Values.wire.trainingAgent.replicas }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "training-agents" "app.kubernetes.io/name" "training-agents" "squad" "wire" "app" $app "service" "discovery")) | indent 6 }}
+  revisionHistoryLimit: 2
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+{{- if .Values.global.metricsCollection.enabled }}
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '{{ .Values.wire.statsd.exporterPrometheusPort }}'
+{{- end }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "training-agents" "app.kubernetes.io/name" "training-agents" "squad" "wire" "app" $app "service" "discovery")) | indent 8 }}
+    spec:
+      serviceAccountName: {{ include "discovery.admin.serviceAccount" . }}
+      affinity:
+{{ include "sch.affinity.nodeAffinity" (list . ) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedPodSecurityContext) | indent 6 }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+      volumes:
+      - name: tls
+        secret:
+          secretName: {{ $wireRankerSecret }}
+{{- if .Values.global.metricsCollection.enabled }}
+      - name: {{ .Values.wire.configVolume }}
+        configMap:
+          name: {{ $wireConfigName }}
+{{- end }}
+      initContainers:
+{{ include "discovery.elasticInitContainer" . | indent 6 }}
+      containers:
+      - name: {{ $rankerCleanerAgentCompName }}
+        image: {{ .Values.global.dockerRegistryPrefix }}/
+          {{- .Values.wire.trainingAgent.image.name }}:
+          {{- .Values.wire.trainingAgent.image.tag }}
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 8 }}
+        resources:
+          requests:
+            memory: {{ .Values.wire.rankerCleanerAgent.resources.requests.memory | quote }}
+            cpu: {{ .Values.wire.rankerCleanerAgent.resources.requests.cpu | quote }}
+          limits:
+            memory: {{ .Values.wire.rankerCleanerAgent.resources.limits.memory | quote }}
+            cpu: {{ .Values.wire.rankerCleanerAgent.resources.limits.cpu | quote }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        volumeMounts:
+        - mountPath: /app/server.crt
+          name: tls
+          readOnly: true
+          subPath: server.crt
+        - mountPath: /app/ca.crt
+          name: tls
+          readOnly: true
+          subPath: ca.crt
+        - mountPath: /app/server.pem
+          name: tls
+          readOnly: true
+          subPath: server.pem
+        env:
+        - name: TRAINING_DATA_HOST
+          value: {{ include "sch.names.fullCompName" (list . $tdCrudName ) | quote }}
+        - name: INTERVAL
+          value: "60"
+        - name: RANK_HOST
+          value: {{ include "sch.names.fullCompName" (list . $rankerRestName ) | quote }}
+        - name: RANK_PORT
+          value: "9090"
+        - name: PIPELINE
+          value: {{ .Values.wire.rankerCleanerAgent.rankerCleanerPipeline | quote }}
+        - name: ERROR_LISTENERS
+          value: {{ .Values.wire.rankerCleanerAgent.rankerCleanerMessageListeners | quote }}
+        - name: TLS_SERVER_NAME_OVERRIDE
+          value: "{{ $tdCrudName }}.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }}"
+        - name: TLS_CERT_FILE
+          value: "/app/ca.crt"
+        - name: ELASTIC_URLS_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.mantle.elastic.configmap" . }}
+              key: endpoint
+        - name: ELASTIC_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.mantle.elastic.secret" . }}
+              key: username
+        - name: ELASTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.mantle.elastic.secret" . }}
+              key: password
+        - name: ELASTIC_AUTH_ENV
+          value: "$(ELASTIC_USER):$(ELASTIC_PASSWORD)"
+        args: ["-agent_name", "RankerCleanerAgent"]
+        livenessProbe:
+          exec:
+            command:
+            - cat
+            - APP_VERSION
+          initialDelaySeconds: {{ .Values.wire.rankerCleanerAgent.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.wire.rankerCleanerAgent.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.wire.rankerCleanerAgent.livenessProbe.timeoutSeconds }}
+        readinessProbe:
+          exec:
+            command:
+            - cat
+            - APP_VERSION
+          initialDelaySeconds: {{ .Values.wire.rankerCleanerAgent.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.wire.rankerCleanerAgent.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.wire.rankerCleanerAgent.readinessProbe.timeoutSeconds }}
+{{- if .Values.wire.trainingAgent.deployTrainingDataDeletionAgent }}
+      - name: {{ $dataDeletionAgentCompName }}
+        image: {{ .Values.global.dockerRegistryPrefix }}/
+          {{- .Values.wire.trainingAgent.image.name }}:
+          {{- .Values.wire.trainingAgent.image.tag }}
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 8 }}
+        resources:
+          requests:
+            memory: {{ .Values.wire.trainingDataDeletionAgent.resources.requests.memory | quote }}
+            cpu: {{ .Values.wire.trainingDataDeletionAgent.resources.requests.cpu | quote }}
+          limits:
+            memory: {{ .Values.wire.trainingDataDeletionAgent.resources.limits.memory | quote }}
+            cpu: {{ .Values.wire.trainingDataDeletionAgent.resources.limits.cpu | quote }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        volumeMounts:
+        - mountPath: /app/server.crt
+          name: tls
+          readOnly: true
+          subPath: server.crt
+        - mountPath: /app/ca.crt
+          name: tls
+          readOnly: true
+          subPath: ca.crt
+        - mountPath: /app/server.pem
+          name: tls
+          readOnly: true
+          subPath: server.pem
+        env:
+        - name: TRAINING_DATA_HOST
+          value: {{ include "sch.names.fullCompName" (list . $tdCrudName ) | quote }}
+        - name: INTERVAL
+          value: "300"
+        - name: MAX_NUMBER_OF_TENANTS_TRAINING_DATA_TO_DELETE_AT_ONCE
+          value: "1"
+        - name: MINIMUM_AGE_FOR_DELETION_ELIGIBILITY_MILLISECONDS
+          value: "60000"
+        - name: PIPELINE
+          value: {{ .Values.wire.trainingDataDeletionAgent.trainingDataDeletionPipeline | quote }}
+        - name: ERROR_LISTENERS
+          value: {{ .Values.wire.trainingDataDeletionAgent.trainingDataDeletionMessageListeners | quote }}
+        - name: TLS_SERVER_NAME_OVERRIDE
+          value: "{{ $tdCrudName }}.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }}"
+        - name: TLS_CERT_FILE
+          value: "/app/ca.crt"
+        - name: ELASTIC_URLS_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.mantle.elastic.configmap" . }}
+              key: endpoint
+        - name: ELASTIC_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.mantle.elastic.secret" . }}
+              key: username
+        - name: ELASTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.mantle.elastic.secret" . }}
+              key: password
+        - name: ELASTIC_AUTH_ENV
+          value: "$(ELASTIC_USER):$(ELASTIC_PASSWORD)"
+        args: ["-agent_name", "TrainingDataDeletionAgent"]
+        livenessProbe:
+          exec:
+            command:
+            - cat
+            - APP_VERSION
+          initialDelaySeconds: {{ .Values.wire.trainingDataDeletionAgent.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.wire.trainingDataDeletionAgent.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.wire.trainingDataDeletionAgent.livenessProbe.timeoutSeconds }}
+        readinessProbe:
+          exec:
+            command:
+            - cat
+            - APP_VERSION
+          initialDelaySeconds: {{ .Values.wire.trainingDataDeletionAgent.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.wire.trainingDataDeletionAgent.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.wire.trainingDataDeletionAgent.readinessProbe.timeoutSeconds }}
+{{- end }}
+{{ include "wire.statsdExporter.container" (list . ) | indent 6 }}
