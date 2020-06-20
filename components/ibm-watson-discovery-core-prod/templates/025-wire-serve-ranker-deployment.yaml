@@ -1,0 +1,221 @@
+{{- if .Values.global.private }}
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.serveRanker.name -}}
+{{- $app := .Values.wire.serveRanker.app -}}
+{{- $rankerSecretName := include "discovery.ranker.secret" . }}
+{{- $wireRankerSecret := include "sch.names.fullCompName" (list . .sch.chart.components.rankerSecret.name ) -}}
+{{- $mmRuntimecompName := .sch.chart.components.mmRuntime.name -}}
+{{- $mmServercompName := .sch.chart.components.mmServer.name -}}
+{{- $wireConfigName := include "sch.names.fullCompName" (list . "wire-config" ) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "component" "model-mesh" "squad" "wire" "slot" "serve-ranker" "service" "discovery")) | indent 4 }}
+spec:
+  replicas: {{ include "discovery.wire.serveRankerReplicas" . }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "component" "model-mesh" "squad" "wire" "slot" "serve-ranker" "app.kubernetes.io/name" $app "service" "discovery")) | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+{{- if .Values.global.metricsCollection.enabled }}
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '{{ .Values.wire.statsd.exporterPrometheusPort }}'
+{{- end }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "component" "model-mesh" "squad" "wire" "slot" "serve-ranker" "app.kubernetes.io/name" $app "service" "discovery")) | indent 8 }}
+    spec:
+      serviceAccountName: {{ include "discovery.admin.serviceAccount" . }}
+      affinity:
+{{ include "sch.affinity.nodeAffinity" (list . ) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedPodSecurityContext) | indent 6 }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+{{- if .Values.global.private }}
+      initContainers:
+{{ include "discovery.minioInitContainer" . | indent 6 }}
+{{- end }}
+      containers:
+      - name: {{ $mmRuntimecompName }}
+        image: {{ .Values.global.dockerRegistryPrefix }}/
+          {{- .Values.mm.mmSideCar.image.name }}:
+          {{- .Values.mm.mmSideCar.image.tag }}
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 8 }}
+        ports:
+        - name: grpc
+          containerPort: 8033
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        env:
+        - name: MM_SERVICE_NAME
+          value: {{ include "sch.names.fullCompName" (list . $compName) }}
+        - name: INTERNAL_GRPC_PORT
+          value: "50051"
+        - name: MM_SVC_GRPC_PORT
+          value: "8033"
+        - name: MM_SVC_GRPC_CA_CERT_PATH
+          value: "/tmp/public/public.key"
+        - name: MM_SVC_GRPC_PRIVATE_KEY_PATH
+          value: "/tmp/private/private.pem"
+
+       # [*] optional, set to support grpc messages > 16MiB
+        - name: MM_SVC_GRPC_MAX_MSG_SIZE
+          value: '{{ .Values.wire.serveRanker.maxSupportedServerRequestSizeInBytes }}'
+        - name: KV_STORE
+          value: etcd:/opt/watson/mmesh/dynconfig/etcd_connection
+
+       # [*] LOG_TO_DB is optional and needs to be set only if you want
+       # the start script to log to a database.  Any non-empty value
+       # will activate it.
+       #- name: LOG_TO_DB
+       #  value: "true"
+        - name: WKUBE_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: WKUBE_POD_IPADDR
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: MM_LOCATION
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+
+        # set this to equal terminationGracePeriodSeconds setting
+        - name: SHUTDOWN_TIMEOUT_MS
+          value: "90000"
+        volumeMounts:
+        - name: ranker-secrets
+          mountPath: /opt/watson/mmesh/dynconfig
+          readOnly: true
+        - name: ssl-certs-private
+          mountPath: /tmp/private/private.pem
+          subPath: private.pem
+          readOnly: true
+        - name: ssl-certs-public
+          mountPath: /tmp/public/public.key
+          subPath: public.key
+          readOnly: true
+        resources:
+          requests:
+            cpu: {{ .Values.mm.mmSideCar.resources.requests.cpu }}
+            memory: {{ .Values.mm.mmSideCar.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.mm.mmSideCar.resources.limits.cpu }}
+            memory: {{ .Values.mm.mmSideCar.resources.limits.memory }}
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8089
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 60
+          failureThreshold: 10
+        livenessProbe:
+          httpGet:
+            path: /live
+            port: 8089
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          timeoutSeconds: 60
+          failureThreshold: 2
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /opt/watson/mmesh/stop.sh
+              - wait
+      - name: {{ $mmServercompName }}
+        image: {{ .Values.global.dockerRegistryPrefix }}/
+          {{- .Values.wire.serveRanker.mmServer.image.name }}:
+          {{- .Values.wire.serveRanker.mmServer.image.tag}}
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 8 }}
+        resources:
+          requests:
+            cpu: {{ .Values.wire.serveRanker.mmServer.resources.requests.cpu }}
+            memory: {{ .Values.wire.serveRanker.mmServer.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.wire.serveRanker.mmServer.resources.limits.cpu }}
+            memory: {{ .Values.wire.serveRanker.mmServer.resources.limits.memory }}
+        volumeMounts:
+        - name: truststore
+          mountPath: /opt/ibm/java/jre/lib/security/cacerts
+          subPath: truststore.jks
+          readOnly: true
+        env:
+        - name: COS_CONNECTION_PARAMETERS
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.wire.cosSecretName" . | quote }}
+              key: cloud_objstore
+        - name: RANKER_SERVER_MAX_MESSAGE_SIZE_IN_BYTES
+          value: '{{ .Values.wire.serveRanker.maxSupportedServerRequestSizeInBytes}}'
+        - name: JAVA_TOOL_OPTIONS
+          value: '{{ .Values.wire.serveRanker.serveRankerJavaOpts }}'
+        - name: YOUNG_GENERATION_MIN_SPACE
+          value: '{{ .Values.wire.serveRanker.serveRankerYoungMinSpace }}'
+        - name: PALM_STATS_D_METRIC_TYPE_PREFIX_ENABLED
+          value: "true"
+        - name: PALM_STATS_D_PREFIX
+          value: "ranker_server"
+        livenessProbe:
+          exec:
+            command:
+            - cat
+            - logging.properties
+          initialDelaySeconds: {{ .Values.wire.serveRanker.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.wire.serveRanker.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.wire.serveRanker.livenessProbe.timeoutSeconds }}
+        readinessProbe:
+          exec:
+            command:
+            - cat
+            - logging.properties
+          initialDelaySeconds: {{ .Values.wire.serveRanker.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.wire.serveRanker.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.wire.serveRanker.readinessProbe.timeoutSeconds }}
+{{ include "wire.statsdExporter.container" (list . ) | indent 6 }}
+
+      # longer grace period to allow for model propagation
+      terminationGracePeriodSeconds: 90
+      # This needs to be revisited once we get confirmation regarding the elastic plugins
+      volumes:
+      - name: ranker-secrets
+        secret:
+          secretName: '{{ $rankerSecretName }}'
+      - name: ssl-certs-private
+        secret:
+          secretName: '{{ $wireRankerSecret }}'
+          items:
+            - key: wire-private-pem
+              path: private.pem
+      - name: ssl-certs-public
+        secret:
+          secretName: '{{ $wireRankerSecret }}'
+          items:
+          - key: server.crt
+            path: public.key
+      - name: truststore
+        secret:
+          secretName: {{ include "discovery.core.javaKeyStore" . }}
+      - name: mc-config-dir
+        emptyDir: {}
+{{- if .Values.global.metricsCollection.enabled }}
+      - name: {{ .Values.wire.configVolume }}
+        configMap:
+          name: {{ $wireConfigName }}
+{{- end }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 4
+      maxUnavailable: 1
+
+  revisionHistoryLimit: 3
+{{- end }}

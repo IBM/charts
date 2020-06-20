@@ -1,0 +1,291 @@
+{{- if .Values.global.private }}
+  {{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+  {{- $compName := .sch.chart.components.rankerMaster.name -}}
+  {{- $app := .Values.global.appName -}}
+  {{- $namespace := .Release.Namespace -}}
+  {{- $wireRankerSecret := include "sch.names.fullCompName" (list . .sch.chart.components.rankerSecret.name ) -}}
+  {{- $serveRankerCompName := .sch.chart.components.serveRanker.name -}}
+  {{- $trainingJobTemplateCompName := .sch.chart.components.trainingJobTemplate.name -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "squad" "wire")) | indent 4 }}
+spec:
+  replicas: {{ include "discovery.wire.rankerMasterReplicas" . }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "app.kubernetes.io/name" $compName "squad" "wire" "app" $app "slot" "all" "component" "master" "service" "discovery")) | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "app.kubernetes.io/name" $compName "squad" "wire" "app" $app "slot" "all" "component" "master" "service" "discovery")) | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.global.privilegedServiceAccount.name }}
+      affinity:
+{{ include "sch.affinity.nodeAffinity" (list . ) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedPodSecurityContext) | indent 6 }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+      initContainers:
+{{ include "discovery.etcdInitContainer" . | indent 6 }}
+      - name: etcd-running
+        image: {{ .Values.global.dockerRegistryPrefix }}/
+          {{- .Values.wire.rankerMaster.etcdConfigJob.image.name }}:
+          {{- .Values.wire.rankerMaster.etcdConfigJob.image.tag }}
+        command:
+        - "/bin/bash"
+        - "-c"
+        - |
+          i=1
+          seconds=5
+          ETCD_CHROOT=${ETCD_CHROOT:-$(</etc/secrets/etcd/etcd_connection jq -r '.root_prefix')}
+          export ETCD_CHROOT
+          while (( i > 0 )); do
+            echo "Testing ability to add ETCD keys using the correct credentials"
+            if /etcd/etcdctl put --endpoints="${ETCD_ENDPOINTS}" /test "test"; then
+              if [ -n "$(/etcd/etcdctl get --endpoints="${ETCD_ENDPOINTS}" "/test")" ]; then
+                echo "successfully created and retrieved a key"
+                break
+              fi
+              echo "Successfully created /test, but could not retrieve it"
+            else
+              echo "Failing to PUT /test into etcd"
+            fi
+            echo "Waiting $(( i * 5 )) seconds before trying again"
+            sleep "$(( i * 5 ))s"
+            i=$(( i + 1 ))
+          done
+          /bin/bash /ranker/configure-etcd.sh
+
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 8 }}
+        resources:
+          requests:
+            memory: {{ .Values.initContainers.etcd.resources.requests.memory | quote }}
+            cpu: {{ .Values.initContainers.etcd.resources.requests.cpu | quote }}
+          limits:
+            memory: {{ .Values.initContainers.etcd.resources.limits.memory | quote }}
+            cpu: {{ .Values.initContainers.etcd.resources.limits.cpu | quote }}
+        env:
+        - name: ETCD_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.crust.etcd.secret" . }}
+              key: username
+        - name: ETCD_AUTH
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.crust.etcd.secret" . }}
+              key: password
+        - name: ETCD_ENDPOINTS
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.crust.etcd.configmap" . }}
+              key: endpoint
+        - name: ETCDCTL_USER
+          value: "$(ETCD_USER):$(ETCD_AUTH)"
+        - name: ETCDCTL_API
+          value: "3"
+        - name: ETCDCTL_CACERT
+          value: /etc/secrets/etcd/etcd_certificate
+        - name: ETCDCTL_COMMAND_TIMEOUT
+          value: "10s"
+        - name: ETCDCTL_DIAL_TIMEOUT
+          value: "10s"
+        # configure-etcd script expects these environment variables to set the key values
+        - name: "TRAIN_CPU_REQUEST_MILLI"
+          value: {{ .Values.wire.rankerMaster.etcdConfigJob.trainCPURequestMilli | quote }}
+        - name: "TRAIN_CPU_LIMIT_MILLI"
+          value: {{ .Values.wire.rankerMaster.etcdConfigJob.trainCPULimitMilli | quote }}
+        - name: "DOCKER_REGISTRY"
+          value: {{ include "discovery.wire.docker.registry" . | quote }}
+        - name: "TRAINING_IMAGE_NAME"
+          value: {{ .Values.wire.rankerMaster.rankerTraining.image.name | quote }}
+        - name: "TRAIN_IMAGE_VERSION"
+          value: {{ .Values.wire.rankerMaster.rankerTraining.image.tag | quote }}
+        - name: "TRAIN_NAMESPACE"
+          value: {{ include "discovery.wire.docker.namespace" . | quote }}
+        - name: "MODEL_MESH_SERVICE_HOST"
+          value: {{ include "sch.names.fullCompName" (list . $serveRankerCompName) | quote }}
+        - name: "MODEL_MESH_SERVICE_PORT"
+          value: {{ .Values.wire.rankerMaster.etcdConfigJob.modelMeshServicePort | quote }}
+        - name: "CA_CERT_PATH"
+          value: {{ .Values.wire.rankerMaster.etcdConfigJob.etcdConfigCaCertPath | quote }}
+        - name: "WIRE_PUBLIC_CERT_NAME"
+          value: {{ .Values.wire.rankerMaster.etcdConfigJob.wirePublicCertName | quote }}
+        - name: "WIRE_PUBLIC_CERT_CN_NAME"
+          value: {{ include "discovery.wire.master.CN" . }}
+        - name: "TRUSTSTORE_CONFIG_SECRET"
+          value: {{ include "discovery.core.javaKeyStore" . | quote }}
+        - name: "TRAINING_MEMORY_MB"
+          value: {{ .Values.wire.rankerMaster.etcdConfigJob.trainingMemoryMB | quote }}
+        volumeMounts:
+        - name: ranker-secrets
+          mountPath: /etc/secrets/etcd
+          readOnly: true
+{{ include "discovery.minioInitContainer" . | indent 6 }}
+      containers:
+      - name: {{ $compName }}
+        image: {{ .Values.global.dockerRegistryPrefix }}/
+          {{- .Values.wire.rankerMaster.image.name }}:
+          {{- .Values.wire.rankerMaster.image.tag }}
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 8 }}
+        ports:
+        - name: thrift
+          containerPort: 8080
+        env:
+        - name: CERTIFICATES_IMPORT_LIST
+          value: /opt/bluegoat/qa_master/config/server.crt:minio
+        - name: CONFIG_SECRET_NAME
+          value: ranker # most likely used in discovery master can be ignored
+        - name: MASTER_ROOT_PATH
+          value: bluegoat-master
+        - name: MASTER_SERVICE_NAME
+          value: master
+        - name: SERVICE_VERSION
+          value: 1.1.0
+        # The following variables are needed to deploy discovery master.
+        # The entire block can be removed when we only need to deploy nlc master.
+        - name: TRAINING_IMAGE_NAMESPACE
+          value: {{ include "discovery.wire.docker.namespace" . | quote }}
+        - name: TRAINING_IMAGE_NAME
+          value: '{{ .Values.wire.rankerMaster.rankerTraining.image.name }}'
+        - name: TRAINING_IMAGE_VERSION
+          value: '{{ .Values.wire.rankerMaster.rankerTraining.image.tag }}'
+        # The block ends here
+
+        # This has to be a values that is of the format etcd:ETCD_CONNECTION_STRING <- the connection string has
+        # to be a format expected by kv-utils, you can find the example from our current kube secrets
+        - name: KV_STORE
+          value: '{{ .Values.wire.rankerMaster.kvStore }}'
+        - name: LL_DISCOVERY
+          value: '{{ .Values.wire.rankerMaster.kvStore }}'
+        - name: LL_REGISTRY
+          value: '{{ .Values.wire.rankerMaster.kvStore }}'
+        - name: WKUBE_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: WKUBE_POD_IPADDR
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        # This environment variable should contain the PVC connection string like "filesys,root=SOMEPATH"
+        # OR if we decide to use Minio, we need to provide the correct connection string as a secret
+        # Format of minio, "s3,endpoint=<>,accesskey=<>,secretKey=<>,bucketsuffix=<>"
+        - name: WATSON_OBJECTSTORE
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.wire.cosSecretName" . | quote }}
+              key: watson_objstore
+        - name: DOCKER_REGISTRY
+          value: {{ include "discovery.wire.docker.registry" . | quote }}
+        - name: DOCKER_REGISTRY_NAMESPACE
+          value: {{ include "discovery.wire.docker.namespace" . | quote }}
+        - name: DOCKER_REGISTRY_PULL_SECRET
+          value: {{ .Values.global.image.pullSecret }}
+        - name: "TRUST_ALL_DOCKER_REG_CERTIFICATES"
+          value: "{{ .Values.wire.rankerMaster.dockerTrustAllCertificates }}"
+        - name: WIRE_PAGER_DUTY_INTEGRATION_KEY_HIGH
+          valueFrom:
+            secretKeyRef:
+              name: '{{ $wireRankerSecret }}'
+              key: pagerduty-key-high
+        - name: WIRE_PAGER_DUTY_INTEGRATION_KEY_LOW
+          valueFrom:
+            secretKeyRef:
+              name: '{{ $wireRankerSecret }}'
+              key: pagerduty-key-low
+        {{ if .Values.pagerdutyURL }}
+        - name: PAGERDUTY_URL
+          value: '{{ .Values.pagerdutyURL }}'
+        {{ end }}
+        resources:
+          requests:
+            memory: '{{ .Values.wire.rankerMaster.resources.requests.memory }}'
+            cpu: '{{ .Values.wire.rankerMaster.resources.requests.cpu }}'
+          limits:
+            memory: '{{ .Values.wire.rankerMaster.resources.limits.memory }}'
+            cpu: '{{ .Values.wire.rankerMaster.resources.limits.cpu }}'
+        readinessProbe:
+          exec:
+            command:
+            - /opt/bluegoat/qa_master/kube-probe
+          initialDelaySeconds: {{ .Values.wire.rankerMaster.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.wire.rankerMaster.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.wire.rankerMaster.readinessProbe.timeoutSeconds }}
+        livenessProbe:
+          exec:
+            command:
+            - /opt/bluegoat/qa_master/kube-probe
+            - -l
+          # Offset this probe by 1 minute from the readiness probe
+          initialDelaySeconds: {{ .Values.wire.rankerMaster.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.wire.rankerMaster.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.wire.rankerMaster.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.wire.rankerMaster.livenessProbe.failureThreshold }}
+        volumeMounts:
+        - name: ranker-secrets
+          mountPath: /opt/bluegoat/qa_master/config
+          readOnly: true
+        - name: jks
+          mountPath: /opt/bluegoat/qa_master/ssl/truststore.jks
+          readOnly: true
+          subPath: master.jks
+        - name: jks
+          mountPath: /opt/bluegoat/qa_master/ssl/master.jks
+          readOnly: true
+          subPath: master.jks
+        - name: "image-pull-secret"
+          mountPath: /opt/bluegoat/qa_master/docker-registry-creds
+          readOnly: true
+        - name: training-job-template
+          mountPath: /opt/bluegoat/qa_master/resources/job-pod.json
+          subPath: job-pod.json
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /opt/bluegoat/qa_master/stop.sh
+      # TO DO: Add PVC volume details that will be added as a data store
+      # Or if we are not using PVC remove this comment and make sure the Minio COS secrets
+      # are passed correctly to the WATSON_OBJECTSTORE environment variable
+      volumes:
+      - name: ranker-secrets
+        secret:
+          secretName: {{ $wireRankerSecret }}
+      - name: jks
+        secret:
+          secretName: {{ include "discovery.core.javaKeyStore" . }}
+      - name: image-pull-secret
+        secret:
+          secretName: {{ .Values.global.image.pullSecret }}
+      - name: mc-config-dir
+        emptyDir: {}
+      - name: training-job-template
+        configMap:
+          name: {{ include "sch.names.fullCompName" (list . $trainingJobTemplateCompName) }}
+          defaultMode: 0755
+
+      {{- if .Values.wire.kubernetesIP }}
+      hostAliases:
+      - hostnames:
+        - {{ .Values.wire.kubernetesHost | quote }}
+        ip: {{ .Values.wire.kubernetesIP | quote }}
+      {{- end }}
+
+  strategy:
+    rollingUpdate:
+      # Ensure that a Deployment with a single instance is never
+      # unavailable during an upgrade.  This forces each new pod to
+      # become ready before an old one is stopped.
+      maxUnavailable: 0
+
+  revisionHistoryLimit: 2
+{{- end }}

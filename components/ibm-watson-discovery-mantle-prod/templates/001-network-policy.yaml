@@ -1,0 +1,40 @@
+{{- if .Values.mantle.networkPolicy.create }}
+  {{- include "sch.config.init" (list . "discovery.mantle.sch.chart.config.values") -}}
+  {{- $name := include "sch.names.fullCompName" (list . "policy") -}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      release: {{ .Release.Name }}
+  policyTypes:
+  - Ingress
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          release: {{ (index .Values.global.components "ibm-watson-discovery-crust-prod").releaseName }}
+  - to:
+    - podSelector:
+        matchLabels:
+          release: {{ (index .Values.global.components "ibm-watson-discovery-mantle-prod").releaseName }}
+  - to:
+    - podSelector:
+        matchLabels:
+          release: {{ (index .Values.global.components "ibm-watson-discovery-core-prod").releaseName }}
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          release: {{ (index .Values.global.components "ibm-watson-discovery-core-prod").releaseName }}
+  - from:
+    - podSelector:
+        matchLabels:
+          release: {{ (index .Values.global.components "ibm-watson-discovery-mantle-prod").releaseName }}
+{{- end }}

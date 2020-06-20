@@ -1,0 +1,36 @@
+{{- include "sch.config.init" (list . "wks.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.awt.name -}}
+{{- if .Values.awt.create -}}
+{{- if .Values.awt.persistentVolume.enabled -}}
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "wks.awt.filePvc.name" . }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 4 }}
+spec:
+  accessModes:
+  - ReadWriteMany
+  {{- if .Values.awt.persistentVolume.useDynamicProvisioning }}
+    # if present, use the storageClassName from the values.yaml, else use the default storageClass setup by kube Administrator
+    # setting storageClassName to nil means use the default storage class
+    {{- if .Values.awt.persistentVolume.storageClassName }}
+  storageClassName: {{ default nil .Values.awt.persistentVolume.storageClassName | quote }}
+    {{- else }}
+  storageClassName: {{ default nil .Values.global.storageClassName | quote }}
+    {{- end}}
+  {{- else }}
+    # bind to an existing pv.
+    # setting storageClassName to "" disables dynamic provisioning
+    {{- if .Values.awt.persistentVolume.storageClassName }}
+  storageClassName: {{ default "" .Values.awt.persistentVolume.storageClassName | quote }}
+    {{- else }}
+  storageClassName: {{ default "" .Values.global.storageClassName | quote }}
+    {{- end}}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ include "wks.awt.filePvc.size" . }}
+{{- end }}
+{{- end }}

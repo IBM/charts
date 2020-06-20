@@ -1,0 +1,109 @@
+{{- include "sch.config.init" (list . "wks.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.broker.name -}}
+{{- $keystorePass := randAlphaNum 10 }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName ) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 6 }}
+  replicas: {{ .Values.broker.replicas }} # tells deployment to run 2 pods matching the template
+  template: # create pods using pod definition in this template
+    metadata:
+      # unlike pod-nginx.yaml, the name is not included in the meta data as a unique name is
+      # generated from the deployment name
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+    spec:
+      serviceAccountName: {{ template "wks.serviceaccount.name" . }}
+      affinity:
+{{ include "wks.affinity" . | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      # TODO: should we add service account name?
+      containers:
+      - name: wks-sbsep
+{{ include "wks.docker.image.name" (list . .Values.broker.image) | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.securityContext1) | indent 8 }}
+        ports:
+        - containerPort: 9443
+          protocol: TCP
+        resources:
+          limits:
+            cpu: {{ .Values.broker.resources.limits.cpu }}
+            memory: {{ .Values.broker.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.broker.resources.requests.cpu }}
+            memory: {{ .Values.broker.resources.requests.memory }}
+        env:
+        - name: CLOUD_ENVIRONMENT
+          value: "icp"
+        - name: K8S_ENABLED
+          value: "true"
+        - name: CLOUD_APP_GROUP
+          value: "wks20_escloud"
+        - name: CLOUD_APP
+          value: "wks20_sbsep"
+        - name: ESCLOUD_PRODUCT_CONTEXT
+          value: "WKS"
+        - name: LOG_LEVEL
+          value: "finer"
+        - name: TMP_DEPLOY_TIMESTAMP
+          value: "Thu Jun  4 04:59:39 UTC 2020"
+{{ include "wks.keystore.envvars" (list . $keystorePass) | indent 8 }}
+        args: ["/opt/watson/config/sbsep20-k8s-dockerinit.sh", "/opt/watson/config/common"]
+        livenessProbe:
+          httpGet:
+            path: "/knowledge-studio/provisioning/endpoint"
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 180
+          timeoutSeconds: 30
+          periodSeconds: 180
+        readinessProbe:
+          httpGet:
+            path: /knowledge-studio/provisioning/endpoint
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 1
+          periodSeconds: 5
+          timeoutSeconds: 5
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 15"]
+        volumeMounts:
+        - name: sbsepconfigs
+          mountPath: "/mnt/configs"
+        - name: mongo-ca-secrets
+          mountPath: "/mnt/mongo-ca-secrets"
+          readOnly: true
+        - name: wks-icp-mongo-config
+          mountPath: "/mnt/wks-icp-mongo-config"
+          readOnly: true
+        - name: mongo-admin-secrets
+          mountPath: "/mnt/mongo-admin-secrets"
+          readOnly: true
+{{ include "wks.keystore.volumemount" . | indent 8 }}
+      initContainers:
+{{ include "wks.keystoregen.initcontainer" (list . $keystorePass) | indent 6 }}
+      volumes:
+{{ include "wks.keystoregen.volumes" . | indent 6 }}
+      - name: wks-icp-mongo-config
+        configMap:
+          name: {{ include "wks.frontend.mongodb.config" . | quote }}
+      - name: mongo-admin-secrets
+        secret:
+          secretName: {{ include "wks.mongodb.admin.secretName" . }}
+      - name: mongo-ca-secrets
+        secret:
+          secretName: {{ include "wks.mongodb.cert.secretName" . | quote }}
+      - name: sbsepconfigs
+        configMap:
+          name: {{ include "sch.names.fullCompName" (list . $compName ) | quote }}
+{{ include "wks.docker.registry.secret" . | indent 6 }}

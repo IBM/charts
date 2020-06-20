@@ -1,0 +1,222 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.wexCore.name }}
+{{- $subCompName := .sch.chart.components.wexCore.statelessApi.runtime.name }}
+{{- $servicePort := .sch.chart.components.wexCore.statelessApi.runtime.port }}
+{{- $compGatewayName := .sch.chart.components.wexCore.gateway.name }}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $subCompName ) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 4 }}
+    run: {{ $subCompName }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 6 }}
+      run: {{ $subCompName }}
+  replicas: {{ include "discovery.core.statelessApi.runtime.replicas" . }}
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 8 }}
+        run: {{ $subCompName }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.global.serviceAccount.name }}
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserSpecSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+        {{- if eq .Values.core.statelessApi.runtime.antiAffinity "hard" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: "kubernetes.io/hostname"
+            labelSelector:
+              matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 16 }}
+                run: {{ $subCompName }}
+        {{- else if eq .Values.core.statelessApi.runtime.antiAffinity "soft" }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 5
+            podAffinityTerm:
+              topologyKey: "kubernetes.io/hostname"
+              labelSelector:
+                matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 18 }}
+                  run: {{ $subCompName }}
+        {{- end }}
+      initContainers:
+      - name: init-models
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.core.image.watsonNLP.name }}:{{ .Values.core.image.watsonNLP.tag }}"
+        imagePullPolicy: "{{ .Values.global.image.pullPolicy }}"
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserPodSecurityContext) | indent 8 }}
+        command:
+        - bash
+        - -c
+        args:
+        - cp -r /opt/ibm/watson_nlp/models/* /models
+        resources:
+{{ toYaml .Values.core.statelessApi.runtime.initContainer.resources | indent 10 }}
+        volumeMounts:
+        - mountPath: /models
+          name: models
+{{ include "discovery.core.initContainer.etcdCheck" . | indent 6 }}
+      containers:
+      - name: model-mesh
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.core.image.modelMesh.name }}:{{ .Values.core.image.modelMesh.tag }}"
+        imagePullPolicy: "{{ .Values.global.image.pullPolicy }}"
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserPodSecurityContext) | indent 8 }}
+        ports:
+          - name: grpc
+            containerPort: {{ $servicePort }}
+        env:
+          - name: MM_SERVICE_NAME
+            # [*] set this to the logical service name
+            value: {{ $subCompName }}
+          - name: INTERNAL_GRPC_SOCKET_PATH
+            value: /tmp/mmesh/grpc.sock
+          - name: MM_SVC_GRPC_PORT
+            value: {{ $servicePort | quote }}
+          # [*] these are optional - if set then TLS will
+          #     be configured for the external gRPC interface
+          - name: MM_SVC_GRPC_CA_CERT_PATH
+            value: /mnt/tls/tls.crt
+          - name: MM_SVC_GRPC_PRIVATE_KEY_PATH
+            value: /mnt/tls/tls.key
+
+          # [*] optional, set to support grpc messages > 16MiB
+          #- name: MM_SVC_GRPC_MAX_MSG_SIZE
+          #  value: max-grpc-msg-size-in-bytes
+
+          # [**] Key name of etcd secret is changed
+          - name: KV_STORE
+            value: etcd:/opt/watson/mmesh/config/etcd_connection
+
+          # [*] LOG_TO_DB is optional and needs to be set only if you want
+          # the start script to log to a database.  Any non-empty value
+          # will activate it.
+          #- name: LOG_TO_DB
+          #  value: "true"
+          - name: WKUBE_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: WKUBE_POD_IPADDR
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: MM_LOCATION
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+          # set this to equal terminationGracePeriodSeconds setting
+          - name: SHUTDOWN_TIMEOUT_MS
+            value: "90000"
+        volumeMounts:
+          - name: config
+            mountPath: /opt/watson/mmesh/config
+            readOnly: true
+          - name: domain-socket
+            mountPath: /tmp/mmesh
+          - name: tls
+            mountPath: /mnt/tls
+        resources:
+{{ toYaml .Values.core.statelessApi.mmesh.resources | indent 10 }}
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8089
+{{ toYaml .Values.core.statelessApi.mmesh.readinessProbe | indent 10 }}
+        livenessProbe:
+          httpGet:
+            path: /live
+            port: 8089
+{{ toYaml .Values.core.statelessApi.mmesh.livenessProbe | indent 10 }}
+        lifecycle:
+          preStop:
+            exec:
+              command: [/opt/watson/mmesh/stop.sh, wait]
+
+      - name: model-runtime
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.core.image.statelessApi.runtime.name }}:{{ .Values.core.image.statelessApi.runtime.tag }}"
+        imagePullPolicy: "{{ .Values.global.image.pullPolicy }}"
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserPodSecurityContext) | indent 8 }}
+        env:
+        - name: LISTEN_ON
+          value: unix:///tmp/mmesh/grpc.sock
+        - name: JAVA_ENRICH_SERVER_MAX_HEAP
+          value: 2g
+        - name: GRPC_TIMEOUT_SEC
+          value: "600"
+        - name: MAX_MESSAGE_SIZE_MB
+          value: "16"
+        - name: MAX_LOADING_CONCURRENCY
+          value: "2"
+        - name: MODEL_LOADING_TIMEOUT_MS
+          value: "600000"
+        - name: DEFAULT_MODEL_SIZE_MB
+          value: "1024"
+        - name: CAPACITY_MB
+          value: "4096"
+        - name: ENRICH_SERVER_WAIT_MAX_RETRIES
+          value: "100"
+        - name: WKSML_HOST
+          value: {{ include "discovery.core.wksml.hostname" . | quote }}
+{{ include "discovery.core.etcd.envVars" . | indent 8 }}
+{{ include "discovery.core.s3.envVars" . | indent 8 }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . $compGatewayName ) }}
+        resources:
+{{ toYaml .Values.core.statelessApi.runtime.resources | indent 10 }}
+        volumeMounts:
+        - name: certificate-etcd
+          mountPath: "/opt/tls/etcd"
+          readOnly: true
+        - name: models
+          mountPath: /opt/ibm/wex/resources/watson-nlp-models
+          readOnly: true
+        - name: domain-socket
+          mountPath: /tmp/mmesh
+        readinessProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - ps aux | grep -v grep | grep -q ModelManager
+{{ toYaml .Values.core.statelessApi.runtime.readinessProbe | indent 10 }}
+        livenessProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - ps aux | grep -v grep | grep -q ModelManager
+{{ toYaml .Values.core.statelessApi.runtime.livenessProbe | indent 10 }}
+      volumes:
+      - name: config
+        secret:
+          defaultMode: 420
+          ## [*] replace this with the name of your secret containing the etcd_connection key
+          secretName: {{ include "discovery.core.statelessApi.secret" . }}
+          items:
+            - key: "etcd_connection"
+              path: etcd_connection
+      - name: models
+        emptyDir: {}
+      - name: domain-socket
+        emptyDir: {}
+      - name: tls
+        secret:
+          secretName: {{ include "discovery.admin.tls" . }}
+          items:
+          - key: tls.crt
+            path: tls.crt
+          - key: pkcs8.key
+            path: tls.key
+      - name: certificate-etcd
+        secret:
+          secretName: {{ include "discovery.crust.etcd.ca" . }}

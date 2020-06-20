@@ -1,0 +1,230 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.wexCore.name }}
+{{- $subCompName := .sch.chart.components.wexCore.management.name }}
+{{- $compGatewayName := .sch.chart.components.wexCore.gateway.name }}
+{{- $compManagementInitName := .sch.chart.components.wexCore.gateway.init.name }}
+{{- $statefulSetName := include "sch.names.statefulSetName" (list . $subCompName) -}}
+{{- $servicePort := .sch.chart.components.wexCore.management.port }}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $statefulSetName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 4 }}
+    run: {{ $subCompName }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 6 }}
+      run: {{ $subCompName }}
+  serviceName: {{ include "sch.names.fullCompName" (list . $subCompName ) }}
+  replicas: {{ include "discovery.core.management.replicas" . }}
+  updateStrategy:
+    type: RollingUpdate
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 8 }}
+        run: {{ $subCompName }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.global.serviceAccount.name }}
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserSpecSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+        {{- if eq .Values.core.management.antiAffinity "hard" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: "kubernetes.io/hostname"
+            labelSelector:
+              matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 16 }}
+                run: {{ $subCompName }}
+        {{- else if eq .Values.core.management.antiAffinity "soft" }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 5
+            podAffinityTerm:
+              topologyKey: "kubernetes.io/hostname"
+              labelSelector:
+                matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 18 }}
+                  run: {{ $subCompName }}
+        {{- end }}
+      initContainers:
+{{ include "discovery.core.initContainer.etcdCheck" . | indent 6 }}
+{{ include "discovery.core.initContainer.postgresqlCheck" . | indent 6 }}
+{{ include "discovery.core.initContainer.rapiCheck" . | indent 6 }}
+{{- if .Values.global.private }}
+{{ include "discovery.core.initContainer.minioCheck" . | indent 6 }}
+{{- end }}
+{{ include "discovery.core.initContainer.haywireCheck" . | indent 6 }}
+      - name: postgresql-init
+{{ include "discovery.core.initContainer.commonConfig" . | indent 8 }}
+        env:
+{{ include "discovery.core.pg.envVars" . | indent 8}}
+        command:
+        - bash
+        - -c
+        - |
+          if [[ `hostname -s` == *{{ $statefulSetName }}-0 ]] ; then
+            if ! psql -lqt -w | cut -d \| -f 1 | grep -qw "${PGDATABASE}" ; then
+              createdb -w "${PGDATABASE}"
+              if [ $? -ne 0 ]; then
+                echo "An error occurred while creating database."
+                exit 2
+              fi
+              echo "OK - create postgres database ${PGDATABASE}"
+            else
+              echo "postgres database '${PGDATABASE}' already exists"
+            fi
+          else
+            echo "Wait for dadmin database to be ready..."
+            while true; do
+              if ! psql -lqt -w | cut -d \| -f 1 | grep -qw "${PGDATABASE}" ; then
+                sleep 1
+              else
+                echo "dadmin database is ready."
+                break
+              fi
+            done
+          fi
+          echo "OK"
+      containers:
+      - name: management
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.core.image.management.name }}:{{ .Values.core.image.management.tag }}"
+        imagePullPolicy: "{{ .Values.global.image.pullPolicy }}"
+        env:
+        - name: WLP_MAX_HEAP
+          value: "$(MANAGEMENT_WLP_MAX_HEAP)"
+{{ include "discovery.core.gateway.envVars" . | indent 8 }}
+#486 +1
+        - name: CK_SECRET_CK
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.core.ck.secret" . }}
+              key: CK
+        - name: DLAAS_SSL_CERT
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "dlaas.secretName" . | quote }}
+              key: tls.crt
+        - name: DLAAS_SERVICE_URL
+          value: {{ include "dlaas.hostPort" . | quote}}
+        - name: DLAAS_DATASTORE_TYPE
+          value: "s3_datastore"
+        - name: DLAAS_AUTHORITY
+          value: "dlaas.ibm.com"
+        - name: SENTENCE_TRAIN_GPU_COUNT
+          value: "0"
+        - name: SENTENCE_TRAIN_GPU_TYPE
+          value: "cpu"
+        - name: SENTENCE_TRAIN_CPU_COUNT
+          value: "8"
+        - name: SENTENCE_TRAIN_CPU_MEMORY
+          value: "12000"
+        - name: SENTENCE_TRAIN_BATCH_SIZE
+          value: "16"
+        - name: SENTENCE_TRAIN_NUM_EPOCHS
+          value: "2"
+        - name: SENTENCE_TRAIN_IMAGE_NAME
+          value: "sentence-classification"
+        - name: SENTENCE_TRAIN_IMAGE_VERSION
+          value: "v1.0.7"
+        - name: SENTENCE_TRAIN_IMAGE_REGISTRY
+          value: {{ .Values.global.dockerRegistryPrefix | splitList "/" | first }}
+        - name: SENTENCE_TRAIN_IMAGE_NAMESPACE
+          value: {{ .Values.global.dockerRegistryPrefix | splitList "/" | rest | first }}
+        - name: SENTENCE_TRAIN_IMAGE_DOCKERCFG
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.image.pullSecret }}
+{{- if .Values.global.private }}
+              key: .dockercfg
+{{- else }}
+              key: .dockerconfigjson
+{{- end }}
+        - name: SENTENCE_TRAIN_INPUT_BUCKET_NAME
+          value: "discovery-sentence-classification-input"
+        - name: SENTENCE_TRAIN_OUTPUT_BUCKET_NAME
+          value: "discovery-sentence-classification-results"
+        - name: ETCD_SSL_CERT
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.admin.tls" . }}
+              key: tls.cacrt
+        - name: SSL_CERTFILE
+          value: "/opt/tls/wlp/tls.crt"
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . $compName ) }}
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . $compGatewayName ) }}
+        ports:
+        - name: api-tls
+          containerPort: {{ $servicePort }}
+          protocol: TCP
+        resources:
+{{ toYaml .Values.core.management.resources | indent 10 }}
+        volumeMounts:
+        - name: data
+          mountPath: /wexdata
+        {{- if .Values.core.tls.nginx.enabled }}
+        - name: certificate-nginx
+          mountPath: "/opt/tls/nginx"
+          readOnly: true
+        {{- end }}
+        {{- if .Values.core.tls.wlp.enabled }}
+        - name: certificate-wlp
+          mountPath: "/opt/tls/wlp"
+          readOnly: true
+        {{- end }}
+        - name: certificate-etcd
+          mountPath: "/opt/tls/etcd"
+          readOnly: true
+        readinessProbe:
+          exec:
+            command:
+            - bash
+            - -ce
+            - |
+              echo 'Checking WLP readiness.'
+              httpCode=$(curl -sl -w "%{http_code}" -o /dev/null http://localhost:9080/wex/api/v1/system/info)
+              echo $httpCode
+              echo $httpCode | grep -q 200
+              echo 'WLP is ready.'
+{{ toYaml .Values.core.management.readinessProbe | indent 10 }}
+        livenessProbe:
+          exec:
+            command:
+            - bash
+            - -ce
+            - |
+              echo 'Checking WLP readiness.'
+              httpCode=$(curl -sl -w "%{http_code}" -o /dev/null http://localhost:9080/wex/api/v1/system/info)
+              echo $httpCode
+              echo $httpCode | grep -q 200
+              echo 'WLP is ready.'
+{{ toYaml .Values.core.management.livenessProbe | indent 10 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserPodSecurityContext) | indent 8 }}
+      volumes:
+      - name: data
+        emptyDir: {}
+      {{- if .Values.core.tls.nginx.enabled }}
+      - name: certificate-nginx
+        secret:
+          secretName: {{ include "discovery.admin.tls" . }}
+      {{- end }}
+      {{- if .Values.core.tls.wlp.enabled }}
+      - name: certificate-wlp
+        secret:
+          secretName: {{ include "discovery.admin.tls" . }}
+      {{- end }}
+      - name: certificate-etcd
+        secret:
+          secretName: {{ include "discovery.crust.etcd.ca" . }}
+      - name: certificate-postgresql
+        secret:
+          secretName: {{ include "discovery.crust.postgresql.ca" . }}

@@ -1,0 +1,64 @@
+{{- if .Values.networkPolicy.create }}
+  {{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+  {{- $name := include "sch.names.fullCompName" (list . "ingress-policy") -}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $name (dict "service" "discovery")) | indent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      release: {{ .Release.Name }}
+  policyTypes:
+  - Ingress
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          release: {{ (index .Values.global.components "ibm-watson-discovery-crust-prod").releaseName }}
+    - podSelector:
+        matchLabels:
+          release: {{ (index .Values.global.components "ibm-watson-discovery-mantle-prod").releaseName }}
+    - podSelector:
+        matchLabels:
+          release: {{ (index .Values.global.components "ibm-watson-discovery-core-prod").releaseName }}
+    - podSelector:
+        matchLabels:
+          app: crow
+    - podSelector:
+        matchLabels:
+          component: ibm-nginx
+    - podSelector:
+        matchLabels:
+          component: zen-core
+    - podSelector:
+        matchLabels:
+          component: zen-core-api
+    - podSelector:
+        matchLabels:
+          component: usermgmt
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          component: ibm-nginx
+    - podSelector:
+        matchLabels:
+          component: zen-core
+    - podSelector:
+        matchLabels:
+          component: zen-core-api
+    - podSelector:
+        matchLabels:
+          component: usermgmt
+    - podSelector:
+        matchLabels:
+          release: {{ (index .Values.global.components "ibm-watson-discovery-mantle-prod").releaseName }}
+    - podSelector:
+        matchLabels:
+          release: {{ (index .Values.global.components "ibm-watson-discovery-core-prod").releaseName }}
+{{- end }}

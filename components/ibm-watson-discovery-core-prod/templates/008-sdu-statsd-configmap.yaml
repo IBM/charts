@@ -1,0 +1,78 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $app := .Values.global.appName }}
+{{- $compName := .sch.chart.components.sdu.name -}}
+{{- $sduStatsdConfigName := include "sch.names.fullCompName" (list . "sdu-statsd-config" ) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $sduStatsdConfigName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "sdu" "app.kubernetes.io/name" "sdu" "squad" "sdu" "product" $app)) | indent 4 }}
+data:
+  statsd_exporter_mapping.yml: |
+    mappings:
+
+    - match: gunicorn.request.status.*
+      name: "gunicorn_request_status"
+      labels:
+        status_code: $1
+        component: "sdu"
+
+    - match: gunicorn.request.duration
+      name: "gunicorn_request_duration"
+      labels:
+        component: "sdu"
+
+    - match: gunicorn.*
+      name: gunicorn_${1}
+      labels:
+        component: "sdu"
+
+    - match: "sdu.workers.*.processed"
+      name: "task_processed"
+      labels:
+        task: "$1"
+        component: "sdu"
+
+    - match: "sdu.workers.*.failed"
+      name: "task_status"
+      labels:
+        task: "$1"
+        status: failed
+        component: sdu
+
+    - match: "sdu.workers.*.success"
+      name: "task_status"
+      labels:
+        task: "$1"
+        status: success
+        component: sdu
+
+    - match: "sdu.workers.*.runtime"
+      name: "task_duration"
+      match_metric_type: timer
+      labels:
+        task: "$1"
+        component: sdu
+
+    - match: "sdu.*.*.failure"
+      name: "pdf_conversion_failure"
+      labels:
+        task: "$1"
+        subtask: "$2"
+        component: sdu
+
+    - match: "sdu.*.*.timeout"
+      name: "pdf_conversion_timeout"
+      labels:
+        task: "$1"
+        subtask: "$2"
+        component: sdu
+
+    - match: "sdu.*.*"
+      name: "task_duration"
+      match_metric_type: timer
+      labels:
+        task: "$1"
+        subtask: "$2"
+        component: sdu

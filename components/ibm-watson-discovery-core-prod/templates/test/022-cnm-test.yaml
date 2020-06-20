@@ -1,0 +1,34 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.cnm.test.name -}}
+{{- $helmTest := .Values.cnm.test -}}
+{{- $cnmApiService := include "sch.names.fullCompName" (list . .sch.chart.components.cnm.apiServer.name ) -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName ) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedPodSecurityContext) | indent 2 }}
+  serviceAccountName: {{ include "discovery.admin.serviceAccount" . }}
+  restartPolicy: Never
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 4 }}
+  containers:
+  - name: cnm-api-test
+    image: {{ .Values.global.dockerRegistryPrefix }}/
+      {{- .Values.cnm.test.image.name }}:
+      {{- .Values.cnm.test.image.tag }}
+    imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 4 }}
+    resources:
+{{ $helmTest.resources | toYaml | indent 6 }}
+    command:
+    - "/bin/bash"
+    - -c
+    - "curl -s -k --fail --show-error https://{{ $cnmApiService }}:{{ .Values.cnm.apiServer.ports.server.servicePort }}/cnm-api/v1/health/readiness"

@@ -1,0 +1,150 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.projectDataPrepAgent.name -}}
+{{- $tdCrudName := .sch.chart.components.trainingCrud.name -}}
+{{- $rankerRestName := .sch.chart.components.rankerRest.name -}}
+{{- $app := .Values.global.appName -}}
+{{- $haywireCompName := .sch.chart.components.haywire.name -}}
+{{- $wireRankerSecret := include "sch.names.fullCompName" (list . .sch.chart.components.rankerSecret.name ) -}}
+{{- $wireConfigName := include "sch.names.fullCompName" (list . "wire-config" ) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "project-data-prep-agent" "squad" "wire")) | indent 4 }}
+spec:
+  replicas: {{ .Values.wire.dataPrepAgentForProject.replicas }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "project-data-prep-agent" "app.kubernetes.io/name" "project-data-prep-agent" "squad" "wire" "app" $app "service" "discovery")) | indent 6 }}
+  revisionHistoryLimit: 2
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+{{- if .Values.global.metricsCollection.enabled }}
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '{{ .Values.wire.statsd.exporterPrometheusPort }}'
+{{- end }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "project-data-prep-agent" "app.kubernetes.io/name" "project-data-prep-agent" "squad" "wire" "app" $app "service" "discovery")) | indent 8 }}
+    spec:
+      serviceAccountName: {{ include "discovery.admin.serviceAccount" . }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . ) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedPodSecurityContext) | indent 6 }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+      initContainers:
+{{ include "discovery.elasticInitContainer" . | indent 6 }}
+      containers:
+      - name: {{ $compName }}
+        image: {{ .Values.global.dockerRegistryPrefix }}/
+          {{- .Values.wire.trainingAgent.image.name }}:
+          {{- .Values.wire.trainingAgent.image.tag }}
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 8 }}
+        resources:
+          requests:
+            memory: {{ .Values.wire.dataPrepAgentForProject.resources.requests.memory | quote }}
+            cpu: {{ .Values.wire.dataPrepAgentForProject.resources.requests.cpu | quote }}
+          limits:
+            memory: {{ .Values.wire.dataPrepAgentForProject.resources.limits.memory | quote }}
+            cpu: {{ .Values.wire.dataPrepAgentForProject.resources.limits.cpu | quote }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        env:
+        - name: MANAGEMENT_API_HOST
+          value: {{ include "discovery.core.gatewayService" . }}
+        - name: MANAGEMENT_API_PORT
+          value: {{ .Values.wire.dataPrepAgentForProject.managementApiPort | quote }}
+        - name: TRAINING_DATA_HOST
+          value: {{ include "sch.names.fullCompName" (list . $tdCrudName ) | quote }}
+        - name: TRAINING_DATA_PORT
+          value: {{ .Values.wire.trainingCrud.port | quote }}
+        - name: TRAINING_JOB_HEARTBEAT_MILLISECONDS
+          value: "{{ .Values.wire.dataPrepAgentForProject.dataPrepTrainingJobHeartbeatMillis }}"
+        - name: FEATURE_GEN_WORKERS
+          value: "{{ .Values.wire.dataPrepAgentForProject.dataPrepFeatureVectorWorkers }}"
+        - name: RANK_HOST
+          value: {{ include "discovery.wire.rankerRest.hostname" . | quote }}
+        - name: RANK_PORT
+          value: {{ .Values.wire.rankerRest.port | quote }}
+        - name: NOTICES_HOST
+          value: "{{ include "sch.names.fullCompName" (list . $haywireCompName) }}"
+        - name: NOTICES_PORT
+          value: {{ .Values.notices.port | quote }}
+        - name: INTERVAL
+          value: "0"
+        - name: ADD_METRICS_TYPE_TO_METRIC_NAMES
+          value: "true"
+        - name: PIPELINE
+          value: '{{ .Values.wire.dataPrepAgentForProject.dataPrepPipeline }}'
+        - name: ERROR_LISTENERS
+          value: '{{ .Values.wire.dataPrepAgentForProject.dataPrepMessageListeners }}'
+        - name: ELASTIC_URLS
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.mantle.elastic.configmap" . }}
+              key: endpoint
+        - name: ELASTIC_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.mantle.elastic.secret" . }}
+              key: username
+        - name: ELASTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.mantle.elastic.secret" . }}
+              key: password
+        - name: ELASTIC_AUTH
+          value: "$(ELASTIC_USER):$(ELASTIC_PASSWORD)"
+        - name: ELASTIC_DOCTYPE
+          value: '{{ .Values.wire.dataPrepAgentForProject.elasticDocType }}'
+        - name: BLACKLIST
+          value: {{ .Values.wire.dataPrepAgentForProject.dataPrepBlackList | quote }}
+        - name: TLS_SERVER_NAME_OVERRIDE
+          value: "{{ $tdCrudName }}.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }}"
+        - name: TLS_CERT_FILE
+          value: "/app/ca.crt"
+        args: ["-agent_name", "DataPreparationAgent"]
+        livenessProbe:
+          exec:
+            command:
+            - cat
+            - APP_VERSION
+          initialDelaySeconds: {{ .Values.wire.dataPrepAgentForProject.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.wire.dataPrepAgentForProject.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.wire.dataPrepAgentForProject.livenessProbe.timeoutSeconds }}
+        readinessProbe:
+          exec:
+            command:
+            - cat
+            - APP_VERSION
+          initialDelaySeconds: {{ .Values.wire.dataPrepAgentForProject.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.wire.dataPrepAgentForProject.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.wire.dataPrepAgentForProject.readinessProbe.timeoutSeconds }}
+        volumeMounts:
+        - mountPath: /app/server.crt
+          name: tls
+          readOnly: true
+          subPath: server.crt
+        - mountPath: /app/ca.crt
+          name: tls
+          readOnly: true
+          subPath: ca.crt
+        - mountPath: /app/server.pem
+          name: tls
+          readOnly: true
+          subPath: server.pem
+{{ include "wire.statsdExporter.container" (list . ) | indent 6 }}
+      volumes:
+      - name: tls
+        secret:
+          secretName: {{ $wireRankerSecret }}
+{{- if .Values.global.metricsCollection.enabled }}
+      - name: {{ .Values.wire.configVolume }}
+        configMap:
+          name: {{ $wireConfigName }}
+{{- end }}

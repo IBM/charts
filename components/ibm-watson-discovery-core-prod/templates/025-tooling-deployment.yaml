@@ -1,0 +1,170 @@
+{{- if .Values.global.private }}
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.tooling.name -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "service" "discovery")) | indent 4 }}
+spec:
+  replicas: {{ include "discovery.tooling.replicas" . }}
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 50%
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "service" "discovery")) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "service" "discovery")) | indent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "4000"
+        prometheus.io/scheme: https
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      terminationGracePeriodSeconds: 120
+      serviceAccountName: {{ include "discovery.admin.serviceAccount" . }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedPodSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      containers:
+      - name: {{ include "sch.names.fullCompName" (list . "tooling") | quote }}
+        image: {{ .Values.global.dockerRegistryPrefix }}/
+          {{- .Values.tooling.image.name }}:
+          {{- .Values.tooling.image.tag }}
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 8 }}
+        ports:
+        - containerPort: 4000
+          protocol: TCP
+        volumeMounts:
+        - name: app-tmp
+          mountPath: /usr/app/server-legacy/tmp
+        {{- if .Values.tls.enabled }}
+        - name: certificate-nginx
+          mountPath: "/opt/tls/nginx"
+          readOnly: true
+        {{- end }}
+        livenessProbe:
+          httpGet:
+            path: "/health"
+            port: 4000
+            scheme: HTTPS
+          initialDelaySeconds: 20
+          periodSeconds: 20
+          timeoutSeconds: 20
+          failureThreshold: 18
+        readinessProbe:
+          httpGet:
+            path: "/health"
+            port: 4000
+            scheme: HTTPS
+          initialDelaySeconds: 20
+          periodSeconds: 20
+          timeoutSeconds: 20
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - "/bin/sh"
+              - "-c"
+              - "sleep 60"
+        resources:
+{{ toYaml .Values.tooling.resources | indent 10 }}
+        env:
+        - name: APP_VERSION
+          value: {{ .Values.tooling.image.tag | quote }}
+        - name: CONTAINER_NAME
+          value: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: BLUEMIX_ORGANIZATION_ID
+          value: {{ .Values.gateway.addon.organizationId | quote }}
+        - name: BLUEMIX_ACCOUNT_ID
+          value: {{ .Values.gateway.addon.accountId | quote }}
+        - name: BLUEMIX_PLAN_ID
+          value: {{ .Values.gateway.addon.planId | quote }}
+        - name: BLUEMIX_INSTANCE_ID
+          value: {{ .Values.gateway.addon.instanceId }}
+        - name: CLOUD_ENVIRONMENT
+          value: "icp"
+        - name: CNM_API_URL
+          value: {{ include "discovery.cnm.apiEndpoint" . | quote }}
+        - name: CONTEXT_PATH
+          value: {{ include "discovery.tooling.path" . | quote }}
+        - name: EXPOSABLE_BASE_DOC_EXTENSION
+          value: "discovery-data/"
+        - name: EXPOSABLE_BASE_WALKME_URL
+          value: "/walkme-flows/6efdca72efc0471aa4fc3061e214519b/walkme_6efdca72efc0471aa4fc3061e214519b_https.js"
+        - name: EXPOSABLE_BLUEMIX_HOST
+          value: "https://cloud.ibm.com"
+        - name: EXPOSABLE_INSTANCE_ID
+          value: {{ .Values.gateway.addon.instanceId | quote }}
+        - name: EXPOSABLE_DISCO_DEBUG
+          value: "false"
+        - name: EXPOSABLE_FILE_TYPES
+          value: "HTML, JSON, Word"
+        - name: EXPOSABLE_SDU_FILE_TYPES
+          value: "PDF, HTML, JSON, Word, Excel, PowerPoint, PNG, TIFF, JPG, GIF, TXT, CSV, ZIP, GZIP, TAR"
+        - name: EXPOSABLE_FILE_EXTENSIONS
+          value: ".html, .json, .doc, .docx"
+        - name: EXPOSABLE_SDU_FILE_EXTENSIONS
+          value: ".pdf, .html, .json, .doc, .docx, .xls, .xlsx, .ppt, .pptx, .png, .tiff, .jpg, .gif, .jpeg, .txt, .csv, .zip, .gzip, .tar"
+        - name: EXPOSABLE_SDU_SUPPORTED_ANNOTATOR_FILE_TYPES
+          value: "PDF, Word, Excel, PowerPoint, PNG, TIFF, JPG"
+        - name: EXPOSABLE_FILE_RESOURCE_WINDOWS_AGENT
+          value: "Windows-Agent-Installer"
+        - name: EXPOSABLE_TOOLING_NEXT
+          value: "true"
+        - name: ENABLE_FEATURE_EXPERIMENTAL_SENTENCE_CLASSIFIER
+          value: "false"
+        - name: ENABLE_FEATURE_IDLE_TIMEOUT
+          value: "false"
+        - name: GATEWAY_API_URL
+          value: {{ include "watson.gateway.endpoint" . | quote }}
+        - name: REQUEST_TIMEOUT_SECONDS
+          value: "60"
+        - name: VCR_STATUS
+          value: "disabled"
+        - name: WEX_API_URL
+          value: {{ include "discovery.core.gatewayEndpoint" . | quote }}
+        - name: WEX_SSL_CACERT
+          value: /opt/tls/nginx/tls.crt
+        - name: WEX_SSL_CAPATH
+          value: /opt/tls/nginx/tls.crt
+        - name: WEX_SSL_KEY
+          value: /opt/tls/nginx/tls.key
+        - name: SECRET_KEY_BASE
+          value: "eb24739506e148cad9afd94f631c4891be59cfcaf4325826eb0f4ba0c7a9ce31deb3a05ccc5c66698a6e5834e251645d08bd9591c9401a3a5a3c6b1f8659c78a"
+        - name: SESSION_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: session-secret
+              name: tooling-secrets
+        - name: RESOURCE_CONTROLLER_ENDPOINT
+          value: {{ include "watson.gateway.endpoint" . | quote }}
+        - name: USER_MANAGEMENT_ENDPOINT
+          value: {{ printf "%s/api/v1/usermgmt" (include "cp4d.nginx.endpoint" .) | quote }}
+        - name: RESOURCE_CONTROLLER_INSTANCES_PATH
+          value: "/api/ibmcloud/resource-controller/resource_instances"
+        - name: RESOURCE_CONTROLLER_KEYS_PATH
+          value: "/api/ibmcloud/resource-controller/resource_keys/:instanceId"
+        - name: RESOURCE_CONTROLLER_RESOURCE_ID
+          value: {{ .Values.gateway.addon.serviceId }}
+      volumes:
+      - name: app-tmp
+        emptyDir: {}
+      - name: certificate-nginx
+        secret:
+          secretName: {{ include "discovery.admin.tls" . }}
+{{- end }}

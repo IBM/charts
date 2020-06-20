@@ -1,0 +1,42 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $suffix := .sch.chart.components.wexCore.ck.delJob.name -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $suffix) | quote }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . $suffix) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "post-delete"
+    "helm.sh/hook-weight": "-2"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      name: {{ include "sch.names.fullCompName" (list . $suffix) | quote }}
+      labels:
+{{  include "sch.metadata.labels.standard" (list . $suffix)  | indent 8 }}
+    spec:
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      restartPolicy: Never
+      serviceAccountName: {{ .Values.global.privilegedServiceAccount.name }}
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserSpecSecurityContext) | indent 6 }}
+      containers:
+      - name: ck-del-secret
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.core.image.ckJob.name }}:{{ .Values.core.image.ckJob.tag }}"
+        imagePullPolicy: "{{ .Values.global.image.pullPolicy }}"
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserPodSecurityContext) | indent 8 }}
+        resources:
+{{ toYaml .Values.core.ckJob.resources | indent 10 }}
+        command:
+        - /bin/bash
+        - -c
+        - |
+          if kubectl get secret {{ include "discovery.core.ck.secret" . }} ; then
+            kubectl delete secret {{ include "discovery.core.ck.secret" . }}
+          fi
+

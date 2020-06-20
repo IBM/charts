@@ -1,0 +1,80 @@
+{{- if .Release.IsInstall }}
+  {{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+  {{- $jobName := "jks-secret-gen-job" -}}
+  {{- $wireJksSecret := include "discovery.core.javaKeyStore" . -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $jobName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $jobName (dict "service" "discovery")) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . ) | indent 8 }}
+      name: {{ include "sch.names.fullCompName" (list . $jobName) }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $jobName (dict "service" "discovery")) | indent 8 }}
+    spec:
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedPodSecurityContext) | indent 6 }}
+      restartPolicy: Never
+      serviceAccountName: {{ .Values.global.privilegedServiceAccount.name }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+      containers:
+      - name: "jks-secret-gen"
+        resources:
+          requests:
+            memory: {{ .Values.jksJob.resources.requests.memory | quote }}
+            cpu: {{ .Values.jksJob.resources.requests.cpu | quote }}
+          limits:
+            memory: {{ .Values.jksJob.resources.limits.memory | quote }}
+            cpu: {{ .Values.jksJob.resources.limits.cpu | quote }}
+        image: {{ .Values.global.dockerRegistryPrefix }}/
+          {{- .Values.jksJob.image.name }}:
+          {{- .Values.jksJob.image.tag }}
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 8 }}
+        command:
+        - "/bin/bash"
+        - "-c"
+        - |
+          ./jksScript.sh;
+
+          kubectl apply -f - <<END
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            name: {{ $wireJksSecret }}
+            labels:
+{{ include "sch.metadata.labels.standard" (list . $jobName (dict "service" "discovery")) | indent 14 }}
+          data:
+            truststore.jks: $(base64 /tmp/jks/truststore.jks | tr -d '\n')
+            keystore.jks: $(base64 /tmp/jks/keystore.jks | tr -d '\n')
+            master.jks: $(base64 /tmp/jks/master.jks | tr -d '\n')
+          END
+
+        volumeMounts:
+        - name: tls
+          mountPath: /tls-creds
+        - name: jks-out
+          mountPath: /tmp/jks
+      volumes:
+      - name: tls
+        secret:
+          secretName: {{ include "discovery.admin.tls" . }}
+      - name: jks-out
+        emptyDir: {}
+{{ end }}

@@ -1,0 +1,79 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $suffix := .sch.chart.components.wexCore.ck.genJob.name -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $suffix) | quote }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . $suffix) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "-2"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      name: {{ include "sch.names.fullCompName" (list . $suffix) | quote }}
+      labels:
+{{  include "sch.metadata.labels.standard" (list . $suffix)  | indent 8 }}
+    spec:
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      restartPolicy: Never
+      serviceAccountName: {{ .Values.global.privilegedServiceAccount.name }}
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserSpecSecurityContext) | indent 6 }}
+      volumes:
+      - name: ck-file
+        emptyDir: {}
+      initContainers:
+      - name: ck-gen-file
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.core.image.ingestion.name }}:{{ .Values.core.image.ingestion.tag }}"
+        imagePullPolicy: "{{ .Values.core.image.pullPolicy }}"
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserPodSecurityContext) | indent 8 }}
+        resources:
+{{ toYaml .Values.core.ckJob.resources | indent 10 }}
+        volumeMounts:
+        - name: ck-file
+          mountPath: /ck-file
+        command:
+        - /bin/bash
+        - -c
+        - |
+          CK_FILE=/ck-file/crawler.ini
+          touch "${CK_FILE}"
+          /opt/ibm/java/jre/bin/java -cp $WEX_HOME/zing/libs/\* com.ibm.es.util.GenerateKeyFile "${CK_FILE}"
+          echo Password=$(hostname) >>"${CK_FILE}"
+          /opt/ibm/java/jre/bin/java -DES_CFG="${CK_FILE}" -cp $WEX_HOME/zing/libs/\* -Xms32m -Xmx128m com.ibm.es.util.EncryptProperty -f "${CK_FILE}" -p Password "$(hostname)"
+      containers:
+      - name: ck-gen-secret
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.core.image.ckJob.name }}:{{ .Values.core.image.ckJob.tag }}"
+        imagePullPolicy: "{{ .Values.global.image.pullPolicy }}"
+{{- include "sch.security.securityContext" (list . .sch.chart.wexUserPodSecurityContext) | indent 8 }}
+        resources:
+{{ toYaml .Values.core.ckJob.resources | indent 10 }}
+        volumeMounts:
+        - name: ck-file
+          mountPath: /ck-file
+          readOnly: true
+        command:
+        - /bin/bash
+        - -c
+        - |
+          . /ck-file/crawler.ini
+          kubectl apply -f - <<END
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            name: {{ include "discovery.core.ck.secret" . }}
+            labels:
+{{  include "sch.metadata.labels.standard" (list . (include "discovery.core.ck.secret" .))  | indent 14 }}
+          stringData:
+            CK:  "${CK}"
+            OK: "${OK}"
+            Password: "${Password}"
+          END
+

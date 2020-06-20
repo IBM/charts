@@ -1,0 +1,164 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.haywire.name -}}
+{{- $app := .Values.global.appName -}}
+{{- $rankerSecretName := include "discovery.ranker.secret" . }}
+{{- $wireRankerSecret := include "sch.names.fullCompName" (list . .sch.chart.components.rankerSecret.name ) -}}
+{{- $wireConfigName := include "sch.names.fullCompName" (list . "wire-config" ) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "haywire" "squad" "wire" "tenant" (tpl .Values.global.tenant .))) | indent 4 }}
+spec:
+  replicas: {{ include "discovery.wire.haywireReplicas" . }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "haywire" "app.kubernetes.io/name" "haywire" "squad" "wire" "app" $app "service" "discovery" "tenant" (tpl .Values.global.tenant .))) | indent 6 }}
+  revisionHistoryLimit: 2
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+{{- if .Values.global.metricsCollection.enabled }}
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '{{ .Values.wire.statsd.exporterPrometheusPort }}'
+{{- end }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "haywire" "app.kubernetes.io/name" "haywire" "squad" "wire" "app" $app "service" "discovery" "tenant" (tpl .Values.global.tenant .))) | indent 8 }}
+    spec:
+      serviceAccountName: {{ include "discovery.admin.serviceAccount" . }}
+      affinity:
+{{ include "sch.affinity.nodeAffinity" (list . ) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedPodSecurityContext) | indent 6 }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      volumes:
+      - name: tls
+        secret:
+          secretName: {{ $wireRankerSecret }}
+{{- if .Values.global.metricsCollection.enabled }}
+      - name: {{ .Values.wire.configVolume }}
+        configMap:
+          name: {{ $wireConfigName }}
+{{- end }}
+      initContainers:
+{{ include "discovery.elasticInitContainer" . | indent 8 }}
+      containers:
+      - name: {{ $compName }}
+        image: {{ .Values.global.dockerRegistryPrefix }}/
+          {{- .Values.wire.haywire.image.name }}:
+          {{- .Values.wire.haywire.image.tag }}
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 8 }}
+        resources:
+          requests:
+            memory: "{{ .Values.wire.haywire.resources.requests.memory }}"
+            cpu: "{{ .Values.wire.haywire.resources.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.wire.haywire.resources.limits.memory }}"
+            cpu: "{{ .Values.wire.haywire.resources.limits.cpu }}"
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        volumeMounts:
+        - mountPath: /app/server.crt
+          name: tls
+          readOnly: true
+          subPath: server.crt
+        - mountPath: /app/ca.crt
+          name: tls
+          readOnly: true
+          subPath: ca.crt
+        - mountPath: /app/server.pem
+          name: tls
+          readOnly: true
+          subPath: server.pem
+        env:
+        - name: PROFILE
+          value: "{{ .Values.wire.haywire.profile }}"
+        - name: NOTICES_MESSAGE_DOCTYPE
+          value: "document"
+        - name: CRN_CNAME
+          value: "{{ .Values.wire.trainingRest.crnCname }}"
+        - name: CRN_CTYPE
+          value: "{{ .Values.wire.trainingRest.crnCtype }}"
+        - name: CRN_LOCATION
+          value: "{{ .Values.wire.trainingRest.crnLocation }}"
+        - name: TIP_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ $rankerSecretName }}
+              key: tip-token
+        - name: JAVA_TOOL_OPTIONS
+          value: "{{ .Values.wire.haywire.javaOpts }}"
+        - name: WIRE_PRIVATE_KEY_PASSPHRASE
+          valueFrom:
+            secretKeyRef:
+              name: {{ $wireRankerSecret }}
+              key: service-key-token
+        - name: PALM_PAGER_DUTY_METADATA
+          value: "{{ .Values.wire.haywire.palmPagerDutyMetadata }}"
+        - name: USE_DATAPOWERLESS
+          value: "false"
+        - name: FRONTEND_HOST
+          value: ""
+        - name: WIRE_PRIVATE_KEY_PASSPHRASE_ENABLED
+          value: {{ .Values.wire.privateKeyPassphraseEnabled | quote }}
+        - name: ICP_DEPLOY_ENABLED
+          value: "true"
+        - name: ICP_ELASTIC_ADDRESSES
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.mantle.elastic.configmap" . }}
+              key: endpoint
+        - name: ICP_ELASTIC_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.mantle.elastic.secret" . }}
+              key: username
+        - name: ICP_ELASTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.mantle.elastic.secret" . }}
+              key: password
+        - name: PALM_STATS_D_METRIC_TYPE_PREFIX_ENABLED
+          value: "true"
+        - name: PALM_STATS_D_PREFIX
+          value: haywire
+        livenessProbe:
+          exec:
+            command:
+            - "./aceso"
+            - "-method"
+            - "health"
+            - "-service_port"
+            - {{ .Values.notices.port | quote }}
+            - "-ca_certificate"
+            - "ca.crt"
+            - "-domain_name"
+            - "$(WIRE_DOMAIN_NAME_OVERRIDE)"
+            - "-skip_hostname_verification"
+          initialDelaySeconds: {{ .Values.wire.haywire.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.wire.haywire.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.wire.haywire.livenessProbe.timeoutSeconds }}
+        readinessProbe:
+          exec:
+            command:
+            - "./aceso"
+            - "-method"
+            - "readiness"
+            - "-service_port"
+            - {{ .Values.notices.port | quote }}
+            - "-ca_certificate"
+            - "ca.crt"
+            - "-domain_name"
+            - "$(WIRE_DOMAIN_NAME_OVERRIDE)"
+            - "-skip_hostname_verification"
+          initialDelaySeconds: {{ .Values.wire.haywire.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.wire.haywire.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.wire.haywire.readinessProbe.timeoutSeconds }}
+        ports:
+        - containerPort: {{ .Values.notices.port }}
+          protocol: TCP
+{{ include "wire.statsdExporter.container" (list . ) | indent 6 }}

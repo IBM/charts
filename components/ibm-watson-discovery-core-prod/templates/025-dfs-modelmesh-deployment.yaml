@@ -1,0 +1,260 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.mm.name -}}
+{{- $app := .Values.global.appName -}}
+{{- $tlsSecret := include "discovery.admin.tls" . -}}
+{{- $tenantLabel := .Values.global.tenant }}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "dfs-modelmesh" "squad" "wire" "service" "discovery" "tenant" $tenantLabel)) | indent 4 }}
+spec:
+  replicas: {{ include "discovery.dfs.mmReplicas" . }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "dfs-modelmesh" "app.kubernetes.io/name" "dfs-modelmesh" "squad" "wire" "app" $app "service" "discovery" "tenant" $tenantLabel)) | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "dfs-modelmesh" "app.kubernetes.io/name" "dfs-modelmesh" "squad" "wire" "app" $app "service" "discovery" "tenant" $tenantLabel)) | indent 8 }}
+    spec:
+      serviceAccountName: {{ include "discovery.admin.serviceAccount" . }}
+      affinity:
+{{ include "sch.affinity.nodeAffinity" (list . ) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedPodSecurityContext) | indent 6 }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+{{- if .Values.global.private }}
+      initContainers:
+{{ include "discovery.etcdInitContainer" . | indent 8 }}
+{{- end }}
+      containers:
+      - name: modelmesh-sidecar
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.mm.mmSideCar.image.name}}:{{ .Values.mm.mmSideCar.image.tag }}"
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 8 }}
+        ports:
+        - name: thrift
+          containerPort: 8080
+        - name: grpc
+          containerPort: 8033
+        env:
+        - name: MM_SERVICE_NAME
+          value: disco-dfs-modelmesh
+        - name: INTERNAL_GRPC_SOCKET_PATH
+          value: /tmp/mmesh/grpc.sock
+        - name: MM_SVC_GRPC_PORT
+          value: "8033"
+          # [*] these are optional - if set then TLS will
+          #     be configured for the external gRPC interface
+        - name: MM_SVC_GRPC_CA_CERT_PATH
+          value: "/tmp/public/public.key"
+        - name: MM_SVC_GRPC_PRIVATE_KEY_PATH
+          value: "/tmp/private/private.pem"
+        # [*] optional, set to support grpc messages > 16MiB
+        #- name: MM_SVC_GRPC_MAX_MSG_SIZE
+        #  value: max-grpc-msg-size-in-bytes
+        - name: KV_STORE
+          value: etcd:/opt/watson/mmesh/dynconfig/etcd_connection
+        # [*] LOG_TO_DB is optional and needs to be set only if you want
+        # the start script to log to a database.  Any non-empty value
+        # will activate it.
+        #- name: LOG_TO_DB
+        #  value: "true"
+        - name: WKUBE_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: WKUBE_POD_IPADDR
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: MM_LOCATION
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        # set this to equal terminationGracePeriodSeconds setting
+        - name: SHUTDOWN_TIMEOUT_MS
+          value: "90000"
+        volumeMounts:
+        - name: config
+          mountPath: /opt/watson/mmesh/dynconfig
+          readOnly: true
+        - name: domain-socket
+          mountPath: /tmp/mmesh
+        - name: ssl-certs-private
+          mountPath: /tmp/private/private.pem
+          subPath: private.pem
+          readOnly: true
+        - name: ssl-certs-public
+          mountPath: /tmp/public/public.key
+          subPath: public.key
+          readOnly: true
+        resources:
+          requests:
+            cpu: "{{ .Values.mm.mmSideCar.resources.requests.cpu }}"
+            memory: "{{ .Values.mm.mmSideCar.resources.requests.memory }}"
+          limits:
+            cpu: "{{ .Values.mm.mmSideCar.resources.limits.cpu }}"
+            memory: "{{ .Values.mm.mmSideCar.resources.limits.memory }}"
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8089
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 1
+        livenessProbe:
+          httpGet:
+            path: /live
+            port: 8089
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 2
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /opt/watson/mmesh/stop.sh
+              - wait
+      - name: modelmesh-server
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.mm.mmServer.image.name }}:{{ .Values.mm.mmServer.image.tag }}"
+{{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 8 }}
+        resources:
+          requests:
+            memory: "{{ .Values.mm.mmServer.resources.requests.memory }}"
+            cpu: "{{ .Values.mm.mmServer.resources.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.mm.mmServer.resources.limits.memory }}"
+            cpu: "{{ .Values.mm.mmServer.resources.limits.cpu }}"
+        volumeMounts:
+        - name: domain-socket
+          mountPath: /tmp/mmesh
+{{- if .Values.global.private }}
+        - name: truststore
+          mountPath: /opt/ibm/java/jre/lib/security/cacerts
+          subPath: truststore.jks
+          readOnly: true
+{{- end }}
+        livenessProbe:
+          exec:
+            command:
+            - cat
+            - /srv/knowledge-graph-model-mesh/bin/kg-mmesh-client
+          initialDelaySeconds: 30
+          periodSeconds: 5
+        readinessProbe:
+          exec:
+            command:
+            - cat
+            - /srv/knowledge-graph-model-mesh/bin/kg-mmesh-client
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        envFrom:
+        - configMapRef:
+            name: {{ include "discovery.dfs.configmapName" . }}
+        - secretRef:
+            name: {{ include "discovery.dfs.secretName" . }}
+        env:
+        - name: socketpath
+          value: unix:///tmp/mmesh/grpc.sock
+        - name: CLOUD_ENVIRONMENT
+          value: "CP4D"
+        - name: realm
+          value: "{{ .Values.dfs.env.realmInfo }}"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: cos_connection_url
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.crust.minio.configmap" . }}
+              key: endpoint
+        - name: cos_username
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.crust.minio.secret" . }}
+              key: accesskey
+        - name: cos_password
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "discovery.crust.minio.secret" . }}
+              key: secretkey
+        - name: etcd_connection_url
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.crust.etcd.configmap" . }}
+              key: endpoint
+        - name: kgdb_userid
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.crust.postgresql.configmap" . }}
+              key: username
+        - name: kgdb_password
+          valueFrom:
+            secretKeyRef:
+              name: '{{ include "discovery.crust.postgresql.secret" . }}'
+              key: pg_su_password
+        - name: kgdb_url
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.crust.postgresql.configmap" . }}
+              key: endpoint
+        - name: serve_count_multiplier
+          value: "{{ .Values.mm.mmServer.env.multiplier }}"
+        - name: serve_keyword_filter_min_count
+          value: "{{ .Values.mm.mmServer.env.minCount }}"
+        - name: modelmesh_model_load_timeoutms
+          value: "{{ .Values.mm.mmServer.env.loadTimeoutInMil }}"
+        - name: mem_size_in_mb
+          value: "{{ .Values.mm.mmServer.env.memoryLimitInMb }}"
+        - name: mem_reserved_size_in_mb
+          value: "100"
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+      # longer grace period to allow for model propagation
+      terminationGracePeriodSeconds: 90
+      volumes:
+      - name: config
+        secret:
+          defaultMode: 420
+          ## [*] replace this with the name of your secret containing the etcd_connection key
+          secretName: {{ include "discovery.dfs.secretName" . }}
+      - name: domain-socket
+        emptyDir: {}
+      - name: ssl-certs-private
+        secret:
+          secretName: {{ $tlsSecret }}
+          items:
+          - key: pkcs8.key
+            path: private.pem
+      - name: ssl-certs-public
+        secret:
+          secretName: {{ $tlsSecret }}
+          items:
+          - key: tls.crt
+            path: public.key
+{{- if .Values.global.private }}
+      - name: truststore
+        secret:
+          defaultMode: 420
+          secretName: '{{ include "discovery.core.javaKeyStore" . }}'
+{{- end }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 4
+      maxUnavailable: 1
