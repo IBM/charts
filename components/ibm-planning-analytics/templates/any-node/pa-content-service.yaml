@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: paw
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    name: pa-content
+    release: {{ .Release.Name }}
+  name: pa-content
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      name: pa-content
+  template:
+    metadata:
+      annotations:
+        productName: IBM Planning Analytics Workspace
+        productID: com.ibm.ba.paw.{{ .Release.Name }}
+        productVersion: {{ .Release.Name }}
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productChargedContainers: "All"
+        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
+        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
+        cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
+      labels:
+        app.kubernetes.io/name: paw
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        name: pa-content
+        release: {{ .Release.Name }}
+        version: {{ .Values.paContent.imageversion }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      containers:
+        - name: pa-content
+          image: {{.Values.docker_registry_prefix}}/pa-content-service:{{ .Values.paContent.imageversion }}
+          ports:
+            - containerPort: 9191
+              protocol: TCP
+          env:
+            - name: REDIS_SENTINEL
+              value: "{ \"name\": \"redis-cluster\", \"sentinels\": [{ \"host\": \"sentinel1\", \"port\": 26379 }, { \"host\": \"sentinel2\", \"port\": 26379 }, { \"host\": \"sentinel3\", \"port\": 26379 }]}"
+          resources:
+            limits:
+              cpu: "{{ .Values.paContent.cpuLimit }}"
+              memory: "{{ .Values.paContent.memoryLimit }}"
+            requests:
+              cpu: "{{ .Values.paContent.cpuRequest }}"
+              memory: "{{ .Values.paContent.memoryRequest }}"
+          securityContext:
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 2000
+            {{- end }}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            initialDelaySeconds: 300
+            failureThreshold: 1
+            tcpSocket:
+              port: 9191
+            periodSeconds: 2
+          readinessProbe:
+            failureThreshold: 1
+            periodSeconds: 2
+            tcpSocket:
+              port: 9191
+      hostNetwork: false
+      hostIPC: false
+      hostPID: false
+      restartPolicy: Always
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      schedulerName: default-scheduler
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1

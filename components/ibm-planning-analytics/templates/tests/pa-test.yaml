@@ -1,0 +1,85 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app.kubernetes.io/name: paw
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    name: pa-test
+    release: {{ .Release.Name }}
+  name: pa-test
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  template:
+    metadata:
+      annotations:
+        productName: IBM Planning Analytics Workspace
+        productID: com.ibm.ba.paw.{{ .Release.Name }}
+        productVersion: {{ .Release.Name }}
+      labels:
+        app.kubernetes.io/name: paw
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        name: pa-test
+        release: {{ .Release.Name }}
+        version: {{ .Values.cdn3p.imageversion }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      containers:
+        - name: pa-test
+          image: {{.Values.docker_registry_prefix}}/pa-k8s-config:{{ .Values.paConfig.imageversion }}
+          command: ["/bin/bash"]
+          args: ["-c", "/opt/harmony/start.sh"]
+          resources:
+            limits:
+              cpu: "200m"
+              memory: "50M"
+            requests:
+              cpu: "100m"
+              memory: "25M"
+          securityContext:
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 2000
+            {{- end }}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            exec:
+              command:
+                - date
+            initialDelaySeconds: 0
+            periodSeconds: 60
+          readinessProbe:
+            exec:
+              command:
+                - date
+            initialDelaySeconds: 0
+            periodSeconds: 60
+      hostNetwork: false
+      hostIPC: false
+      hostPID: false
+      restartPolicy: Never
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      schedulerName: default-scheduler

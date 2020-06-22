@@ -1,0 +1,201 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: paw
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    name: wa-proxy
+    release: {{ .Release.Name }}
+  name: wa-proxy
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      name: wa-proxy
+  template:
+    metadata:
+      annotations:
+        productName: IBM Planning Analytics Workspace
+        productID: com.ibm.ba.paw.{{ .Release.Name }}
+        productVersion: {{ .Release.Name }}
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productChargedContainers: "All"
+        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
+        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
+        cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
+      labels:
+        app.kubernetes.io/name: paw
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        name: wa-proxy
+        release: {{ .Release.Name }}
+        version: {{ .Values.waProxy.imageversion }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      volumes:
+        - name: pa-cookie-key
+          secret:
+            secretName: pa-cookie-key
+        - name: pa-credential-store-key
+          secret:
+            secretName: pa-credential-store-key
+        - name: pa-cacerts
+          secret:
+            secretName: pa-cacerts
+        - name: jwt-cert
+          emptyDir:
+            medium: "{{ .Values.waProxy.emptyDirMedium }}"
+            sizeLimit: "{{ .Values.waProxy.emptyDirSizeLimit }}"
+        - name: jwt-key
+          secret:
+            secretName: pa-internal-tls-cert
+      initContainers:
+        - name: wa-proxy-jwt-init
+          image: {{.Values.docker_registry_prefix}}/pa-wa-proxy:{{ .Values.waProxy.imageversion }}
+          command: ["/bin/sh"]
+          args: ["-c", "curl -k https://ibm-nginx-svc/auth/jwtcert > /jwt/jwtcert"]
+          volumeMounts:
+            - name: jwt-cert
+              mountPath: /jwt
+      containers:
+        - name: wa-proxy
+          image: {{.Values.docker_registry_prefix}}/pa-wa-proxy:{{ .Values.waProxy.imageversion }}
+          ports:
+            - containerPort: 1331
+              protocol: TCP
+            - containerPort: 1338
+              protocol: TCP
+          env:
+            - name: TM1Location
+              value: "{{ .Values.common.tm1Location }}"
+            - name: TM1ApplicationsLocation
+              value: "{{ .Values.common.tm1ApplicationsLocation }}"
+            - name: IBMCognosGateway
+              value: "{{ .Values.waProxy.ibmCognosGatewayUrl }}"
+            - name: IBMCognosServlet
+              value: "{{ .Values.common.ibmCognosServlet }}"
+            - name: TM1APIPort
+              value: "{{ .Values.common.tm1APIPort }}"
+            - name: CONSOLE_LOG_LEVEL
+              value: "warn"
+            - name: PROXY_TIMEOUT
+              value: "{{ .Values.common.proxyTimeoutSeconds }}"
+            - name: AFFINITY
+              value: "true"
+            - name: PAAuthMode
+              value: "{{ .Values.waProxy.paLoginMode }}"
+            - name: TM1LoginServerURL
+              value: "{{ .Values.waProxy.tm1LoginUrl }}"
+            - name: CAMLoginNamespace
+              value: "{{ .Values.waProxy.camLoginNamespace }}"
+            - name: SESSION_TIMEOUT
+              value: "{{ .Values.waProxy.sessionTimeout }}"
+            - name: CREDENTIAL_STORE_KEY_FILE
+              value: "/run/secrets/{{ .Release.Namespace }}/credential-store-key/tls.key"
+            - name: COOKIE_SECRET_KEY_FILE
+              value: "/run/secrets/{{ .Release.Namespace }}/cookie-key/tls.key"
+            - name: ENABLE_USER_IMPORT
+              value: "{{ .Values.waProxy.enableUserImport }}"
+            - name: SESSION_COOKIE_SECURE
+              value: "{{ .Values.common.secureSessionCookie }}"
+            - name: REDIS_SENTINEL
+              value: "{ \"name\": \"redis-cluster\", \"sentinels\": [{ \"host\": \"sentinel1\", \"port\": 26379 }, { \"host\": \"sentinel2\", \"port\": 26379 }, { \"host\": \"sentinel3\", \"port\": 26379 }]}"
+            - name: ENABLE_VIEW_EXCHANGE
+              value: "{{ .Values.waProxy.enableViewExchange }}"
+            - name: CSP_FRAME_ANCESTORS
+              value: "{{ .Values.waProxy.cspFrameAncestors }}"
+            - name: X_FRAME_OPTIONS
+              value: "{{ .Values.waProxy.xFrameOptions }}"
+            - name: API_ALLOW_ORIGINS
+              value: "{{ .Values.waProxy.apiAllowOrigins }}"
+            - name: SSL_CA_BUNDLE_FILE
+              value: "/run/config/cacerts.pem"
+            - name: JWT_CERT_FILE
+              value: "/jwt/jwtcert"
+            - name: "JWT_LOGIN_REDIRECT_URL"
+              value: {{ .Values.waProxy.jwtRedirectURL }}
+            - name: JWT_SESSION_KEY_FILE
+              value: "/jwt-key/tls.key"
+            - name: CONFIG_NAME
+              value: "paw-cp4d"
+          resources:
+            limits:
+              cpu: "{{ .Values.waProxy.cpuLimit }}"
+              memory: "{{ .Values.waProxy.memoryLimit }}"
+            requests:
+              cpu: "{{ .Values.waProxy.cpuRequest }}"
+              memory: "{{ .Values.waProxy.memoryRequest }}"
+          securityContext:
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 2000
+            {{- end }}
+          volumeMounts:
+            - name: pa-cookie-key
+              mountPath: /run/secrets/{{ .Release.Namespace }}/cookie-key
+            - name: pa-credential-store-key
+              mountPath: /run/secrets/{{ .Release.Namespace }}/credential-store-key
+            - name: pa-cacerts
+              mountPath: /run/config
+              # EmptyDir to retrieve the JWT cert from CP4D
+            - name: jwt-cert
+              mountPath: /jwt
+              # Mounted secret for JWT key for TM1 comms
+            - name: jwt-key
+              mountPath: "/jwt-key"
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 1
+            initialDelaySeconds: 300
+            tcpSocket:
+              port: 1331
+            periodSeconds: 2
+          livenessProbe:
+            failureThreshold: 1
+            initialDelaySeconds: 300
+            tcpSocket:
+              port: 1338
+            periodSeconds: 2
+          readinessProbe:
+            failureThreshold: 1
+            periodSeconds: 2
+            tcpSocket:
+              port: 1331
+          readinessProbe:
+            failureThreshold: 1
+            periodSeconds: 2
+            tcpSocket:
+              port: 1338
+      hostNetwork: false
+      hostIPC: false
+      hostPID: false
+      restartPolicy: Always
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      schedulerName: default-scheduler
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1

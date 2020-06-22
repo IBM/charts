@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: paw
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    name: prism-proxy
+    release: {{ .Release.Name }}
+  name: prism-proxy
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      name: prism-proxy
+  template:
+    metadata:
+      annotations:
+        productName: IBM Planning Analytics Workspace
+        productID: com.ibm.ba.paw.{{ .Release.Name }}
+        productVersion: {{ .Release.Name }}
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productChargedContainers: "All"
+        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
+        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
+        cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
+      labels:
+        app.kubernetes.io/name: paw
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        name: prism-proxy
+        release: {{ .Release.Name }}
+        version: {{ .Values.prismProxy.imageversion }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      containers:
+        - name: prism-proxy
+          image: {{.Values.docker_registry_prefix}}/pa-prism-proxy:{{ .Values.prismProxy.imageversion }}
+          ports:
+            - containerPort: 9090
+              protocol: TCP
+            - containerPort: 9100
+              protocol: TCP
+          env:
+            - name: ProxyTimeoutSeconds
+              value: "{{ .Values.common.proxyTimeoutSeconds }}"
+          resources:
+            limits:
+              cpu: "{{ .Values.prismProxy.cpuLimit }}"
+              memory: "{{ .Values.prismProxy.memoryLimit }}"
+            requests:
+              cpu: "{{ .Values.prismProxy.cpuRequest }}"
+              memory: "{{ .Values.prismProxy.memoryRequest }}"
+          securityContext:
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 2000
+            {{- end }}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            initialDelaySeconds: 300
+            failureThreshold: 1
+            tcpSocket:
+              port: 9100
+            periodSeconds: 2
+          readinessProbe:
+            failureThreshold: 1
+            periodSeconds: 2
+            tcpSocket:
+              port: 9100
+      hostNetwork: false
+      hostIPC: false
+      hostPID: false
+      restartPolicy: Always
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      schedulerName: default-scheduler
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
