@@ -1,0 +1,84 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: tm1
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    tm1_name: {{ .Values.resources.dv.requests.name }}
+    name: tm1
+    app: tm1
+    release: {{ .Release.Name }}
+  name: tm1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tm1
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+        openshift.io/scc: hostmount-anyuid
+        productName: IBM Planning Analytics TM1 Server
+        productID: com.ibm.ba.paw.{{ .Release.Name }}
+        productVersion: {{ .Release.Name }}
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productChargedContainers: "All"
+        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
+        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
+        cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
+      creationTimestamp: null
+      labels:
+        app: tm1
+        app.kubernetes.io/name: paw
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+      - env:
+        - name: TM1_NAME
+          value: {{ .Values.resources.dv.requests.name }}
+        - name: GID
+          value: "0"
+        - name: MAX_RELOADS
+          value: "3"
+        - name: ALWAYS_RELOAD
+          value: "on"
+        - name: LISTEN_PORT
+          value: "8080"
+        - name: MANAGE_PORT
+          value: "8081"
+        - name: MAX_MEMORY_GB
+          value: "{{ .Values.resources.dv.requests.tm1.maxMemoryDisplayPAAGB }}"
+        image: {{.Values.docker_registry_prefix}}/pa-tm1-cp4d:{{ .Values.tm1.imageversion }}
+        imagePullPolicy: Always
+        name: tm1
+        readinessProbe:
+          httpGet:
+            path: /oddt/v1/tm1s/startIfNot
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: {{ .Values.resources.dv.requests.tm1.cpu }}
+            memory: {{ .Values.resources.dv.requests.tm1.memory }}
+          requests:
+            cpu: {{ .Values.resources.dv.requests.tm1.cpu }}
+            memory: {{ .Values.resources.dv.requests.tm1.memory }}
+        volumeMounts:
+        - mountPath: /tm1mnt
+          name: tm1-storage
+          subPath: tm1-{{ .Release.Name }}
+        - mountPath: /jwt-cert
+          name: jwt-cert
+      restartPolicy: Always
+      volumes:
+      - name: tm1-storage
+        persistentVolumeClaim:
+          claimName: {{ .Release.Name }}-tm1-pvc
+      - name: jwt-cert
+        secret:
+          secretName: pa-internal-tls-cert
