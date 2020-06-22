@@ -439,3 +439,61 @@ spec:
 {{- $imagePath }}
   {{- end -}}
 {{- end -}}
+
+{{/*
+"sch.names.routeName" is a shared helper to build a route name based of the release
+and namespace and route name.
+
+OpenShift will append the namespace to your route name when it creates the route. This combined
+name has a maximum character limit of 62 characters. This definition will truncate your route
+name if necessary so that you do not create a route name with more than 62 characters.
+
+Note: If the namespace is 60 characters or longer, this definition will fail as it cannot 
+create a unique name within those constraints.
+
+__Config Values Used:__
+- None
+    
+__Parameters input as an array of one values:__
+  - the root context (required)
+  - the release name to test (required)
+  - the namespace name to test (required)
+  - the route type to test (required)
+
+__Usage:__
+```
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{include "sch.names.routeName" (list $root "MyRelease" "MyNamespace" "MyTypeOfRoute") }}
+```
+
+*/}}
+{{- define "sch.names.routeName" -}}
+  {{- $params := . -}}
+  {{- $root := first $params -}}
+  {{- $releaseName := (include "sch.utils.getItem" (list $params 1 "")) -}}
+  {{- $namespaceName := (include "sch.utils.getItem" (list $params 2 "")) -}}
+  {{- $namespaceLen := len $namespaceName -}}
+  {{- $routeName := (include "sch.utils.getItem" (list $params 3 "")) -}}
+  {{- $routeLen := len (printf "-%s-" $routeName) -}}
+
+  {{- if gt $namespaceLen 59 -}}
+    {{- fail (printf "Namespace %s length is too long to create a unique route name" $namespaceName) -}}
+  {{- end -}}
+
+  {{- $maxLength := 62 -}}
+  {{- $truncLength := (sub $maxLength $namespaceLen) -}}
+
+  {{- $fullLengthString := (printf "%s-%s" $releaseName $routeName) -}}
+  {{- $fullLengthResult :=  include "sch.utils.withinLength" (list $root $fullLengthString $truncLength) -}}
+
+  {{- if $fullLengthResult -}}
+    {{- $fullLengthResult | lower | trimSuffix "-" -}}
+  {{- else -}}
+    {{- $buildNameParms := (list) -}}
+    {{- $buildNameParms := append $buildNameParms (dict "name" $fullLengthString "length" (sub $truncLength 1)) -}}
+    {{- $shortResult := print (include "sch.names.buildName" $buildNameParms) -}}
+    {{- $shortResult | lower | trimSuffix "-" | trimPrefix "-" -}}
+  {{- end -}}
+{{- end -}}
