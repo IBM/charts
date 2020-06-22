@@ -1,0 +1,109 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app.kubernetes.io/name: paw
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    paw_instance_name: {{ .Values.resources.dv.requests.name }}
+    name: bss-init
+    release: {{ .Release.Name }}
+  name: bss-init
+  namespace: {{ .Release.Namespace }}
+spec:
+  completions: 1
+  parallelism: 1
+  template:
+    metadata:
+      annotations:
+        productName: IBM Planning Analytics Workspace
+        productID: com.ibm.ba.paw.{{ .Release.Name }}
+        productVersion: {{ .Release.Name }}
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productChargedContainers: "All"
+        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
+        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
+        cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
+      labels:
+        app.kubernetes.io/name: paw
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        paw_instance_name: {{ .Values.resources.dv.requests.name }}
+        name: bss-init
+        release: {{ .Release.Name }}
+        version: {{ .Values.bssInit.imageversion }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      containers:
+        - name: bss-init
+          image: {{.Values.docker_registry_prefix}}/pa-bss-init:{{ .Values.bssInit.imageversion }}
+          env:
+            - name: TM1Location
+              value: "{{ .Values.common.tm1Location }}"
+            - name: TM1ApplicationsLocation
+              value: "{{ .Values.common.tm1ApplicationsLocation }}"
+            - name: IBMCognosServlet
+              value: "{{ .Values.common.ibmCognosServlet }}"
+            - name: TM1APIPort
+              value: "{{ .Values.common.tm1APIPort }}"
+            - name: ENABLE_USER_IMPORT
+              value: "{{ .Values.waProxy.enableUserImport }}"
+            - name: ENABLE_PASTE_SPECIAL
+              value: "{{ .Values.bssInit.enablePasteSpecial }}"
+            - name: ENABLE_PAA
+              value: "{{ .Values.bssInit.enablePAA }}"
+            - name: ENABLE_EDIT_MDX_VIEW
+              value: "{{ .Values.bssInit.enableEditMdxView }}"
+            - name: ENABLE_INTENT_BAR
+              value: "{{ .Values.bssInit.enableIntentBar }}"
+          resources:
+            limits:
+              cpu: {{ .Values.bssInit.cpuLimit }}
+              memory: {{ .Values.bssInit.memoryLimit }}
+            requests:
+              cpu: {{ .Values.bssInit.cpuRequest }}
+              memory: {{ .Values.bssInit.memoryRequest }}
+          securityContext:
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 2000
+            {{- end }}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            exec:
+              command:
+                - date
+            initialDelaySeconds: 0
+            periodSeconds: 60
+          readinessProbe:
+            exec:
+              command:
+                - date
+            initialDelaySeconds: 0
+            periodSeconds: 60
+      hostNetwork: false
+      hostIPC: false
+      hostPID: false
+      restartPolicy: OnFailure
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      schedulerName: default-scheduler

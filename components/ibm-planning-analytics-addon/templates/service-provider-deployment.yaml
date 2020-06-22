@@ -1,0 +1,62 @@
+kind: Deployment
+metadata:
+  name: {{ template "svc-api.fullname" . }}
+  labels:
+    app: {{ template "svc-api.name" . }}
+    chart: {{ template "svc-api.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "svc-api.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+        productName: IBM Planning Analytics
+        productID: com.ibm.ba.pa.{{ .Release.Name }}
+        productVersion: {{ .Values.image.tag }}
+      labels:
+        app: {{ template "svc-api.name" . }}
+        release: {{ .Release.Name }}
+    spec:
+      serviceAccountName: ibm-planning-analytics-sa
+      containers:
+        - name: {{ .Chart.Name }}
+        {{ if .Values.global.dockerRegistryPrefix }}
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.svcApi.image.repository }}:{{ .Values.svcApi.image.tag }}"
+          {{ else }}
+          image: "{{ .Values.svcApi.image.repository }}:{{ .Values.svcApi.image.tag }}"
+          {{ end }}
+          imagePullPolicy: {{ .Values.svcApi.image.pullPolicy }}
+          livenessProbe:
+            httpGet:
+              path: /api/v1/Servers
+              port: http
+              scheme: HTTP
+          readinessProbe:
+            httpGet:
+              path: /api/v1/Servers
+              port: http
+              scheme: HTTP
+          ports:
+            - name: http
+              containerPort: {{ .Values.svcApi.service.port }}
+              protocol: TCP
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+apiVersion: apps/v1beta2
