@@ -30,6 +30,11 @@ do
   cp -R $TESTDIR/../../templates/* $TESTDIR/chart/charts/ibm-sch/templates
   cp -R $TESTDIR/../../Chart.yaml $TESTDIR/chart/charts/ibm-sch/Chart.yaml
   cp -R $TESTDIR/../../values.yaml $TESTDIR/chart/charts/ibm-sch/values.yaml
+  if [ "$(basename $TESTDIR)" = "test-routename-4" ]; then
+    echo "####################################################################"
+    echo "!!! This render is expected to fail. Ignore the failure message. !!!"
+    echo "####################################################################"
+  fi
   helm template $TESTDIR/chart -f $TESTDIR/chart/values.yaml | sed '/---/d' | sed '/^$/d' | sed '/# Source/d' | sed 's/"release-name"/"RELEASE-NAME"/g' > $TESTDIR/output.yaml
   if [ $ISHELM3 == 1 ]; then
     if [ ! -f $TESTDIR/expected_helm3.yaml ]; then
@@ -55,4 +60,6 @@ rm $SCRIPTDIR/compareyaml
 if [ $FAIL = true ]; then
   echo "One or more test failed."
   exit 1
+else
+  echo "All tests completed successfully!"
 fi

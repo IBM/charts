@@ -28,13 +28,13 @@ There are two ways to include ibm-sch with your chart:
   dependencies:
   - name: ibm-sch
     repository: "@sch" ## where sch is based on [NAME] from the cmd: helm repo add [flags] [NAME] [URL]
-    version: "^1.2.17"
+    version: "^1.2.18"
     alias: sch
   ```
   
     Explanation of parameters:
     - Set the alias to `sch` to guarantee that all functions will work successfully.
-    - Set the version to `^1.2.17` to download the latest `1.x.x` version of ibm-sch.
+    - Set the version to `^1.2.18` to download the latest `1.x.x` version of ibm-sch.
 
 2. Download the source and copy it into your charts directory
 
@@ -53,7 +53,7 @@ Entry in subchart requirements.yaml:
 dependencies:
 - name: ibm-sch
   repository: "@sch" ## where sch is based on [NAME] from the cmd: helm repo add [flags] [NAME] [URL]
-  version: "^1.2.17"
+  version: "^1.2.18"
   alias: sch
   condition: global.sch.enabled
 ```
@@ -72,7 +72,7 @@ Entry in parent chart's requirements.yaml:
 dependencies:
 - name: ibm-sch
   repository: "@sch" ## where sch is based on [NAME] from the cmd: helm repo add [flags] [NAME] [URL]
-  version: "^1.2.17"
+  version: "^1.2.18"
   alias: sch
 ```
 
@@ -534,6 +534,29 @@ used in template as follows:
   annotations:
 {{- include "sch.metadata.annotations.nginx.ingress" (list . .sch.chart.nginx.ingress) | indent 4 }}
 ```
+
+#### Route Name
+`"sch.names.routeName"` is a shared helper to build a route name based of the release and namespace and route name.
+
+OpenShift will append the namespace to your route name when it creates the route. This combined name has a maximum character limit of 62 characters. This definition will truncate your route name if necessary so that you do not create a route name with more than 62 characters.
+
+Note: If the namespace is 60 characters or longer, this definition will fail as it cannot create a unique name within those constraints.
+
+__Config Values Used:__
+- None
+  
+__Parameters input as an list of values:__
+Parameters input as an array of one values:
+  - the root context (required)
+  - the release name to test (required)
+  - the namespace name to test (required)
+  - the route type to test (required)
+
+__Usage:__
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{include "sch.names.routeName" (list $root "MyRelease" "MyNamespace" "MyTypeOfRoute") }}
 
 ### Affinity
 
