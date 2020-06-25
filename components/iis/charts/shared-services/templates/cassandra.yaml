@@ -1,0 +1,194 @@
+# Licensed Materials - Property of IBM
+# 5724-Q36
+# Copyright IBM Corp. 2018
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Values.cassandra.app_name }}
+  labels:
+     app: {{ .Values.cassandra.app_name }}
+     chart: "{{ .Chart.Name }}"
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}"
+     app.kubernetes.io/name: {{ .Values.cassandra.app_name }}
+     helm.sh/chart: {{ .Chart.Name }}
+     app.kubernetes.io/managed-by: {{ .Release.Service }}
+     app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  serviceName: {{ .Values.cassandra.app_name }}
+  selector:
+    matchLabels:
+      app: {{ .Values.cassandra.app_name }}
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.cassandra.app_name }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/name: {{ .Values.cassandra.app_name }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        icpdsupport/app: "apis"
+        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+      annotations:
+      {{- include "product-metering" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: "app"
+                  operator: In
+                  values:
+                  - {{ .Values.cassandra.app_name }}
+              topologyKey: "kubernetes.io/hostname"
+      terminationGracePeriodSeconds: 300
+      containers:
+        - name: cassandra
+          image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.cassandra.repository }}:{{ .Values.cassandra.tag }}
+          imagePullPolicy: {{ .Values.release.image.pullPolicy }}
+          command:
+          - "/bin/bash"
+          - "-c"
+          - "cp /opt/cassandra/conf/cassandra_defaults.yaml /opt/cassandra/conf/cassandra.yaml && exec start-cassandra.sh"
+          resources:
+            limits:
+               memory: "{{ .Values.cassandraResources.limits.memory }}"
+               cpu: "{{ .Values.cassandraResources.limits.cpu }}"
+            requests:
+               memory: "{{ .Values.cassandraResources.requests.memory }}"
+               cpu: "{{ .Values.cassandraResources.requests.cpu }}"
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsNonRoot: true
+            capabilities:
+              drop:
+              - ALL
+          ports:
+          - name: intra-node
+            containerPort: 7000
+          - name: tls-intra-node
+            containerPort: 7001
+          - name: jmx
+            containerPort: 7199
+          - name: jmx2
+            containerPort: 9042
+          - name: thrift
+            containerPort: 9160
+          env:
+            - name: CASSANDRA_SEEDS
+              value: {{ .Values.cassandra.app_name }}-0.{{ .Values.cassandra.app_name }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}
+            - name: CASSANDRA_CLUSTER_NAME
+              value: "{{ .Values.cassandra.app_name }}"
+            - name: CASSANDRA_START_RPC
+              value: "true"
+          volumeMounts:
+            - mountPath: /opt/cassandra/data
+              name: cassandra-data
+            - name: cassandra-logs-volume
+              mountPath: /opt/cassandra/logs
+            - name: cassandra-tmp-volume
+              mountPath: /tmp
+            - name: cassandra-conf-volume
+              mountPath: /opt/cassandra/conf
+            - name: config
+              mountPath: /opt/cassandra/conf/cassandra_defaults.yaml
+              subPath: cassandra_defaults.yaml
+            - name: config-jvm-options
+              mountPath: /opt/cassandra/conf/jvm.options
+              subPath: jvm.options
+            - name: config
+              mountPath: /opt/cassandra/conf/cassandra-rackdc.properties
+              subPath: cassandra-rackdc.properties
+            - name: config
+              mountPath: /opt/cassandra/conf/cassandra-env.ps1
+              subPath: cassandra-env.ps1
+            - name: config
+              mountPath: /opt/cassandra/conf/cassandra-env.sh
+              subPath: cassandra-env.sh
+            - name: config
+              mountPath: /opt/cassandra/conf/logback.xml
+              subPath: logback.xml
+            - name: config
+              mountPath: /opt/cassandra/conf/logback-tools.xml
+              subPath: logback-tools.xml
+          readinessProbe:
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 10
+            initialDelaySeconds: 30
+            exec:
+              command:
+              - cassandra-docker-ready.sh
+          livenessProbe:
+            tcpSocket:
+              port: 9160
+            initialDelaySeconds: 300
+            periodSeconds: 15
+            failureThreshold: 3
+      securityContext:
+        runAsNonRoot: true
+        {{- if .Values.cassandra.runAsUser }}
+        runAsUser: {{ .Values.cassandra.runAsUser }}
+        {{- end }}
+        {{- if .Values.cassandra.fsGroup }}
+        fsGroup: {{ .Values.cassandra.fsGroup }}
+        {{- end }}
+      volumes:
+      - name: config
+        configMap:
+          name: cassandra-config
+      - name: config-jvm-options
+        configMap:
+          name: cassandra-jvm-options
+      - name: cassandra-logs-volume
+        emptyDir: {}
+      - name: cassandra-tmp-volume
+        emptyDir: {}
+      - name: cassandra-conf-volume
+        emptyDir: {}
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- end }}
+      {{- include "image-secret" . | indent 6 }}
+  volumeClaimTemplates:
+  - metadata:
+      name: cassandra-data
+    spec:
+      {{- if and .Values.global.persistence.useDynamicProvisioning (not .Values.cassandra.volumeClaim.overrideStorageClass) }}
+      # If present, use the storageClassName from the values.yaml, else use the
+      # default storageClass setup by Kubernetes Administrator
+      #
+      # Setting storageClassName to nil means use the default storage class
+      storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+      {{- else }}
+      storageClassName: {{ .Values.cassandra.volumeClaim.storageClassName | quote }}
+      {{- end }}
+      {{- if (not .Values.global.persistence.useDynamicProvisioning ) }}
+      selector:
+        matchLabels:
+          assign-to: "{{ .Release.Namespace }}-cassandra"
+      {{- end }}
+      accessModes: [ {{ .Values.cassandra.volumeClaim.accessMode }} ]
+      resources:
+        requests:
+          storage: {{ .Values.cassandra.volumeClaim.size }}

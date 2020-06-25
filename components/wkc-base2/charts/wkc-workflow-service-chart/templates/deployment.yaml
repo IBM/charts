@@ -1,0 +1,235 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ .Values.appName }}
+  labels:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: {{ .Values.appName }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.minReplicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.appName }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/name: {{ .Values.appName }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        date: "date"
+        icpdsupport/app: "apis"
+        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+      annotations:
+        {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+        {{- end }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        {{- if .Values.securityContext.runAsUser }}
+        runAsUser: {{ .Values.securityContext.runAsUser }}
+        {{- end}}
+      containers:
+      - name: {{ .Values.appName }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+        {{- if .Values.global.installCerts }}
+        volumeMounts:
+        - name: wdp-certs
+          mountPath: "/etc/wdp_certs"
+          readOnly: true
+        {{- end }}
+        ports:
+        - containerPort: {{ .Values.ports.targetPort }}
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.environment.appVersionEndpoint }}
+            port: {{ .Values.ports.targetPort }}
+            scheme: HTTPS
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.environment.appVersionEndpoint }}
+            port: {{ .Values.ports.targetPort }}
+            scheme: HTTPS
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+        env:
+        {{- if .Values.environment.appVersionEndpoint }}
+        - name: "BM_APP_VERSION_ENDPOINT"
+          value: "{{ .Values.environment.appVersionEndpoint }}"
+        {{- end }}
+        {{- if .Values.environment.gatewayUrl }}
+        - name: "GATEWAY_URL"
+          value: "{{ .Values.environment.gatewayUrl }}"
+        {{- end }}
+        {{- if .Values.environment.appVersion }}
+        - name: "BM_APP_VERSION"
+          value: "{{ .Values.environment.appVersion }}"
+        {{- end }}
+        {{- if .Values.environment.swaggerHost }}
+        - name: {{ .Values.environment.swaggerHost.name }}
+          value: {{ .Values.environment.swaggerHost.value }}
+        {{- end }}
+        {{- if (.Values.environment.serviceIdCredential) }}
+        - name: {{ .Values.environment.serviceIdCredential.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.serviceIdCredential.secret }}
+              key: {{ .Values.environment.serviceIdCredential.key }}
+        {{- end }}
+        {{- if (.Values.environment.serviceId) }}
+        - name: {{ .Values.environment.serviceId.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.serviceId.secret }}
+              key: {{ .Values.environment.serviceId.key }}
+        {{- end }}
+        {{- if (.Values.environment.icp4dUrl) }}
+        - name: {{ .Values.environment.icp4dUrl.name }}
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Values.environment.icp4dUrl.config }}
+              key: {{ .Values.environment.icp4dUrl.key }}
+        {{- end }}
+        {{- if (.Values.environment.dbName) }}
+        - name: {{ .Values.environment.dbName.name }}
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Values.environment.dbName.config }}
+              key: {{ .Values.environment.dbName.key }}
+              optional: true
+        {{- end }}
+        {{- if (.Values.environment.icp4dInternalUrl) }}
+        - name: {{ .Values.environment.icp4dInternalUrl.name }}
+          value: {{ .Values.environment.icp4dInternalUrl.value }}
+        {{- end }}
+        {{- if (.Values.environment.icp4dSysCallUsername) }}
+        - name: {{ .Values.environment.icp4dSysCallUsername.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.icp4dSysCallUsername.secret }}
+              key: {{ .Values.environment.icp4dSysCallUsername.key }}
+              optional: true
+        {{- end }}
+        {{- if (.Values.environment.icp4dSysCallPassword) }}
+        - name: {{ .Values.environment.icp4dSysCallPassword.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.icp4dSysCallPassword.secret }}
+              key: {{ .Values.environment.icp4dSysCallPassword.key }}
+              optional: true
+        {{- end }}
+        {{- if (.Values.environment.authServiceImpl) }}
+        - name: {{ .Values.environment.authServiceImpl.name }}
+          value: {{ .Values.environment.authServiceImpl.value }}
+        {{- end }}
+        {{- if (.Values.environment.sslTrustAll) }}
+        - name: {{ .Values.environment.sslTrustAll.name }}
+          value: {{ .Values.environment.sslTrustAll.value }}
+        {{- end }}
+        {{- if (.Values.environment.consoleLogAppender) }}
+        - name: {{ .Values.environment.consoleLogAppender.name }}
+          value: {{ .Values.environment.consoleLogAppender.value }}
+        {{- end }}
+        {{- if (.Values.environment.fileLogAppender) }}
+        - name: {{ .Values.environment.fileLogAppender.name }}
+          value: {{ .Values.environment.fileLogAppender.value }}
+        {{- end }}
+        {{- if (.Values.environment.dbUrl) }}
+        - name: {{ .Values.environment.dbUrl.name }}
+          value: {{ .Values.environment.dbUrl.value }}
+        {{- end }}
+        {{- if (.Values.environment.dbUsername) }}
+        - name: {{ .Values.environment.dbUsername.name }}
+          value: {{ .Values.environment.dbUsername.value }}
+        {{- end }}
+        {{- if (.Values.environment.dbPassword) }}
+        - name: {{ .Values.environment.dbPassword.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.dbPassword.secret }}
+              key: {{ .Values.environment.dbPassword.key }}
+        {{- end }}
+        {{- if (.Values.environment.dbDriver) }}
+        - name: {{ .Values.environment.dbDriver.name }}
+          value: {{ .Values.environment.dbDriver.value }}
+        {{- end }}
+        {{- if (.Values.environment.baseUrl) }}
+        - name: {{ .Values.environment.baseUrl.name }}
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Values.environment.baseUrl.config }}
+              key: {{ .Values.environment.baseUrl.key }}
+        - name: ces_base_url
+          value: "$({{ .Values.environment.baseUrl.name }})/v3"
+        - name: notification_base_url
+          value: "$({{ .Values.environment.baseUrl.name }})"
+        {{- end }}
+        resources:
+          limits:
+            cpu: {{ .Values.resources.limits.cpu }}
+            memory: {{ .Values.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.resources.requests.cpu }}
+            memory: {{ .Values.resources.requests.memory }}
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+      {{- if .Values.global.installCerts }}
+      volumes:
+      - name: wdp-certs
+        projected:
+          sources:
+          - secret:
+              name: internal-nginx-svc-tls
+              items:
+              - key: certificate.pem
+                path: internal-nginx.cert.pem
+              optional: true
+          - secret:
+              name: rabbitmq-ha-cert
+              items:
+              - key: cert.pem
+                path: rabbitmq.cert.pem
+              optional: true
+          - secret:
+              name: wdp-db2-cert
+              items:
+              - key: wdp-db2-ca.crt
+                path: wdp-db2-ca.pem
+              optional: true
+      {{- end }}
+      {{- if .Values.repository.secret.name }}
+      imagePullSecrets:
+      - name: {{ .Values.repository.secret.name }}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64

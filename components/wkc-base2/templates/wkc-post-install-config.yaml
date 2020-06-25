@@ -1,0 +1,88 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: wkc-post-install-config
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  init.sh: |
+    set -e
+    LogMsg(){
+        logMsg="$1"
+        echo "["$(date +"%d-%B-%Y %R %Z")"]" ${logMsg}
+      }
+    LogError(){
+        LogMsg "ERROR: $@"
+      }
+    LogWarn(){
+        LogMsg "WARNING: $@"
+      }
+    LogInfo(){
+        LogMsg "INFO: $@"
+      }
+
+    LogInfo "Waiting for OMAG pod to be ready"
+    kubectl wait --for=condition=ready --timeout=90m pod/$(kubectl get pod -l app=omag -o jsonpath="{.items[0].metadata.name}")
+
+    LogInfo "Waiting for DC main pod to be ready"
+    kubectl wait --for=condition=ready --timeout=90m pod/$(kubectl get pod -l app=dc-main -o jsonpath="{.items[0].metadata.name}")
+
+    LogInfo "Waiting for glossary pod to be ready"
+    kubectl wait --for=condition=ready --timeout=90m pod/$(kubectl get pod -l app=wkc-glossary-service -o jsonpath="{.items[0].metadata.name}")
+
+    LogInfo "Waiting for catalog-api pod to be ready"
+    kubectl wait --for=condition=ready --timeout=90m pod/$(kubectl get pod -l app=catalog-api -o jsonpath="{.items[0].metadata.name}")
+
+    ADMIN_UID=1000330999
+
+    LogInfo "Starting call to create sync catalog"
+    LogInfo "Reading metakey"
+    mk=$(cat /user-home/_global_/security/artifacts/metakey | tr -d '\n' )
+    LogInfo "Getting a short lived token"
+    ttoken=$(curl -ks -X POST -H "metakey: $mk" -H "uid: $ADMIN_UID" -H 'lifetime: 0.10'  https://usermgmt-svc:3443/v1/usermgmt/getTimedToken  | sed -e 's/.*"accessToken":"//g' -e 's/".*//g')
+    LogInfo "Making call to create sync catalog"
+    curl -k -H "Authorization: Bearer $ttoken" -X PUT -H 'Content-Type: application/json;charset=UTF-8' https://dc-main:443/catalog/api/init-omrs
+
+    LogInfo "Waiting for wkc-search pod to be ready"
+    kubectl wait --for=condition=ready --timeout=30m pod/$(kubectl get pod -l app=wkc-search -o jsonpath="{.items[0].metadata.name}")
+
+    bg_omrs_status=""
+    connection_status="false"
+    counter=1
+    sleep_time="1m"
+    max_wait_time=20
+    while [ "${connection_status}" != "true" ]; do
+      counter=$(expr ${counter} + 1)
+      LogInfo "Calling BG OMRS healthcheck"
+      ttoken=$(curl -ks -X POST -H "metakey: $mk" -H "uid: $ADMIN_UID" -H 'lifetime: 0.10'  https://usermgmt-svc:3443/v1/usermgmt/getTimedToken  | sed -e 's/.*"accessToken":"//g' -e 's/".*//g')
+      bg_omrs_status=$(curl -ks -X GET 'https://wkc-glossary-service:443/v3/glossary_terms/admin/open-metadata/healthcheck'  -H "accept: application/json"  -H "Authorization: Bearer $ttoken" -H "Content-Type: application/json" | tr -d " \t\n\r" | sed -e 's/.*"status":"//g' -e 's/".*//g')
+      LogInfo "BG OMRS status is ${bg_omrs_status}"
+      if [ "${bg_omrs_status}" != "CONNECTED" ]; then
+        LogWarn "BG Connection status is not successful, sleeping for ${sleep_time}"
+        sleep ${sleep_time}
+      else
+        LogInfo "Connection status is successful"
+        connection_status="true"
+        LogInfo "Calling BG api to create OOTB artifacts"
+        ttoken=$(curl -ks -X POST -H "metakey: $mk" -H "uid: $ADMIN_UID" -H 'lifetime: 0.10'  https://usermgmt-svc:3443/v1/usermgmt/getTimedToken  | sed -e 's/.*"accessToken":"//g' -e 's/".*//g')
+        curl -k -X POST 'https://wkc-glossary-service:443/v3/glossary_terms/admin/initialize_content'  -H "accept: application/json"  -H "Authorization: Bearer $ttoken" -H "Content-Type: application/json" -d "{}"
+      fi
+      if [ ${counter} -gt ${max_wait_time} -a "${connection_status}" != "true" ]; then
+        LogError "The connection is not successful even after ${max_wait_time} retries"
+        exit 0
+      fi
+    done
+
+{{- end }}

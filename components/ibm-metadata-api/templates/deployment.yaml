@@ -1,0 +1,161 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "metadata-api.fullname" . }}
+  labels:
+    app: {{ template "metadata-api.name" . }}
+    chart: {{ template "metadata-api.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ template "metadata-api.fullname" . }}
+    helm.sh/chart: {{ template "metadata-api.chart" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "metadata-api.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+{{ toYaml .Values.global.podAnnotations | indent 8 }}
+      labels:
+        app: {{ template "metadata-api.name" . }}
+        chart: {{ template "metadata-api.chart" . }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ template "metadata-api.fullname" . }}
+        helm.sh/chart: {{ template "metadata-api.chart" . }}
+    spec:
+      serviceAccountName: "cpd-viewer-sa"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      volumes:
+        - name: shared-data
+          emptyDir: {}
+        - name: api-tmp
+          emptyDir: {}
+        - name: engine-tmp
+          emptyDir: {}
+        - name: engine-scratch
+          emptyDir: {}
+        - name: cert
+          secret:
+            defaultMode: 420
+            secretName: {{ template "metadata-api.fullname" . }}-cert  
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      {{- if .Values.securityContext.runAsUser }}
+        runAsUser: {{ .Values.securityContext.runAsUser }}
+      {{- end }}  
+      containers:
+        - name: api
+          {{ $container := .Values.containers.api -}}
+          {{- $image := $container.image -}}
+          image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.containers.api.image.repository }}:{{ .Values.containers.api.image.tag }}
+          imagePullPolicy: "{{ template "image.pullpolicy" $image }}"
+          volumeMounts:
+          - name: shared-data
+            mountPath: /data
+          - name: api-tmp
+            mountPath: /tmp
+          - name: cert
+            mountPath: /amgssl  
+          ports:
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /metadata/healthz
+              port: https
+            initialDelaySeconds: 10
+            periodSeconds: 60
+          readinessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /metadata/healthz
+              port: https
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+{{ toYaml .Values.containers.api.resources | indent 12 }}
+          securityContext:
+            privileged: false
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+        - name: engine
+          {{ $container := .Values.containers.engine -}}
+          {{- $image := $container.image -}}
+          image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.containers.engine.image.repository }}:{{ .Values.containers.engine.image.tag }}
+          imagePullPolicy: "{{ template "image.pullpolicy" $image }}"
+          volumeMounts:
+          - name: shared-data
+            mountPath: /data
+          - name: engine-tmp
+            mountPath: /tmp
+          - name: engine-scratch
+            mountPath: /workspace/scratch
+          env:
+          - name: AMG_NO_PERSIST
+            value: ""
+          - name: AMG_FILENAME_AGE
+            value: "0"
+          - name: AMG_MAX_ROWS
+            value: "10000"
+          - name: AMG_LOCK_SCRATCH
+            value: ""
+          resources:
+{{ toYaml .Values.containers.engine.resources | indent 12 }}
+          livenessProbe:
+            exec:
+              command:
+              - echo
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+              - echo
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+      imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 8 }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}

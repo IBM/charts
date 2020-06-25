@@ -1,0 +1,188 @@
+# Licensed Materials - Property of IBM
+# 5724-Q36
+# Copyright IBM Corp. 2018
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.auditTrail.app_name }}
+  labels:
+    app: {{ .Values.auditTrail.app_name }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/name: {{ .Values.auditTrail.app_name }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  selector:
+    app: {{ .Values.auditTrail.app_name }}
+  ports:
+  - name: http
+    protocol: TCP
+    port: 9080
+    targetPort: 9080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.auditTrail.app_name }}
+  labels:
+    app: {{ .Values.auditTrail.app_name }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/name: {{ .Values.auditTrail.app_name }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.auditTrail.app_name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.auditTrail.app_name }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/name: {{ .Values.auditTrail.app_name }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        icpdsupport/app: "apis"
+        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+      annotations:
+      {{- include "product-metering" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: "app"
+                    operator: In
+                    values:
+                    - {{ .Values.auditTrail.app_name }}
+              topologyKey: "kubernetes.io/hostname"
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: "app"
+                    operator: In
+                    values:
+                    - kafka
+              topologyKey: "kubernetes.io/hostname"
+      initContainers:
+      {{- include "wait-services" . | indent 6 }}
+      containers:
+      - name: {{ .Values.auditTrail.app_name }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.release.image.audittrail.repository }}:{{ .Values.release.image.audittrail.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          requests:
+            memory: "{{ .Values.release.image.audittrail.requests.memory }}"
+            cpu: "{{ .Values.release.image.audittrail.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.release.image.audittrail.limits.memory }}"
+            cpu: "{{ .Values.release.image.audittrail.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: AUDIT_TRAIL_DB_TYPE
+          value: db2
+        - name: AUDIT_TRAIL_DB_HOST
+          value: is-xmetadocker
+        - name: AUDIT_TRAIL_DB_PORT
+          value: "50000"
+        - name: AUDIT_TRAIL_DB_USER
+          value: xmeta
+        - name: AUDIT_TRAIL_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: xmeta_password
+        - name: AUDIT_TRAIL_DB_NAME
+          value: xmeta
+        - name: AUDIT_TRAIL_EVENTS_KAFKA_BOOTSTRAP_SERVERS
+          value: {{ .Values.kafka.app_name }}:9093
+        ports:
+        - containerPort: 9080
+        volumeMounts:
+        - name: secrets-pv-volume
+          mountPath: /config/secrets
+          readOnly: true
+        - name: config-dir
+          mountPath: /config/config
+        - name: config-dropins-defaults-dir
+          mountPath: /config/configDropins/defaults
+        - name: flyway-conf-dir
+          mountPath: /opt/flyway/conf
+        - name: logs-dir
+          mountPath: /logs
+        - name: wlp-output-dir
+          mountPath: /opt/ibm/wlp/output
+        - name: tmp-dir
+          mountPath: /tmp
+        readinessProbe:
+          httpGet:
+            path: /ibm/iis/api/audit_trail/v1
+            port: 9080
+          initialDelaySeconds: 120
+          periodSeconds: 60
+        livenessProbe:
+          httpGet:
+            path: /ibm/iis/api/audit_trail/v1/health
+            port: 9080
+          initialDelaySeconds: 300
+          periodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        {{- if .Values.release.image.audittrail.runAsUser }}
+        runAsUser: {{ .Values.release.image.audittrail.runAsUser }}
+        {{- end }}
+        {{- if .Values.release.image.audittrail.fsGroup }}
+        fsGroup: {{ .Values.release.image.audittrail.fsGroup }}
+        {{- end }}
+      {{- if .Values.release.image.audittrail.serviceAccountName }}
+      serviceAccountName: {{ .Values.release.image.audittrail.serviceAccountName }}
+      {{- end }}
+      {{- include "image-secret" . | indent 6 }}
+      volumes:
+      - name: secrets-pv-volume
+        persistentVolumeClaim:
+            claimName: iis-secrets-pv
+      - name: config-dir
+        emptyDir: {}
+      - name: config-dropins-defaults-dir
+        emptyDir: {}
+      - name: flyway-conf-dir
+        emptyDir: {}
+      - name: logs-dir
+        emptyDir: {}
+      - name: wlp-output-dir
+        emptyDir: {}
+      - name: tmp-dir
+        emptyDir: {}

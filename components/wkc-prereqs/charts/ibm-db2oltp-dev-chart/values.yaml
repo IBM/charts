@@ -1,0 +1,178 @@
+###############################################################################
+################################ IBM Db2 ######################################
+###############################################################################
+
+###############################################################################
+## Common image variables
+###############################################################################
+
+## Architecture - e.g. amd64, s390x, ppc64le. Specific worker node architecture
+## to deploy to.
+## You can use kubectl version command to determine the architecture on the
+## desired worker node.
+fullnameOverride: wdp-db2
+
+global:
+  image:
+    secretName: "dr-docker-registry-cred"
+  chownPV: false
+  persistence:
+    useDynamicProvisioning: false
+  dockerRegistryPrefix: ""
+  serviceabilityLabelName: wkc
+  serviceabilityLabelValue: wkc
+  ibmProduct: ""
+  podAnnotations:
+    productName: "DB2"
+    productID: "DB2"
+    productVersion: "3.0"
+
+image:
+  repository: "${DOCKER_REGISTRY}/wdp-db2"
+  tag: 11.5.0.0a
+  pullPolicy: IfNotPresent
+#imageCredentials:
+  #username:
+  #password:
+service:
+  ssl: true
+  type: ClusterIP
+  port: 50000
+db2inst:
+  instname: ""
+  password: ""
+options:
+  databaseName: ""
+  oracleCompatibility: false
+
+existingSecret: ""
+
+# job for generating secrets.. only runs is existingSecret=false
+secretGeneration:
+  serviceAccountName:
+  image:
+    repository: wkc-init-container
+    tag: 1.0.50
+    imagePullSecrets: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi  
+      
+## global persistence settings
+persistence:
+  enabled: true
+
+support4kDevice: false
+
+serviceAccount:
+  name: ""
+
+## hadr option
+hadr:
+  enabled: false
+
+## Persistence parameters for /database
+dataVolume:
+  name: "data-stor"
+
+  ## Specify the name of the Existing Claim to be used by your application
+  ## empty string means don't use an existClaim
+  existingClaimName: ""
+
+  ## Specify the name of the StorageClass
+  ## empty string means don't use a StorageClass
+  storageClassName: "wdp-db2-class"
+  overrideStorageClass: false
+  size: 20Gi
+  path: ""
+  host: ""
+
+# if chown is true, an init-container with sudo is launched to
+# change the owner of the persistence volume mount folder to the user defined in the
+# security context  
+initContainer:
+  chown: false
+  initImage:
+    repository: wkc-init-container
+    tag: 1.0.50
+    pullPolicy: IfNotPresent
+  resources: 
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  securityContext:
+    runAsUser: 
+
+
+setKernelParamsInitContainer: false
+
+setSysctlsUsingJob: false
+sysctlKernelSem: "250 1024000 32 4096"
+sysCtlsJobContainer:
+  initImage:
+    repository: wkc-init-container
+    tag: 1.0.50
+  resources: 
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  securityContext:
+    runAsUser: 
+  serviceAccount: 
+    name: 
+    
+etcdVolume:
+  name: "etcd-stor"
+
+  ## Specify the name of the StorageClass
+  ## empty string means don't use a StorageClass
+  storageClassName: ""
+  size: 1Gi
+
+
+hadrVolume:
+  name: "hadr-stor"
+
+  ## Specify the name of the Existing Claim to be used by your application
+  ## empty string means don't use an existClaim
+  existingClaimName: ""
+
+  ## Specify the name of the StorageClass
+  ## empty string means don't use a StorageClass
+  storageClassName: ""
+  size: 1Gi
+
+securityContext:
+  runAsUser:
+   
+## Configure resource requests and limits
+## ref: http://kubernetes.io/docs/user-guide/compute-resources/
+##
+resources:
+  requests:
+    memory: 2Gi
+    cpu: 1500m
+  limits:
+    memory: 12Gi
+    cpu: 4000m
+
+## Add arch value
+archx86_64: amd64
+archppc64le: ppc64le
+
+## Run as user for Securitycontext
+directiveChanges:
+  securityContext:
+    runAsUser: "0"
+
+nodeLabel: wkc-privileged-node

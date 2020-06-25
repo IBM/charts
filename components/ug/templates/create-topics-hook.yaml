@@ -1,0 +1,79 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "ug-create-topics-hook"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/name: "ug-create-topics-hook"
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 240
+  template:
+    metadata: 
+      labels:
+        release: {{ .Release.Name }}
+        app.kubernetes.io/name: "ug-create-topics-hook"
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      annotations:
+      {{- include "product-metering" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      restartPolicy: Never
+      containers:
+      - name: "ug-create-topics-hook"
+        imagePullPolicy: IfNotPresent
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.release.image.kafka.repository }}:{{ .Values.release.image.kafka.tag }}
+        resources:
+          requests:
+            memory: "{{ .Values.createTopicsHook.requests.memory }}"
+            cpu: "{{ .Values.createTopicsHook.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.createTopicsHook.limits.memory }}"
+            cpu: "{{ .Values.createTopicsHook.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+        command:
+        - sh
+        - -c
+        - |
+          kafka-topics.sh --create --zookeeper zookeeper:2181/kafka --replication-factor 1 --partitions 3 --topic open-metadata.repository-services.cohort.one_catalog.OMRSTopic || errorExit "Error creating OMRSTopic topic."
+          kafka-topics.sh --describe --zookeeper zookeeper:2181/kafka --topic open-metadata.repository-services.cohort.one_catalog.OMRSTopic
+
+          function errorExit () {
+            echo "$1" 1>&2
+            exit 1
+          }
+      securityContext:
+        runAsNonRoot: true
+        {{- if .Values.release.image.kafka.runAsUser }}
+        runAsUser: {{ .Values.release.image.kafka.runAsUser }}
+        {{- end }}
+        {{- if .Values.release.image.kafka.fsGroup }}
+        fsGroup: {{ .Values.release.image.kafka.fsGroup }}
+        {{- end }}
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- end }}
+      {{- include "image-secret" . | indent 6 }}

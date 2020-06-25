@@ -1,0 +1,112 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "wkc-base-roles-init"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+  {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 4 }}
+  {{- end }}    
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 120
+  template:
+    metadata: 
+      labels:
+        app: {{ .Chart.Name }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      annotations:
+      {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+      {{- end }}
+    spec:
+      restartPolicy: Never
+      {{- if .Values.preInstall.serviceAccountName }}
+      serviceAccountName: {{ .Values.preInstall.serviceAccountName }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      affinity:
+      {{- include "wkcbase.nodeAffinity" . | indent 6 }}  
+      containers:
+      - name: "wkc-base-roles-init"
+        imagePullPolicy: IfNotPresent
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.preInstall.image.repository }}:{{ .Values.preInstall.image.tag }}
+        command: ["/bin/sh", "/wkc/init.sh"]
+        volumeMounts:
+          - name: wkc-base-roles-config
+            mountPath: /wkc
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "{{ .Values.preInstall.image.requests.memory }}"
+            cpu: "{{ .Values.preInstall.image.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.preInstall.image.limits.memory }}"
+            cpu: "{{ .Values.preInstall.image.limits.cpu }}"
+        env:
+          - name: ICPD_CONTROLPLANE_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+          - name: CLOUDANT_URL
+            valueFrom:
+              secretKeyRef:
+                key: cloudant-url.txt
+                name: wdp-cloudant-url
+                optional: true
+          - name: COUCHDB_USERNAME
+            valueFrom:
+              secretKeyRef:
+                key: couchdb_username
+                name: couchdb-secrets
+                optional: true
+          - name: COUCHDB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: couchdb_password
+                name: couchdb-secrets
+                optional: true
+          {{- if .Values.global.ibmProduct }}
+          - name: PRODUCT_NAME
+            value: {{ .Values.global.ibmProduct | quote }}
+          {{- end }}
+{{- if .Values.preInstall.image.imagePullSecrets }}
+      imagePullSecrets:
+      - name: {{ .Values.preInstall.image.imagePullSecrets }}
+{{- end }}
+      volumes:
+        - name: wkc-base-roles-config
+          configMap:
+            name: wkc-base-roles-config
+            defaultMode: 0555
+{{- end }}

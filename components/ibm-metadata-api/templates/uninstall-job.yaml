@@ -1,0 +1,93 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "metadata-api.fullname" . }}-uninstall-job
+  labels:
+    app: {{ template "metadata-api.name" . }}-uninstall-job
+    chart: {{ template "metadata-api.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ template "metadata-api.fullname" . }}-uninstall-job
+    helm.sh/chart: {{ template "metadata-api.chart" . }}
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-delete-policy": hook-succeeded
+    "helm.sh/hook-weight": "2"
+  {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | indent 4 }}
+  {{- end }}     
+spec:
+  completions: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "metadata-api.name" . }}-uninstall-job
+        chart: {{ template "metadata-api.chart" . }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ template "metadata-api.fullname" . }}-uninstall-job
+        helm.sh/chart: {{ template "metadata-api.chart" . }}     
+      annotations:
+      {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | indent 8 }}
+      {{- end }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - "amd64"
+      {{- if .Values.secretGeneration.serviceAccountName }}
+      serviceAccountName: {{ .Values.secretGeneration.serviceAccountName }}
+      {{- end }} 
+      containers:
+        - name: {{ template "metadata-api.fullname" . }}-uninstall-job
+          image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.secretGeneration.image.repository }}:{{ .Values.secretGeneration.image.tag }}
+          imagePullPolicy: "IfNotPresent"
+          command: ["kubectl"] 
+          args: ["delete", "secret", "amg-ibm-metadata-api", "amg-ibm-metadata-api-cert", "-n", "$(ICPD_CONTROLPLANE_NAMESPACE)"]
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+          {{- if .Values.securityContext.runAsUser }}
+            runAsUser: {{ .Values.securityContext.runAsUser }}
+          {{- end }}
+            capabilities:
+              drop:
+              - ALL            
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "32Mi"
+            limits:
+              cpu: "200m"
+              memory: "64Mi"
+          env:
+            - name: ICPD_CONTROLPLANE_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+      securityContext:
+        runAsNonRoot: true
+      {{- if .Values.securityContext.runAsUser }}
+        runAsUser: {{ .Values.securityContext.runAsUser }}
+      {{- end }}                   
+{{- if .Values.secretGeneration.image.imagePullSecrets }}
+      imagePullSecrets:
+      - name: {{ .Values.secretGeneration.image.imagePullSecrets }}
+{{- end }}                  
+      restartPolicy: OnFailure

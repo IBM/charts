@@ -1,0 +1,184 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.odfFA.app_name }}
+  labels:
+    app: {{ .Values.odfFA.app_name }}
+    svc: {{ .Values.odfFA.app_name }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/name: {{ .Values.odfFA.app_name }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.odfFA.app_name }}
+      svc: {{ .Values.odfFA.app_name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.odfFA.app_name }}
+        svc: {{ .Values.odfFA.app_name }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/name: {{ .Values.odfFA.app_name }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        icpdsupport/app: "apis"
+        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+      annotations:
+      {{- include "product-metering" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      initContainers:
+      - name: wait-services
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.global.image.wkcinitcontainer.repository }}:{{ .Values.global.image.wkcinitcontainer.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        command: ['sh', '-c', '--']
+        args: [ "iis_status=1;
+                 while [ $iis_status != 0  ];
+                 do sleep 30;
+                 iis_status=`nc is-servicesdocker 9446 < /dev/null; echo $?`;
+                 done;"
+              ]
+        resources:
+          requests:
+            memory: "{{ .Values.odfFA.initcontainer.requests.memory }}"
+            cpu: "{{ .Values.odfFA.initcontainer.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.odfFA.initcontainer.limits.memory }}"
+            cpu: "{{ .Values.odfFA.initcontainer.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+      securityContext:
+        runAsNonRoot: true
+        {{- if .Values.release.image.odfFastAnalyzer.runAsUser }}
+        runAsUser: {{ .Values.release.image.odfFastAnalyzer.runAsUser }}
+        {{- end }}
+        {{- if .Values.release.image.odfFastAnalyzer.fsGroup }}
+        fsGroup: {{ .Values.release.image.odfFastAnalyzer.fsGroup }}
+        {{- end }}
+      containers:
+      - name: {{ .Values.odfFA.app_name }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.release.image.odfFastAnalyzer.repository }}:{{ .Values.release.image.odfFastAnalyzer.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          requests:
+            memory: "{{ .Values.release.image.odfFastAnalyzer.requests.memory }}"
+            cpu: "{{ .Values.release.image.odfFastAnalyzer.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.release.image.odfFastAnalyzer.limits.memory }}"
+            cpu: "{{ .Values.release.image.odfFastAnalyzer.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: ZOOKEEPERCONNECT
+          value: {{ .Values.zookeeper.app_name }}:2181/kafka
+        - name: SOLRCONNECT
+          value: http://solr:8983/solr
+        - name: IISBASEURL
+          value: https://is-servicesdocker:9446
+        - name: IALITEURL
+          value: https://ia-analysis:443
+        - name: IISUSER
+          valueFrom:
+            secretKeyRef:
+              name: fast-analyzer
+              key: fast-analyzer-user
+        - name: IISPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: isadmin_password
+        - name: FINLEY_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: finley_token
+        - name: QUICK_SCAN_LOG_LEVEL
+          value: INFO
+        - name: FEATURE_FLAG_CREATE_CHILD_DOCS
+          value: "true"
+        - name: ODF_PROPERTIES
+          value: "-Dcom.ibm.iis.odf.kafka.skipmessages.older.than.secs=43200"
+        - name: HADOOP_JAVA_HEAP_SPACE
+          value: "-Xmx2048m"
+        - name: SOLR_BATCH_SIZE
+          value: "250"
+        - name: ANALYSIS_BATCH_SIZE
+          value: "1001"
+        livenessProbe:
+          exec:
+            command:
+            - "/odfok.sh"
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command:
+            - "/odfok.sh"
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        volumeMounts:
+        - name: secrets
+          mountPath: /app/secrets
+          readOnly: true
+        - name: extralibs
+          mountPath: /extralibs
+        - name: hadooplogs
+          mountPath: /opt/hadoop/logs
+        - name: kerberos-config
+          mountPath: /external/quickscan/kerberos
+        - name: user-home-mount
+          mountPath: /user-home/_global_/dbdrivers
+          subPath: _global_/dbdrivers
+          readOnly: true
+        - name: user-home-mount
+          mountPath: /user-home/_global_/security/customer-truststores
+          subPath: _global_/security/customer-truststores 
+          readOnly: true
+        - mountPath: /cc-home/_global_/security/customer-truststores
+          subPath: _global_/security/customer-truststores
+          name: volume-at-index-0
+          readOnly: true
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- end }}
+      {{- include "image-secret" . | indent 6 }}
+      volumes:
+      - name: secrets
+        secret:
+          secretName: fast-analyzer
+      - name: extralibs
+        emptyDir: {}
+      - name: hadooplogs
+        emptyDir: {}
+      - name: kerberos-config
+        secret:
+          secretName: {{ .Values.odfFA.secret_name }}
+      {{- include "user-home-pvc" .  | indent 6 }}
+      - name: volume-at-index-0
+        persistentVolumeClaim:
+          claimName: cc-home-pvc

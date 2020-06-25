@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    icpdata_addon: "true"
+    icpdata_addon_version: "3.0.0"
+    release: {{ .Release.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  name: knol-routes
+data:
+  nginx.conf: |
+    set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
+    location /gov/document-extract  {
+        set $knol_api knol.$nsdomain;
+        access_by_lua_file /nginx_data/checkjwt.lua;
+        proxy_set_header Host $host;
+        proxy_pass https://$knol_api:9443;
+    }
+    location /gov/document-extract/api/finley {
+        set $finley_api finley-ml.$nsdomain;
+        access_by_lua_file /nginx_data/checkjwt.lua;
+        rewrite  ^/gov/document-extract/(.*) /$1 break;
+        proxy_pass https://$finley_api:5000;
+    }

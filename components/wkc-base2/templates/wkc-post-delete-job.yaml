@@ -1,0 +1,83 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "wkc-post-delete-job"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    cpd-delete-hook: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": "post-delete"
+    "helm.sh/hook-weight": "100"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 4 }}
+  {{- end }}
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      annotations:
+        {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+        {{- end }}
+    spec:
+      {{- if eq .Values.global.deploymentTarget "icp4data" }}
+      serviceAccountName: {{ .Values.postDelete.serviceAccountName }}
+      {{- end }}
+      restartPolicy: Never
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      affinity:
+      {{- include "wkcbase2.nodeAffinity" . | indent 6 }}
+      containers:
+      - name: "wkc-post-delete-pod"
+        imagePullPolicy: IfNotPresent
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.preInstall.image.repository }}:{{ .Values.preInstall.image.tag }}
+        command: ["/bin/sh", "/wkc-post-delete-scripts/post-delete.sh"]
+        volumeMounts:
+        - mountPath: /wkc-post-delete-scripts
+          name: wkc-post-delete-scripts
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          limits:
+            cpu: {{ .Values.preInstall.resources.limits.cpu }}
+            memory: {{ .Values.preInstall.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.preInstall.resources.requests.cpu }}
+            memory: {{ .Values.preInstall.resources.requests.memory }}
+        env:
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+      volumes:
+        - name: wkc-post-delete-scripts
+          configMap:
+            name: wkc-post-delete-cm
+            defaultMode: 0555
+{{- end }}

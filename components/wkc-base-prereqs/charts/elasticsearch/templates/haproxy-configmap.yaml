@@ -1,0 +1,82 @@
+kind: ConfigMap
+apiVersion: v1
+data:
+  haproxy.cfg: |
+    global
+      log stdout  format raw  local0  notice
+      maxconn 10000
+   
+    userlist es_users
+      user {{ .Values.username }} insecure-password "${ELASTIC_PASSWORD}"
+
+    defaults
+      log global
+      option clitcpka      
+      timeout connect  30000
+      timeout client  120000
+      timeout server  120000
+      timeout tunnel 1d
+      timeout client-fin 1h
+      
+    resolvers k8s_dns
+      parse-resolv-conf
+      resolve_retries 5
+      timeout retry 10s
+
+    # http port
+    frontend ft_elastic
+      mode http
+      acl auth_es http_auth(es_users)
+      bind *:{{ .Values.proxyHttpPort }} ssl crt /etc/ssl/certs/cert.pem ssl-min-ver TLSv1.2
+      http-request auth unless auth_es     
+      http-request redirect scheme https unless { ssl_fc }     
+      default_backend bk_elastic
+      
+    # transport   
+    frontend ft_elastic_transport
+      mode tcp
+      bind *:{{ .Values.proxyTransportPort }} ssl crt /etc/ssl/certs/cert.pem ssl-min-ver TLSv1.2             
+      default_backend bk_elastic_transport
+    
+    backend bk_elastic
+      mode http
+      http-request del-header Authorization
+      server es localhost:{{ .Values.httpPort }} weight 1 check inter 1000 rise 5 fall 1
+      
+    backend bk_elastic_transport
+      mode tcp
+      server es_transport localhost:{{ .Values.transportPort }} weight 1 check inter 1000 rise 5 fall 1     
+      
+    # generate this section based on replica count  
+    ##  
+    {{- $name := include "uname" . }}
+    {{- $namespace := .Release.Namespace }}
+    {{- $clusterDomain := .Values.clusterDomain }}
+    {{- $proxyTransport := .Values.proxyTransportPort }}
+    {{- $replicas := int .Values.replicas }}
+    {{- range $i, $e := untilStep 0 $replicas 1 -}}
+    # transport local routes to SSL
+    frontend ft_elastic_transport_local{{ toString $i }}
+      bind 127.0.0.1:970{{ toString $i }} 
+      mode tcp         
+      default_backend bk_elastic_transport{{ toString $i }}
+    
+    backend bk_elastic_transport{{ toString $i }}
+      mode tcp
+      
+      server {{ $name }}-{{ toString $i }}_transport {{ $name }}-{{ toString $i }}.{{ $name }}-headless.{{ $namespace }}.svc.{{ $clusterDomain }}:{{ $proxyTransport }} ssl ca-file /etc/ssl/certs/ca.pem weight 1 check resolvers k8s_dns init-addr none inter 1000 rise 5 fall 1     
+    {{- end }}  
+    ##    
+    # end generate      
+
+metadata:
+  name: {{ template "uname" . }}-haproxy
+  labels:
+    app: {{ template "uname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}  
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }} 
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}

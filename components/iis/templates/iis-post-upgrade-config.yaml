@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: iis-post-upgrade-config
+  annotations:
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "99"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  post-upgrade.sh: |
+    echo waiting for xmeta pod to become ready
+    kubectl wait --for=condition=ready --timeout=30m pod -l app=iis-xmetarepo -n $NAMESPACE
+    echo waiting for iis-services pod to become ready
+    kubectl wait --for=condition=ready --timeout=30m pod -l app=iis-services -n $NAMESPACE
+    echo get iis-services pod
+    iis_services_pod=$(kubectl get pod -l app=iis-services -o jsonpath="{.items[0].metadata.name}" -n $NAMESPACE)
+    echo iis-services pod: ${iis_services_pod}, execute updateXmetaDbSchema.sh script
+    kubectl exec ${iis_services_pod} -- /opt/IBM/InformationServer/initScripts/updateXmetaDbSchema.sh -n $NAMESPACE
+    echo done
+    exit 0

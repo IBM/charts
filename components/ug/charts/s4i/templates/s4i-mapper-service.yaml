@@ -1,0 +1,191 @@
+# Licensed Materials - Property of IBM
+# 5724-Q36
+# Copyright IBM Corp. 2018
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.shop4infoMapper.app_name }}
+  labels:
+    app: {{ .Values.shop4infoMapper.app_name }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/name: {{ .Values.shop4infoMapper.app_name }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  selector:
+    app: {{ .Values.shop4infoMapper.app_name }}
+  ports:
+  - name: http
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+  - name: actuator
+    protocol: TCP
+    port: 8090
+    targetPort: 8090
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Values.shop4infoMapper.app_name }}
+  labels:
+    app: {{ .Values.shop4infoMapper.app_name }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/name: {{ .Values.shop4infoMapper.app_name }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  serviceName: "{{ .Values.shop4infoMapper.app_name }}"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.shop4infoMapper.app_name }}
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.shop4infoMapper.app_name }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/name: {{ .Values.shop4infoMapper.app_name }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        icpdsupport/app: "apis"
+        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+      annotations:
+        co.elastic.logs/multiline.pattern: '^\d\d\d\d-\d\d-\d\d'
+        co.elastic.logs/multiline.negate: 'true'
+        co.elastic.logs/multiline.match: after
+        prometheus.io/scrape: 'true'
+        prometheus.io/path:   /actuator/prometheus
+        prometheus.io/port:   '8090'
+      {{- include "product-metering" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      terminationGracePeriodSeconds: 5
+      initContainers:
+      - name: wait
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.global.image.wkcinitcontainer.repository }}:{{ .Values.global.image.wkcinitcontainer.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        command: ['sh', '-c', '--']
+        args: [ "wait_status=1;
+                 while [ $wait_status != 0  ];
+                 do sleep 2;
+                 wait_status=`nc {{ .Values.s4iRegistry.app_name }}-internal 8080 && nc is-xmetadocker 50000 < /dev/null; echo $?`;
+                 done;"
+              ]
+        resources:
+          requests:
+            memory: "{{ .Values.shop4infoMapper.initcontainer.requests.memory }}"
+            cpu: "{{ .Values.shop4infoMapper.initcontainer.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.shop4infoMapper.initcontainer.limits.memory }}"
+            cpu: "{{ .Values.shop4infoMapper.initcontainer.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+      containers:
+      - name: {{ .Values.shop4infoMapper.app_name }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.shop4infoMapper.repository }}:{{ .Values.shop4infoMapper.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          requests:
+            memory: "{{ .Values.shop4infoMapper.requests.memory }}"
+            cpu: "{{ .Values.shop4infoMapper.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.shop4infoMapper.limits.memory }}"
+            cpu: "{{ .Values.shop4infoMapper.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: XMETA_DB_DRIVER
+          value: com.ibm.db2.jcc.DB2Driver
+        - name: XMETA_DB_URL
+          value: jdbc:db2://is-xmetadocker:50000/xmeta
+        - name: XMETA_DB_USER
+          value: xmeta
+        - name: XMETA_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: xmeta_password
+        ports:
+        - containerPort: 8080
+        - containerPort: 8090
+        volumeMounts:
+        - name: config-map
+          mountPath: /app/application.properties
+          subPath: application.properties
+        - name: config-map
+          mountPath: /app/jvm.options
+          subPath: jvm.options
+        - name: app-log
+          mountPath: /app/log
+        - name: secrets
+          mountPath: /app/secrets
+          readOnly: true
+        readinessProbe:
+          httpGet:
+            path: /actuator/ready
+            port: 8090
+          periodSeconds: 20
+          initialDelaySeconds: 20
+          timeoutSeconds: 20
+          failureThreshold: 1
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8090
+          periodSeconds: 20
+          initialDelaySeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 8
+      securityContext:
+        runAsNonRoot: true
+        {{- if .Values.shop4infoMapper.runAsUser }}
+        runAsUser: {{ .Values.shop4infoMapper.runAsUser }}
+        {{- end }}
+        {{- if .Values.shop4infoMapper.fsGroup }}
+        fsGroup: {{ .Values.shop4infoMapper.fsGroup }}
+        {{- end }}
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- end }}
+      {{- include "image-secret" . | indent 6 }}
+      volumes:
+      - name: config-map
+        configMap:
+          name: shop4info-mappers-config
+      - name: secrets
+        persistentVolumeClaim:
+             claimName: iis-secrets-pv
+      - name: app-log
+        emptyDir: {}

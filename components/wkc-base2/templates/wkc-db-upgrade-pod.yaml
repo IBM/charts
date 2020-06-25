@@ -1,0 +1,71 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: wkc-pre-upgrade
+  annotations:
+    "helm.sh/hook": "pre-upgrade"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "6"
+    {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 4 }}
+    {{- end }}
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  containers:
+  - name: wkc-pre-upgrade
+    image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.preInstall.image.repository }}:{{ .Values.preInstall.image.tag }}
+    imagePullPolicy: IfNotPresent
+    command: ["/bin/sh"]
+    args: ["/wkc-db-config-scripts/pre-upgrade.sh"]
+    volumeMounts:
+    - mountPath: /wkc-db-config-scripts
+      name: wkc-db-config-scripts
+    securityContext:
+      privileged: false
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      readOnlyRootFilesystem: false
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      limits:
+        cpu: {{ .Values.preInstall.resources.limits.cpu }}
+        memory: {{ .Values.preInstall.resources.limits.memory }}
+      requests:
+        cpu: {{ .Values.preInstall.resources.requests.cpu }}
+        memory: {{ .Values.preInstall.resources.requests.memory }}
+    env:
+      - name: NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+  restartPolicy: OnFailure
+  volumes:
+  - name: wkc-db-config-scripts
+    configMap:
+      name: wkc-db-upgrade-config
+  serviceAccountName: {{ .Values.postDelete.serviceAccountName }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+  affinity:
+  {{- include "wkcbase2.nodeAffinity" . | indent 4 }}
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+{{- if .Values.preInstall.image.imagePullSecrets }}
+  imagePullSecrets:
+  - name: {{ .Values.preInstall.image.imagePullSecrets }}
+{{- end }}
+{{- end }}

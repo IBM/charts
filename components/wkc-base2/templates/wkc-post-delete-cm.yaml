@@ -1,0 +1,48 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wkc-post-delete-cm
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "99"
+    "helm.sh/hook-delete-policy": "before-hook-creation"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  post-delete.sh: |
+    #delete jobs
+    kubectl delete job wkc-roles-init -n $NAMESPACE
+    kubectl delete job wkc-post-install-init -n $NAMESPACE
+    kubectl delete job wkc-post-upgrade-init -n $NAMESPACE
+    
+    #delete secrets
+    kubectl delete secret secret-wdp-policy-service -n $NAMESPACE
+    
+    #delete configmaps
+    kubectl delete cm wkc-roles-config -n $NAMESPACE
+    kubectl delete cm wkc-post-install-config -n $NAMESPACE
+    kubectl delete cm wkc-post-upgrade-config -n $NAMESPACE
+    kubectl delete cm wkc-homepage-extensions -n $NAMESPACE
+    kubectl delete cm wkc-permission-extensions -n $NAMESPACE
+    kubectl delete cm wkc-user-role-extensions -n $NAMESPACE
+    kubectl delete cm wkc-bg-db-config -n $NAMESPACE
+    
+    # delete only if it exists
+    db_upgrade_exists=$(kubectl get cm wkc-db-upgrade-config -n $NAMESPACE 2>/dev/null)
+    rc=$?
+    if [[ rc -eq 0 ]]; then
+      kubectl delete cm wkc-db-upgrade-config -n $NAMESPACE
+    fi
+    
+    kubectl delete cm  wkc-post-delete-cm -n $NAMESPACE
+    
+    exit 0
+{{- end }}

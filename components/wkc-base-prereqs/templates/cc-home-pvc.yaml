@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: "cc-home-pvc"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}    
+  annotations:
+  {{- range $key, $value := .Values.ccHomePVC.persistentVolume.annotations }}
+    {{ $key }}: {{ $value }}
+  {{- end }}
+
+spec:
+  accessModes:
+  {{- range .Values.ccHomePVC.persistentVolume.accessModes }}
+    - {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.ccHomePVC.persistentVolume.size | quote }}
+
+  {{- if .Values.ccHomePVC.persistentVolume.storageClass }}
+    {{- if (eq "-" .Values.ccHomePVC.persistentVolume.storageClass) }}
+  storageClassName: ""
+    {{- else }}
+      {{- if .Values.global.persistence.useDynamicProvisioning }}
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+      {{- else }}
+  storageClassName: "{{ .Values.ccHomePVC.persistentVolume.storageClass }}"
+      {{- end }}
+    {{- end }}
+  {{- end }}

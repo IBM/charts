@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.enterpriseSearchUI.app_name }}
+  labels:
+     app: {{ .Values.enterpriseSearchUI.app_name }}
+     chart: "{{ .Chart.Name }}"
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}"
+     app.kubernetes.io/name: {{ .Values.enterpriseSearchUI.app_name }}
+     helm.sh/chart: {{ .Chart.Name }}
+     app.kubernetes.io/managed-by: {{ .Release.Service }}
+     app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.enterpriseSearchUI.app_name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.enterpriseSearchUI.app_name }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/name: {{ .Values.enterpriseSearchUI.app_name }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        icpdsupport/app: "ui"
+        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+      annotations:
+      {{- include "product-metering" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: "app"
+                operator: In
+                values:
+                - {{ .Values.enterpriseSearchUI.app_name }}
+            topologyKey: "kubernetes.io/hostname"
+       {{- include "nodeaffinity" . | indent 6 }}
+      containers:
+        - name: {{ .Values.enterpriseSearchUI.app_name }}
+          image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.enterpriseSearchUI.repository }}:{{ .Values.enterpriseSearchUI.tag }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          env:
+          - name: RUN_TYPE
+            value: {{.Values.global.ibmProduct | upper | quote }}
+          resources:
+            requests:
+              memory: "{{ .Values.enterpriseSearchUI.requests.memory }}"
+              cpu: "{{ .Values.enterpriseSearchUI.requests.cpu }}"
+            limits:
+              memory: "{{ .Values.enterpriseSearchUI.limits.memory }}"
+              cpu: "{{ .Values.enterpriseSearchUI.limits.cpu }}"
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+              - ALL
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+           tcpSocket:
+            port: 3000
+           initialDelaySeconds: 5
+          livenessProbe:
+           tcpSocket:
+            port: 3000
+           initialDelaySeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        {{- if .Values.enterpriseSearchUI.runAsUser }}
+        runAsUser: {{ .Values.enterpriseSearchUI.runAsUser }}
+        {{- end }}
+        {{- if .Values.enterpriseSearchUI.fsGroup }}
+        fsGroup: {{ .Values.enterpriseSearchUI.fsGroup }}
+        {{- end }}
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- end }}
+      {{- include "image-secret" . | indent 6 }}

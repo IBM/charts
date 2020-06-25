@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: s4i-pre-upgrade-config
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "-10"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  pre-upgrade.sh: |
+    echo Shop4info Pre-upgrade pod...
+    echo scaling down {{ .Values.s4iEventConsumer.app_name }} replicas to 0
+    kubectl scale sts {{ .Values.s4iEventConsumer.app_name }} --replicas=0 -n $NAMESPACE
+    
+    echo scaling down {{ .Values.shop4infoMapper.app_name }} replicas to 0
+    kubectl scale sts {{ .Values.shop4infoMapper.app_name }} --replicas=0 -n $NAMESPACE
+    
+    echo scaling down {{ .Values.shop4infoRest.app_name }} replicas to 0
+    kubectl scale sts {{ .Values.shop4infoRest.app_name }} --replicas=0 -n $NAMESPACE
+    
+    echo scaling down {{ .Values.s4iScheduler.app_name }} replicas to 0
+    kubectl scale sts {{ .Values.s4iScheduler.app_name }} --replicas=0 -n $NAMESPACE
+    
+    echo scaling down {{ .Values.s4iRegistry.app_name }} replicas to 0
+    kubectl scale sts {{ .Values.s4iRegistry.app_name }} --replicas=0 -n $NAMESPACE
+    
+    exit 0
