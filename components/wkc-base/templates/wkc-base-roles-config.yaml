@@ -1,0 +1,43 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: wkc-base-roles-config
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  init.sh: |
+    set -e
+
+    if [ "$COUCHDB_PASSWORD" != "" ];
+    then
+      DB_URL=https://$COUCHDB_USERNAME:$COUCHDB_PASSWORD@couchdb-svc
+    else
+      DB_URL=$CLOUDANT_URL
+    fi
+
+    # update admin user with base roles and permissions
+    echo "Updating the base user with all the base roles and permissions"
+    adminUserDoc=$(curl -sS -k $DB_URL/privatecloud-users/admin | python -c "import sys, json; \
+    adminUserJson=json.load(sys.stdin); \
+    adminUserJson['permissions'].append('manage_catalog'); \
+    adminUserJson['user_roles'].append('Data Scientist'); \
+    adminUserJson['user_roles'].append('Developer'); \
+    print (json.dumps(adminUserJson))")
+
+    curl -sS -k -X PUT $DB_URL/privatecloud-users/admin \
+        -H "Content-Type: application/json" \
+        -d "$adminUserDoc"
+
+  {{- end }}

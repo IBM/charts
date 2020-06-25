@@ -1,0 +1,96 @@
+{{- if .Values.setSysctlsUsingJob }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: wdp-db2-sysctl-config
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+data:
+  job.yaml: |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: JOB_NAME
+      labels:
+        app: {{ .Chart.Name }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+    {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+    {{- end }}    
+    spec:
+      backoffLimit: 3
+      activeDeadlineSeconds: 120
+      template:
+        metadata: 
+          annotations:
+    {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 12 }}
+    {{- end }}
+        spec:
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector:
+                  matchExpressions:
+                  - key: "statefulset.kubernetes.io/pod-name"
+                    operator: In
+                    values:
+                    - "POD_NAME"
+                topologyKey: "kubernetes.io/hostname"
+          restartPolicy: Never
+          serviceAccountName: {{ default "default" .Values.sysCtlsJobContainer.serviceAccount.name }}          
+          containers:
+          - name: "wdp-db2-sysctl-job"
+            imagePullPolicy: IfNotPresent
+            image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.sysCtlsJobContainer.initImage.repository }}:{{ .Values.sysCtlsJobContainer.initImage.tag }}
+            command: ['sh']
+            args:
+            - "-c"
+            - sudo sysctl -w kernel.sem={{ .Values.sysctlKernelSem | quote }};      
+            securityContext:
+              privileged: true
+    {{- if .Values.sysCtlsJobContainer.securityContext.runAsUser }}      
+              runAsUser: {{ .Values.sysCtlsJobContainer.securityContext.runAsUser }}   
+    {{- end }} 
+            resources:
+              requests:
+                memory: "{{ .Values.sysCtlsJobContainer.resources.requests.memory }}"
+                cpu: "{{ .Values.sysCtlsJobContainer.resources.requests.cpu }}"
+              limits:
+                memory: "{{ .Values.sysCtlsJobContainer.resources.limits.memory }}"
+                cpu: "{{ .Values.sysCtlsJobContainer.resources.limits.cpu }}"        
+    {{- if .Values.imagePullSecrets }}
+          imagePullSecrets:
+          - name: {{ .Values.imagePullSecrets | quote }}
+    {{- end }}
+    
+  runJob.sh: |
+    function errorExit () {
+      echo "$1" 1>&2
+      exit 1
+    }
+    
+    JOBNAME=$POD_NAME-sysctl-job
+    
+    # delete previous job
+    kubectl delete job $JOBNAME
+    
+    JOB=$(<./job/job.yaml);   
+    
+    JOB=$(echo "${JOB/POD_NAME/$POD_NAME}")
+    
+    echo "${JOB/JOB_NAME/$JOBNAME}"
+    
+    echo "${JOB/JOB_NAME/$JOBNAME}" | kubectl create -f - || errorExit "Failed to create job"
+    
+    # wait for status
+    kubectl wait --for=condition=complete --timeout=60s job/$JOBNAME || errorExit "Sysctl job never completed."
+    
+  
+{{- end }}

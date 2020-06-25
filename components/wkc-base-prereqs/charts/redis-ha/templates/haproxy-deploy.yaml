@@ -1,0 +1,154 @@
+{{- if gt (int .Values.replicas) 1 }}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ template "redis-ha.fullname" . }}-haproxy
+  namespace: {{ .Values.namespace }}
+  labels:
+    name: {{ template "redis-ha.fullname" . }}-haproxy
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }} 
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+{{ include "labels.standard" . | indent 4 }}
+spec:
+  updateStrategy:
+    type: RollingUpdate
+  revisionHistoryLimit: 1
+  replicas: {{ .Values.haproxy.replicas }}
+  selector:
+    matchLabels:
+      app: {{ template "redis-ha.fullname" . }}-haproxy
+  template:
+    metadata:
+      name: {{ template "redis-ha.fullname" . }}-haproxy
+      labels:
+        app: {{ template "redis-ha.fullname" . }}-haproxy
+        release: {{ .Release.Name }}
+        name: {{ template "redis-ha.fullname" . }}-haproxy
+        heritage: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }} 
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        icpdsupport/app: "apis"
+        chart: {{ .Chart.Name }}
+        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+      annotations:       
+        checksum/config: {{ include (print $.Template.BasePath "/haproxy-configmap.yaml") . | sha256sum }}
+      {{- if .Values.haproxy.podAnnotations }}
+{{ toYaml .Values.haproxy.podAnnotations | indent 8 }}
+      {{- end }}
+    spec:
+      # Needed when using unmodified rbac-setup.yml
+      serviceAccountName: {{ template "redis-ha.serviceAccountName" . }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      nodeSelector:
+{{ toYaml .Values.haproxy.nodeSelector | indent 8 }}
+      {{- if eq .Values.haproxy.podAntiAffinity "hard" }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: {{ template "redis-ha.name" . }}-haproxy
+                release: {{ .Release.Name }}
+                component: server
+            topologyKey: kubernetes.io/hostname
+      {{- else if eq .Values.haproxy.podAntiAffinity "soft" }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: {{ template "redis-ha.fullname" . }}-haproxy
+                  release: {{ .Release.Name }}
+                  component: server
+              topologyKey: kubernetes.io/hostname
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.archx86_64 }}
+                - {{ .Values.archppc64le }}
+      containers:      
+      - name: haproxy
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.haproxy.image.repository }}:{{ .Values.haproxy.image.tag }}
+        imagePullPolicy: {{ .Values.haproxy.image.pullPolicy }}
+        ports:
+        - name: master
+          containerPort: {{ .Values.haproxy.ports.master }}
+        {{ if eq .Values.haproxy.stats.http.enable true }}
+        - name: stats
+          containerPort: {{ .Values.haproxy.stats.http.port }}
+        {{ end }}
+        env:
+        {{- if .Values.auth }}
+        - name: AUTH
+          valueFrom:
+            secretKeyRef:
+            {{- if .Values.existingSecret }}
+              name: {{ .Values.existingSecret }}
+            {{- else }}
+              name: {{ template "redis-ha.fullname" . }}
+            {{- end }}
+              key: auth
+        {{- end }}
+        livenessProbe:
+          httpGet:
+            path: /_haproxy_health
+            scheme: HTTP
+            port: {{ .Values.haproxy.stats.http.port }}
+          initialDelaySeconds: 30
+          timeoutSeconds: 30      
+          periodSeconds: 30  
+          failureThreshold: 3  
+        readinessProbe:
+          httpGet:
+            path: /_haproxy_health
+            scheme: HTTP
+            port: {{ .Values.haproxy.stats.http.port }}
+          initialDelaySeconds: 10
+          timeoutSeconds: 30
+          periodSeconds: 30
+          failureThreshold: 5
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          {{- if .Values.haproxy.securityContext.runAsUser }}
+          runAsUser: {{ .Values.haproxy.securityContext.runAsUser }}
+          {{- end }}
+          capabilities:
+            drop:
+            - ALL
+        resources:
+{{ toYaml .Values.haproxy.resources | indent 10 }}
+        volumeMounts:
+        - name: config-volume
+          mountPath: /usr/local/etc/haproxy
+        - name: shared-socket
+          mountPath: /run/haproxy
+      {{- if .Values.haproxy.image.pullSecret }}    
+      imagePullSecrets:
+      - name: {{ .Values.haproxy.image.pullSecret }}
+      {{- end }}    
+      volumes:
+      - name: config-volume
+        configMap:
+          name: {{ template "redis-ha.fullname" . }}-haproxy
+      - name: shared-socket
+        emptyDir: {}
+{{- end }}        

@@ -1,0 +1,50 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wkc-db-upgrade-config
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "5"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  pre-upgrade.sh: |
+    DB_CONFIG="wkc-bg-db-config"
+    echo Checking if $DB_CONFIG exists
+    bg_db_exists=$(kubectl get cm $DB_CONFIG -n $NAMESPACE)
+    rc=$?
+    if [[ rc -eq 1 ]]; then
+      echo $DB_CONFIG does not exists, setting the glossary and workflow db to ILGDB
+      glossary_db="ILGDB"
+      workflow_db="ILGDB"
+      echo creating the configmap $DB_CONFIG 
+      kubectl create configmap $DB_CONFIG --from-literal BG_DB2_DATABASE_NAME=$glossary_db --from-literal WF_DB2_DATABASE_NAME=$workflow_db -n $NAMESPACE
+      echo adding the labels to $DB_CONFIG
+      kubectl label cm $DB_CONFIG app={{ .Chart.Name }} chart={{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }} release={{ .Release.Name }} heritage={{ .Release.Service }} app.kubernetes.io/name={{ .Chart.Name }} helm.sh/chart={{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }} app.kubernetes.io/managed-by={{ .Release.Service }} app.kubernetes.io/instance={{ .Release.Name }} -n $NAMESPACE
+    else 
+      echo The config map $DB_CONFIG already exists.
+    fi
+    
+    # check if nlq-search-extractor is from 0027-wkc-base
+    nlq_search=$(kubectl describe deploy nlq-search-extractor -n $NAMESPACE| grep release | grep 0027-wkc-base)
+    rc=$?
+    if [[ rc -eq 0 ]]; then
+      echo deleting the nlq-search-extractor deployment
+      kubectl delete deploy nlq-search-extractor -n $NAMESPACE
+        
+      echo deleting the nlq-search-extractor service
+      kubectl delete service nlq-search-extractor -n $NAMESPACE 
+    else
+      echo nlq-search-extractor is not from 0027-wkc-base
+    fi
+    exit 0
+{{- end }}

@@ -1,0 +1,176 @@
+replicaCount: 1
+
+## Add arch value
+archx86_64: amd64
+archppc64le: ppc64le
+
+enabled:
+  catalog-ui: true
+  catalog: true
+  connection: true
+  secrets: true
+  ingress: false
+  wkc_search: true
+  nlq-search: true
+
+# set to true if regen of all secrets required.
+updateSecrets: false
+
+global:
+  imagePullSecrets: ""
+  serviceIdSecret: "wdp-service-id"
+  serviceId: "icp4d-dev"
+  deploymentTarget: "icp4data"
+  installCerts: true
+  podAnnotations:
+    productName: "IBM Common Core Services for IBM Cloud Pak for Data"
+    productID: "ICP4D-Common-Core-Services-3-0-1"
+    productVersion: "3.0.1"
+    productMetric: "VIRTUAL_PROCESSOR_CORE"
+    productChargedContainers: "All"
+    cloudpakName: "IBM Cloud Pak for Data"
+    cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    cloudpakVersion: "3.0.1"
+
+preInstall:
+  serviceAccountName: "cpd-editor-sa"
+  image:
+    repository: wkc-init-container
+    tag: 1.0.85
+    imagePullSecrets: ""
+    requests:
+      memory: 256M
+      cpu: 100m
+    limits:
+      memory: 512M
+      cpu: 500m
+
+postDelete:
+  serviceAccountName: cpd-admin-sa
+
+# secret generation
+secretGeneration:
+  serviceAccountName: "cpd-editor-sa"
+  image:
+    repository: wkc-init-container
+    tag: 1.0.85
+    imagePullSecrets: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+
+ingress:
+  tls:
+    enabled: false
+    secretName:
+  host:
+    domain: internal-nginx-svc
+    ip:
+
+
+portal-catalog:
+  service:
+    replicas: 1
+    cpuLimits: 1000m
+    cpuRequests: 200m
+    memoryLimits: 1Gi
+    memoryRequests: 300Mi
+  image:
+    repository: portal-catalog
+    tag: v0.2.236.21
+    pullSecret: ""
+  env:
+    PRODUCT_NAME: "ugi"
+    DEPLOYMENT_TARGET: icp4data
+    PRODUCT_VERSION: "3.0"
+    DOC_URL: "https://www.ibm.com/support/knowledgecenter/SSQNUZ_2.5.0"
+
+dc-main:
+  service:
+    replicas: 1
+    cpuLimits: 200m
+    cpuRequests: 50m
+    memoryLimits: 400Mi
+    memoryRequests: 200Mi
+  image:
+    repository: dc-main
+    tag: v0.2.130.5
+    pullSecret: ""
+  env:
+    PRODUCT_NAME: "ugi"
+    DEPLOYMENT_TARGET: icp4data
+
+
+catalog-api-charts:
+  replicas: 2
+  image:
+    repository: catalog_master
+    tag: 2.0.0-20200511155343-a95f05f
+  imagePullSecrets:
+    name: ""
+  properties:
+    cloudantUrl: https://wdp-cloudant:443
+    enforceWKCPermission: true
+    enableGlobalSearchPublishing: true
+    expireCatalogOnDelete: true
+    enableCrossCatalogSearch: false
+  requests:
+    cpu: 300m
+    memory: 512Mi
+  limits:
+    cpu: 2.5
+    memory: 4Gi
+
+wdp-connect-connection-chart:
+  minReplicas: 1
+  maxReplicas: 1
+  image:
+    repository: wdp-connect-connection
+    tag: 2.0.76
+  resources:
+    requests:
+      cpu: 150m
+      memory: 650Mi
+    limits:
+      cpu: 500m
+      memory: 4Gi
+
+
+wdp-connect-connector-chart:
+  minReplicas: 1
+  maxReplicas: 1
+  image:
+    repository: wdp-connect-connector
+    tag: 2.0.76
+  resources:
+    requests:
+      cpu: 200m
+      memory: 650Mi
+    limits:
+      cpu: 1
+      memory: 4Gi
+
+wkc-search-charts:
+  replicas: 1
+  image:
+    repository: wkc-search_master
+    tag: 1.0.123
+  imagePullSecrets:
+    name: ""
+  requests:
+    cpu: 100m
+    memory: 400Mi
+  limits:
+    cpu: 1
+    memory: 1Gi
+
+nlq-search:
+  replicaCount: 1
+  image:
+    repository: smart-platform-search
+    tag: 0.1.381

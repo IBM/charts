@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ template "metadata-api.fullname" . }}-test
+  labels:
+    app: {{ template "metadata-api.name" . }}-test
+    chart: {{ template "metadata-api.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ template "metadata-api.fullname" . }}
+    helm.sh/chart: {{ template "metadata-api.chart" . }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - amd64
+  containers:
+  - name: amg-test
+    image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.secretGeneration.image.repository }}:{{ .Values.secretGeneration.image.tag }}
+    imagePullPolicy: IfNotPresent
+    command: ["sh", "-c", "echo this is a test"]
+{{- if .Values.secretGeneration.image.imagePullSecrets }}
+    imagePullSecrets:
+    - name: {{ .Values.secretGeneration.image.imagePullSecrets }}
+{{- end }}       
+    securityContext:
+      privileged: false
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        memory: "{{ .Values.secretGeneration.resources.requests.memory }}"
+        cpu: "{{ .Values.secretGeneration.resources.requests.cpu }}"
+      limits:
+        memory: "{{ .Values.secretGeneration.resources.limits.memory }}"
+        cpu: "{{ .Values.secretGeneration.resources.limits.cpu }}"        
+  restartPolicy: Never
+  serviceAccountName: {{ .Values.secretGeneration.serviceAccountName }}

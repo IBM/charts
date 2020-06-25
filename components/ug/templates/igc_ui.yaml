@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.igcUI.app_name }}
+  labels:
+     app: {{ .Values.igcUI.app_name }}
+     chart: "{{ .Chart.Name }}"
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}"
+     app.kubernetes.io/name: {{ .Values.igcUI.app_name }}
+     helm.sh/chart: {{ .Chart.Name }}
+     app.kubernetes.io/managed-by: {{ .Release.Service }}
+     app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+     matchLabels:
+       app: {{ .Values.igcUI.app_name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.igcUI.app_name }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/name: {{ .Values.igcUI.app_name }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        icpdsupport/app: "ui"
+        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+      annotations:
+      {{- include "product-metering" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: "app"
+                operator: In
+                values:
+                - {{ .Values.igcUI.app_name }}
+            topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: {{ .Values.igcUI.app_name }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.release.image.igcUIReact.repository }}:{{ .Values.release.image.igcUIReact.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          requests:
+            memory: "{{ .Values.release.image.igcUIReact.requests.memory }}"
+            cpu: "{{ .Values.release.image.igcUIReact.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.release.image.igcUIReact.limits.memory }}"
+            cpu: "{{ .Values.release.image.igcUIReact.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+        command: [ "/bin/sh", "-c", "--" ]
+        args: [ "sed -i '/<html lang=\"en\">/a <meta name=\"toggle\" content=\"featureShowInZen\" value=\"on\" >' /app/dist/index.html;
+                 sed -i '/<html lang=\"en\">/a <meta name=\"toggle\" content=\"featureShowEdit\" value=\"on\" >' /app/dist/index.html;
+                 sed -i '/<html lang=\"en\">/a <meta name=\"toggle\" content=\"featureMaskingRules\" value=\"off\" >' /app/dist/index.html;
+                 sed -i 's/<title>Information Governance Catalog<\\/title>/<title>IBM Cloud Private for Data<\\/title>/g' /app/dist/index.html;
+                 sed -i '/<meta name=\"toggle\" content=\"featureShowInZen\" value=\"on\">/a <meta name=\"toggle\" content=\"featureMaskingRules\" value=\"off\" >' /app/dist/index.zen.html;
+                 npm start;"
+             ]
+        env:
+        - name: RUN_TYPE
+          value: {{.Values.global.ibmProduct | upper | quote }}
+        ports:
+        - name: http
+          containerPort: 3000
+        readinessProbe:
+          tcpSocket:
+            port: 3000
+          initialDelaySeconds: 5
+        livenessProbe:
+          tcpSocket:
+            port: 3000
+          initialDelaySeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        {{- if .Values.release.image.igcUIReact.runAsUser }}
+        runAsUser: {{ .Values.release.image.igcUIReact.runAsUser }}
+        {{- end }}
+        {{- if .Values.release.image.igcUIReact.fsGroup }}
+        fsGroup: {{ .Values.release.image.igcUIReact.fsGroup }}
+        {{- end }}
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- end }}
+      {{- include "image-secret" . | indent 6 }}

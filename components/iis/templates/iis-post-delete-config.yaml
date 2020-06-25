@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: iis-post-delete-config
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "99"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  post-delete.sh: |
+    #delete jobs
+    echo iis-secret-generation-job deleting the jobs
+    kubectl delete job iis-secret-generation-job solr-configset-collection iis-post-upgrade-job -n $NAMESPACE 
+
+    # delete pvcs
+    kubectl delete pvc kafka-data-kafka-0 solr-data-solr-0 zookeeper-data-zookeeper-0 cassandra-data-cassandra-0 -n $NAMESPACE
+
+    # delete configmaps
+    echo iis-secret-generation-config deleting the configmap
+    kubectl delete cm iis-secret-generation-config solr-configset-collection iis-post-upgrade-config -n $NAMESPACE
+
+    #delete secret
+    kubectl delete secret iis-usr-secrets -n $NAMESPACE
+
+    # echo delete the post delete bits
+    echo iis-post-delete-config deleting the configmap
+    kubectl delete cm iis-post-delete-config -n $NAMESPACE
+
+    exit 0

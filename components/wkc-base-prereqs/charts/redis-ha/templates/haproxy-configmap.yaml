@@ -1,0 +1,91 @@
+{{- if gt (int .Values.replicas) 1 }}
+kind: ConfigMap
+apiVersion: v1
+data:
+  haproxy.cfg: |
+    global
+      log stdout  format raw  local0  notice
+      maxconn 10000
+    {{ if eq .Values.haproxy.stats.socket.enable true }}
+      stats socket /run/haproxy/admin.sock mode 660 level admin
+      stats timeout 2m # Wait up to 2 minutes for input
+    {{ end }}
+
+
+    # Specifies TCP timeout on connect for use by the frontend ft_redis
+    # Set the max time to wait for a connection attempt to a server to succeed
+    # The server and client side expected to acknowledge or send data.
+    defaults
+      log global
+      mode tcp
+      option clitcpka      
+      timeout client 5m
+      timeout connect 4s
+      timeout server 5m
+      timeout tunnel 1d
+      timeout client-fin 1h
+      timeout check 5s
+
+    resolvers k8s_dns
+      parse-resolv-conf
+      resolve_retries 10
+      timeout retry 10s
+
+    {{ if eq .Values.haproxy.stats.http.enable true }}
+    frontend http_stats
+      mode http
+      bind {{ .Values.haproxy.bindAddresses }}:{{ .Values.haproxy.stats.http.port }}
+      acl no_redis_backends nbsrv("bk_master_redis") lt 1
+      monitor-uri   /_haproxy_health
+      monitor fail  if no_redis_backends
+      
+      default_backend stats
+
+    backend stats
+      mode http
+      stats enable
+      stats enable
+      stats uri  /
+      stats refresh 1s
+      stats show-legends
+    {{ end -}}
+
+    # Specifies listening socket for accepting client connections using the default
+    # REDIS TCP timeout and backend bk_redis TCP health check.
+    frontend ft_master_redis
+      bind {{ .Values.haproxy.bindAddresses }}:{{ .Values.haproxy.ports.master }} name master_redis      
+      default_backend bk_master_redis
+
+    # Specifies the backend Redis proxy server TCP health settings
+    # Ensure it only forward incoming connections to reach a master.
+    backend bk_master_redis
+      balance first
+       
+      option tcp-check
+      tcp-check connect
+      {{- if .Values.auth }}
+      tcp-check send AUTH\ "$AUTH"\r\n
+      tcp-check expect string +OK      
+      {{- end }}
+      tcp-check send PING\r\n
+      tcp-check expect string +PONG
+      tcp-check send info\ replication\r\n
+      tcp-check expect string role:master
+      tcp-check send QUIT\r\n
+      tcp-check expect string +OK
+      {{- template "masters.list" . }}
+   
+
+metadata:
+  name: {{ template "redis-ha.fullname" . }}-haproxy
+  labels:
+    app: {{ template "redis-ha.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}  
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }} 
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  namespace: {{ .Values.namespace }}
+{{- end }}  

@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ia-analysis-preupgrade
+  annotations:
+    "helm.sh/hook": "pre-upgrade"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "-100"
+{{- include "product-metering" . | indent 4 }}
+
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  containers:
+  - name: ia-analysis-preupgrade
+    image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.global.image.wkcinitcontainer.repository }}:{{ .Values.global.image.wkcinitcontainer.tag }}
+    imagePullPolicy: IfNotPresent
+    command: ["/bin/sh"]
+    args: ["/ia-analysis-preupgrade-scripts/ia-preupgrade-delete.sh"]
+    env: 
+    - name: NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+    volumeMounts:
+    - mountPath: /ia-analysis-preupgrade-scripts
+      name: ia-analysis-preupgrade-scripts
+    securityContext:
+      privileged: false
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      readOnlyRootFilesystem: false
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      limits:
+        cpu: {{ .Values.global.image.wkcinitcontainer.resources.limits.cpu }}
+        memory: {{ .Values.global.image.wkcinitcontainer.resources.limits.memory }}
+      requests:
+        cpu: {{ .Values.global.image.wkcinitcontainer.resources.requests.cpu }}
+        memory: {{ .Values.global.image.wkcinitcontainer.resources.requests.memory }}
+  restartPolicy: OnFailure
+  volumes:
+  - name: ia-analysis-preupgrade-scripts
+    configMap:
+      name: ia-analysis-preupgrade-config
+  serviceAccountName: {{ .Values.postDelete.serviceAccountName }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+  affinity:
+  {{- include "nodeaffinity" . | indent 4 }}
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+  {{- include "image-secret" . | indent 2 }}

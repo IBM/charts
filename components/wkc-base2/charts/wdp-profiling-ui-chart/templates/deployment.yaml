@@ -1,0 +1,187 @@
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ template "wdp-profiling-ui-chart.fullname" . }}
+  labels:
+    app: {{ template "wdp-profiling-ui-chart.fullname" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  annotations:
+    {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+    {{- end }}
+spec:
+  replicas: {{ .Values.minReplicas }}
+  selector:
+    matchLabels:
+      app: {{ template "wdp-profiling-ui-chart.fullname" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "wdp-profiling-ui-chart.fullname" . }}
+        date: "date"
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        istier: services
+        icpdsupport/addOnKey: "ugi"
+        icpdsupport/app: "ui"
+        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+      annotations:
+        productName: "IBM Watson Knowledge Catalog Professional for ICP for Data"
+        productID: "5737-K89"
+        productVersion: "1.0"
+        {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+        {{- end }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      containers:
+      - name: {{ template "wdp-profiling-ui-chart.fullname" . }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+        ports:
+        - containerPort: {{ .Values.ports.targetPort }}
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.environment.BM_APP_VERSION_ENDPOINT }}
+            port: {{ .Values.ports.targetPort }}
+            scheme: "HTTPS"
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.environment.BM_APP_VERSION_ENDPOINT }}
+            port: {{ .Values.ports.targetPort }}
+            scheme: "HTTPS"
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+        env:
+          - name: "WDP_PROFILING_UI_URL"
+            value: {{ .Values.environment.WDP_PROFILING_UI_URL }}
+          - name: "DUMMY_ENV"
+            value: "{{ .Values.environment.DUMMY_ENV }}"
+          - name: "CF_DOMAIN"
+            value: {{ .Values.environment.CF_DOMAIN }}
+          - name: "ENTRY"
+            value: {{ .Values.environment.ENTRY }}
+          - name: "STAGE"
+            value: {{ .Values.environment.STAGE }}
+          - name: "NODE_ENV"
+            value: {{ .Values.environment.NODE_ENV }}
+          - name: "NODE_MODULES_CACHE"
+            value: "{{ .Values.environment.NODE_MODULES_CACHE }}"
+          - name: "ENABLE_MONITORING"
+            value: "{{ .Values.environment.ENABLE_MONITORING }}"
+          - name: "ENABLE_PDT"
+            value: "{{ .Values.environment.ENABLE_PDT }}"
+          - name: "ENABLE_NOTCLASSIFIED"
+            value: "{{ .Values.environment.ENABLE_NOTCLASSIFIED }}"
+          - name: "CF_STAGING_TIMEOUT"
+            value: "{{ .Values.environment.CF_STAGING_TIMEOUT }}"
+          - name: "DEPLOYMENT_TARGET"
+            value: "{{ .Values.environment.DEPLOYMENT_TARGET }}"
+          - name: "BM_APP_HOST"
+            value: "{{ .Values.environment.BM_APP_HOST }}"
+          - name: "BM_APP_VERSION_ENDPOINT"
+            value: "{{ .Values.environment.BM_APP_VERSION_ENDPOINT }}"
+          - name: "config__session__key"
+            value: "{{ .Values.environment.config__session__key }}"
+          - name: "K8S"
+            value: "{{ .Values.environment.K8S }}"
+          - name: "BM_DOMAIN"
+            value: "{{ .Values.environment.BM_DOMAIN }}"
+          - name: "GATEWAY_URL"
+            value: "{{ .Values.environment.GATEWAY_URL }}"
+          - name: "replicaCount"
+            value: "{{ .Values.replicaCount }}"
+          {{ if .Values.environment.redisUrl }}
+          - name: {{ .Values.environment.redisUrl.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.redisUrl.secret }}
+                key: {{ .Values.environment.redisUrl.key }}
+          {{ end }}
+          {{ if .Values.app_name }}
+          - name: "app_name"
+            value: {{ .Values.app_name }}
+          {{ end }}
+          {{ if .Values.global.deploymentTarget }}
+          - name: "deploymentTarget"
+            value: {{ .Values.global.deploymentTarget }}
+          {{ end }}
+          {{ if .Values.image.pullPolicy }}
+          - name: "pullPolicy"
+            value: {{ .Values.image.pullPolicy }}
+          {{ end }}
+          {{ if .Values.rootPath }}
+          - name: "rootPath"
+            value: {{ .Values.rootPath }}
+          {{ end }}
+          {{ if .Values.secret_object_name }}
+          - name: "secret_object_name"
+            value: {{ .Values.secret_object_name }}
+          {{ end }}
+          - name: CUSTOM_DOMAIN
+            valueFrom:
+              configMapKeyRef:
+                name: wdp-config
+                key: host
+          - name: ZEN_DOMAIN
+            valueFrom:
+              configMapKeyRef:
+                name: wdp-config
+                key: host
+          - name: WDP_UI_PROXY_URL
+            valueFrom:
+              configMapKeyRef:
+                name: wdp-config
+                key: host
+        resources:
+          limits:
+            cpu: {{ .Values.resources.limits.cpu }}
+            memory: {{ .Values.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.resources.requests.cpu }}
+            memory: {{ .Values.resources.requests.memory }}
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+{{- if .Values.repository.secret.name }}
+      imagePullSecrets:
+        - name: {{ .Values.repository.secret.name }}
+{{- end }}

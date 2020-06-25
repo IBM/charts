@@ -1,0 +1,30 @@
+{{- if and .Values.persistence.enabled (not .Values.global.persistence.useDynamicProvisioning) }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ template "fullname" . }}-pv
+  labels:
+    release: {{ .Release.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }} 
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+spec:
+  capacity:
+    storage: {{ .Values.dataVolume.size | default "20Gi" | quote }}
+  volumeMode: Filesystem
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: {{ .Values.dataVolume.storageClassName | quote }}
+  local:
+    path: {{ .Values.dataVolume.path | quote }}
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          -  {{ .Values.dataVolume.host | quote }}
+{{- end }}

@@ -1,0 +1,181 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.microservice.appname }}
+  labels:
+    app: {{ .Values.microservice.appname }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }} 
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }} 
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector: 
+    matchLabels:
+      app: {{ .Values.microservice.appname }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.microservice.appname }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}  
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }} 
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        icpdsupport/app: "apis"
+        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+      annotations:  
+        {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+        {{- end }}
+    spec:
+      {{- if or .Values.archx86_64 .Values.archppc64le }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.archx86_64 }}
+                - {{ .Values.archppc64le }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: {{ .Values.microservice.appname }}
+          image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+{{- if .Values.global.installCerts }}
+            - name: wdp-certs
+              mountPath: "/etc/wdp_certs"
+              readOnly: true
+{{- end }}
+          ports:
+            - containerPort: {{ .Values.ports.containerPort }}
+              protocol: {{ .Values.ports.protocol }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.livenessProbe.path }}
+              port: {{ .Values.probes.livenessProbe.port }}
+              scheme: {{ .Values.probes.livenessProbe.scheme }}
+            initialDelaySeconds: {{ .Values.probes.livenessProbe.initialDelaySeconds }}
+            timeoutSeconds: {{ .Values.probes.livenessProbe.timeoutSeconds }}
+            periodSeconds: {{ .Values.probes.livenessProbe.periodSeconds }}
+            successThreshold: {{ .Values.probes.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.probes.livenessProbe.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readinessProbe.path }}
+              port: {{ .Values.probes.readinessProbe.port }}
+              scheme: {{ .Values.probes.readinessProbe.scheme }}
+            initialDelaySeconds: {{ .Values.probes.readinessProbe.initialDelaySeconds }}
+            timeoutSeconds: {{ .Values.probes.readinessProbe.timeoutSeconds }}
+            periodSeconds: {{ .Values.probes.readinessProbe.periodSeconds }}
+            successThreshold: {{ .Values.probes.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.probes.readinessProbe.failureThreshold }}
+          env:
+{{- if eq .Values.envType "cp4d" }}
+             - name: {{ .Values.env.baseUrl.name }}
+               valueFrom:
+                 configMapKeyRef:
+                   name: {{ .Values.env.baseUrl.config }}
+                   key: {{ .Values.env.baseUrl.key }}
+             - name: {{ .Values.env.enable_icp4d_auth.name }}
+               value: {{ .Values.env.enable_icp4d_auth.value | quote }}
+{{- end }}
+             - name: {{ .Values.env.access_control_enabled.name }}
+               value: {{ .Values.env.access_control_enabled.value | quote }}
+             - name: {{ .Values.env.cams_api_url_config.name }}
+               value: {{ .Values.env.cams_api_url_config.value | quote }}
+             - name: {{ .Values.env.projects_api_url_config.name }}
+               value: {{ .Values.env.projects_api_url_config.value | quote }}
+             - name: {{ .Values.env.elasticsearch_uri_config.name }}
+               value: {{ .Values.env.elasticsearch_uri_config.value | quote }}
+             - name: {{ .Values.env.elasticsearch_uid_config.name }}
+               valueFrom:
+                  secretKeyRef:
+                    name: {{ .Values.env.elasticsearch_uid_config.secret }}
+                    key: {{ .Values.env.elasticsearch_uid_config.key }}
+             - name: {{ .Values.env.elasticsearch_pwd_config.name }}
+               valueFrom:
+                  secretKeyRef:
+                    name: {{ .Values.env.elasticsearch_pwd_config.secret }}
+                    key: {{ .Values.env.elasticsearch_pwd_config.key }}             
+{{- if eq .Values.envType "cloud" }}
+             - name: {{ .Values.env.elasticsearch_ca_base64_cert_config.name }}
+               valueFrom:
+                  secretKeyRef:
+                    name: {{ .Values.env.elasticsearch_ca_base64_cert_config.secret }}
+                    key: {{ .Values.env.elasticsearch_ca_base64_cert_config.key }} 
+{{- end }}
+             - name: {{ .Values.env.elasticsearch_uri_port_config.name }}
+               value: {{ .Values.env.elasticsearch_uri_port_config.value | quote }}
+             - name: {{ .Values.env.elasticsearch_index_config.name }}
+               value: {{ .Values.env.elasticsearch_index_config.value | quote }}
+{{- if eq .Values.envType "cp4d" }}
+             - name: {{ .Values.env.icp4dUrl.name }}
+               valueFrom:
+                  configMapKeyRef:
+                    name: {{ .Values.env.icp4dUrl.config }}
+                    key: {{ .Values.env.icp4dUrl.key }}
+{{- end }}
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+             - name: {{ .Values.env.icp4dInternalUrl.name }}
+               value: {{ .Values.env.icp4dInternalUrl.value }}
+{{- end }}
+{{- if eq .Values.envType "cp4d" }}
+             - name: {{ .Values.env.serviceIdCredential.name }}
+               valueFrom:
+                  secretKeyRef:
+                    name: {{ .Values.env.serviceIdCredential.secret }}
+                    key: {{ .Values.env.serviceIdCredential.key }}
+{{- end }}
+{{- if eq .Values.envType "cp4d" }}
+             - name: {{ .Values.env.serviceId.name }}
+               valueFrom:
+                  secretKeyRef:
+                    name: {{ .Values.env.serviceId.secret }}
+                    key: {{ .Values.env.serviceId.key }}
+{{- end }}
+          resources:
+             limits:
+                cpu: {{ .Values.limits.cpu }}
+                memory: {{ .Values.limits.memory }}
+             requests:
+                cpu: {{ .Values.requests.cpu }}
+                memory: {{ .Values.requests.memory }}
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+              - ALL
+      volumes:
+{{- if .Values.global.installCerts }}
+        - name: wdp-certs
+          projected:
+            sources:
+            - secret:
+                name: elasticsearch-master-cert
+                items:
+                - key: ca.pem
+                  path: elasticsearch.ca.pem
+                optional: true
+{{- end }}
+{{- if .Values.imagePullSecrets.name }}
+      imagePullSecrets: 
+         - name: {{ .Values.imagePullSecrets.name }}
+{{- end }}

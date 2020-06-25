@@ -1,0 +1,145 @@
+---
+{{- include "sch.config.init" (list . "engine-spark.sch.chart.config.values") -}}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ template "dataconn-engine-spark-cluster.fullname" . }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  replicas: {{ .Values.minReplicas }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
+  template:
+    metadata:
+      labels:
+        icpdsupport/app: "apis"
+{{ include "sch.metadata.labels.standard" (list . "" (dict .Values.global.serviceabilityLabelName .Values.global.serviceabilityLabelValue)) | indent 8 }}
+      annotations:
+        {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+        {{- end }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 2
+            preference:
+              matchExpressions:
+              - key: wkc-privileged
+                operator: In
+                values:
+                - {{ .Values.nodeLabel }}
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.archx86_64 }}
+                - {{ .Values.archppc64le }}
+      containers:
+      - name: {{ template "dataconn-engine-spark-cluster.fullname" . }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+{{- if .Values.global.installCerts }}
+        volumeMounts:
+        - name: wdp-certs
+          mountPath: "/etc/wdp_certs"
+          readOnly: true
+{{- end }}
+        ports:
+        - containerPort: {{ .Values.ports.targetPort }}
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: "/v2/dataconn/engine/version"
+            port: {{ .Values.ports.targetPort }}
+            scheme: "HTTPS"
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+        readinessProbe:
+          httpGet:
+            path: "/v2/dataconn/engine/version"
+            port: {{ .Values.ports.targetPort }}
+            scheme: "HTTPS"
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+        env:
+        - name: COMPONENT_ID
+          value: "WDP-Engine"
+        - name: ENABLE_DEBUG
+          value: {{ .Values.environment.enableDebug }}
+        - name: ENVIRONMENT_NAME
+          value: {{ .Values.global.deploymentTarget }}
+        - name: GATEWAY_URL
+          valueFrom:
+            configMapKeyRef:
+              name: wdp-config
+              key: host-url
+        - name: KUBERNETES
+          value: "true"
+        - name: IBM_HOME
+          value: "/opt/IBM"
+        - name: PRODUCT_NAME
+          value: {{ .Values.global.ibmProduct }}
+        - name: R_LIBS
+          value: "/usr/local/src/spark/R/libs"
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: redis-url
+              key: redis-url.txt
+        - name: SPARK_ACCESS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: wdp-crypto-secret
+              key: wdp-spark-access-password
+        - name: SPARK_HOME
+          value : "/usr/local/src/spark"
+        - name: STANDALONE_CLUSTER
+          value: "false"
+        resources:
+          limits:
+            cpu: {{ .Values.resources.limits.cpu }}
+            memory: {{ .Values.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.resources.requests.cpu }}
+            memory: {{ .Values.resources.requests.memory }}
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+{{- if .Values.global.installCerts }}
+      volumes:
+      - name: wdp-certs
+        projected:
+          sources:
+          - secret:
+              name: internal-nginx-svc-tls
+              items:
+              - key: certificate.pem
+                path: internal-nginx.cert.pem
+              optional: true
+          - secret:
+              name: rabbitmq-ha-cert
+              items:
+              - key: cert.pem
+                path: rabbitmq.cert.pem
+              optional: true
+{{- end }}
+{{- if .Values.repository.secret.name }}
+      imagePullSecrets:
+      - name: {{ .Values.repository.secret.name }}
+{{- end }}

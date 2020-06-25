@@ -1,0 +1,287 @@
+enabled:
+  rabbitmq: true
+  redis: true
+  elastic_search: true
+  couchdb: true
+
+## Add arch value
+archx86_64: amd64
+archppc64le: ppc64le
+
+global:
+  persistence:
+    useDynamicProvisioning: true
+    storageClassName: ""
+  installCerts: true
+  ibmProduct: ""
+  deploymentTarget: "icp4data"
+  podAnnotations:
+    productName: "IBM Common Core Services for IBM Cloud Pak for Data"
+    productID: "ICP4D-Common-Core-Services-3-0-1"
+    productVersion: "3.0.1"
+    productMetric: "VIRTUAL_PROCESSOR_CORE"
+    productChargedContainers: "All"
+    cloudpakName: "IBM Cloud Pak for Data"
+    cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    cloudpakVersion: "3.0.1"
+
+env:
+  redisUrl: redis://redis-ha-master-svc:6379
+  rabbitmqUrl: amqps://%s:%s@rabbitmq-ha:5671
+  cloudantUrl: https://%s:%s@wdp-cloudant.%s.svc.cluster.local:443
+
+couchdb:
+  fullnameOverride: wdp
+  createCloudantArtifacts: true
+  serviceAccountName: ""
+  useExistingCertificates:
+    secretName: "wdp-cloudant-cert"
+  image:
+    repository: couchdb3
+    tag: 3.1.2
+  resources:
+    requests:
+      cpu: 1
+      memory: 512Mi
+    limits:
+      cpu: 8
+      memory: 4Gi
+  persistentVolume:
+    size: 30Gi
+  jobImage:
+    repository: wkc-init-container
+    tag: 1.0.85
+  initImage:
+    repository: wkc-init-container
+    tag: 1.0.85
+  secretGeneration:
+    serviceAccountName: "cpd-editor-sa"
+    image:
+      repository: wkc-init-container
+      tag: 1.0.85
+  podAnnotations:
+    productName: "IBM Common Core Services for IBM Cloud Pak for Data"
+    productID: "ICP4D-Common-Core-Services-3-0-1"
+    productVersion: "3.0.1"
+    productMetric: "VIRTUAL_PROCESSOR_CORE"
+    productChargedContainers: "All"
+    cloudpakName: "IBM Cloud Pak for Data"
+    cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    cloudpakVersion: "3.0.1"
+
+# secret generation
+secretGeneration:
+  serviceAccountName: "cpd-editor-sa"
+  image:
+    repository: wkc-init-container
+    tag: 1.0.85
+    imagePullSecrets: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# rabbitmq
+wdp-rabbitmq:
+  updateStrategy: RollingUpdate
+  fullnameOverride: rabbitmq-ha
+  replicaCount: 3
+  rabbitmqAmqpsSupport:
+    nodePortService: false
+  serviceAccount:
+    create: false
+    name: cpd-viewer-sa
+  rbac:
+    create: false
+  securityContext:
+    fsGroup: ""
+    runAsUser: ""
+  rabbitmqUsername: "admin"
+  rabbitmqPassword: ""
+  persistentVolume:
+    enabled: true
+    storageClass: wdp-rabbitmq-class
+  image:
+    repository: rabbitmq
+    tag: 3.7.16-95
+    pullSecrets: ""
+  resources:
+    requests:
+      cpu: 300m
+      memory: 256Mi
+    limits:
+      cpu: 1
+      memory: 2Gi
+  busybox:
+    image:
+      repository: wkc-init-container
+      tag: 1.0.85
+  initContainer:
+    resources: 
+      limits:
+        memory: 2Gi
+  secretGeneration:
+    serviceAccountName: "cpd-editor-sa"
+    image:
+      repository: wkc-init-container
+      tag: 1.0.85
+  podAnnotations:
+    productName: "IBM Common Core Services for IBM Cloud Pak for Data"
+    productID: "ICP4D-Common-Core-Services-3-0-1"
+    productVersion: "3.0.1"
+    productMetric: "VIRTUAL_PROCESSOR_CORE"
+    productChargedContainers: "All"
+    cloudpakName: "IBM Cloud Pak for Data"
+    cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    cloudpakVersion: "3.0.1"
+
+redis-ha:
+  fullnameOverride: redis-ha
+  rbac:
+    create: false
+  image:
+    repository: redis
+    tag: 5.0.5-85
+    pullSecret: ""
+  replicas: 3
+  persistentVolume:
+    enabled: true
+    storageClass: "redis"
+  securityContext:
+    runAsUser: ""
+    fsGroup: ""
+  redis:
+    config:
+      min-slaves-to-write: 1
+      maxmemory: "2147483648"
+    resources:
+      requests:
+        memory: 400Mi
+        cpu: 200m
+      limits:
+        memory: 2Gi
+        cpu: 1
+  sentinel:
+    quorum: 2
+    resources:
+      requests:
+        memory: 50Mi
+        cpu: 20m
+      limits:
+        memory: 512Mi
+        cpu: 300m
+  secretGeneration:
+    serviceAccountName: "cpd-editor-sa"
+    image:
+      repository: wkc-init-container
+      tag: 1.0.85
+  initContainer:
+    image:
+      repository: wkc-init-container
+      tag: 1.0.85
+  podAnnotations:
+    productName: "IBM Common Core Services for IBM Cloud Pak for Data"
+    productID: "ICP4D-Common-Core-Services-3-0-1"
+    productVersion: "3.0.1"
+    productMetric: "VIRTUAL_PROCESSOR_CORE"
+    productChargedContainers: "All"
+    cloudpakName: "IBM Cloud Pak for Data"
+    cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    cloudpakVersion: "3.0.1"
+  haproxy:
+    image:
+      repository: haproxy
+      tag: 1.9-26
+      pullSecret: ""
+    securityContext:
+      runAsUser: ""
+    resources:
+      requests:
+        memory: 64Mi
+        cpu: 200m
+      limits:
+        memory: 1Gi
+        cpu: 1
+    redis:
+      checkSeconds: 5
+    podAnnotations:
+      productName: "IBM Common Core Services for IBM Cloud Pak for Data"
+      productID: "ICP4D-Common-Core-Services-3-0-1"
+      productVersion: "3.0.1"
+      productMetric: "VIRTUAL_PROCESSOR_CORE"
+      productChargedContainers: "All"
+      cloudpakName: "IBM Cloud Pak for Data"
+      cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+      cloudpakVersion: "3.0.1"
+
+elasticsearch:
+  fullnameOverride: wdp-elasticsearch
+  nameOverride: wdp-elasticsearch
+  persistence:
+    enabled: true
+  image:
+    repository: elasticsearch
+    tag: 7.5.2-76
+  antiAffinity: "off"
+  imagePullSecrets: ""
+  replicas: 3
+  minimumMasterNodes: 2
+  fsGroup: ""
+  resources:
+    requests:
+      cpu: 200m
+      memory: 1Gi
+    limits:
+      cpu: 1
+      memory: 2Gi
+  secretGeneration:
+    serviceAccountName: "cpd-editor-sa"
+    image:
+      repository: wkc-init-container
+      tag: 1.0.85
+  initContainer:
+    initImage:
+      repository: wkc-init-container
+      tag: 1.0.85
+  sysCtlsJobContainer:
+    initImage:
+      repository: wkc-init-container
+      tag: 1.0.85
+  haproxy:
+    image:
+      repository: haproxy
+      tag: 1.9-26
+    securityContext:
+      runAsUser: ""
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 200m
+      limits:
+        memory: 1Gi
+        cpu: 1
+  podAnnotations:
+    productName: "IBM Common Core Services for IBM Cloud Pak for Data"
+    productID: "ICP4D-Common-Core-Services-3-0-1"
+    productVersion: "3.0.1"
+    productMetric: "VIRTUAL_PROCESSOR_CORE"
+    productChargedContainers: "All"
+    cloudpakName: "IBM Cloud Pak for Data"
+    cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    cloudpakVersion: "3.0.1"
+  
+  nodeLabel: wkc-privileged-node
+
+ccHomePVC:
+  persistentVolume:
+    accessModes:
+      - ReadWriteMany
+    size: 50Gi
+    storageClass: cc-home-class
+    annotations: {}
+
+## Kubernetes Cluster Domain
+clusterDomain: cluster.local

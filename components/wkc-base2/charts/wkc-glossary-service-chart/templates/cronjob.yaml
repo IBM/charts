@@ -1,0 +1,108 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: wkc-glossary-service-sync-cronjob
+  labels:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: wkc-glossary-service-sync-cronjob
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 1
+  successfulJobsHistoryLimit: 3
+  schedule: '0 8/8 * * *'
+  jobTemplate:
+    metadata:
+      labels:
+        app: wkc-glossary-service-sync-cronjob
+        date: "date"
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        icpdsupport/app: "apis"
+        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/name: wkc-glossary-service-sync-cronjob
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    spec:
+      template:
+        metadata:
+          labels:
+            app: wkc-glossary-service-sync-cronjob
+            date: "date"
+            chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+            release: {{ .Release.Name }}
+            heritage: {{ .Release.Service }}
+            icpdsupport/app: "apis"
+            {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+            app.kubernetes.io/instance: {{ .Release.Name }}
+            app.kubernetes.io/managed-by: {{ .Release.Service }}
+            app.kubernetes.io/name: wkc-glossary-service-sync-cronjob
+            helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+          annotations:
+            {{- if .Values.global.podAnnotations }}{{ toYaml .Values.global.podAnnotations | trim | nindent 12 }}
+            {{- end }}
+        spec:
+          hostNetwork: false
+          hostPID: false
+          hostIPC: false
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                    - amd64
+          securityContext:
+            runAsNonRoot: true
+          restartPolicy: OnFailure
+          containers:
+          - name: wkc-glossary-service-sync-cronjob
+            image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.preInstall.image.repository }}:{{ .Values.preInstall.image.tag }}
+            imagePullPolicy: IfNotPresent
+            resources:
+              requests:
+                memory: "{{ .Values.preInstall.resources.requests.memory }}"
+                cpu: "{{ .Values.preInstall.resources.requests.cpu }}"
+              limits:
+                memory: "{{ .Values.preInstall.resources.limits.memory }}"
+                cpu: "{{ .Values.preInstall.resources.limits.cpu }}"
+            securityContext:
+              privileged: false
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: false
+              runAsNonRoot: true
+              capabilities:
+                drop:
+                - ALL
+            env:
+            - name: BASE_URL
+              value: https://wkc-glossary-service:443
+            - name: SERVICE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.environment.WDP_SERVICE_ID_CREDENTIAL.secret }}
+                  key: {{ .Values.environment.WDP_SERVICE_ID_CREDENTIAL.key }}
+                  optional: true
+            command:
+            - "/bin/sh"
+            - "-ec"
+            - |
+              set -o nounset
+              set -o errexit
+              echo "Begin :: Glossary Sync Activated & Deactivated Artifacts CRON Job."
+              echo
+              echo "curl -s -k -X POST $BASE_URL/v3/glossary_terms/admin/open-metadata/sync -H Authorization: Basic <SERVICE_ID>"
+              curl -s -k -X POST "$BASE_URL/v3/glossary_terms/admin/open-metadata/sync" -H "Authorization: Basic $SERVICE_ID"
+              echo
+              echo "End   :: Glossary Sync Activated & Deactivated Artifacts CRON Job."
+              echo
+{{- if .Values.repository.secret.name }}
+          imagePullSecrets:
+            - name: {{ .Values.repository.secret.name }}
+{{- end }}

@@ -1,0 +1,305 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iis-services
+  labels:
+    app: iis-services
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: iis-services
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iis-services
+  template:
+    metadata:
+      labels:
+        app: iis-services
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/name: iis-services
+        helm.sh/chart: {{ .Chart.Name | quote }}
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        istier: services
+        icpdsupport/podSelector: "Service"
+        icpdsupport/addOnKey: "ugi"
+        icpdsupport/app: "apis"
+        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+      annotations:
+      {{- include "product-metering" . | indent 8 }}
+        checksum/config: {{ include (print $.Template.BasePath "/iis-server-ug-configMap.yaml") . | sha256sum }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 2
+            preference:
+              matchExpressions:
+              - key: wkc-privileged
+                operator: In
+                values:
+                - {{ .Values.nodeLabel }}
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.archx86_64 }}
+                - {{ .Values.archppc64le }}
+      hostname: is-servicesdocker
+      initContainers:
+      {{- include "wait-xmeta" . | indent 6 }}
+      - name: solr-wait
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.release.image.wkcinitcontainer.repository }}:{{ .Values.release.image.wkcinitcontainer.tag }}
+        imagePullPolicy: {{ .Values.release.image.pullPolicy }}
+        resources:
+          requests:
+            memory: "{{ .Values.release.image.wkcinitcontainer.requests.memory }}"
+            cpu: "{{ .Values.release.image.wkcinitcontainer.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.release.image.wkcinitcontainer.limits.memory }}"
+            cpu: "{{ .Values.release.image.wkcinitcontainer.limits.cpu }}"
+        command: ['sh', '-c', '--']
+        args: [ "solr_status=1;
+                 while [ $solr_status != 0  ];
+                 do sleep 2;
+                 solr_status=`nc solr 8983 < /dev/null; echo $?`;
+                 done;"
+              ]
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+      containers:
+       - name: iis-servicesdocker-container
+         command: [ "/bin/bash", "-c", "--" ]
+         args: [ "/opt/ug-setup-services.sh > /opt/ug-setup-services-output.txt;
+                  tail -F /opt/IBM/InformationServer/wlp/usr/servers/iis/logs/messages.log &
+                  while true; do sleep 30; done;"
+                ]
+         image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.release.image.iis.services.repository }}:{{ .Values.release.image.iis.services.tag }}
+         imagePullPolicy: {{ .Values.release.image.pullPolicy }}
+         lifecycle:
+           preStop:
+             exec:
+               command: ["/bin/sh","-c","/opt/IBM/InformationServer/initScripts/shutdownhook.sh"]
+         resources:
+            requests:
+               memory: "{{ .Values.serviceResources.requests.memory }}"
+               cpu: "{{ .Values.serviceResources.requests.cpu }}"
+            limits:
+               memory: "{{ .Values.serviceResources.limits.memory }}"
+               cpu: "{{ .Values.serviceResources.limits.cpu }}"
+         securityContext:
+           privileged: false
+           allowPrivilegeEscalation: true
+           runAsNonRoot: true
+           readOnlyRootFilesystem: false
+         ports:
+           - containerPort: 9446
+             protocol: TCP
+           - containerPort: 52181
+           - containerPort: 52888
+           - containerPort: 53888
+           - containerPort: 59092
+           - containerPort: 58983
+         env:
+         - name: MY_NODE_NAME
+           valueFrom:
+             fieldRef:
+               fieldPath: spec.nodeName
+         - name: MY_POD_NAME
+           valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+         - name: MY_POD_NAMESPACE
+           valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+         - name: ISADMIN_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: isadmin_password
+         - name: XMETA_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: xmeta_password
+         - name: XMETASR_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: xmetasr_password
+         - name: DSADM_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: dsadm_password
+         - name: IAUSER_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: iauser_password
+         - name: DSODB_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: dsodb_password
+         - name: FINLEY_TOKEN
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: finley_token
+         - name: CLOUDANT_URL
+           valueFrom:
+             secretKeyRef:
+               name: wdp-cloudant-url
+               key: cloudant-url.txt
+               optional: true
+         - name: COUCHDB_USERNAME
+           valueFrom:
+             secretKeyRef:
+               key: couchdb_username
+               name: couchdb-secrets
+               optional: true
+         - name: COUCHDB_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               key: couchdb_password
+               name: couchdb-secrets
+               optional: true
+         - name: ZEN_SERVICE_BROKER_SECRET
+           valueFrom:
+             secretKeyRef:
+               key: token
+               name: zen-service-broker-secret
+               optional: true
+         - name: DEDICATED_SERVICES_VOLPATH
+           value: "/mnt/dedicated_vol/Services"
+         {{ if .Values.serviceId }}
+         - name: {{ .Values.serviceId.name }}
+           valueFrom:
+              secretKeyRef:
+                name: {{ .Values.serviceId.secret }}
+                key: {{ .Values.serviceId.key }}
+                optional: true
+         {{ end }}
+         {{- if (.Values.environment.RABBITMQ_PRIMARY_URI) }}
+         - name: "RABBITMQ_PRIMARY_URI"
+           valueFrom:
+             secretKeyRef:
+               name: {{ .Values.environment.RABBITMQ_PRIMARY_URI.secret }}
+               key: {{ .Values.environment.RABBITMQ_PRIMARY_URI.key }}
+               optional: true
+         {{- end }}
+         {{- if (.Values.environment.RABBITMQ_BACKUP_URI) }}
+         - name: "RABBITMQ_BACKUP_URI"
+           valueFrom:
+             secretKeyRef:
+               name: {{ .Values.environment.RABBITMQ_BACKUP_URI.secret }}
+               key: {{ .Values.environment.RABBITMQ_BACKUP_URI.key }}
+               optional: true
+         {{- end }}
+         {{- if (.Values.environment.RABBITMQ_CA_CERTIFICATE) }}
+         - name: "RABBITMQ_CA_CERTIFICATE"
+           valueFrom:
+             secretKeyRef:
+               name: {{ .Values.environment.RABBITMQ_CA_CERTIFICATE.secret }}
+               key: {{ .Values.environment.RABBITMQ_CA_CERTIFICATE.key }}
+               optional: true
+         {{- end }}
+         livenessProbe:
+            tcpSocket:
+              port: 9446
+            initialDelaySeconds: 1800
+            periodSeconds: 120
+            failureThreshold: 3
+         readinessProbe:
+            tcpSocket:
+              port: 9446
+            initialDelaySeconds: 300
+            periodSeconds: 30
+            successThreshold: 3
+         volumeMounts:
+         - mountPath: "/mnt/dedicated_vol/Services"
+           name: services-dedicated-volume
+         - mountPath: /user-home
+           name: user-home-mount
+         - mountPath: /opt/IBM/InformationServer/wlp/usr/servers/iis/jvm.options
+           name: jvm-options-volume
+           subPath: jvm.options
+         - name: secrets-pv-volume
+           mountPath: /opt/IBM/InformationServer/wlp/usr/servers/iis/lib/iis/tknproperties/secrets
+         - name: config-postscript
+           mountPath: /opt/ug-setup-services.sh
+           subPath: ug-setup-services.sh
+         - name: config-postscript
+           mountPath: /opt/countryattribute.json
+           subPath: countryattribute.json
+         - name: config-postscript
+           mountPath: /opt/services-config.properties
+           subPath: services-config.properties
+         - mountPath: "/sampledata"
+           name: sampledata-pv-volume
+         - mountPath: /opt/IBM/InformationServer/misc
+           name: services-dedicated-volume
+           subPath: is-servicesdocker/misc
+      securityContext:
+        {{- if .Values.release.image.iis.services.runAsUser }}
+        runAsUser: {{ .Values.release.image.iis.services.runAsUser }}
+        {{- end }}
+        {{- if .Values.release.image.iis.services.fsGroup }}
+        fsGroup: {{ .Values.release.image.iis.services.fsGroup }}
+        {{- end }}
+        {{- if .Values.release.image.iis.services.supplementalGroups }}
+        supplementalGroups:
+        - {{ .Values.release.image.iis.services.supplementalGroups }}
+        {{- end }}
+      {{- if .Values.release.image.iis.services.serviceAccountName }}
+      serviceAccountName: {{ .Values.release.image.iis.services.serviceAccountName }}
+      {{- end }}
+      {{- include "image-secret" . | indent 6 }}
+      volumes:
+       - name: services-dedicated-volume
+         persistentVolumeClaim:
+         {{- if .Values.serviceVolumeInfo.volumeClaim.existingClaimName }}
+           claimName: {{ .Values.serviceVolumeInfo.volumeClaim.existingClaimName }}
+         {{- else }}
+           claimName: {{ .Release.Name }}-{{ .Values.serviceVolumeInfo.volumeClaim.name }}
+         {{- end }}
+       - name: config-postscript
+         configMap:
+            name: iis-server
+            defaultMode: 0755
+       - name: jvm-options-volume
+         configMap:
+            name: iis-server
+            defaultMode: 420
+       - name: secrets-pv-volume
+         persistentVolumeClaim:
+          {{- if .Values.iisService.volumeClaim.existingClaimName }}
+            claimName: {{ .Values.iisService.volumeClaim.existingClaimName }}
+          {{- else }}
+            claimName: {{ .Values.iisService.volumeClaim.name }}
+          {{- end }}
+       - name: sampledata-pv-volume
+         persistentVolumeClaim:
+          {{- if .Values.sampleData.volumeClaim.existingClaimName }}
+            claimName: {{ .Values.sampleData.volumeClaim.existingClaimName }}
+          {{- else }}
+            claimName: {{ .Release.Name }}-{{ .Values.sampleData.volumeClaim.name }}
+          {{- end }}
+       {{- include "user-home-pvc" .  | indent 7 }}

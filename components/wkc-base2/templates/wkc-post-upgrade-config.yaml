@@ -1,0 +1,49 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: wkc-post-upgrade-config
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  post-upgrade.sh: |
+    set -e
+    LogMsg(){
+        logMsg="$1"
+        echo "["$(date +"%d-%B-%Y %R %Z")"]" ${logMsg}
+      }
+    LogError(){
+        LogMsg "ERROR: $@"
+      }
+    LogWarn(){
+        LogMsg "WARNING: $@"
+      }
+    LogInfo(){
+        LogMsg "INFO: $@"
+      }
+
+    ADMIN_UID=1000330999
+    
+    LogInfo "Waiting for wkc-workflow-service pod to be ready"
+    kubectl wait --for=condition=ready --timeout=90m pod/$(kubectl get pod -l app.kubernetes.io/name=wkc-workflow-service -o jsonpath="{.items[0].metadata.name}")
+    
+    LogInfo "Upgrade running workflows..."
+    LogInfo "Reading metakey"
+    mk=$(cat /user-home/_global_/security/artifacts/metakey | tr -d '\n' )
+    LogInfo "Getting a short lived token"
+
+    ttoken=$(curl -ks -X POST -H "metakey: $mk" -H "uid: $ADMIN_UID" -H 'lifetime: 0.10'  https://usermgmt-svc:3443/v1/usermgmt/getTimedToken  | sed -e 's/.*"accessToken":"//g' -e 's/".*//g')
+    curl -k -X POST -H "Content-Type: application/json" -H "accept: application/json" -H "Authorization: Bearer $ttoken" "https://wkc-workflow-service:443/v3/workflows/flowable-rest/service/runtime/process-instances" -d "{ \"processDefinitionKey\": \"applyCompatibilityProcessEngine\"}"
+
+{{- end }}
