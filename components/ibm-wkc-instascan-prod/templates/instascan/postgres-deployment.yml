@@ -1,0 +1,134 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: instascan-postgres
+  annotations:
+    prod.name: {{ .Values.prod.name | quote }}
+    prod.version: {{ .Values.prod.version | quote }}
+  creationTimestamp: null
+  labels:
+    io.kompose.service: instascan-postgres
+{{include "instascan.labels" . | indent 4 }}
+    release: "{{ .Release.Name }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.global.appname }}       
+      release: {{ .Release.Name | quote }}
+      component: instascan-postgres
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: {{ .Values.global.appname }}      
+        release: {{ .Release.Name | quote }}
+        component: instascan-postgres
+{{include "instascan.labels" . | indent 8 }}        
+      annotations:
+        {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+        {{- end }} 
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName: {{ .Values.global.serviceAccountName }}
+      affinity:
+{{include "instascan.nodeAffinity" . | indent 8 }}
+      {{- if eq .Values.postgres.securityContext.enabled true }}
+      securityContext:
+        fsGroup: {{ .Values.postgres.securityContext.fsGroup }}
+      {{- end }}
+      volumes:
+      - name: v-postgres-data
+        persistentVolumeClaim:
+          claimName: pvc-instascan-postgres-data
+      - name: v-postgres-logs
+        persistentVolumeClaim:
+          claimName: pvc-instascan-postgres-logs
+      - name: internal-tls
+        secret:
+          secretName: {{ .Values.vault.secret }}
+          defaultMode: 420
+          items:
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.key
+            path: tls.key
+          - key: certificate.pem
+            path: certificate.pem  
+      - name: pgsql
+        secret:
+          secretName: {{ .Values.postgres.secret }}
+          defaultMode: 420
+          items:
+          - key: pgpass
+            path: .pgpass    
+      containers:
+      - name: instascan-postgres
+        {{- if .Values.global.dockerRegistryPrefix }}
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.postgres.image.name }}:{{ .Values.instascan.image.tag }}"
+        {{- else if .Values.instascan.image.repository }}
+        image: "{{ .Values.instascan.image.repository }}/{{ .Values.postgres.image.name }}:{{ .Values.instascan.image.tag }}"
+        {{- else }}
+        image: "{{ .Values.postgres.image.name }}:{{ .Values.instascan.image.tag }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        ports:
+        - containerPort: 5432
+        resources:
+          {{- if eq .Values.isSingleNode true }}
+{{ toYaml .Values.singleNode.resources | trim | indent 10 }}
+          {{- else }}
+{{ toYaml .Values.postgres.resources | trim | indent 10 }}
+          {{- end }}
+        securityContext:
+{{include "nonroot.containers.securityContext" . | indent 10 }}
+          runAsUser: {{ .Values.global.nonroot.uid }}
+          runAsGroup: 0
+        volumeMounts:
+        - mountPath: /var/lib/pgsql/data
+          name: v-postgres-data
+        - mountPath: /var/log/postgresql
+          name: v-postgres-logs
+        - mountPath: /etc/internal-tls
+          name: internal-tls
+        - mountPath: /etc/pgsql
+          name: pgsql
+        env:
+        - name: PGDATA
+          value: /var/lib/pgsql/data/pgdata
+        envFrom:
+        - configMapRef:
+            name: instascan-postgres-configmap          
+        readinessProbe:
+          exec:
+            {{- if eq .Values.isProduction true }}
+            command: ["/usr/pgsql-11/bin/pg_isready", "-U", "postgres"]
+            {{- else }}
+            command: {{ .Values.testProbe.command }}
+            {{- end }}
+          initialDelaySeconds: 5
+          failureThreshold: 20
+          periodSeconds: 5
+          timeoutSeconds: 2    
+        livenessProbe:
+          exec:
+            {{- if eq .Values.isProduction true }}
+            command: ["/usr/pgsql-11/bin/pg_isready", "-U", "postgres"]
+            {{- else }}
+            command: {{ .Values.testProbe.command }}
+            {{- end }}
+          initialDelaySeconds: 30
+          failureThreshold: 3
+          periodSeconds: 60
+          timeoutSeconds: 2
+      restartPolicy: Always
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+status: {}
