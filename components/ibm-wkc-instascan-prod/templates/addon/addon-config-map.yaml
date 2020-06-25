@@ -1,0 +1,99 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: instascan-addon-configmap
+  labels:
+{{include "instascan.labels" . | indent 4 }}    
+    chart: {{ template "instascan.chart" . }}
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    icpdata_addon: "true"
+data:
+  add-ons.json: |
+    {
+      "wkc-instascan":{
+      "access_management_enable":false,
+      "category":"gdt",
+      "add_on_type":"component",
+      "details":{
+        "short_description":"Identify risk hot spots in your data in cloud data sources. Assess compliance of your cloud data sources with regulatory requirements.",
+        "long_description":"With IBM Watson Knowledge Catalog InstaScan, you can manage unstructured data in cloud data sources. Define policies for placement of sensitive data that reflect regulatory requirements or your organization’s directives. Connect to various cloud data sources and assign such policies to those data sources. Then, run risk assessments on the data sources to identify high risk areas. After you remediate the risks uncovered, assess compliance of your data sources with your policies for placement of sensitive data.",
+        "openURL":"/wkc-instascan/",
+        "premium": false,
+        "serviceability": [{
+          "serviceability_label_name": "release",
+          "serviceability_label_value": "{{ .Release.Name }}"
+        }]
+      },
+      "display_name":"Watson Knowledge Catalog InstaScan",
+      "extensions":{
+      },
+      "max_instances":"",   
+      "vendor":"IBM",  
+      "versions":{
+        "1.1.1":{
+        "state":"enabled"
+        }
+      }
+      }
+    }
+
+  nginx.conf: |
+    
+    location /wkc-instascan/
+    {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      proxy_pass https://instascan-nginx:443/;
+      proxy_read_timeout 10m;
+      proxy_ssl_certificate  /etc/internal-nginx-svc-tls/tls.crt;
+      proxy_ssl_certificate_key  /etc/internal-nginx-svc-tls/tls.key;
+      proxy_ssl_session_reuse on;
+      add_header X-Content-Type-Options nosniff;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Cache-Control "max-age=0, no-cache, no-store, must-revalidate";
+      add_header Pragma "no-cache";
+      add_header Strict-Transport-Security "max-age=31536000";
+      add_header Content-Security-Policy "default-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com";
+    }
+
+    location /instascan/v1/ 
+    {       
+        proxy_pass https://instascan-api-server:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_ssl_certificate  /etc/internal-nginx-svc-tls/tls.crt;
+        proxy_ssl_certificate_key  /etc/internal-nginx-svc-tls/tls.key;
+        proxy_ssl_session_reuse on;
+        add_header X-Content-Type-Options nosniff;
+        add_header X-XSS-Protection "1; mode=block";
+        add_header Cache-Control "max-age=0, no-cache, no-store, must-revalidate";
+        add_header Pragma "no-cache";
+        add_header Strict-Transport-Security "max-age=31536000";
+        add_header Content-Security-Policy "default-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com";
+    }
+
+    location /doc-preview-service/ 
+    {
+        proxy_pass https://instascan-api-server:5000/instascan/v1/doc-preview-service/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_ssl_certificate  /etc/internal-nginx-svc-tls/tls.crt;
+        proxy_ssl_certificate_key  /etc/internal-nginx-svc-tls/tls.key;
+        proxy_ssl_session_reuse on;
+        add_header X-Content-Type-Options nosniff;
+        add_header X-XSS-Protection "1; mode=block";
+        add_header Cache-Control "max-age=0, no-cache, no-store, must-revalidate";
+        add_header Pragma "no-cache";
+        add_header Strict-Transport-Security "max-age=31536000";
+        add_header Content-Security-Policy "default-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com";
+    }

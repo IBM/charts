@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: instascan-nginx
+  annotations:
+    prod.name: {{ .Values.prod.name | quote }}
+    prod.version: {{ .Values.prod.version | quote }}
+  creationTimestamp: null
+  labels:
+    io.kompose.service: instascan-nginx
+{{include "instascan.labels" . | indent 4 }}
+    release: "{{ .Release.Name }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.global.appname }}       
+      release: {{ .Release.Name | quote }}
+      component: instascan-nginx
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: {{ .Values.global.appname }}      
+        release: {{ .Release.Name | quote }}
+        component: instascan-nginx
+{{include "instascan.labels" . | indent 8 }}        
+      annotations:
+        {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+        {{- end }} 
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName: {{ .Values.global.serviceAccountName }}
+      affinity:
+{{include "instascan.nodeAffinity" . | indent 8 }}
+      {{- if eq .Values.siqNginx.securityContext.enabled true }}
+      securityContext:
+        fsGroup: {{ .Values.siqNginx.securityContext.fsGroup }}
+      {{- end }}
+      volumes:
+      - name: internal-tls
+        secret:
+          secretName: {{ .Values.vault.secret }}
+          items:
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.key
+            path: tls.key
+          - key: certificate.pem
+            path: certificate.pem
+      - name: internal-nginx-svc-tls
+        secret:
+          secretName: internal-nginx-svc-tls
+          items:
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.key
+            path: tls.key
+          - key: certificate.pem
+            path: certificate.pem      
+      - name: v-nginx-config
+        configMap:
+          name: instascan-nginx-configmap
+      containers:
+      - name: instascan-nginx
+        {{- if .Values.global.dockerRegistryPrefix }}
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.siqNginx.image.name }}:{{ .Values.instascan.image.tag }}"
+        {{- else if .Values.instascan.image.repository }}
+        image: "{{ .Values.instascan.image.repository }}/{{ .Values.siqNginx.image.name }}:{{ .Values.instascan.image.tag }}"
+        {{- else }}
+        image: "{{ .Values.siqNginx.image.name }}:{{ .Values.instascan.image.tag }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        securityContext:
+          capabilities:
+{{include "nonroot.containers.securityContext" . | indent 10 }}
+          runAsUser: {{ .Values.global.nonroot.uid }}
+        volumeMounts:
+        - mountPath: /etc/nginx/ssl
+          name: internal-tls
+          readOnly: true
+        - mountPath: /etc/internal-nginx-svc-tls
+          name: internal-nginx-svc-tls
+          readOnly: true  
+        - mountPath: /etc/nginx/nginx.conf
+          name: v-nginx-config
+          subPath: nginx.conf
+        readinessProbe:
+          {{- if eq .Values.isProduction true }}
+          exec:
+            command: ["/bin/curl", "-k", "https://localhost:8443/ping"]
+          {{- else }}
+          exec:
+            command: {{ .Values.testProbe.command }}
+          {{- end }}
+          initialDelaySeconds: 30
+          failureThreshold: 20
+          periodSeconds: 5
+          timeoutSeconds: 5
+        livenessProbe:
+          {{- if eq .Values.isProduction true }}
+          exec:
+            command: ["/bin/curl", "-k", "https://localhost:8443/ping"]
+          {{- else }}
+          exec:
+            command: {{ .Values.testProbe.command }}
+          {{- end }}
+          initialDelaySeconds: 40
+          failureThreshold: 3
+          periodSeconds: 60
+          timeoutSeconds: 30
+        ports:
+        - containerPort: 8443
+        resources:
+          {{- if eq .Values.isSingleNode true }}
+{{ toYaml .Values.singleNode.resources | trim | indent 10 }}
+          {{- else }}
+{{ toYaml .Values.siqNginx.resources | trim | indent 10 }}
+          {{- end }}
+      restartPolicy: Always
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+status: {}
+
+  

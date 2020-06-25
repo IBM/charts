@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ap-tika-nginxconf
+  labels:
+{{include "instascan.labels" . | indent 4 }}    
+    release: "{{ .Release.Name }}"
+data:
+  nginx.conf: |
+    worker_processes 1;
+
+    events {
+      worker_connections 1024;
+    }
+    error_log  /dev/stderr;
+
+        
+    http {
+
+      log_format upstream_time '$remote_addr - $remote_user [$time_local] '
+                             '"$scheme":"$request-uri" $status $body_bytes_sent '
+                             '"$http_referer" "$http_user_agent"'
+                             'rt=$request_time uct="$upstream_connect_time" uht="$upstream_header_time" urt="$upstream_response_time"';
+
+
+      server {
+        listen 8080;
+        return 301 https://$host:8443//$request_uri;
+      }
+      
+      server {
+        
+        listen 8443 ssl;        
+        
+        ssl_certificate             /etc/nginx/ssl/tls.crt;
+        ssl_certificate_key         /etc/nginx/ssl/tls.key;
+        ssl_client_certificate      /etc/nginx/ssl/certificate.pem;
+        ssl_verify_client           on;
+        
+        access_log                  /dev/stdout upstream_time; 
+
+        client_max_body_size        120M;
+        proxy_read_timeout          120s;
+        send_timeout                120s;
+        
+        location /nginx-health {
+          access_log off;
+          return 200 "healthy\n";
+        }
+
+        location / {
+          dav_methods PUT;
+          proxy_pass http://localhost:9998/;
+        }
+      }
+    }

@@ -1,0 +1,159 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ap-tika
+  annotations:
+    prod.name: {{ .Values.prod.name | quote }}
+    prod.version: {{ .Values.prod.version | quote }}
+  creationTimestamp: null
+  labels:
+    io.kompose.service: ap-tika
+{{include "instascan.labels" . | indent 4 }}
+    release: "{{ .Release.Name }}"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: {{ .Values.global.appname }}       
+      release: {{ .Release.Name | quote }}
+      component: ap-tika  
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: {{ .Values.global.appname }}      
+        release: {{ .Release.Name | quote }}
+        component: ap-tika  
+{{include "instascan.labels" . | indent 8 }}
+      annotations:
+        {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+        {{- end }} 
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName: {{ .Values.global.serviceAccountName }}
+      affinity:
+{{include "instascan.nodeAffinity" . | indent 8 }}
+      {{- if eq .Values.apTika.securityContext.enabled true }}
+      securityContext:
+        fsGroup: {{ .Values.apTika.securityContext.fsGroup }}
+      {{- end }}
+      containers:
+      - name: ap-tika
+        {{- if .Values.global.dockerRegistryPrefix }}
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.apTika.image.name }}:{{ .Values.ap.image.tag }}"
+        {{- else if .Values.ap.image.repository }}
+        image: "{{ .Values.ap.image.repository }}/{{ .Values.apTika.image.name }}:{{ .Values.ap.image.tag }}"
+        {{- else }}
+        image: "{{ .Values.apTika.image.name }}:{{ .Values.ap.image.tag }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        securityContext:
+{{include "nonroot.containers.securityContext" . | indent 10 }}
+          runAsUser: {{ .Values.global.nonroot.uid }}
+        readinessProbe:
+          {{- if eq .Values.isProduction true }}
+          httpGet:
+            path: /tika
+            port: 9998
+          {{- else }}
+          exec:
+            command: {{ .Values.testProbe.command }}
+          {{- end }}
+          initialDelaySeconds: 5
+          failureThreshold: 20
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          {{- if eq .Values.isProduction true }}
+          httpGet:
+            path: /tika
+            port: 9998
+          {{- else }}
+          exec:
+            command: {{ .Values.testProbe.command }}
+          {{- end }}
+          initialDelaySeconds: 30
+          failureThreshold: 3
+          periodSeconds: 60
+          timeoutSeconds: 30
+        ports:
+        - containerPort: 9998
+        resources:
+          {{- if eq .Values.isSingleNode true }}
+{{ toYaml .Values.singleNode.resources | trim | indent 10 }}
+          {{- else }}
+{{ toYaml .Values.apTika.resources | trim | indent 10 }}
+          {{- end }} 
+      - name: nginx
+        {{- if .Values.global.dockerRegistryPrefix }}
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.siqNginx.image.name }}:{{ .Values.instascan.image.tag }}"
+        {{- else if .Values.instascan.image.repository }}
+        image: "{{ .Values.instascan.image.repository }}/{{ .Values.siqNginx.image.name }}:{{ .Values.instascan.image.tag }}"
+        {{- else }}
+        image: "{{ .Values.siqNginx.image.name }}:{{ .Values.instascan.image.tag }}"
+        {{- end }}
+        imagePullPolicy: Always
+        securityContext:
+{{include "nonroot.containers.securityContext" . | indent 10 }}
+          runAsUser: {{ .Values.global.nonroot.uid }}
+          runAsGroup: 0
+        readinessProbe:
+          tcpSocket:
+            port: 8443
+          initialDelaySeconds: 30
+          failureThreshold: 20
+          periodSeconds: 5
+          timeoutSeconds: 5
+        livenessProbe:
+          tcpSocket:
+            port: 8443
+          initialDelaySeconds: 40
+          failureThreshold: 3
+          periodSeconds: 60
+          timeoutSeconds: 30  
+        ports:
+        - containerPort: 8443
+        resources:
+          {{- if eq .Values.isSingleNode true }}
+{{ toYaml .Values.singleNode.resources | trim | indent 10 }}
+          {{- else }}
+{{ toYaml .Values.apTikaNginx.resources | trim | indent 10 }}
+          {{- end }}
+        volumeMounts:
+        - mountPath: /etc/nginx # mount nginx-conf volumn to /etc/nginx
+          readOnly: true
+          name: nginx-conf
+        - mountPath: /etc/nginx/ssl
+          name: internal-tls
+          readOnly: true  
+      volumes:
+      - name: nginx-conf
+        configMap:
+          name: ap-tika-nginxconf # place ConfigMap `ap-tika-nginxconf` on /etc/nginx
+          items:
+            - key: nginx.conf
+              path: nginx.conf
+      - name: internal-tls
+        secret:
+          secretName: {{ .Values.vault.secret }}
+          defaultMode: 420
+          items:
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.key
+            path: tls.key
+          - key: certificate.pem
+            path: certificate.pem                                                                                    
+      restartPolicy: Always
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+        
+status: {}
+

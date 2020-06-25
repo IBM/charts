@@ -1,0 +1,151 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: instascan-nginx-configmap
+  labels:
+    io.kompose.service: instascan-nginx
+{{include "instascan.labels" . | indent 4 }}    
+    release: "{{ .Release.Name }}"
+data:
+  nginx.conf: |+
+    #
+    worker_processes  5;
+
+    pid     /tmp/nginx.pid;
+
+    events {
+        worker_connections  1024;
+    }
+
+
+    http {
+        client_body_temp_path /tmp/client_temp;
+        proxy_temp_path       /tmp/proxy_temp_path;
+        fastcgi_temp_path     /tmp/fastcgi_temp;
+        uwsgi_temp_path       /tmp/uwsgi_temp;
+        scgi_temp_path        /tmp/scgi_temp;
+
+        include       /etc/nginx/mime.types;
+        default_type  application/octet-stream;
+        client_max_body_size 100M;
+        log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                          '$status $body_bytes_sent "$http_referer" '
+                          '"$http_user_agent" "$http_x_forwarded_for"';
+
+        #access_log  /var/log/nginx/http-access.log;
+        #error_log  /var/log/nginx/http-error.log;
+        error_log  /dev/stdout info;
+        access_log  /dev/stdout;
+
+        sendfile        on;
+        #tcp_nopush     on;
+
+        keepalive_timeout  65;
+        proxy_connect_timeout 75;
+        proxy_read_timeout 300;
+
+        gzip  on;
+        gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript application/octet-stream;
+
+        include /etc/nginx/sites-enabled/*;
+
+        # Don't send the nginx version number in error pages and Server header
+        server_tokens off;
+
+        # Config to don't allow the browser to render the page inside an frame or iframe
+        # and avoid clickjacking http://en.wikipedia.org/wiki/Clickjacking
+        add_header X-Frame-Options SAMEORIGIN;
+
+        # When serving user-supplied content, include a X-Content-Type-Options: nosniff header along with the Content-Type: header,
+        # to disable content-type sniffing on some browsers.
+        add_header X-Content-Type-Options nosniff;
+
+        # This header enables the Cross-site scripting (XSS) filter built into most recent web browsers.
+        # It's usually enabled by default anyway, so the role of this header is to re-enable the filter for
+        # this particular website if it was disabled by the user.
+        add_header X-XSS-Protection "1; mode=block";
+
+        # The max-age directive states the maximum amount of time in seconds that fetched responses are allowed to be used again.
+        # The no-cache shows that returned responses can~@~Yt be used for subsequent requests to the same URL before checking if server responses have changed.
+        # The no-store disallows browsers and all intermediate caches from storing any versions of returned responses.
+        # The must-revalidate directive is used to tell a cache that it must first revalidate an asset with the origin after it becomes stale.
+        #  The asset must not be delivered to the client without doing an end-to-end revalidation
+        add_header Cache-Control "max-age=0, no-cache, no-store, must-revalidate";
+
+        # The Pragma:no-cache header is added by clients to bypass all intermediary caches and
+        # go straight to the origin server for the requested content.
+        add_header Pragma "no-cache";
+
+        # This domain must only be accessed using HTTPS (SSL or TLS).
+        # It caches this information for the max-age period (typically 31,536,000 seconds, equal to about 1 year).
+        add_header Strict-Transport-Security "max-age=31536000";
+
+        # Content-Security-Policy HTTP response header helps you reduce XSS risks on modern browsers by declaring, which dynamic resources are allowed to load.
+        # The default-src is the default policy for loading content such as JavaScript, Images, CSS, Fonts, AJAX requests, Frames, HTML5 Media.
+        # 'self' Allows loading resources from the same origin (same scheme, host and port).
+        # 'unsafe-inline' Allows use of inline source elements such as style attribute, onclick, or script tag bodies and javascript: URIs
+        add_header Content-Security-Policy "default-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com";
+
+        server {
+            # listen on port 443
+            listen 8443 ssl;
+
+            # root folder for static pages; TODO change this to /opt/app-root/src for UBI
+            #root /var/www;
+            root /opt/app-root/src;
+
+            # what file to server as index
+            index index.html index.htm;
+
+            location /instascan/v1/ {
+                proxy_pass https://instascan-api-server:5000;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection 'upgrade';
+                proxy_set_header Host $host;
+                proxy_cache_bypass $http_upgrade;
+            }
+
+            location /doc-preview-service/ {
+                proxy_pass https://instascan-api-server:5000/instascan/v1/doc-preview-service/;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection 'upgrade';
+                proxy_set_header Host $host;
+                proxy_cache_bypass $http_upgrade;
+            }
+
+            location /wkc-instascan/ {
+                rewrite  ^/wkc-instascan/(.*) /$1 break;
+                try_files $uri /index.html;
+            }
+
+            location / {
+                try_files $uri /index.html;
+            }
+        
+            location /ping/ {
+                access_log off;
+                return 200 "healthy\n";
+            }
+            
+            # ssl cert and key location
+            ssl_certificate /etc/nginx/ssl/tls.crt;
+            ssl_certificate_key /etc/nginx/ssl/tls.key;
+            ssl_client_certificate /etc/internal-nginx-svc-tls/certificate.pem;
+            ssl_verify_client optional;
+
+            # protocols
+            ssl_protocols TLSv1.2;
+
+            # ciphers
+            ssl_prefer_server_ciphers on;
+            ssl_ciphers EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH;
+            #ssl_ciphers HIGH:MEDIUM:+3DES:+DH:!RC4:!SEED:!IDEA:!eNULL:!aNULL;
+
+            #redirect http to https url
+            #if ($server_port = 8080) {
+            #    return 301 https://$host$request_uri;
+            #}
+        }
+    }

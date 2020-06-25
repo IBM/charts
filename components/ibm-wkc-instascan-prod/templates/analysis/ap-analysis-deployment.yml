@@ -1,0 +1,187 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ap-analysis-service
+  annotations:
+    prod.name: {{ .Values.prod.name | quote }}
+    prod.version: {{ .Values.prod.version | quote }}
+  creationTimestamp: null
+  labels:
+    io.kompose.service: ap-analysis-service
+{{include "instascan.labels" . | indent 4 }}
+    release: "{{ .Release.Name }}"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: {{ .Values.global.appname }}
+      release: {{ .Release.Name | quote }}
+      component: ap-analysis-service  
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: {{ .Values.global.appname }}
+        release: {{ .Release.Name | quote }}
+        component: ap-analysis-service
+{{include "instascan.labels" . | indent 8 }}
+      annotations:
+        {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+        {{- end }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName: {{ .Values.global.serviceAccountName }}
+      affinity:
+{{include "instascan.nodeAffinity" . | indent 8 }}
+      {{- if eq .Values.apAnalysis.securityContext.enabled true }}
+      securityContext:
+        fsGroup: {{ .Values.apAnalysis.securityContext.fsGroup }}
+      {{- end }}
+      volumes:
+      - name: internal-tls
+        secret:
+          secretName: {{ .Values.vault.secret }}
+      - name: keystore-volume
+        emptyDir: {}
+      initContainers:
+      - resources:
+          limits:
+            cpu: '0'
+            memory: '0'
+          requests:
+            cpu: '0'
+            memory: '0'
+        terminationMessagePath: /dev/termination-log
+        name: create-ap-keystores
+        command:
+        - /bin/bash
+        env:
+        - name: KEYFILE
+          value: /etc/internal-tls/tls.key
+        - name: CRTFILE
+          value: /etc/internal-tls/tls.crt
+        - name: CAFILE
+          value: /etc/internal-tls/certificate.pem
+        - name: AP_KEYSTORE_PKCS12
+          value: /etc/keystores/ap-keystore.pkcs12
+        - name: AP_TRUSTSTORE_PKCS12
+          value: /etc/keystores/ap-truststore.pkcs12
+        - name: AP_KEYSTORES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Values.ap.secret.keystore.name }}"
+              key: "{{ .Values.ap.secret.keystore.key }}"
+        securityContext:
+{{include "nonroot.containers.securityContext" . | indent 10 }}
+          runAsUser: {{ .Values.global.nonroot.uid }}
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - name: internal-tls
+          mountPath: /etc/internal-tls
+        - name: keystore-volume
+          mountPath: /etc/keystores
+        terminationMessagePolicy: File
+        {{- if .Values.global.dockerRegistryPrefix }}
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.ap.initimage.name }}:{{ .Values.ap.initimage.tag }}"
+        {{- else if .Values.instascan.image.repository }}
+        image: "{{ .Values.instascan.image.repository }}/{{ .Values.ap.initimage.name }}:{{ .Values.ap.initimage.tag }}"
+        {{- else }}
+        image: "{{ .Values.ap.initimage.name }}:{{ .Values.ap.initimage.tag }}"
+        {{- end }}
+        args:
+        - '-c'
+        - >-
+          openssl pkcs12 -export -inkey $KEYFILE -in $CRTFILE -out
+          $AP_KEYSTORE_PKCS12 -password pass:$AP_KEYSTORES_PASSWORD &&
+          keytool -import -noprompt -keystore $AP_TRUSTSTORE_PKCS12 -file
+          $CAFILE -storetype pkcs12 -storepass $AP_KEYSTORES_PASSWORD
+          -alias ap-tls
+      containers:
+      - name: ap-analysis-service
+        {{- if .Values.global.dockerRegistryPrefix }}
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.apAnalysis.image.name }}:{{ .Values.ap.image.tag }}"
+        {{- else if .Values.ap.image.repository }}
+        image: "{{ .Values.ap.image.repository }}/{{ .Values.apAnalysis.image.name }}:{{ .Values.ap.image.tag }}"
+        {{- else }}
+        image: "{{ .Values.apAnalysis.image.name }}:{{ .Values.ap.image.tag }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        volumeMounts:
+        - name: keystore-volume
+          mountPath: /opt/ibm/wlp/output/defaultServer/resources/security
+        securityContext:
+{{include "nonroot.containers.securityContext" . | indent 10 }}
+          runAsUser: {{ .Values.global.nonroot.uid }}
+        env:
+        - name: IBM_COREDIR
+          value: /logs
+        - name: IBM_HEAPDUMPDIR
+          value: /logs
+        - name: IBM_JAVACOREDIR
+          value: /logs
+        - name: JAXRS_LOGGING_ENABLED
+          value: "false"
+        - name: JAXRS_LOGGING_TRUNCATE_ENTITY_AFTER_BYTES
+          value: '512'
+        - name: APP_LOG_LEVEL
+          value: info
+        - name: AP_SERVICE_ADDRESS
+          value: 'https://ap-service:8443/'
+        - name: AP_TLS_KEYSTORE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Values.ap.secret.keystore.name }}"
+              key: "{{ .Values.ap.secret.keystore.key }}"
+        - name: AP_TLS_TRUSTSTORE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Values.ap.secret.keystore.name }}"
+              key: "{{ .Values.ap.secret.keystore.key }}"
+        readinessProbe:
+          {{- if eq .Values.isProduction true }}
+          exec:
+            command:
+            - /bin/curl
+            - 'http://localhost:9080/config'
+          {{- else }}
+          exec:
+            command: {{ .Values.testProbe.command }}
+          {{- end }}
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+          periodSeconds: 5
+          successThreshold: 1
+          failureThreshold: 20
+        livenessProbe:
+          {{- if eq .Values.isProduction true }}
+          exec:
+            command:
+            - /bin/curl
+            - 'http://localhost:9080/health'
+          {{- else }}
+          exec:
+            command: {{ .Values.testProbe.command }}
+          {{- end }}
+          initialDelaySeconds: 30
+          failureThreshold: 3
+          periodSeconds: 60
+          timeoutSeconds: 30
+        ports:
+        - containerPort: 9443
+        resources:
+          {{- if eq .Values.isSingleNode true }}
+{{ toYaml .Values.singleNode.resources | trim | indent 10 }}
+          {{- else }}
+{{ toYaml .Values.apAnalysis.resources | trim | indent 10 }}
+          {{- end }}
+      restartPolicy: Always
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+status: {}
