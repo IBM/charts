@@ -1,0 +1,477 @@
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ template "wdp-profiling-chart.fullname" . }}
+  labels:
+    app: {{ template "wdp-profiling-chart.fullname" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}   
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  annotations:
+    {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+    {{- end }}
+spec:
+  replicas: {{ .Values.minReplicas }}
+  selector:
+    matchLabels:
+      app: {{ template "wdp-profiling-chart.fullname" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "wdp-profiling-chart.fullname" . }}
+        date: "date"
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: {{ .Release.Service }}   
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        istier: services
+        icpdsupport/addOnKey: "ugi"
+        icpdsupport/app: "apis"
+        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+      annotations:
+        productName: "IBM Watson Knowledge Catalog Professional for ICP for Data"
+        productID: "5737-K89"
+        productVersion: "1.0"
+        {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+        {{- end }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      containers:
+      - name: {{ template "wdp-profiling-chart.fullname" . }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+      {{- if .Values.global.installCerts }}
+        volumeMounts:
+        - name: wdp-certs
+          mountPath: "/etc/wdp_certs"
+          readOnly: true
+      {{- end}}
+        ports:
+        - containerPort: {{ .Values.ports.targetPort }}
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.environment.BM_APP_VERSION_ENDPOINT }}
+            port: {{ .Values.ports.targetPort }}
+            scheme: "HTTPS"
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.environment.BM_APP_VERSION_ENDPOINT }}
+            port: {{ .Values.ports.targetPort }}
+            scheme: "HTTPS"
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+        env:
+          {{ if .Values.environment.wdpHostDomain }}
+          - name: "GATEWAY_HOST"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.environment.wdpHostDomain.configMapName }}
+                key: {{ .Values.environment.wdpHostDomain.hostKey }}
+          - name: "ICP4D_HOST"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.environment.wdpHostDomain.configMapName }}
+                key: {{ .Values.environment.wdpHostDomain.icp4dHostKey }}
+          {{ end }}
+          - name: "ENGINE_API_BASE_URL"
+            value: {{ .Values.environment.ENGINE_API_BASE_URL }}
+          - name: "TRUST_ALL_SSL_CERT"
+            value: {{ .Values.environment.TRUST_ALL_SSL_CERT }}
+          - name: "BM_APP_VERSION_ENDPOINT"
+            value: {{ .Values.environment.BM_APP_VERSION_ENDPOINT }}
+          - name: "BG_API_BASE_URL"
+            value: {{ .Values.environment.BG_API_BASE_URL }}
+          - name: "MQ_CATALOG_BINDING_KEY"
+            value: {{ .Values.environment.MQ_CATALOG_BINDING_KEY }}
+          - name: "MQ_ACTIVITIES_BINDING_KEY"
+            value: {{ .Values.environment.MQ_ACTIVITIES_BINDING_KEY }}
+          - name: "MQ_BINDINGKEY"
+            value: "{{ .Values.environment.MQ_BINDINGKEY }}"
+          - name: "MQ_DATAPROFILE_QUEUE"
+            value: {{ .Values.environment.MQ_DATAPROFILE_QUEUE }}
+          - name: "MQ_CATALOG_EXCHANGE_NAME"
+            value: {{ .Values.environment.MQ_CATALOG_EXCHANGE_NAME }}
+          - name: "IAM_URL"
+            value: {{ .Values.environment.IAM_URL }}
+          - name: "LOAD_DESIGN_DOCS"
+            value: "{{ .Values.environment.LOAD_DESIGN_DOCS }}"
+          - name: "CLOUDANT_DB"
+            value: {{ .Values.environment.CLOUDANT_DB }}
+          - name: "CLOUDANT_FT_DB"
+            value: {{ .Values.environment.CLOUDANT_FT_DB }}
+          - name: "MQ_ACTIVITIES_EXCHANGE_NAME"
+            value: {{ .Values.environment.MQ_ACTIVITIES_EXCHANGE_NAME }}
+          - name: "USE_STATUS_POLLING"
+            value: "{{ .Values.environment.USE_STATUS_POLLING }}"
+          - name: "ENABLE_PROFILE_ENTITLEMENTS"
+            value: "{{ .Values.environment.ENABLE_PROFILE_ENTITLEMENTS }}"
+          - name: "COMPONENT_ID"
+            value: {{ .Values.environment.COMPONENT_ID }}
+          - name: "ENABLE_PROFILING_UNGOVERNED"
+            value: "{{ .Values.environment.ENABLE_PROFILING_UNGOVERNED }}"
+          - name: "MAX_RETRY_COUNT"
+            value: "{{ .Values.environment.MAX_RETRY_COUNT }}"
+          - name: "RETRY_SLEEP_TIME"
+            value: "{{ .Values.environment.RETRY_SLEEP_TIME }}"
+          - name: "ENABLE_INSTRUMENTATION"
+            value: "{{ .Values.environment.ENABLE_INSTRUMENTATION }}"
+          - name: "SLEEP_TIME_CLOUDANT_MONITOR"
+            value: "{{ .Values.environment.SLEEP_TIME_CLOUDANT_MONITOR }}"
+          - name: "MAX_DAYS_PROCESS_CLOUDANT_ENTRY"
+            value: "{{ .Values.environment.MAX_DAYS_PROCESS_CLOUDANT_ENTRY }}"
+          - name: "ENABLE_IAM_ID"
+            value: "{{ .Values.environment.ENABLE_IAM_ID }}"
+          - name: "CLASSIFIER_VERIFY_BG_TERM_ASSOCIATIONS"
+            value: "{{ .Values.environment.CLASSIFIER_VERIFY_BG_TERM_ASSOCIATIONS }}"
+          - name: "ENABLE_PROFILING_ALL_ROWS"
+            value: "{{ .Values.environment.ENABLE_PROFILING_ALL_ROWS }}"
+          - name: "VALUE_LIST_MAX_FILE_SIZE"
+            value: "{{ .Values.environment.VALUE_LIST_MAX_FILE_SIZE }}"
+          - name: "LOG_AT_EVENTS"
+            value: "{{ .Values.environment.LOG_AT_EVENTS }}"
+          - name: "SLEEP_TIME_CAMS_QUERY_THREAD"
+            value: "{{ .Values.environment.SLEEP_TIME_CAMS_QUERY_THREAD }}"
+          - name: "ENABLE_DATAFLOW"
+            value: "{{ .Values.environment.ENABLE_DATAFLOW }}"
+          - name: "ENABLE_FT_PHASE_2"
+            value: "{{ .Values.environment.ENABLE_FT_PHASE_2 }}"
+          - name: "MAX_COS_SIZE"
+            value: "{{ .Values.environment.MAX_COS_SIZE }}"
+          - name: "ENABLE_FULL_ENTITLEMENT"
+            value: "{{ .Values.environment.ENABLE_FULL_ENTITLEMENT }}"
+          - name: "SERVICE_SPACE_GUID"
+            value: "{{ .Values.environment.SERVICE_SPACE_GUID }}"
+          - name: "ENVIRONMENT_NAME"
+            value: "{{ .Values.environment.ENVIRONMENT_NAME }}"
+          - name: "ENVIRONMENT_TYPE"
+            value: "{{ .Values.environment.ENVIRONMENT_TYPE }}"
+          - name: "DEPLOY_TARGET"
+            value: "{{ .Values.environment.DEPLOY_TARGET }}"
+          - name: "GATEWAY_URL"
+            value: "{{ .Values.environment.GATEWAY_URL }}"
+          - name: "CACHE_TTL"
+            value: "{{ .Values.environment.CACHE_TTL }}"
+          - name: "ACTIVITY_MAX_POLL_TIME"
+            value: "{{ .Values.environment.ACTIVITY_MAX_POLL_TIME }}"
+          - name: "ACTIVITY_POLL_SLEEP_TIME"
+            value: "{{ .Values.environment.ACTIVITY_POLL_SLEEP_TIME }}"
+          - name: "replicaCount"
+            value: "{{ .Values.replicaCount }}"
+          {{ if .Values.environment.mqUrl }}
+          - name: {{ .Values.environment.mqUrl.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.mqUrl.secret }}
+                key: {{ .Values.environment.mqUrl.key }}
+          {{ end }}
+          {{ if .Values.environment.mqSsl }}
+          - name: {{ .Values.environment.mqSsl.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.mqSsl.secret }}
+                key: {{ .Values.environment.mqSsl.key }}
+          {{ end }}
+          {{ if .Values.environment.serviceId }}
+          - name: {{ .Values.environment.serviceId.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.serviceId.secret }}
+                key: {{ .Values.environment.serviceId.key }}
+          {{ end }}
+          {{ if .Values.environment.serviceApiKey }}
+          - name: {{ .Values.environment.serviceApiKey.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.serviceApiKey.secret }}
+                key: {{ .Values.environment.serviceApiKey.key }}
+          {{ end }}
+          {{ if .Values.environment.cloudantUser }}
+          - name: {{ .Values.environment.cloudantUser.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.cloudantUser.secret }}
+                key: {{ .Values.environment.cloudantUser.key }}
+          {{ end }}
+          {{ if .Values.environment.cloudantPassword }}
+          - name: {{ .Values.environment.cloudantPassword.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.cloudantPassword.secret }}
+                key: {{ .Values.environment.cloudantPassword.key }}
+          {{ end }}
+          {{ if .Values.environment.cloudantUrl }}
+          - name: {{ .Values.environment.cloudantUrl.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.cloudantUrl.secret }}
+                key: {{ .Values.environment.cloudantUrl.key }}
+          {{ end }}
+          {{ if .Values.environment.cloudantApiUrl }}
+          - name: {{ .Values.environment.cloudantApiUrl.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.cloudantApiUrl.secret }}
+                key: {{ .Values.environment.cloudantApiUrl.key }}
+          {{ end }}
+          {{ if .Values.environment.cloudantApiUser }}
+          - name: {{ .Values.environment.cloudantApiUser.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.cloudantApiUser.secret }}
+                key: {{ .Values.environment.cloudantApiUser.key }}
+          {{ end }}
+          {{ if .Values.environment.cloudantApiPassword }}
+          - name: {{ .Values.environment.cloudantApiPassword.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.cloudantApiPassword.secret }}
+                key: {{ .Values.environment.cloudantApiPassword.key }}
+          {{ end }}
+          {{ if .Values.environment.wdpTempSecKey }}
+          - name: {{ .Values.environment.wdpTempSecKey.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.wdpTempSecKey.secret }}
+                key: {{ .Values.environment.wdpTempSecKey.key }}
+          {{ end }}
+          {{ if .Values.environment.newRelicLicKey }}
+          - name: {{ .Values.environment.newRelicLicKey.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.newRelicLicKey.secret }}
+                key: {{ .Values.environment.newRelicLicKey.key }}
+          {{ end }}
+          {{ if .Values.environment.kmsUrl }}
+          - name: {{ .Values.environment.kmsUrl.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.kmsUrl.secret }}
+                key: {{ .Values.environment.kmsUrl.key }}
+          {{ end }}
+          {{ if .Values.environment.kmsInstanceId }}
+          - name: {{ .Values.environment.kmsInstanceId.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.kmsInstanceId.secret }}
+                key: {{ .Values.environment.kmsInstanceId.key }}
+          {{ end }}
+          {{ if .Values.environment.kmsRootKeyId }}
+          - name: {{ .Values.environment.kmsRootKeyId.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.kmsRootKeyId.secret }}
+                key: {{ .Values.environment.kmsRootKeyId.key }}
+          {{ end }}
+          {{ if .Values.environment.kmsServiceId }}
+          - name: {{ .Values.environment.kmsServiceId.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.kmsServiceId.secret }}
+                key: {{ .Values.environment.kmsServiceId.key }}
+          {{ end }}
+          {{ if .Values.environment.kmsApiKey }}
+          - name: {{ .Values.environment.kmsApiKey.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.kmsApiKey.secret }}
+                key: {{ .Values.environment.kmsApiKey.key }}
+          {{ end }}
+          {{ if .Values.environment.atAuthToken }}
+          - name: {{ .Values.environment.atAuthToken.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.atAuthToken.secret }}
+                key: {{ .Values.environment.atAuthToken.key }}
+          {{ end }}
+          {{ if .Values.environment.brokerUrl }}
+          - name: {{ .Values.environment.brokerUrl.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.brokerUrl.secret }}
+                key: {{ .Values.environment.brokerUrl.key }}
+          {{ end }}
+          {{ if .Values.environment.brokerUserName }}
+          - name: {{ .Values.environment.brokerUserName.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.brokerUserName.secret }}
+                key: {{ .Values.environment.brokerUserName.key }}
+          {{ end }}
+          {{ if .Values.environment.brokerPassword }}
+          - name: {{ .Values.environment.brokerPassword.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.brokerPassword.secret }}
+                key: {{ .Values.environment.brokerPassword.key }}
+          {{ end }}
+          {{ if .Values.environment.serviceAtName }}
+          - name: {{ .Values.environment.serviceAtName.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.serviceAtName.secret }}
+                key: {{ .Values.environment.serviceAtName.key }}
+          {{ end }}
+          {{ if .Values.environment.serviceOfferingName }}
+          - name: {{ .Values.environment.serviceOfferingName.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.serviceOfferingName.secret }}
+                key: {{ .Values.environment.serviceOfferingName.key }}
+          {{ end }}
+          {{ if .Values.environment.serviceSpaceGuid }}
+          - name: {{ .Values.environment.serviceSpaceGuid.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.serviceSpaceGuid.secret }}
+                key: {{ .Values.environment.serviceSpaceGuid.key }}
+          {{ end }}
+          {{ if .Values.environment.etcdUrl }}
+          - name: {{ .Values.environment.etcdUrl.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.etcdUrl.secret }}
+                key: {{ .Values.environment.etcdUrl.key }}
+          {{ end }}
+          {{ if .Values.environment.etcdSSL }}
+          - name: {{ .Values.environment.etcdSSL.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.etcdSSL.secret }}
+                key: {{ .Values.environment.etcdSSL.key }}
+          {{ end }}
+          {{ if .Values.environment.etcdCert }}
+          - name: {{ .Values.environment.etcdCert.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.etcdCert.secret }}
+                key: {{ .Values.environment.etcdCert.key }}
+          {{ end }}
+          {{ if .Values.environment.etcdv3deploymentId }}
+          - name: {{ .Values.environment.etcdv3deploymentId.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.etcdv3deploymentId.secret }}
+                key: {{ .Values.environment.etcdv3deploymentId.key }}
+          {{ end }}
+          {{ if .Values.environment.segmentWriteKey }}
+          - name: {{ .Values.environment.segmentWriteKey.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.segmentWriteKey.secret }}
+                key: {{ .Values.environment.segmentWriteKey.key }}
+          {{ end }}
+          {{ if .Values.environment.redisUrl }}
+          - name: {{ .Values.environment.redisUrl.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.redisUrl.secret }}
+                key: {{ .Values.environment.redisUrl.key }}
+          {{ end }}
+          {{ if .Values.environment.allowedServiceIds }}
+          - name: {{ .Values.environment.allowedServiceIds.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.allowedServiceIds.secret }}
+                key: {{ .Values.environment.allowedServiceIds.key }}
+          {{ end }}
+          {{ if .Values.environment.ICP4D_URL }}
+          - name: "ICP4D_URL"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.environment.ICP4D_URL.configMap }}
+                key: {{ .Values.environment.ICP4D_URL.key }}
+          {{ end }}
+          {{ if .Values.app_name }}
+          - name: "app_name"
+            value: {{ .Values.app_name }}
+          {{ end }}
+          {{ if .Values.global.deploymentTarget }}
+          - name: "deploymentTarget"
+            value: {{ .Values.global.deploymentTarget }}
+          {{ end }}
+          {{ if .Values.image.pullPolicy }}
+          - name: "pullPolicy"
+            value: {{ .Values.image.pullPolicy }}
+          {{ end }}
+          {{ if .Values.rootPath }}
+          - name: "rootPath"
+            value: {{ .Values.rootPath }}
+          {{ end }}
+          {{ if .Values.secret_object_name }}
+          - name: "secret_object_name"
+            value: {{ .Values.secret_object_name }}
+          {{ end }}
+        resources:
+          limits:
+            cpu: {{ .Values.resources.limits.cpu }}
+            memory: {{ .Values.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.resources.requests.cpu }}
+            memory: {{ .Values.resources.requests.memory }}
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+    {{- if (.Values.global.installCerts) }}
+      volumes:
+        - name: wdp-certs
+          projected:
+            sources:
+            - secret:
+                name: internal-nginx-svc-tls
+                items:
+                - key: certificate.pem
+                  path: internal-nginx.cert.pem
+                optional: true
+            - secret:
+                name: wdp-cloudant-cert
+                items:
+                - key: ca.crt.pem
+                  path: cloudant.ca.cert.pem
+                optional: true
+            - secret:
+                name: rabbitmq-ha-cert
+                items:
+                - key: cert.pem
+                  path: rabbitmq.cert.pem
+                optional: true
+    {{- end }}
+{{- if .Values.repository.secret.name }}
+      imagePullSecrets:
+        - name: {{ .Values.repository.secret.name }}
+{{- end }}

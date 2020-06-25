@@ -1,0 +1,103 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: wkc-lite
+    chart: wkc-lite
+    heritage: Tiller
+    icpdata_addon: "true"
+    icpdata_addon_version: "3.0.1"
+    release: wkc-lite
+    app.kubernetes.io/name: wkc-lite
+    helm.sh/chart: wkc-lite
+    app.kubernetes.io/managed-by: Tiller
+    app.kubernetes.io/instance: wkc-lite
+    wkc_glossary_service_v: "{{ index .Values "wkc-glossary-service-chart" "image" "tag" }}"
+    wdp_search_v: "{{ index .Values "wdp-search-chart" "image" "tag" }}"
+    wdp_profiling_v: "{{ index .Values "wdp-profiling-chart" "image" "tag" }}"
+    wdp_profiling_messaging_v: "{{ index .Values "wdp-profiling-messaging-chart" "image" "tag" }}"
+    wdp_profiling_ui_v: "{{ index .Values "wdp-profiling-ui-chart" "image" "tag" }}"
+    wkc_gov_ui_v: "{{ index .Values "wkc-gov-ui-chart" "image" "tag" }}"
+    dataconn_engine_opdiscovery_v: "{{ index .Values "dataconn-engine-opdiscovery-chart" "image" "tag" }}"
+    dataconn_engine_service_v: "{{ index .Values "dataconn-engine-service-chart" "image" "tag" }}"
+    dataconn_engine_spark_cluster_v: "{{ index .Values "dataconn-engine-spark-cluster-chart" "image" "tag" }}"
+    wdp_activities_v: "{{ index .Values "wdp-activities-chart" "image" "tag" }}"
+    wdp_policy_service_v: "{{ index .Values "wdp-policy-service-chart" "image" "tag" }}"
+    wdp_lineage_chart_v: "{{ index .Values "wdp-lineage-chart" "image" "tag" }}"
+  name: wkc-lite-config-map
+data:
+  add-ons.json: |
+      {{- if eq .Values.global.ibmProduct "wkc" }}
+      {
+         "wkc-professional":{
+            "add_on_type": "application",
+            "category": "gdt",
+            "details":{
+               "openURL": "/data/catalogs",
+               "priority": 10,
+               "entitlement_plan_definition": "standalone-professional"
+            },
+            "display_name": "Watson Knowledge Catalog",
+            "extensions": {},
+            "vendor": "IBM",
+            "versions":{
+               "3.2.0":{
+                  "state":"enabled"
+               }
+            }
+         }
+      }
+      {{- else }}
+      {
+         "wkc":{
+            "details":{
+               "openURL": "/data/catalogs",
+               "plan_name": "icp4d-professional",
+               "priority": -1,
+               "serviceability": [
+                  {
+                   "serviceability_label_name": "wkc",
+                   "serviceability_label_value": "wkc",
+                   "collection_type": "SCRIPT",
+                   "scripts": [
+                    {
+                      "container_name": "iis-servicesdocker-container",
+                      "path": "/opt/IBM/InformationServer/ISALite/tools/HealthChecker/runIISDiagnostics4ICP4D.sh -t serv",
+                      "pod_selector": "Service"
+                    },
+                    {
+                      "container_name": "iis-servicesdocker-container",
+                      "path": "/opt/IBM/InformationServer/ISALite/tools/HealthChecker/runIISDiagnostics4ICP4D.sh -c -t serv",
+                      "pod_selector": "Service"
+                    },
+                    {
+                      "container_name": "iis-en-conductor",
+                      "path": "/opt/IBM/InformationServer/ISALite/tools/HealthChecker/runIISDiagnostics4ICP4D.sh -t eng",
+                      "pod_selector": "Engine"
+                    },
+                    {
+                      "container_name": "iis-en-conductor",
+                      "path": "/opt/IBM/InformationServer/ISALite/tools/HealthChecker/runIISDiagnostics4ICP4D.sh -c -t eng",
+                      "pod_selector": "Engine"
+                    }]
+                  }
+               ]
+            },
+            "versions":{
+               "3.2.0":{
+                  "state":"enabled"
+               }
+            }
+         },
+         "wkc-full":{
+            "add_on_type": "component",
+            "versions":{
+               "3.2.0":{
+                  "state":"enabled"
+               }
+            }
+         }
+      }
+      {{- end }}
+{{- end }}

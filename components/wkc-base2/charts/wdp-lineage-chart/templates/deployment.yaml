@@ -1,0 +1,330 @@
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ template "wdp-lineage-chart.fullname" . }}
+  labels:
+    app: {{ template "wdp-lineage-chart.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: wdp-lineage
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+spec:
+  replicas: {{ .Values.minReplicas }}
+  selector:
+    matchLabels:
+      app: {{ template "wdp-lineage-chart.fullname" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "wdp-lineage-chart.fullname" . }}
+        date: "date"
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        icpdsupport/app: "apis"
+        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/name: wdp-lineage
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+      annotations:
+        {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+        {{- end }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      containers:
+      - name: {{ template "wdp-lineage-chart.fullname" . }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+{{- if .Values.global.installCerts }}
+        volumeMounts:
+        - name: wdp-certs
+          mountPath: "/etc/wdp_certs"
+          readOnly: true
+{{- end }}
+        ports:
+        - containerPort: {{ .Values.ports.targetPort }}
+          protocol: "TCP"
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.environment.BM_APP_VERSION_ENDPOINT }}
+            port: {{ .Values.ports.targetPort }}
+            scheme: "HTTPS"
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.environment.BM_APP_VERSION_ENDPOINT }}
+            port: {{ .Values.ports.targetPort }}
+            scheme: "HTTPS"
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+        env:
+          - name: "BM_APP_NAME"
+            value: {{ .Values.environment.BM_APP_NAME }}
+          {{- if .Values.environment.IamUrl }}
+          - name: "LS_GATEWAY_URL"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.LsGatewayUrl.secret }}
+                value: {{ .Values.environment.LsGatewayUrl.key }}
+          - name: "LS_BASE_URL"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.lsBaseUrl.secret }}
+                value: {{ .Values.environment.lsBaseUrl.key }}
+          - name: "LS_LOGGING_USE_JSON"
+            value: "{{ .Values.environment.LS_LOGGING_USE_JSON }}"
+          - name: "GATEWAY_CONFIGURED"
+            value: "{{ .Values.environment.GATEWAY_CONFIGURED }}"
+          - name: "ENABLE_MONITORING"
+            value: "{{ .Values.environment.ENABLE_MONITORING }}"
+          - name: "LS_IAM_PUBLIC_KEYS_URL"
+            value: "{{ .Values.environment.LS_IAM_PUBLIC_KEYS_URL }}"
+          - name: "LS_WML_WHITELISTED_SERVICE_IDS"
+            value: {{ .Values.environment.LS_WML_WHITELISTED_SERVICE_IDS }}
+          - name: "LS_PROFILING_WHITELISTED_SERVICE_IDS"
+            value: {{ .Values.environment.LS_PROFILING_WHITELISTED_SERVICE_IDS }}
+          - name: "LS_ACTIVITIES_WHITELISTED_SERVICE_IDS"
+            value: {{ .Values.environment.LS_ACTIVITIES_WHITELISTED_SERVICE_IDS }}
+          - name: "LS_CAMS_UI_WHITELISTED_SERVICE_IDS"
+            value: {{ .Values.environment.LS_CAMS_UI_WHITELISTED_SERVICE_IDS }}
+          - name: "LS_CAMS_API_WHITELISTED_SERVICE_IDS"
+            value: {{ .Values.environment.LS_CAMS_API_WHITELISTED_SERVICE_IDS }}
+          - name: "LS_TPS_WHITELISTED_SERVICE_IDS"
+            value: {{ .Values.environment.LS_TPS_WHITELISTED_SERVICE_IDS }}
+          - name: "LS_NOTEBOOK_UI_WHITELISTED_SERVICE_IDS"
+            value: {{ .Values.environment.LS_NOTEBOOK_UI_WHITELISTED_SERVICE_IDS }}
+          - name: "LS_PROJECT_UI_WHITELISTED_SERVICE_IDS"
+            value: {{ .Values.environment.LS_PROJECT_UI_WHITELISTED_SERVICE_IDS }}
+          - name: "LS_SERVICEID_WHITELIST"
+            value: {{ .Values.environment.LS_SERVICEID_WHITELIST }}
+          - name: "LS_OPERATIONS_WHITELIST"
+            value: {{ .Values.environment.LS_OPERATIONS_WHITELIST }}
+          - name: "AT_AUTH_TOKEN"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.AtAuthToken.secret }}
+                value: {{ .Values.environment.AtAuthToken.key }}
+          - name: "SERVICE_AT_NAME"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.ServiceAtName.secret }}
+                value: {{ .Values.environment.ServiceAtName.key }}
+          - name: "SERVICE_SPACE_GUID"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.ServiceSpaceGuid.secret }}
+                value: {{ .Values.environment.ServiceSpaceGuid.key }}
+          - name: "ENABLE_AUTOSCALING"
+            value: {{ .Values.environment.ENABLE_AUTOSCALING }}
+          - name: "LOG_AT_EVENTS"
+            value: {{ .Values.environment.LOG_AT_EVENTS }}
+          - name: "LS_USE_DATASOURCE"
+            value: {{ .Values.environment.LS_USE_DATASOURCE }}
+          - name: "LS_ACTIVITYTRACKER_LOGS"
+            value: {{ .Values.environment.LS_ACTIVITYTRACKER_LOGS }}
+          - name: "LS_ACTIVITYTRACKER_LOGS"
+            value: {{ .Values.environment.LS_ACTIVITYTRACKER_LOGS }}
+          - name: "LS_ENVIRONMENT"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.lsenv.secret }}
+                value: {{ .Values.environment.lsenv.key }}
+          - name: "NEW_RELIC_LICENSE_KEY"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.NewRelicLicKey.secret }}
+                value: {{ .Values.environment.NewRelicLicKey.key }}
+          - name: "ENABLE_NEWRELIC"
+            value: {{ .Values.environment.ENABLE_NEWRELIC }}
+          - name: "LS_IAM_BASE_URL"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.IamUrl.secret }}
+                value: {{ .Values.environment.IamUrl.key }}
+          - name: "LS_IAM_BASE64_CLIENT_ID_SECRET"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.LsIamBase64ClientId.secret }}
+                value: {{ .Values.environment.LsIamBase64ClientId.key }}
+          - name: "LS_SERVICE_API_KEY"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.LsServiceApiKey.secret }}
+                value: {{ .Values.environment.LsServiceApiKey.key }}
+          - name: "LS_JDBC_CONNECT_STRING"
+            value: {{ .Values.environment.LS_JDBC_CONNECT_STRING }}
+          - name: "LS_WML_SERVICE_URL"
+            value: {{ .Values.environment.LS_WML_SERVICE_URL }}
+          - name: "LS_DATABASE_USER"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.lsDatabaseUser.secret }}
+                value: {{ .Values.environment.lsDatabaseUser.key }}
+          - name: "LS_DATABASE_PORT_NUMBER"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.lsDatabasePort.secret }}
+                value: {{ .Values.environment.lsDatabasePort.key }}
+          - name: "LS_DATABASE_SERVER_NAME"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.lsDatabaseServerName.secret }}
+                value: {{ .Values.environment.lsDatabaseServerName.key }}
+          - name: "LS_STORE_FOUNDATION_URL"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.LsStoreFoundationUrl.secret }}
+                value: {{ .Values.environment.LsStoreFoundationUrl.key }}
+          - name: "LS_STORE_DEPLOYMENT_ID"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.LsStoreDeploymentId.secret }}
+                value: {{ .Values.environment.LsStoreDeploymentId.key }}
+          - name: "LS_STORE_CLOUD_API_TOKEN"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.LsStoreCloudApiToken.secret }}
+                value: {{ .Values.environment.LsStoreCloudApiToken.key }}
+          {{- else }}
+          - name: "LS_GATEWAY_URL"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.environment.lsGatewayUrl.configMap }}
+                key: {{ .Values.environment.lsGatewayUrl.key }}
+          - name: "LS_BASE_URL"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.environment.lsBaseUrl.configMap }}
+                key: {{ .Values.environment.lsBaseUrl.key }}
+          - name: "LS_ENVIRONMENT"
+            value: {{ .Values.environment.LS_ENVIRONMENT }}
+          {{- if eq .Values.environment.LS_STORE "postgres" }}
+          - name: {{ .Values.environment.lsDbUser.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.lsDbUser.secret }}
+                key: {{ .Values.environment.lsDbUser.key }}
+          - name: {{ .Values.environment.lsDbPassword.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.lsDbPassword.secret }}
+                key: {{ .Values.environment.lsDbPassword.key }}
+          {{- else }}
+          - name: "LS_DATABASE_USER"
+            value: "{{ .Values.environment.LS_DATABASE_USER }}"
+          - name: "LS_DATABASE_PASSWORD"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.lsDbPassword.secret }}
+                key: {{ .Values.environment.lsDbPassword.key }}
+          {{- end }}
+          - name: "LS_DATABASE_PORT_NUMBER"
+            value: "{{ .Values.environment.LS_DATABASE_PORT_NUMBER }}"
+          - name: "LS_DATABASE_SERVER_NAME"
+            value: {{ .Values.environment.LS_DATABASE_SERVER_NAME }}
+          - name: "LS_ISF_BASE_URL"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.environment.lsIsfBaseUrl.configMap }}
+                key: {{ .Values.environment.lsIsfBaseUrl.key }}
+          - name: "LS_SERVICE_ID_CREDENTIAL"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.serviceIdCredential.secret }}
+                key: {{ .Values.environment.serviceIdCredential.key }}
+          - name: "LS_STORE"
+            value: {{ .Values.environment.LS_STORE }}
+          - name: "LS_SERVICEID_WHITELIST"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.lsServiceIdWhiteList.secret }}
+                key: {{ .Values.environment.lsServiceIdWhiteList.key }}
+          {{- end }}
+          - name: "LS_APPEND_CREATION_EVENT"
+            value: "{{ .Values.environment.LS_APPEND_CREATION_EVENT }}"
+          - name: "LS_ENABLE_SERVICEID_WHITELIST"
+            value: "{{ .Values.environment.LS_ENABLE_SERVICEID_WHITELIST }}"
+          - name: "BM_APP_VERSION_ENDPOINT"
+            value: {{ .Values.environment.BM_APP_VERSION_ENDPOINT }}
+          - name: "BM_APP_VERSION"
+            value: "{{ .Values.image.tag }}"
+          - name: "LS_DATABASE_NAME"
+            value: {{ .Values.environment.LS_DATABASE_NAME }}
+          - name: "LS_DATABASE_MAX_POOL_SIZE"
+            value: "{{ .Values.environment.LS_DATABASE_MAX_POOL_SIZE }}"
+          - name: "LS_DATABASE_MIN_POOL_SIZE"
+            value: "{{ .Values.environment.LS_DATABASE_MIN_POOL_SIZE }}"
+          {{- if eq .Values.environment.LS_STORE "postgres" }}
+          - name: "LS_DATABASE_CERT_FILENAME"
+            value: {{ .Values.environment.LS_DATABASE_CERT_FILENAME }}
+          - name: "LS_SSLFACTORY"
+            value: {{ .Values.environment.LS_SSLFACTORY }}
+          {{- end }}
+          - name: "LS_ENABLE_ET"
+            value: "{{ .Values.environment.LS_ENABLE_ET }}"
+          - name: "LS_SINGLETENANT"
+            value: "{{ .Values.environment.LS_SINGLETENANT }}"
+          - name: "LS_AUTHENTICATOR"
+            value: {{ template "wdp-lineage-chart.autheticator" . }}
+          - name: "LS_TOKEN_GENERATOR"
+            value: {{ template "wdp-lineage-chart.tokenGenerator" . }}
+          - name: "LS_SSL_ENABLED"
+            value: "{{ .Values.environment.LS_SSL_ENABLED }}"
+          - name: "LS_DEFAULT_DB_NAME"
+            value: {{ .Values.environment.LS_DEFAULT_DB_NAME }}
+        resources:
+          limits:
+            cpu: {{ .Values.resources.limits.cpu }}
+            memory: {{ .Values.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.resources.requests.cpu }}
+            memory: {{ .Values.resources.requests.memory }}
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+        {{- if .Values.global.installCerts }}
+        - name: "wdp-certs"
+          projected:
+            sources:
+            - secret:
+                name: wdp-db2-cert
+                items:
+                - key: wdp-db2-ca.crt
+                  path: wdp-db2-ca.pem
+                optional: true
+        {{- end }}
+{{- if .Values.imagePullSecrets.name }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets.name }}
+{{- end }}

@@ -1,0 +1,307 @@
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ template "wdp-search-chart.fullname" . }}
+  labels:
+    app: {{ template "wdp-search-chart.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: wdp-search-service
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  annotations:
+    {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+    {{- end }}  
+spec:
+  replicas: {{ .Values.minReplicas }}
+  selector:
+    matchLabels:
+      app: {{ template "wdp-search-chart.fullname" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "wdp-search-chart.fullname" . }}
+        date: "date"
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        icpdsupport/app: "apis"
+        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+        heritage: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/name: wdp-search-service
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        istier: services
+        icpdsupport/addOnKey: "ugi"
+        icpdsupport/app: "apis"
+        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+      annotations:
+        productID: "5737-K89"
+        productVersion: "1.0"
+        productName: "wdp search servies"
+        {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+        {{- end }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      containers:
+      - name: {{ template "wdp-search-chart.fullname" . }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+      {{- if .Values.global.installCerts }}
+        volumeMounts:
+        - name: wdp-certs
+          mountPath: "/etc/wdp_certs"
+          readOnly: true
+      {{- end}}
+        ports:
+        - containerPort: {{ .Values.ports.targetPort }}
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.environment.BM_APP_VERSION_ENDPOINT }}
+            port: {{ .Values.ports.targetPort }}
+            scheme: "HTTPS"
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.environment.BM_APP_VERSION_ENDPOINT }}
+            port: {{ .Values.ports.targetPort }}
+            scheme: "HTTPS"
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+        env:
+        - name: "BM_APP_NAME"
+          value: {{ .Values.environment.BM_APP_NAME }}
+        - name: "BM_APP_HOST"
+          value: {{ .Values.environment.BM_APP_HOST }}
+        - name: "BM_DOMAIN"
+          value: {{ .Values.environment.BM_DOMAIN }}
+        - name: "BM_APP_VERSION"
+          value: "{{ .Values.image.tag }}"
+        - name: "BM_APP_VERSION_ENDPOINT"
+          value: {{ .Values.environment.BM_APP_VERSION_ENDPOINT }}
+        {{- if .Values.environment.wdpHostDomain }}
+        - name: "GATEWAY_HOST"
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Values.environment.wdpHostDomain.configMapName }}
+              key: {{ .Values.environment.wdpHostDomain.hostKey }}
+        - name: "ICP4D_HOST"
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Values.environment.wdpHostDomain.configMapName }}
+              key: {{ .Values.environment.wdpHostDomain.icp4dHostKey }}
+        {{- end }}
+        - name: "GATEWAY_URL"
+          value: {{ .Values.environment.GATEWAY_URL }}
+        - name: "IAM_URL"
+          value: {{ .Values.environment.IAM_URL }}
+        - name: "ICP4D_URL"
+          value: {{ .Values.environment.ICP4D_URL }}
+        - name: "TRUST_ALL_SSL_CERT"
+          value: {{ .Values.environment.TRUST_ALL_SSL_CERT }}
+        - name: "ENVIRONMENT_NAME"
+          value: "{{ .Values.environment.ENVIRONMENT_NAME }}"
+        - name: "ENVIRONMENT_TYPE"
+          value: {{ .Values.environment.ENVIRONMENT_TYPE }}
+        - name: "DEPLOY_TARGET"
+          value: "{{ .Values.environment.DEPLOY_TARGET }}"
+        - name: "DEPLOYMENT_TARGET"
+          value: {{ .Values.environment.DEPLOYMENT_TARGET }}
+        - name: "GATEWAY_CONFIGURED"
+          value: {{ .Values.environment.GATEWAY_CONFIGURED }}
+        - name: "COMPONENT_ID"
+          value: {{ .Values.environment.COMPONENT_ID }}
+        - name: "DISABLE_ETCD_LOCKING"
+          value: {{ .Values.environment.DISABLE_ETCD_LOCKING }}
+        - name: "IBM_COS_ENDPOINT"
+          value: "{{ .Values.environment.IBM_COS_ENDPOINT }}"
+        - name: "CLOUDANT_DB"
+          value: {{ .Values.environment.CLOUDANT_DB }}
+        - name: "CLOUDANT_RA_DB"
+          value: {{ .Values.environment.CLOUDANT_RA_DB }}
+        - name: "DATABASE_LIST_DB"
+          value: "{{ .Values.environment.DATABASE_LIST_DB }}"
+        - name: "LOG_DB_NAME_PREFIX"
+          value: {{ .Values.environment.LOG_DB_NAME_PREFIX }}
+        - name: "MAX_DIGITAL_EXHAUST_WORKERS"
+          value: "{{ .Values.environment.MAX_DIGITAL_EXHAUST_WORKERS }}"
+        - name: "NUMBER_OF_RETRIES"
+          value: "{{ .Values.environment.NUMBER_OF_RETRIES }}"
+        - name: "THRESHOLD_TIME"
+          value: "{{ .Values.environment.THRESHOLD_TIME }}"
+        - name: "UPDATE_DESIGN_DOCS"
+          value: "{{ .Values.environment.UPDATE_DESIGN_DOCS }}"
+        - name: "USE_DATABASE_LIST"
+          value: "{{ .Values.environment.USE_DATABASE_LIST }}"
+        - name: "MAX_RECOMMENDED_ASSETS"
+          value: "{{ .Values.environment.MAX_RECOMMENDED_ASSETS }}"
+        - name: "STAGGER_BUILDER_THREADS"
+          value: "{{ .Values.environment.STAGGER_BUILDER_THREADS }}"
+        - name: "WDP_UI_PROXY_URL"
+          value: "{{ .Values.environment.WDP_UI_PROXY_URL }}"
+        - name: "CTYPE"
+          value: "{{ .Values.environment.CTYPE }}"
+        - name: "REGION"
+          value: "{{ .Values.environment.REGION }}"
+        - name: "CNAME"
+          value: "{{ .Values.environment.CNAME }}"
+        - name: "SERVICE_INSTANCE_GUID"
+          value: "{{ .Values.environment.SERVICE_INSTANCE_GUID }}"
+        - name: "CRN"
+          value: "{{ .Values.environment.CRN }}"
+        - name: "PRODUCT_NAME"
+          value: "{{ .Values.environment.PRODUCT_NAME }}"
+        - name: "DATA_CENTER"
+          value: "{{ .Values.environment.DATA_CENTER }}"
+        - name: {{ .Values.environment.cloudantApiPassword.name }}
+          valueFrom:
+             secretKeyRef:
+               name: {{ .Values.environment.cloudantApiPassword.secret }}
+               key: {{ .Values.environment.cloudantApiPassword.key }}
+        - name: {{ .Values.environment.cloudantApiUrl.name }}
+          valueFrom:
+             secretKeyRef:
+               name: {{ .Values.environment.cloudantApiUrl.secret }}
+               key: {{ .Values.environment.cloudantApiUrl.key }}
+        - name: {{ .Values.environment.cloudantApiUser.name }}
+          valueFrom:
+             secretKeyRef:
+               name: {{ .Values.environment.cloudantApiUser.secret }}
+               key: {{ .Values.environment.cloudantApiUser.key }}
+        - name: {{ .Values.environment.cloudantLogDbPass.name }}
+          valueFrom:
+             secretKeyRef:
+               name: {{ .Values.environment.cloudantLogDbPass.secret }}
+               key: {{ .Values.environment.cloudantLogDbPass.key }}
+        - name: {{ .Values.environment.cloudantLogDbUrl.name }}
+          valueFrom:
+             secretKeyRef:
+               name: {{ .Values.environment.cloudantLogDbUrl.secret }}
+               key: {{ .Values.environment.cloudantLogDbUrl.key }}
+        - name: {{ .Values.environment.cloudantLogDbUser.name }}
+          valueFrom:
+             secretKeyRef:
+               name: {{ .Values.environment.cloudantLogDbUser.secret }}
+               key: {{ .Values.environment.cloudantLogDbUser.key }}
+        - name: {{ .Values.environment.cloudantPassword.name }}
+          valueFrom:
+             secretKeyRef:
+               name: {{ .Values.environment.cloudantPassword.secret }}
+               key: {{ .Values.environment.cloudantPassword.key }}
+        - name: {{ .Values.environment.cloudantUrl.name }}
+          valueFrom:
+             secretKeyRef:
+               name: {{ .Values.environment.cloudantUrl.secret }}
+               key: {{ .Values.environment.cloudantUrl.key }}
+        - name: {{ .Values.environment.cloudantUser.name }}
+          valueFrom:
+             secretKeyRef:
+               name: {{ .Values.environment.cloudantUser.secret }}
+               key: {{ .Values.environment.cloudantUser.key }}
+        {{- if .Values.environment.newrelicKey }}
+        - name: {{ .Values.environment.newrelicKey.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.newrelicKey.secret }}
+              key: {{ .Values.environment.newrelicKey.key }}
+        {{- end }}
+        {{- if .Values.environment.serviceApiKey }}
+        - name: {{ .Values.environment.serviceApiKey.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.serviceApiKey.secret }}
+              key: {{ .Values.environment.serviceApiKey.key }}
+        {{- end }}
+        {{- if .Values.environment.etcdssl }}
+        - name: {{ .Values.environment.etcdssl.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.etcdssl.secret }}
+              key: {{ .Values.environment.etcdssl.key }}
+        {{- end }}
+        {{- if .Values.environment.etcdurl }}
+        - name: {{ .Values.environment.etcdurl.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.etcdurl.secret }}
+              key: {{ .Values.environment.etcdurl.key }}
+        {{- end }}
+        {{- if .Values.environment.serviceId }}
+        - name: {{ .Values.environment.serviceId.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.serviceId.secret }}
+              key: {{ .Values.environment.serviceId.key }}
+        {{- end }}
+        resources:
+          limits:
+            cpu: {{ .Values.resources.limits.cpu }}
+            memory: {{ .Values.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.resources.requests.cpu }}
+            memory: {{ .Values.resources.requests.memory }}
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          {{- if .Values.securityContext.runAsUser }}
+          runAsUser: {{ .Values.securityContext.runAsUser }}
+          {{- end }}
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+    {{- if (.Values.global.installCerts) }}
+      volumes:
+        - name: wdp-certs
+          projected:
+            sources:
+            - secret:
+                name: internal-nginx-svc-tls
+                items:
+                - key: certificate.pem
+                  path: internal-nginx.cert.pem
+                optional: true
+            - secret:
+                name: wdp-cloudant-cert
+                items:
+                - key: ca.crt.pem
+                  path: cloudant.ca.cert.pem
+                optional: true
+            - secret:
+                name: rabbitmq-ha-cert
+                items:
+                - key: cert.pem
+                  path: rabbitmq.cert.pem
+                optional: true
+    {{- end }}
+    {{- if .Values.repository.secret.name }}
+      imagePullSecrets:
+      - name: {{ .Values.repository.secret.name }}
+    {{- end }}

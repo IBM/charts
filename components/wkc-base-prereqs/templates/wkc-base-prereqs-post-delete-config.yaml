@@ -1,0 +1,45 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wkc-base-prereqs-post-delete-config
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "99"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  post-delete.sh: |
+    #delete jobs
+    echo wkc-base-prereqs-post-delete-config deleting the jobs
+    kubectl delete job elasticsearch-master-secret-job rabbitmq-ha-secret-job redis-ha-secret-job secret-generation-job wdp-couchdb-secret-job wdp-couchdb-setup-job -n $NAMESPACE
+    
+    # delete secrets
+    echo wkc-base-prereqs-post-delete-config deleting the secrets
+    kubectl delete secret ca-certificate-chain-trust elasticsearch-master-cert elasticsearch-master-secret https-cert-key-secret rabbitmq-ha rabbitmq-ha-cert rabbitmq-url redis-ha redis-ha-secret-host-and-port redis-url wdp-cloudant-cert wdp-cloudant-creds wdp-cloudant-url wdp-couchdb wdp-service-id -n $NAMESPACE 
+    
+    # delete configmaps
+    echo wkc-base-prereqs-post-delete-config deleting the configmaps
+    kubectl delete cm elasticsearch-master-secret-config rabbitmq-ha-secret-config redis-ha-secret-config secret-generation-config wdp-couchdb-secret-config -n $NAMESPACE
+    
+    #delete pvcs
+    echo wkc-base-prereqs-post-delete-config deleting the pvcs
+    kubectl delete pvc -l app=wdp-rabbitmq -n $NAMESPACE
+    kubectl delete pvc -l app=redis-ha -n $NAMESPACE
+    kubectl delete pvc -l app=couchdb -n $NAMESPACE
+    kubectl delete pvc -l app=elasticsearch-master -n $NAMESPACE
+    kubectl delete pvc cc-home-pvc -n $NAMESPACE
+    
+    echo delete the post delete bits
+    kubectl delete cm wkc-base-prereqs-post-delete-config -n $NAMESPACE
+      
+    exit 0
+{{- end }}

@@ -1,0 +1,58 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: wkc-roles-config
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  init.sh: |
+    set -e
+
+    if [ "$COUCHDB_PASSWORD" != "" ];
+    then
+      DB_URL=https://$COUCHDB_USERNAME:$COUCHDB_PASSWORD@couchdb-svc
+      ADMIN_UID=1000330999
+      ISADMIN_UID=1000330998
+    else
+      DB_URL=$CLOUDANT_URL
+      ADMIN_UID=999
+      ISADMIN_UID=998
+    fi
+
+    echo "Update admin user with wkc roles and permissions"
+    adminUserDoc=$(curl -sS -k $DB_URL/privatecloud-users/admin | python -c "import sys, json; \
+    adminUserJson=json.load(sys.stdin); \
+    adminUserJson['permissions'].append('manage_information_assets'); \
+    adminUserJson['permissions'].append('manage_quality'); \
+    adminUserJson['permissions'].append('manage_discovery'); \
+    adminUserJson['permissions'].append('manage_metadata_import'); \
+    adminUserJson['permissions'].append('manage_categories'); \
+    adminUserJson['permissions'].append('author_governance_artifacts'); \
+    adminUserJson['permissions'].append('manage_governance_workflow'); \
+    adminUserJson['user_roles'].append('Business Analyst'); \
+    adminUserJson['user_roles'].append('Data Steward'); \
+    adminUserJson['user_roles'].append('Data Quality Analyst'); \
+    print (json.dumps(adminUserJson))")
+
+    curl -sS -k -X PUT $DB_URL/privatecloud-users/admin \
+        -H "Content-Type: application/json" \
+        -d "$adminUserDoc"
+
+    echo "Setting up ISF linkage to usermgmt"
+    kubectl set env -n $ICPD_CONTROLPLANE_NAMESPACE deployment usermgmt --containers=usermgmt-container ISF_SERVICE_URL=https://is-servicesdocker:9446
+
+    echo "Restart DC-Main and NLQ"
+    kubectl set env -n $ICPD_CONTROLPLANE_NAMESPACE deployment dc-main ISADMIN_SECRET_ENABLED=true
+  {{- end }}

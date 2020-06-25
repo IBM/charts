@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-base2-svc-profiling-test"
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}-{{ randAlphaNum 5 }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    release: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - amd64  
+            - ppc64le   
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  containers:
+  - name: {{ .Release.Name }}-base2-svc-profiling-test
+    image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.preInstall.image.repository }}:{{ .Values.preInstall.image.tag }}    
+    command: ['/bin/sh']
+    args: ['-c', 'cd /tmp; wget --no-check-certificate https://wdp-profiling/v2/data_profiles/version']
+    securityContext:
+      privileged: false
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      limits:
+        cpu: {{ .Values.preInstall.resources.limits.cpu }}
+        memory: {{ .Values.preInstall.resources.limits.memory }}
+      requests:
+        cpu: {{ .Values.preInstall.resources.requests.cpu }}
+        memory: {{ .Values.preInstall.resources.requests.memory }}
+  restartPolicy: Never  

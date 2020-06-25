@@ -1,0 +1,73 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "iis-post-upgrade-job"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": "post-upgrade"
+    "helm.sh/hook-weight": "100"
+    "helm.sh/hook-delete-policy": before-hook-creation
+{{- include "product-metering" . | indent 4 }}
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 5400
+  template:
+    metadata:
+      labels:
+        app: {{ .Chart.Name }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      annotations:
+      {{- include "product-metering" . | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.postUpgrade.serviceAccountName }}
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      restartPolicy: Never
+      containers:
+      - name: "iis-post-upgrade-pod"
+        imagePullPolicy: IfNotPresent
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.release.image.wkcinitcontainer.repository }}:{{ .Values.release.image.wkcinitcontainer.tag }}
+        command: ["/bin/sh", "/iis-post-upgrade-scripts/post-upgrade.sh"]
+        volumeMounts:
+        - mountPath: /iis-post-upgrade-scripts
+          name: iis-post-upgrade-scripts
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          limits:
+            cpu: {{ .Values.release.image.wkcinitcontainer.limits.cpu }}
+            memory: {{ .Values.release.image.wkcinitcontainer.limits.memory }}
+          requests:
+            cpu: {{ .Values.release.image.wkcinitcontainer.requests.cpu }}
+            memory: {{ .Values.release.image.wkcinitcontainer.requests.memory }}
+        env:
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+      volumes:
+        - name: iis-post-upgrade-scripts
+          configMap:
+            name: iis-post-upgrade-config
+            defaultMode: 0555

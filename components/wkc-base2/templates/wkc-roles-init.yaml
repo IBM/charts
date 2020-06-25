@@ -1,0 +1,111 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "wkc-roles-init"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 360
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      annotations:
+        {{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+        {{- end }}      
+    spec:
+      {{- if eq .Values.global.deploymentTarget "icp4data" }}
+      serviceAccountName: cpd-editor-sa
+      {{- end }}
+      restartPolicy: Never
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      affinity:
+      {{- include "wkcbase2.nodeAffinity" . | indent 6 }}
+      containers:
+      - name: "wkc-roles-init"
+        imagePullPolicy: IfNotPresent
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.preInstall.image.repository }}:{{ .Values.preInstall.image.tag }}
+        command: ["/bin/sh", "/wkc/init.sh"]
+        volumeMounts:
+          - name: wkc-roles-config
+            mountPath: /wkc
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          limits:
+            cpu: {{ .Values.preInstall.resources.limits.cpu }}
+            memory: {{ .Values.preInstall.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.preInstall.resources.requests.cpu }}
+            memory: {{ .Values.preInstall.resources.requests.memory }}
+        env:
+          - name: ICPD_CONTROLPLANE_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+          - name: CLOUDANT_URL
+            valueFrom:
+              secretKeyRef:
+                key: cloudant-url.txt
+                name: wdp-cloudant-url
+                optional: true
+          - name: COUCHDB_USERNAME
+            valueFrom:
+              secretKeyRef:
+                key: couchdb_username
+                name: couchdb-secrets
+                optional: true
+          - name: COUCHDB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: couchdb_password
+                name: couchdb-secrets
+                optional: true
+          - name: ISADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: isadmin_password
+                name: wkc-user-secrets
+                optional: true
+          {{- if .Values.global.ibmProduct }}
+          - name: PRODUCT_NAME
+            value: {{ .Values.global.ibmProduct | quote }}
+          {{- end }}
+{{- if .Values.preInstall.image.imagePullSecrets }}
+      imagePullSecrets:
+      - name: {{ .Values.preInstall.image.imagePullSecrets }}
+{{- end }}
+      volumes:
+        - name: wkc-roles-config
+          configMap:
+            name: wkc-roles-config
+            defaultMode: 0555
+{{- end }}

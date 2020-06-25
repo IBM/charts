@@ -1,0 +1,35 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wkc-prereqs-post-delete-cm
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "99"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  post-delete.sh: |
+    resourcename=wdp-db2
+    #delete secrets, match wdp-db2 pattern and delete them
+    kubectl delete secret wdp-db2 wdp-db2-cert -n $NAMESPACE
+    #delete pvc
+    kubectl get pvc -n $NAMESPACE --no-headers=true | awk -v var="$resourcename" '$0~var{print $1}'| xargs  kubectl delete -n $NAMESPACE pvc
+    #delete job
+    kubectl delete job wdp-db2-secret-job -n $NAMESPACE
+    #delete configmaps
+    kubectl delete cm wdp-db2-secret-config -n $NAMESPACE
+    #delete job pod
+    kubectl get pod -n $NAMESPACE --no-headers=true | awk -v var="$resourcename" '$0~var{print $1}'| xargs  kubectl delete -n $NAMESPACE pod
+    # delete post-delete bits
+    kubectl delete cm wkc-prereqs-post-delete-cm -n $NAMESPACE
+    exit 0
+{{- end }}

@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.appConfigService.app_name }}
+  labels:
+     app: {{ .Values.appConfigService.app_name }}
+     chart: "{{ .Chart.Name }}"
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}"
+     app.kubernetes.io/name: {{ .Values.appConfigService.app_name }}
+     helm.sh/chart: {{ .Chart.Name }}
+     app.kubernetes.io/managed-by: {{ .Release.Service }}
+     app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.appConfigService.app_name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.appConfigService.app_name }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/name: {{ .Values.appConfigService.app_name }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        icpdsupport/app: "apis"
+        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+      annotations:
+      {{- include "product-metering" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      initContainers:
+      {{- include "wait-services" . | indent 6 }}
+      containers:
+      - name: {{ .Values.appConfigService.app_name }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.appConfigService.repository }}:{{ .Values.appConfigService.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          requests:
+            memory: "{{ .Values.appConfigService.requests.memory }}"
+            cpu: "{{ .Values.appConfigService.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.appConfigService.limits.memory }}"
+            cpu: "{{ .Values.appConfigService.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: APP_CONFIG_DB_TYPE
+          value: db2
+        - name: APP_CONFIG_DB_HOST
+          value: is-xmetadocker
+        - name: APP_CONFIG_DB_PORT
+          value: "50000"
+        - name: APP_CONFIG_DB_USER
+          value: xmeta
+        - name: APP_CONFIG_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: xmeta_password
+        - name: APP_CONFIG_DB_NAME
+          value: xmeta
+        ports:
+        - containerPort: 9083
+        readinessProbe:
+          httpGet:
+            path: /ibm/iis/api/app_config/v1
+            port: 9083
+          initialDelaySeconds: 120
+        livenessProbe:
+          httpGet:
+            path: /ibm/iis/api/app_config/v1/health
+            port: 9083
+          initialDelaySeconds: 600
+        volumeMounts:
+        - name: secrets-pv-volume
+          mountPath: /config/secrets
+        - name: config-dir
+          mountPath: /config/config
+        - name: config-dropins-defaults-dir
+          mountPath: /config/configDropins/defaults
+        - name: flyway-conf-dir
+          mountPath: /opt/flyway/conf
+        - name: logs-dir
+          mountPath: /logs
+        - name: wlp-output-dir
+          mountPath: /opt/ibm/wlp/output
+        - name: tmp-dir
+          mountPath: /tmp
+      securityContext:
+        runAsNonRoot: true
+        {{- if .Values.appConfigService.runAsUser }}
+        runAsUser: {{ .Values.appConfigService.runAsUser }}
+        {{- end }}
+        {{- if .Values.appConfigService.fsGroup }}
+        fsGroup: {{ .Values.appConfigService.fsGroup }}
+        {{- end }}
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- end }}
+      {{- include "image-secret" . | indent 6 }}
+      volumes:
+      - name: secrets-pv-volume
+        persistentVolumeClaim:
+            claimName: iis-secrets-pv
+      - name: config-dir
+        emptyDir: {}
+      - name: config-dropins-defaults-dir
+        emptyDir: {}
+      - name: flyway-conf-dir
+        emptyDir: {}
+      - name: logs-dir
+        emptyDir: {}
+      - name: wlp-output-dir
+        emptyDir: {}
+      - name: tmp-dir
+        emptyDir: {}

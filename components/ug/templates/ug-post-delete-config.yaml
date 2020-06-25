@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ug-post-delete-config
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "99"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  post-delete.sh: |
+    #delete jobs
+    echo ug-post-delete-config deleting the jobs
+    kubectl delete job ug-secret-generation-job ug-create-topics-hook {{ .Values.s4i.s4iSchemaInit.app_name }} -n $NAMESPACE
+    
+    # delete configmaps
+    echo ug-post-delete-config deleting the configmaps
+    kubectl delete cm ug-secret-generation-config shop4info-wkc-mappers-config {{ .Values.s4i.s4iEventConsumer.app_name }}-config {{ .Values.s4i.s4iScheduler.app_name }}-config s4is-config {{ .Values.s4i.s4iRegistry.app_name }}-config {{ .Values.s4i.shop4infoRest.app_name }}-config {{ .Values.s4i.s4iSchemaInit.app_name }}-config shop4info-mappers-config gov-catalog-search-service-trace-logging ugi-addon {{ .Values.ia.config_name }} ug-secret-generation-config {{ .Values.finley.app_name }} -n $NAMESPACE
+    
+    echo delete secrets
+    kubectl delete secret fast-analyzer {{ .Values.odfFA.secret_name }} {{ .Values.ia.secret_name }} -n $NAMESPACE
+
+    echo delete the post delete bits
+    kubectl delete cm ug-post-delete-config -n $NAMESPACE
+    
+    # delete pvcs
+      
+    exit 0

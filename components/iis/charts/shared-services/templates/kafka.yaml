@@ -1,0 +1,191 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Values.kafka.app_name }}
+  labels:
+    component: kafka
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app: {{ .Values.kafka.app_name }}
+    app.kubernetes.io/name: {{ .Values.kafka.app_name }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  serviceName: {{ .Values.kafka.app_name }}
+  selector:
+    matchLabels:
+      app: {{ .Values.kafka.app_name }}
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.kafka.app_name }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/name: {{ .Values.kafka.app_name }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        icpdsupport/app: "apis"
+        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+      annotations:
+      {{- include "product-metering" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: "app"
+                  operator: In
+                  values:
+                  - {{ .Values.kafka.app_name }}
+              topologyKey: "kubernetes.io/hostname"
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: "app"
+                  operator: In
+                  values:
+                  - {{ .Values.zookeeper.app_name }}
+              topologyKey: "kubernetes.io/hostname"
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: {{ .Values.kafka.app_name }}
+          image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.kafka.repository }}:{{ .Values.kafka.tag }}
+          imagePullPolicy: {{ .Values.release.image.pullPolicy }}
+          resources:
+            requests:
+               memory: "{{ .Values.kafkaResources.requests.memory }}"
+               cpu: "{{ .Values.kafkaResources.requests.cpu }}"
+            limits:
+               memory: "{{ .Values.kafkaResources.limits.memory }}"
+               cpu: "{{ .Values.kafkaResources.limits.cpu }}"
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+              - ALL
+          ports:
+            - containerPort: 9093
+              name: internal
+            - containerPort: 9092
+              name: external
+          env:
+            - name: POD_NAME
+              valueFrom:
+               fieldRef:
+                fieldPath: metadata.name
+            - name: NODE_NAME
+              valueFrom:
+               fieldRef:
+                fieldPath: spec.nodeName
+            - name: KAFKA_ZOOKEEPER_CONNECT
+              value: "{{ .Values.zookeeper.app_name }}:2181/kafka"
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "PLAINTEXT://$(POD_NAME).{{ .Values.kafka.app_name }}:9092,INTERNAL_PLAINTEXT://:9093"
+            - name: KAFKA_LISTENERS
+              value: "PLAINTEXT://:9092,INTERNAL_PLAINTEXT://:9093"
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "PLAINTEXT:PLAINTEXT,SSL:SSL,SASL_PLAINTEXT:SASL_PLAINTEXT,SASL_SSL:SASL_SSL,INTERNAL_PLAINTEXT:PLAINTEXT"
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: "INTERNAL_PLAINTEXT"
+            - name: KAFKA_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "$(KAFKA_REPLICATION_FACTOR)"
+            - name: KAFKA_DEFAULT_REPLICATION_FACTOR
+              value: "$(KAFKA_REPLICATION_FACTOR)"
+            - name: KAFKA_HEAP_OPTS
+              value: "-Xms{{ .Values.kafkaResources.heap.min }}M -Xmx{{ .Values.kafkaResources.heap.max }}M"
+          livenessProbe:
+            tcpSocket:
+              port: 9093
+            failureThreshold: 3
+            initialDelaySeconds: 1200
+            periodSeconds: 60
+          readinessProbe:
+            tcpSocket:
+              port: 9093
+            failureThreshold: 120
+            initialDelaySeconds: 10
+          volumeMounts:
+            - mountPath: /var/lib/kafka
+              name: kafka-data
+            - mountPath: /opt/kafka/logs
+              name: kafka-logs-volume
+            - mountPath: /opt/kafka/config
+              name: kafka-config-volume
+            - mountPath: /var/tmp
+              name: kafka-tmp-volume
+            - mountPath: /opt/kafka/config/log4j.properties
+              name: config
+              subPath: log4j.properties
+            - mountPath: /opt/kafka/config/connect-log4j.properties
+              name: config
+              subPath: connect-log4j.properties
+            - mountPath: /opt/kafka/config/tools-log4j.properties
+              name: config
+              subPath: tools-log4j.properties
+      securityContext:
+        runAsNonRoot: true
+        {{- if .Values.kafka.runAsUser }}
+        runAsUser: {{ .Values.kafka.runAsUser }}
+        {{- end }}
+        {{- if .Values.kafka.fsGroup }}
+        fsGroup: {{ .Values.kafka.fsGroup }}
+        {{- end }}
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- end }}
+      volumes:
+      - name: config
+        configMap:
+          name: kafka-config
+      - emptyDir: {}
+        name: kafka-logs-volume
+      - emptyDir: {}
+        name: kafka-config-volume
+      - emptyDir: {}
+        name: kafka-tmp-volume
+      {{- include "image-secret" . | indent 6 }}
+  volumeClaimTemplates:
+  - metadata:
+      name: kafka-data
+    spec:
+      {{- if and .Values.global.persistence.useDynamicProvisioning (not .Values.kafka.volumeClaim.overrideStorageClass) }}
+      # If present, use the storageClassName from the values.yaml, else use the
+      # default storageClass setup by Kubernetes Administrator
+      #
+      # Setting storageClassName to nil means use the default storage class
+      storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+      {{- else }}
+      storageClassName: {{ .Values.kafka.volumeClaim.storageClassName | quote }}
+      {{- end }}
+      {{- if (not .Values.global.persistence.useDynamicProvisioning ) }}
+      selector:
+        matchLabels:
+          assign-to: "{{ .Release.Namespace }}-kafka"
+      {{- end }}
+      accessModes: [ {{ .Values.kafka.volumeClaim.accessMode }} ]
+      resources:
+        requests:
+          storage: {{ .Values.kafka.volumeClaim.size }}
