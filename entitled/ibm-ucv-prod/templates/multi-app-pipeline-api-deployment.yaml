@@ -1,0 +1,159 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multi-app-pipeline-api
+  labels:
+    {{- include "ucv.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- $vars := merge (dict) . -}}
+      {{- $_ := set $vars "ucvService" "multi-app-pipeline-api" -}}
+      {{- include "ucv.selector" $vars | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $vars := merge (dict) . -}}
+        {{- $_ := set $vars "ucvService" "multi-app-pipeline-api" -}}
+        {{- include "ucv.specTemplateLabels" $vars | nindent 8 }}
+      annotations:
+        {{- include "ucv.productAnnotations" . | nindent 8 }}
+    spec:
+      serviceAccountName: velocity-service-account
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      imagePullSecrets:
+        {{- include "ucv.imagePullSecrets" . | nindent 8 }}
+      affinity:
+        {{- include "ucv.nodeAffinity" . | nindent 8 }}
+      containers:
+        - name: multi-app-pipeline-api
+          image: 'cp.icr.io/cp/ibm-ucv-multi-app-pipeline-api:1.5.5-ifix01.36'
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9090
+          env:
+            - name: NODE_ENV
+              value: container
+            - name: PORT
+              value: '9090'
+            - name: mongo__db
+              value: multi-app-pipeline
+            - name: LOG_LEVEL
+              value: {{ .Values.loglevel }}
+            - name: mongo__url
+              {{- include "ucv.mongoUrl" . | nindent 14 }}
+            - name: appPath
+              value: /v1/multi-app-pipeline
+            - name: authToken
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: apiToken
+            - name: securityApi__url
+              value: 'http://security-api:3911'
+            - name: securityApi__auth_secret
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: hmacKey
+            - name: cipher__key
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: cipherToken
+            - name: hmac__key
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: hmacKey
+            - name: deployPlanApi__url
+              value: 'http://continuous-release-ui:3000/deploymentPlans'
+            - name: deployPlanApi__cipherKey
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: cipherToken
+            - name: deployPlanApi__hmacKey
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: hmacKey
+            - name: applicationApi__url
+              value: 'http://application-api:3499'
+            - name: bearerToken
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: apiToken
+            - name: registrationApi__token
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: apiToken
+            - name: integrationApi__token
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: apiToken
+            - name: pipelineApi__cipherKey
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: cipherToken
+            - name: pipelineApi__hmacKey
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: hmacKey
+            - name: releaseEventsApi__cipherKey
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: cipherToken
+            - name: releaseEventsApi__hmacKey
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: hmacKey
+            - name: releaseEventsApi__url
+              value: 'http://release-events-api:8080/graphql'
+            - name: amqp__velocity__host
+              value: velocity-rabbitmq
+            - name: amqp__velocity__port
+              value: '5672'
+            - name: amqp__velocity__user
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.rabbit }}
+                  key: user
+            - name: amqp__velocity__password
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.rabbit }}
+                  key: password
+            - name: newRelic__enabled
+              value: 'false'
+            - name: redis__enabled
+              value: 'false'
+            - name: tunnel__enabled
+              value: 'false'
+            - name: serviceProvider__credentials
+              value: Y29udF9yZWxlYXNlX3N2Yzp0cDRNQk53TU0y
+            - name: BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: apiToken
+          resources:
+            {{- include "ucv.resources" . | nindent 12 }}
+          securityContext:
+            {{- include "ucv.securityContext" . | nindent 12 }}
+          livenessProbe:
+            {{- $port := dict "ucvLivenessPort" 9090 }}
+            {{- include "ucv.livenessProbe" $port | nindent 12 }}
+          readinessProbe:
+            {{- $port := dict "ucvReadinessPort" 9090 }}
+            {{- include "ucv.readinessProbe" $port | nindent 12 }}

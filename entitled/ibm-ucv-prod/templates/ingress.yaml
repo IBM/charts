@@ -1,0 +1,34 @@
+apiVersion: {{ .Capabilities.APIVersions.Has "networking.k8s.io/v1beta1" | ternary "networking.k8s.io/v1beta1" "extensions/v1beta1" }}
+kind: Ingress
+metadata:
+  name: velocity-ingress
+  annotations:
+    ingress.kubernetes.io/rewrite-target: /
+    ingress.kubernetes.io/configuration-snippet: proxy_pass_request_headers on;
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/configuration-snippet: proxy_pass_request_headers on;
+  labels:
+    {{- include "ucv.labels" . | nindent 4 }}
+spec:
+  tls:
+    - secretName: {{ .Values.secrets.tls }}
+      hosts:
+        - {{ .Values.url.domain }}
+  backend:
+    serviceName: velocity-router
+    servicePort: 8080
+  rules:
+    - host: {{ .Values.url.domain }}
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: velocity-router
+              servicePort: 8080
+          - backend:
+              serviceName: velocity-rabbitmq
+              servicePort: 5672
+          - path: /rabbit/
+            backend:
+              serviceName: velocity-rabbitmq
+              servicePort: 15672
