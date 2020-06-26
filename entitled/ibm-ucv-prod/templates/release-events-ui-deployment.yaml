@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: release-events-ui
+  labels:
+    {{- include "ucv.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- $vars := merge (dict) . -}}
+      {{- $_ := set $vars "ucvService" "release-events-ui" -}}
+      {{- include "ucv.selector" $vars | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $vars := merge (dict) . -}}
+        {{- $_ := set $vars "ucvService" "release-events-ui" -}}
+        {{- include "ucv.specTemplateLabels" $vars | nindent 8 }}
+      annotations:
+        {{- include "ucv.productAnnotations" . | nindent 8 }}
+    spec:
+      serviceAccountName: velocity-service-account
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      imagePullSecrets:
+        {{- include "ucv.imagePullSecrets" . | nindent 8 }}
+      affinity:
+        {{- include "ucv.nodeAffinity" . | nindent 8 }}
+      containers:
+        - name: release-events-ui
+          image: 'cp.icr.io/cp/ibm-ucv-release-events-ui:1.5.5-ifix01.36'
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3010
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: '3010'
+            - name: LOG_LEVEL
+              value: {{ .Values.loglevel }}
+            - name: release_events_api__host
+              value: {{ template "root.url.releaseEventsApi" . }}
+            - name: security_api__host
+              value: {{ template "root.url.securityApiHost" . }}
+            - name: NODE_TLS_REJECT_UNAUTHORIZED
+              value: '0'
+            - name: version
+              value: {{ .Chart.Version }}
+          resources:
+            {{- include "ucv.resources" . | nindent 12 }}
+          securityContext:
+            {{- include "ucv.securityContext" . | nindent 12 }}
+          livenessProbe:
+            {{- $port := dict "ucvLivenessPort" 3010 }}
+            {{- include "ucv.livenessProbe" $port | nindent 12 }}
+          readinessProbe:
+            {{- $port := dict "ucvReadinessPort" 3010 }}
+            {{- include "ucv.readinessProbe" $port | nindent 12 }}

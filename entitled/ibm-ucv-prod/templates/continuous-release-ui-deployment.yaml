@@ -1,0 +1,148 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: continuous-release-ui
+  labels:
+    {{- include "ucv.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- $vars := merge (dict) . -}}
+      {{- $_ := set $vars "ucvService" "continuous-release-ui" -}}
+      {{- include "ucv.selector" $vars | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $vars := merge (dict) . -}}
+        {{- $_ := set $vars "ucvService" "continuous-release-ui" -}}
+        {{- include "ucv.specTemplateLabels" $vars | nindent 8 }}
+      annotations:
+        {{- include "ucv.productAnnotations" . | nindent 8 }}
+    spec:
+      serviceAccountName: velocity-service-account
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      imagePullSecrets:
+        {{- include "ucv.imagePullSecrets" . | nindent 8 }}
+      affinity:
+        {{- include "ucv.nodeAffinity" . | nindent 8 }}
+      containers:
+        - name: continuous-release-ui
+          image: 'cp.icr.io/cp/ibm-ucv-continuous-release-ui:1.5.5-ifix01.36'
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          env:
+            - name: PORT
+              value: '3000'
+            - name: ROOT_URL
+              value: {{ template "root.url.cr" . }}
+            - name: LOG_LEVEL
+              value: {{ .Values.loglevel }}
+            - name: MONGO_URL
+              {{- include "ucv.mongoUrl" . | nindent 14 }}
+            - name: MONGO_DB
+              value: velocity
+            - name: RABBITMQ_HOST
+              value: velocity-rabbitmq
+            - name: RABBITMQ_PORT
+              value: '5672'
+            - name: RABBITMQ_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.rabbit }}
+                  key: user
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.rabbit }}
+                  key: password
+            - name: SECURITY_API_URL
+              value: 'http://security-api:3911/api'
+            - name: SECURITY_API_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: apiToken
+            - name: APP_API_URL
+              value: 'http://application-api:3499'
+            - name: APP_API_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: apiToken
+            - name: RELEASE_API_URL
+              value: 'http://release-events-api:8080/graphql'
+            - name: RELEASE_API_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: apiToken
+            - name: MAP_API_URL
+              value: 'http://multi-app-pipeline-api:9090/v1/multi-app-pipeline/graphql'
+            - name: MAP_API_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: apiToken
+            - name: JWT_HMAC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: hmacKey
+            - name: CR_CIPHER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: cipherToken
+            - name: CR_HMAC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: hmacKey
+            - name: CONNECT_URL
+              value: 'http://reporting-consumer:6004'
+            - name: CONNECT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: apiToken
+            - name: REPORTING_CONSUMER_API_URL
+              value: 'http://reporting-consumer:6004'
+            - name: REPORTING_CONSUMER_API_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: apiToken
+            - name: AUTH_TOKEN_URL
+              value: {{ .Values.authtokenurl }}
+            - name: DRA_API_URL
+              value: {{ .Values.draapiurl }}
+            - name: TOOL_CHAINS_URL
+              value: {{ .Values.toolchainsurl }}
+            - name: DEVOPS_MESSAGE_STORE_API
+              value: {{ .Values.devopsmessagestoreapi }}
+            - name: METEOR_SETTINGS
+              value: '{ "public": { "requireAuth": true, "securityAuthUrl": "{{ template "root.url.securityAuth" . }}", "version": "{{ .Chart.Version }}", "features": { "SlackTask": false, "PipelineV2Task": false, "EmailNotifications": true, "EmailTask": true, "RunAnotherPlanTask": true, "Approvals": true, "ApprovalTask": true, "ServiceNowTask": true, "JenkinsTask": true } } }'
+          resources:
+            {{- include "ucv.resources" . | nindent 12 }}
+          securityContext:
+            {{- include "ucv.securityContext" . | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /deploymentPlans/alive
+              port: 3000
+            initialDelaySeconds: 300
+            timeoutSeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /deploymentPlans/ready
+              port: 3000
+            initialDelaySeconds: 15
+            timeoutSeconds: 5
+            periodSeconds: 5
+            failureThreshold: 5
