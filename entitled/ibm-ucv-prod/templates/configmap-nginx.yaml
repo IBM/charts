@@ -1,0 +1,183 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: nginx-conf
+  selfLink: /api/v1/namespaces/default/configmaps/nginx-conf
+  labels:
+    {{- include "ucv.labels" . | nindent 4 }}
+data:
+  nginx.conf: |
+    #user  velocity;
+    worker_processes  1;
+
+    error_log /dev/stdout info;
+
+    pid        /opt/bitnami/nginx/pid/nginx.pid;
+
+    events {
+        worker_connections  1024;
+    }
+
+    http {
+        access_log /dev/stdout;
+
+        ssl_session_cache   shared:SSL:10m;
+        ssl_session_timeout 10m;
+        limit_req_zone      $binary_remote_addr zone=perip:10m rate=12r/m;
+
+        upstream release-events-ui {
+            server release-events-ui:3010;
+        }
+        upstream application-api {
+            server application-api:3499;
+        }
+        upstream continuous-release-consumer {
+            server continuous-release-consumer:3411;
+        }
+        upstream security-api {
+            server security-api:3911;
+        }
+        upstream release-events-api {
+            server release-events-api:8080;
+        }
+        upstream continuous-release-ui {
+            server continuous-release-ui:3000;
+        }
+        upstream reporting-ui {
+            ip_hash;
+            server reporting-ui:3000;
+        }
+        upstream reporting-consumer {
+            server reporting-consumer:6004;
+        }
+        upstream multi-app-pipeline-api {
+            server multi-app-pipeline-api:9090;
+        }
+
+        map $http_upgrade $connection_upgrade {
+            default upgrade;
+            '' close;
+        }
+
+        server {
+            listen       8080;
+            server_name  velocity-router;
+
+            ssl_certificate     /opt/bitnami/nginx/conf/ssl/server.crt;
+            ssl_certificate_key /opt/bitnami/nginx/conf/ssl/server.key;
+            ssl_protocols       TLSv1.2;
+            # ssl on;
+            keepalive_timeout   70;
+            client_max_body_size 20m;
+            underscores_in_headers on;
+
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header X-XSS-Protection "1; mode=block" always;
+            add_header X-Content-Type-Options "nosniff" always;
+
+            set $downstream_x_proxy_from https://$host$request_uri;
+            if ($http_x_proxy_from) {
+                set $downstream_x_proxy_from $http_x_proxy_from;
+            }
+            proxy_set_header X-Proxy-From $downstream_x_proxy_from;
+
+            proxy_set_header        Host $host;
+            proxy_set_header        X-Real-IP $remote_addr;
+            proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header        X-Forwarded-Proto https;
+
+            proxy_http_version      1.1;
+            proxy_set_header        Upgrade $http_upgrade;
+            proxy_set_header        Connection $connection_upgrade;
+
+            proxy_pass_request_headers on;
+
+            location /ready {
+                return 200 'ready';
+                add_header Content-Type text/plain;
+            }
+
+            location /alive {
+                return 200 'alive';
+                add_header Content-Type text/plain;
+            }
+
+            location ~* ^((?!release-events-api).)*\/graphql(\/?)$ {
+                deny all;
+                return 403;
+            }
+
+            location / {
+                proxy_pass          http://release-events-ui;
+            }
+
+            location  /release-events-api/ {
+                proxy_pass         http://release-events-api/;
+                mirror              /mirror;
+            }
+
+            location  /api/ {
+                proxy_pass         http://release-events-api/api/;
+                mirror              /mirror;
+            }
+
+            location  ^~ /graphql {
+                proxy_pass         http://release-events-api/graphql;
+                mirror              /mirror;
+            }
+
+            location  /application-api/ {
+                proxy_pass         http://application-api/;
+                mirror              /mirror;
+            }
+
+            location  /continuous-release-consumer/ {
+                proxy_pass         http://continuous-release-consumer/;
+            }
+
+            location  /reporting-sync-api/api/v1/jenkins/ {
+                proxy_pass_request_headers on;
+                proxy_pass         http://reporting-consumer/jenkins/;
+            }
+
+            location  /security-api/ {
+                proxy_pass         http://security-api/;
+                mirror              /mirror;
+            }
+
+            location /deploymentPlans {
+                proxy_pass          http://continuous-release-ui;
+                mirror              /mirror;
+            }
+
+            location  /reports/ {
+                proxy_pass         http://reporting-ui;
+                mirror              /mirror;
+            }
+
+            location  /reporting-consumer/workflowKey/ {
+                deny               all;
+                return             403;
+            }
+
+            location /reporting-consumer/qualityData/artifact/ {
+                deny               all;
+                return             403;
+            }
+
+            location  /reporting-consumer/ {
+                proxy_pass         http://reporting-consumer/;
+            }
+
+            location /multi-app-pipeline-api/ {
+                proxy_pass          http://multi-app-pipeline-api/;
+                mirror              /mirror;
+            }
+            location /mirror {
+                internal;
+                proxy_pass  http://security-api/api/v2/extendSession;
+                limit_req zone=perip;
+            }
+        }
+    }
