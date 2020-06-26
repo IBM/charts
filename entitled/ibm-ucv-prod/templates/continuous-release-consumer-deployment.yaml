@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: continuous-release-consumer
+  labels:
+    {{- include "ucv.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- $vars := merge (dict) . -}}
+      {{- $_ := set $vars "ucvService" "continuous-release-consumer" -}}
+      {{- include "ucv.selector" $vars | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $vars := merge (dict) . -}}
+        {{- $_ := set $vars "ucvService" "continuous-release-consumer" -}}
+        {{- include "ucv.specTemplateLabels" $vars | nindent 8 }}
+      annotations:
+        {{- include "ucv.productAnnotations" . | nindent 8 }}
+    spec:
+      serviceAccountName: velocity-service-account
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      imagePullSecrets:
+        {{- include "ucv.imagePullSecrets" . | nindent 8 }}
+      affinity:
+        {{- include "ucv.nodeAffinity" . | nindent 8 }}
+      containers:
+        - name: continuous-release-consumer
+          image: 'cp.icr.io/cp/ibm-ucv-continuous-release-consumer:1.5.5-ifix01.36'
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3411
+          env:
+            - name: NODE_ENV
+              value: onprem
+            - name: PORT
+              value: '3411'
+            - name: LOG_LEVEL
+              value: {{ .Values.loglevel }}
+            - name: API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: apiToken
+            - name: CIPHER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: cipherToken
+            - name: HMAC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tokens }}
+                  key: hmacKey
+            - name: RABBITMQ_HOST
+              value: velocity-rabbitmq
+            - name: RABBITMQ_PORT
+              value: '5672'
+            - name: RABBITMQ_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.rabbit }}
+                  key: user
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.rabbit }}
+                  key: password
+          resources:
+            {{- include "ucv.resources" . | nindent 12 }}
+          securityContext:
+            {{- include "ucv.securityContext" . | nindent 12 }}
+          livenessProbe:
+            {{- $port := dict "ucvLivenessPort" 3411 }}
+            {{- include "ucv.livenessProbe" $port | nindent 12 }}
+          readinessProbe:
+            {{- $port := dict "ucvReadinessPort" 3411 }}
+            {{- include "ucv.readinessProbe" $port | nindent 12 }}

@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: velocity-rabbitmq
+  labels:
+    {{- include "ucv.labels" . | nindent 4 }}
+spec:
+  serviceName: velocity-rabbitmq
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- $vars := merge (dict) . -}}
+      {{- $_ := set $vars "ucvService" "velocity-rabbitmq" -}}
+      {{- include "ucv.selector" $vars | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $vars := merge (dict) . -}}
+        {{- $_ := set $vars "ucvService" "velocity-rabbitmq" -}}
+        {{- include "ucv.specTemplateLabels" $vars | nindent 8 }}
+      annotations:
+        {{- include "ucv.productAnnotations" . | nindent 8 }}
+    spec:
+      serviceAccountName: velocity-service-account
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      imagePullSecrets:
+        {{- include "ucv.imagePullSecrets" . | nindent 8 }}
+      affinity:
+        {{- include "ucv.nodeAffinity" . | nindent 8 }}
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: velocity-rabbitmq
+          image: 'bitnami/rabbitmq:3.7.9'
+          imagePullPolicy: IfNotPresent
+          command:
+            - bash
+            - '-ec'
+            - |
+              mkdir -p /opt/bitnami/rabbitmq/.rabbitmq/
+              mkdir -p /opt/bitnami/rabbitmq/etc/rabbitmq/
+              #persist the erlang cookie in both places for server and cli tools
+              echo $RABBITMQ_ERL_COOKIE > /opt/bitnami/rabbitmq/var/lib/rabbitmq/.erlang.cookie
+              cp /opt/bitnami/rabbitmq/var/lib/rabbitmq/.erlang.cookie /opt/bitnami/rabbitmq/.rabbitmq/
+              #change permission so only the user has access to the cookie file
+              chmod 600 /opt/bitnami/rabbitmq/.rabbitmq/.erlang.cookie /opt/bitnami/rabbitmq/var/lib/rabbitmq/.erlang.cookie
+              #copy the mounted configuration to both places
+              cp  /opt/bitnami/rabbitmq/conf/* /opt/bitnami/rabbitmq/etc/rabbitmq
+              exec rabbitmq-server
+          volumeMounts:
+            - name: config-volume
+              mountPath: /opt/bitnami/rabbitmq/conf
+            - name: data
+              mountPath: /opt/bitnami/rabbitmq/var/lib/rabbitmq/
+          ports:
+            - name: epmd
+              containerPort: 4369
+            - name: amqp
+              containerPort: 5672
+            - name: dist
+              containerPort: {{ .Values.rabbitmq.nodePort | add 20000 }}
+            - name: stats
+              containerPort: {{ .Values.rabbitmq.managerPort }}
+          livenessProbe:
+            exec:
+              command:
+                - rabbitmqctl
+                - status
+            initialDelaySeconds: 300
+            timeoutSeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - rabbitmqctl
+                - status
+            initialDelaySeconds: 15
+            timeoutSeconds: 5
+            periodSeconds: 5
+            failureThreshold: 5
+          env:
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: RABBITMQ_USE_LONGNAME
+              value: 'true'
+            - name: RABBITMQ_NODENAME
+              value: rabbit@$(MY_POD_IP)
+            - name: K8S_SERVICE_NAME
+              value: velocity-rabbitmq
+            - name: RABBITMQ_ERL_COOKIE
+              value: {{ .Values.rabbitmq.erlangCookie }}
+          resources:
+            {{- include "ucv.resources" . | nindent 12 }}
+          securityContext:
+            {{- include "ucv.securityContext" . | nindent 12 }}
+      volumes:
+        - name: config-volume
+          secret:
+            secretName: {{ .Values.secrets.rabbit }}
+            items:
+              - key: rabbitmq.conf
+                path: rabbitmq.conf
+              - key: enabled_plugins
+                path: enabled_plugins
+              - key: definitions.json
+                path: definitions.json
+        - name: data
+          emptyDir: {}

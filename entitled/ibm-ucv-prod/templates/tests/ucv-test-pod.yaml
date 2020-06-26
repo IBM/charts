@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "ucv-schema-test"
+  labels:
+    {{- include "ucv.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  affinity:
+    {{- include "ucv.nodeAffinity" . | nindent 4 }}
+  containers:
+    - name: "ucv-schema-test"
+      image: alpine:3
+      securityContext:
+        {{- include "ucv.securityContext" . | nindent 8 }}
+      resources:
+        {{- include "ucv.resources" . | nindent 8 }}
+      command: ["sh", "-c"]
+      args:
+        - RESPONSE=$(wget --no-check-certificate --spider --server-response --quiet http://velocity-router:8080/release-events-api/schema 2>&1);
+          echo "RESPONSE - $RESPONSE";
+          if [[ "$RESPONSE" == "" ]]; then echo "No response received, failing"; exit 1; fi;
+          if [[ "${RESPONSE:0:4}" == "wget" ]]; then echo "Received bad response, failing"; exit 1; fi;
+          STATUS_CODE=$(echo "$RESPONSE" | awk 'NR==1{print $2}');
+          echo "STATUS_CODE - $STATUS_CODE";
+          if [[ "$STATUS_CODE" != "200" ]]; then echo "Received bad status code, failing"; exit 1; fi;
+          echo "Status code success, passing";
+          exit 0;
+  imagePullSecrets:
+    {{- include "ucv.imagePullSecrets" . | nindent 4 }}
+  restartPolicy: Never

@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workflow-controller
+  labels:
+    {{- include "ucv.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- $vars := merge (dict) . -}}
+      {{- $_ := set $vars "ucvService" "workflow-controller" -}}
+      {{- include "ucv.selector" $vars | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $vars := merge (dict) . -}}
+        {{- $_ := set $vars "ucvService" "workflow-controller" -}}
+        {{- include "ucv.specTemplateLabels" $vars | nindent 8 }}
+      annotations:
+        {{- include "ucv.productAnnotations" . | nindent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      imagePullSecrets:
+        {{- include "ucv.imagePullSecrets" . | nindent 8 }}
+      affinity:
+        {{- include "ucv.nodeAffinity" . | nindent 8 }}
+      serviceAccountName: argo
+      containers:
+        - name: workflow-controller
+          image: 'argoproj/workflow-controller:v2.7.4'
+          args:
+            - '--configmap'
+            - workflow-controller-configmap
+            - '--executor-image'
+            - 'argoproj/argoexec:v2.7.4'
+          command:
+            - workflow-controller
+          resources:
+            {{- include "ucv.resources" . | nindent 12 }}
+          securityContext:
+            {{- include "ucv.securityContext" . | nindent 12 }}
+          livenessProbe:
+            exec:
+              command:
+                - workflow-controller
+                - '--help'
+            initialDelaySeconds: 300
+            timeoutSeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - workflow-controller
+                - '--help'
+            initialDelaySeconds: 15
+            timeoutSeconds: 5
+            periodSeconds: 5
+            failureThreshold: 5
