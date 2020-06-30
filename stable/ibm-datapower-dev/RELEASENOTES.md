@@ -1,9 +1,9 @@
 ## What's new...
-DataPower 2018.4.1.11
-Configure DataPower with ConfigMaps
+DataPower 2018.4.1.12
+Refreshing existing charts for firmware upgrade
 
 ## Fixes
-HTTP LivenessProbe to avoid OpenShift exec probe bug
+Close connection on healthcheck requests
 
 ## Prerequisites
 None
@@ -17,6 +17,7 @@ See README.md
 
 | Chart   |   Date  | Kubernetes Required |    Image(s) Supported    | Breaking Changes | Details |
 | ------- | ------------ | -------- | ------------------------------------ | ---- | -------------------------------------------------------------- |
+| 3.1.1   | Jun 26, 2020 | >=1.13.0 | ibmcom/datapower:2018.4.1.12.323006  | None | 2018.4.1.12 refresh |
 | 3.1.0   | May 11, 2020 | >=1.13.0 | ibmcom/datapower:2018.4.1.11.320653  | None | 2018.4.1.11, http health check, configmaps |
 | 3.0.5   | Mar 06, 2020 | >=1.13.0 | ibmcom/datapower:2018.4.1.10.318002  | None | Change default pattern to "none" |
 | 3.0.4   | Jan 03, 2020 | >=1.13.0 | ibmcom/datapower:2018.4.1.9.315826   | None | 2018.4.1.9 refresh |
