@@ -1,0 +1,29 @@
+{{ if and (not .Values.storage.storageLocation.growthStorage.enablePodLevelClaim) (.Values.storage.storageLocation.growthStorage.enabled) (eq .Values.storage.storageLocation.growthStorage.volumeType "pvc") -}}
+  {{ if (not .Values.storage.storageLocation.growthStorage.pvc.existingClaim.name) -}}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ template "fullname" . }}-db2u-growth-storage
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  {{- if .Values.storage.storageLocation.growthStorage.pvc.claim.useDynamicProvisioning }}
+  storageClassName: {{ default nil .Values.storage.storageLocation.growthStorage.pvc.claim.storageClassName | quote }}
+  {{- else }}
+  storageClassName: {{ .Values.storage.storageLocation.growthStorage.pvc.claim.storageClassName | quote }}
+  {{- end }}
+  accessModes:
+    - "ReadWriteMany"
+  resources:
+    requests:
+      storage: {{ .Values.storage.storageLocation.growthStorage.pvc.claim.size | quote }}
+    {{- if and (not (empty .Values.storage.storageLocation.growthStorage.pvc.claim.volumeLabel)) (not (empty .Values.storage.storageLocation.growthStorage.pvc.claim.volumeLabelValue)) }}
+  selector:
+    matchLabels:
+      {{ .Values.storage.storageLocation.growthStorage.pvc.claim.volumeLabel }}: {{ .Values.storage.storageLocation.growthStorage.pvc.claim.volumeLabelValue }}
+    {{- end }}
+  {{- end }}
+{{- end }}

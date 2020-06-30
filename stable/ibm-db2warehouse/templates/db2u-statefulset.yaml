@@ -1,0 +1,357 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ template "fullname" . }}-db2u-internal"
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    component: "{{ .Values.global.dbType }}"
+    type: "engine"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  ports:
+  - port: 50000
+    name: main
+    targetPort: 50000
+    protocol: TCP
+  - port: 9443
+    name: wvha-rest
+    targetPort: 9443
+    protocol: TCP
+  clusterIP: None
+  selector:
+    app: {{ template "fullname" . }}
+    component: "{{ .Values.global.dbType }}"
+    type: "engine"
+---
+
+{{- if semverCompare ">=1.11.1" .Capabilities.KubeVersion.GitVersion }}
+apiVersion: apps/v1
+{{- else if .Capabilities.APIVersions.Has "apps/v1beta2" }}
+apiVersion: apps/v1beta2
+{{- else }}
+apiVersion: apps/v1beta1
+{{- end }}
+kind: StatefulSet
+metadata:
+  name: {{ template "fullname" . }}-db2u
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: "{{ .Values.global.dbType }}"
+    type: "engine"
+    icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+    icpdsupport/app: {{ template "fullname" . }}
+spec:
+  serviceName: "{{ template "fullname" . }}-db2u-internal"
+  podManagementPolicy: "Parallel"
+  replicas: {{ .Values.images.db2u.replicas }}
+  selector:
+    matchLabels:
+      app: {{ template "fullname" . }}
+      chart: "{{ .Chart.Name }}"
+      release: "{{ .Release.Name }}"
+      heritage: "{{ .Release.Service }}"
+      component: "{{ .Values.global.dbType }}"
+      type: "engine"
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: "{{ .Values.global.dbType }}"
+        type: "engine"
+        api-progress: "{{ .Values.servicename }}db2wh-api"
+        icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+        icpdsupport/app: {{ template "fullname" . }}
+      annotations:
+        {{- include "db2wh.annotations" . | indent 8 }}
+    spec:
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- if eq (int .Values.images.db2u.replicas) 1 }}
+      {{- include "podAffinityDedicated" . | indent 8 }}
+      {{- else }}
+        {{- if and ( eq .Values.runtime "ICP4Data" ) ( .Values.dedicated ) }}
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: {{ template "fullname" . }}
+              topologyKey: "kubernetes.io/hostname"
+        {{- end }}
+      {{- end }}
+      {{- include "podAntiAffinityDb2" . | indent 8 }}
+      {{- include "tolerations" . | indent 6 }}
+      {{- include "nonroot.securityContext" . | indent 6}}
+      serviceAccount: {{ default "default" .Values.global.serviceAccount }}
+      {{- if eq (lower .Values.subType) "mpp" }}
+      hostIPC: true
+      {{- end }}
+      terminationGracePeriodSeconds: 30
+      initContainers:
+      - name: init-db2
+        {{- if .Values.images.tools.image.tag }}
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.tools.image.tag }}{{ template "platform" . }}"
+        {{- else }}
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.universalTag }}{{ template "platform" . }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- if (eq "x86_64" .Values.arch) }}
+        {{- include "jobs.resources" . | indent 8 }}
+        {{- else }}
+        {{- include "jobs.resources.ppc64le.low" . | indent 8 }}
+        {{- end }}
+        env:
+          - name: MEMORY_LIMIT
+            valueFrom:
+              resourceFieldRef:
+                containerName: {{ template "fullname" . }}-db2u
+                resource: limits.memory
+        command: ['/bin/sh']
+        {{- if .Values.setKernelParams }}
+        {{- include "init-db2.containers.securityContext" . | indent 8}}
+        args: ["-cx", '/tools/pre-install/set_kernel_params.sh']
+        {{- else }}
+        {{- include "nonroot.containers.securityContext" . | indent 8}}
+        args: ["-cx", '/tools/pre-install/set_kernel_params.sh --validate']
+        {{- end }}
+        volumeMounts:
+        - mountPath: /host/proc
+          name: proc
+          readOnly: false
+        - mountPath: /host/proc/sys
+          name: sys
+          readOnly: false
+      - name: init-db2-node-cfg
+        {{- include "nonroot.containers.securityContext" . | indent 8}}
+        {{- if .Values.images.tools.image.tag }}
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.tools.image.tag }}{{ template "platform" . }}"
+        {{- else }}
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.universalTag }}{{ template "platform" . }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- if (eq "x86_64" .Values.arch) }}
+        {{- include "jobs.resources" . | indent 8 }}
+        {{- else }}
+        {{- include "jobs.resources.ppc64le" . | indent 8 }}
+        {{- end }}
+        command:
+          - "/bin/sh"
+          - "-ec"
+          - |
+            /tools/pre-install/update_nodeslist.sh
+            lineNum="$(grep -n $POD_NAME /mnt/blumeta0/nodeslist | head -n 1 | cut -d: -f1)"
+            if [ $lineNum -eq 1 ]; then
+                kubectl label pod $POD_NAME name=dashmpp-head-0 -n $POD_NAMESPACE --overwrite
+            else
+                lineNum=$[$lineNum-1]
+                kubectl label pod $POD_NAME name=dashmpp-data${lineNum}-0 -n $POD_NAMESPACE --overwrite
+            fi
+            kubectl wait --for=condition=complete job/{{ template "fullname" . }}-db2u-nodes-cfg-job -n {{ .Release.Namespace }}
+        env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+        volumeMounts:
+        - mountPath: /mnt/blumeta0
+          {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+      containers:
+      - name: {{ template "fullname" . }}-db2u
+        image: '{{ .Values.images.db2u.image.repository }}:{{ .Values.images.db2u.image.tag }}{{ template "platform" . }}'
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "db2u.containers.securityContext" . | indent 8}}
+        resources:
+          limits:
+            memory: {{ .Values.limit.memory }}
+            cpu: {{ .Values.limit.cpu }}
+          requests:
+            memory: {{ .Values.limit.memory }}
+            cpu: {{ .Values.limit.cpu }}
+        tty: true
+        resources:
+          limits:
+            memory: {{ .Values.limit.memory }}
+            cpu: {{ .Values.limit.cpu }}
+          requests:
+            memory: {{ .Values.limit.memory }}
+            cpu: {{ .Values.limit.cpu }}
+        env:
+        - name: MEMORY_LIMIT
+          valueFrom:
+            resourceFieldRef:
+              resource: limits.memory
+        - name: etcdoperator
+          value: "true"
+        - name: POD
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['name']
+        - name: ETCD_ENDPOINTS
+          value: "http://{{ template "fullname" . }}-etcd-0.{{ template "fullname" . }}-etcd:2379,http://{{ template "fullname" . }}-etcd-1.{{ template "fullname" . }}-etcd:2379,http://{{ template "fullname" . }}-etcd-2.{{ template "fullname" . }}-etcd:2379"
+        - name: WV_RECOVERY
+          value: {{ .Values.haRecovery }}
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+        - mountPath: /mnt/blumeta0
+          {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+        - mountPath: /mnt/bludata0
+          {{- if .Values.storage.storageLocation.dataStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.dataStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+          {{- if .Values.storage.storageLocation.backupStorage.enabled }}
+        - mountPath: /mnt/backup
+          name: {{ .Values.storage.storageLocation.backupStorage.volumeName }}
+          {{- end }}
+          {{- if .Values.storage.storageLocation.growthStorage.enabled }}
+        - mountPath: /mnt/storage
+          name: {{ .Values.storage.storageLocation.growthStorage.volumeName }}
+          {{- end }}
+          {{- if .Values.storage.storageLocation.tieredStorage.enabled }}
+            {{- range $tier := .Values.storage.storageLocation.tieredStorage.tiers -}}
+              {{ $tierSettings := (index $.Values.storage.storageLocation.tieredStorage $tier) }}
+              {{- if $tierSettings.enabled }}
+        - mountPath: /mnt/tiered/{{ $tier }}
+          name: {{ $tierSettings.volumeName }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
+        - mountPath: /mnt/blumeta0/configmap/db2u
+          name: {{ template "fullname" . }}-db2u-config-volume
+        - mountPath: /mnt/blumeta0/configmap/wv
+          name: {{ template "fullname" . }}-db2u-wv-config-volume
+        - mountPath: /mnt/blumeta0/configmap/hadr
+          name: {{ template "fullname" . }}-db2u-hadr-config-volume
+        - mountPath: /run
+          name: runvol
+        - name: db2instance-secret
+          mountPath: "/secrets/db2instancepwd"
+          readOnly: true
+        - mountPath: /db2u/license
+          name: {{ template "fullname" . }}-db2u-lic-volume
+          readOnly: false
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - "/bin/bash"
+              - "-cl"
+              - |
+                /usr/bin/stop
+                sudo kill -CONT 1
+        ports:
+          - containerPort: 50000
+            protocol: TCP
+            name: db2-server
+          - containerPort: 50001
+            protocol: TCP
+            name: db2-ssl-server
+          # SSH port, Wolverine ports and Db2 FCM ports are only applicable to MPP deployments
+          {{- if eq (lower .Values.subType) "mpp" }}
+          - containerPort: 50022
+            hostPort: 50022
+            protocol: TCP
+            name: ssh-port
+          - containerPort: 5000
+            protocol: TCP
+            name: wvha-mgmt-port
+          - containerPort: 9443
+            protocol: TCP
+            name: wvha-rest-port
+            {{- $fcmStartPort := 60000 }}
+            {{- $fcmEndPort := (int (add $fcmStartPort .Values.mln.total 1)) }}
+            {{- range $i, $p := untilStep $fcmStartPort $fcmEndPort 1 }}
+          - containerPort: {{ $p }}
+            protocol: TCP
+            name: db2-fcm-p{{ $p -}}
+            {{ end }}
+          {{- end }}
+    {{- if and (eq (lower .Values.subType) "mpp") (.Values.fcm.hostnetwork.enabled) }}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+    {{- end }}
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+      - name: sys
+        hostPath:
+          path: /proc/sys
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: runvol
+        emptyDir:
+          medium: Memory
+      {{- if .Values.storage.storageLocation.dataStorage.enabled }}
+        {{- include "db2u.container.storage.dataStorage" . | indent 6 }}
+      {{- else }}
+      - name: {{ template "fullname" . }}-db2u-sqllib-shared
+        persistentVolumeClaim:
+          {{- if .Values.storage.existingClaimName }}
+          claimName: {{ .Values.storage.existingClaimName }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+      {{- end }}
+      {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+        {{- include "db2u.container.storage.metaStorage" . | indent 6 }}
+      {{- end }}
+      {{- if .Values.storage.storageLocation.backupStorage.enabled }}
+        {{- include "db2u.container.storage.backupStorage" . | indent 6 }}
+      {{- end }}
+      {{- if .Values.storage.storageLocation.growthStorage.enabled }}
+        {{- include "db2u.container.storage.growthStorage" . | indent 6 }}
+      {{- end }}
+      {{- if .Values.storage.storageLocation.tieredStorage.enabled }}
+        {{- include "db2u.container.storage.tieredStorage" . | indent 6 }}
+      {{- end }}
+      - name: {{ template "fullname" . }}-db2u-config-volume
+        configMap:
+          name: {{ template "fullname" . }}-db2u-config
+          items:
+          - key: db2u-var
+            path: db2u-var
+      - name: {{ template "fullname" . }}-db2u-lic-volume
+        configMap:
+          name: {{ template "fullname" . }}-db2u-lic
+          items:
+            - key: db2u-lic
+              path: db2u-lic
+      - name: {{ template "fullname" . }}-db2u-wv-config-volume
+        configMap:
+          name: {{ template "fullname" . }}-db2u-wv-config
+      - name: {{ template "fullname" . }}-db2u-hadr-config-volume
+        configMap:
+          name: {{ template "fullname" . }}-db2u-hadr-config
+      - name: db2instance-secret
+        secret:
+          secretName: {{ template "fullname" . }}-db2u-instance
+          defaultMode: 256
+  {{- include "db2u.pod.storage.volumeClaimTemplates" . | indent 2 }}

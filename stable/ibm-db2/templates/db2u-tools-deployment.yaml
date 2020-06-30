@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-db2u-tools
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: "{{ .Values.global.dbType }}"
+    icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+    icpdsupport/app: {{ template "fullname" . }}
+spec:
+  replicas: {{ .Values.images.tools.replicas }}
+  selector:
+    matchLabels:
+      type: tools
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: "{{ .Values.global.dbType }}"
+        api-database-status: "{{ .Values.servicename }}{{ .Values.global.dbType }}-api"
+        type: tools
+        icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+        icpdsupport/app: {{ template "fullname" . }}
+      annotations:
+        {{- include "db2oltp.annotations" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "podAffinityDedicated" . | indent 8 }}
+      {{- include "tolerations" . | indent 6 }}
+      {{- include "nonroot.securityContext" . | indent 6 }}
+      serviceAccount: {{ default "default" .Values.global.serviceAccount }}
+      containers:
+      - name: {{ template "fullname" . }}-db2u-tools
+        image: '{{ .Values.images.tools.image.repository }}:{{ .Values.images.tools.image.tag }}{{ template "platform" . }}'
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "nonroot.containers.securityContext" . | indent 8 }}
+        {{- if (eq "x86_64" .Values.arch) }}
+        {{- include "jobs.resources" . | indent 8 }}
+        {{- else }}
+        {{- include "jobs.resources.ppc64le.low" . | indent 8 }}
+        {{- end }}
+        env:
+        - name: SERVICE_NAME
+          value: {{ template "fullname" . }}
+        - name: DB2U_SERVICE_NAME
+          value: {{ template "fullname" . }}-db2u
+        volumeMounts:
+        - mountPath: /mnt/blumeta0
+          {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+        - mountPath: /mnt/blumeta0/configmap/hadr
+          name: {{ template "fullname" . }}-db2u-hadr-config-volume
+        - mountPath: "/secrets/db2instancepwd"
+          name: db2instance-secret
+          readOnly: true
+        - name: ldap-secret
+          mountPath: "/secrets/bluldap.pwd"
+          readOnly: true
+      volumes:
+      {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+        {{- include "db2u.container.storage.metaStorage" . | indent 6 }}
+      {{- else }}
+      - name: {{ template "fullname" . }}-db2u-sqllib-shared
+        persistentVolumeClaim:
+          {{- if .Values.storage.existingClaimName }}
+          claimName: {{ .Values.storage.existingClaimName }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+      {{- end }}
+      - name: {{ template "fullname" . }}-db2u-hadr-config-volume
+        configMap:
+          name: {{ template "fullname" . }}-db2u-hadr-config
+      - name: db2instance-secret
+        secret:
+          secretName: {{ template "fullname" . }}-db2u-instance
+          defaultMode: 256
+      - name: ldap-secret
+        secret:
+          secretName: {{ template "fullname" . }}-db2u-ldap
+          defaultMode: 292
