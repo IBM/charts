@@ -1,0 +1,166 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "{{ template "fullname" . }}-db2u-engn-update-job"
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+    icpdsupport/app: {{ template "fullname" . }}
+  annotations:
+    {{- include "db2oltp.annotations" . | indent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+        icpdsupport/app: {{ template "fullname" . }}
+      annotations:
+        {{- include "db2oltp.annotations" .  | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "tolerations" . | indent 6 }}
+      {{- include "nonroot.securityContext" . | indent 6 }}
+      initContainers:
+# -- 1st init container to excute condition ready probe such that we proceed only after all PODs
+# -- have reached the end of ENTRYPOINT successfully
+      - name: condition-ready
+        {{- if .Values.images.tools.image.tag }}
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.tools.image.tag }}{{ template "platform" . }}"
+        {{- else }}
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.universalTag }}{{ template "platform" . }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "nonroot.containers.securityContext" . | indent 8 }}
+        {{- if (eq "x86_64" .Values.arch) }}
+        {{- include "jobs.resources" . | indent 8 }}
+        {{- else }}
+        {{- include "jobs.resources.ppc64le.low" . | indent 8 }}
+        {{- end }}
+        command: ['/bin/sh']
+        args: ['-cx', '/tools/post-install/db2u_ready.sh --replicas {{ .Values.images.db2u.replicas }} --template {{ template "fullname" . }} --namespace {{ .Release.Namespace }} --dbType {{ .Values.global.dbType }}']
+# -- 2nd init container to check Db2 engn VRMF changes
+      - name: detect-vrmf-change
+        {{- if .Values.images.tools.image.tag }}
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.tools.image.tag }}{{ template "platform" . }}"
+        {{- else }}
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.universalTag }}{{ template "platform" . }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "nonroot.containers.securityContext" . | indent 8 }}
+        {{- if (eq "x86_64" .Values.arch) }}
+        {{- include "jobs.resources" . | indent 8 }}
+        {{- else }}
+        {{- include "jobs.resources.ppc64le" . | indent 8 }}
+        {{- end }}
+        command:
+          - "/bin/sh"
+          - "-ec"
+          - |
+            DETERMINATION_FILE=/mnt/blumeta0/nodeslist
+            CAT_NODE=$(head -1 $DETERMINATION_FILE)
+            # After INSTDB job completes, Db2 instance home is persisted on disk. Which is a
+            # prerequisite for the VRMF detection code, since it depends on ~/sqllib/.instuse file.
+            kubectl wait --for=condition=complete job/{{ template "fullname" . }}-db2u-sqllib-shared-job -n {{ .Release.Namespace }}
+            kubectl exec -it -n {{ .Release.Namespace }} ${CAT_NODE?} -- bash -c "sudo /db2u/scripts/detect_db2_vrmf_change.sh -file"
+        volumeMounts:
+        - mountPath: /mnt/blumeta0
+          {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+      containers:
+# -- main container for triggering Db2 engine update/upgrade logic
+      - name: engn-update
+        {{- if .Values.images.tools.image.tag }}
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.tools.image.tag }}{{ template "platform" . }}"
+        {{- else }}
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.universalTag }}{{ template "platform" . }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "nonroot.containers.securityContext" . | indent 8 }}
+        command:
+          - "/bin/sh"
+          - "-c"
+          - |
+            DETERMINATION_FILE=/mnt/blumeta0/nodeslist
+            CAT_NODE=$(head -1 $DETERMINATION_FILE)
+            cmd=""
+            updt_upgrd_opt="-all"
+            hadr_enabled="false"
+            RC=0
+
+            kubectl exec -it -n {{ .Release.Namespace }} ${CAT_NODE?} -- bash -c '[[ -f /mnt/blumeta0/vrmf/change.out ]] || exit 0; exit $(cat /mnt/blumeta0/vrmf/change.out)' 2>/dev/null
+            vrmf_chk=$?
+            echo "VRMF check status bit: ${vrmf_chk}"
+
+            # If HADR is enabled dont run the DB update/upgrade scripts. This will be handled
+            # by external mechanics to work around rolling updates.
+            kubectl exec -it -n {{ .Release.Namespace }} ${CAT_NODE?} -- bash -c 'grep -qE "^HADR_ENABLED.*true" /mnt/blumeta0/configmap/hadr/*' 2>/dev/null
+            [[ $? -eq 0 ]] && hadr_enabled="true"
+            [[ "${hadr_enabled}" == "true" ]] && updt_upgrd_opt="-inst"
+
+            # Check VRMF change bit and execute Db2 update or upgrade process
+            if [[ $vrmf_chk -ne 0 ]]; then
+                if [[ $vrmf_chk -eq 1 ]]; then
+                    echo "Running the Db2 engine update script ..."
+                    cmd="su - db2inst1 -c '/db2u/scripts/db2u_update.sh ${updt_upgrd_opt}'"
+                elif [[ $vrmf_chk -eq 2 ]]; then
+                    echo "Running the Db2 engine upgrade script ..."
+                    cmd="su - db2inst1 -c '/db2u/scripts/db2u_upgrade.sh ${updt_upgrd_opt}'"
+                fi
+                [[ -n "$cmd" ]] && kubectl exec -it -n {{ .Release.Namespace }} ${CAT_NODE?} -- bash -c "$cmd"
+                RC=$?
+                [[ $RC -ne 0 ]] && exit $RC
+
+                # If HADR is enabled, dont start Woliverine HA
+                [[ "${hadr_enabled}" == "true" ]] && exit $RC
+
+                # For all other Db2 engine update/upgrade scenarios, start Woliverine HA on all Db2U PODs now
+                echo "Starting Wolverine HA ..."
+                cmd="source /db2u/scripts/include/common_functions.sh && start_wvha_allnodes"
+                kubectl exec -it -n {{ .Release.Namespace }} ${CAT_NODE?} -- bash -c "$cmd"
+                RC=$?
+            fi
+            exit $RC
+        {{- if (eq "x86_64" .Values.arch) }}
+        {{- include "jobs.resources" . | indent 8 }}
+        {{- else }}
+        {{- include "jobs.resources.ppc64le.low" . | indent 8 }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /mnt/blumeta0
+          {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+        - mountPath: /mnt/blumeta0/configmap/hadr
+          name: {{ template "fullname" . }}-db2u-hadr-config-volume
+      restartPolicy: Never
+      serviceAccount: {{ default "default" .Values.global.serviceAccount }}
+      volumes:
+      {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+        {{- include "db2u.container.storage.metaStorage" . | indent 6 }}
+      {{- else }}
+      - name: {{ template "fullname" . }}-db2u-sqllib-shared
+        persistentVolumeClaim:
+          {{- if .Values.storage.existingClaimName }}
+          claimName: {{ .Values.storage.existingClaimName }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+      {{- end }}
+      - name: {{ template "fullname" . }}-db2u-hadr-config-volume
+        configMap:
+          name: {{ template "fullname" . }}-db2u-hadr-config

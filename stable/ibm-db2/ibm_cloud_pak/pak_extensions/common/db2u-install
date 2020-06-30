@@ -1,0 +1,261 @@
+#!/bin/bash
+
+CUR_DIR=$(cd $(dirname $0); pwd)
+
+CHART="../../../../*/"
+VALUES_FILE="../../../../*/values.yaml"
+LIC_FILE="../../../../*/LICENSES/LICENSE"
+UPGRADE_OPTIONS="upgrade_options.yaml"
+helm_args=""
+helm_cmd="install"
+install_args=""
+storage_args=""
+db_name="BLUDB"
+helm_file=""
+advanced_install="false"
+arch="$(uname -p)"
+accept_eula="false"
+
+validate(){
+    which helm &>/dev/null || { echo "Unable to find helm binary" && exit 1; }
+
+    which less &>/dev/null || { echo "The \"more\" binary must be present to view the license" && exit 1; }
+
+    helm_version=$(helm version --client | grep -oE "v[0-9]+.[0-9]+.[0-9]+" )
+    if ! echo ${helm_version} | grep "v2" &>/dev/null; then
+        echo "Installed version of Helm is ${helm_version}, which is not supported."
+        echo "Install Helm version 2.x"
+        exit 1
+    fi
+
+    helm version ${helm_args} --tiller-connection-timeout 30 &>/dev/null
+    [[ $? -ne 0 ]] && \
+        echo "Unable to connect to tiller using command:" && \
+        echo "helm version ${helm_args}" && \
+        exit 1
+}
+
+prompt_license(){
+    echo -e "About to open License Agreement...\n"
+    echo -e "Use the keys [k] and [j] to scroll up and down"
+    echo -e "Use the key [q] to exit and proceed to prompt\n"
+    sleep 5
+
+    cat ${LIC_FILE} > ${CUR_DIR}/.tmp
+    less ${CUR_DIR}/.tmp
+    rm -f ${CUR_DIR}/.tmp
+
+    while true; do 
+        read -p "Do you accept the License Agreement? [y/n] " ans
+
+        case "$ans" in
+        "y"|"Y"|"yes")
+            echo -e "Proceeding to ${helm_cmd}...\n"
+            break
+            ;;
+        "n"|"N"|"no")
+            echo -e "Exiting...\n"
+            exit 0
+            ;;
+        *)
+            echo -e "Answer must be \"y\" or \"n\"\n"
+            ;;
+        esac
+    done
+}
+
+parse_command_line_arguments(){
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --db-type )
+                shift
+                db_type=$1
+                ;;
+            --db-name )
+                shift
+                db_name=$1
+                ;;
+            --namespace )
+                shift
+                namespace=$1
+                ;;
+            --release-name )
+                shift
+                release_name=$1
+                ;;
+            --existing-pvc )
+                shift
+                existing_pvc=$1
+                [[ ! -z $storage_class ]] && echo "--existing-pvc and --storage-class are mutually exclusive" && exit 2
+                storage_args="${storage_args} --set storage.existingClaimName=${existing_pvc}"
+                ;;
+            --storage-class )
+                shift
+                storage_class=$1
+                [[ ! -z $existing_pvc ]] && echo "--existing-pvc and --storage-class are mutually exclusive" && exit 2
+                storage_args="${storage_args} --set storage.storageClassName=${storage_class} --set storage.useDynamicProvisioning=true"
+                ;;
+            --cpu-size )
+                shift
+                install_args="${install_args} --set limit.cpu=${1}"
+                ;;
+            --memory-size )
+                shift
+                install_args="${install_args} --set limit.memory=${1}"
+                ;;
+            --kube-context )
+                shift
+                helm_args="${helm_args} --kube-context ${1}"
+                ;;
+            --helm-opt-file )
+                shift
+                helm_file=${1}
+                advanced_install="true"
+                ;;
+            --upgrade )
+                helm_cmd="upgrade"
+                ;;
+            --accept-eula )
+               accept_eula="true"
+               ;;
+            --dry-run )
+               install_args="${install_args} --dry-run"
+               ;;
+            --tls )
+                helm_args="${helm_args} --tls"
+                ;;
+            --tiller-namespace )
+                shift
+                helm_args="${helm_args} --tiller-namespace ${1}"
+                ;;
+            --tls-ca-cert )
+                shift
+                helm_args="${helm_args} --tls-ca-cert ${1}"
+                ;;
+            --tls-cert )
+                shift
+                helm_args="${helm_args} --tls-cert ${1}"
+                ;;
+            --tls-key )
+                shift
+                helm_args="${helm_args} --tls-key ${1}"
+                ;;
+            --tls-verify )
+                helm_args="${helm_args} --tls-verify"
+                ;;
+            --home )
+                shift
+                helm_args="${helm_args} --home ${1}"
+                ;;
+            --host )
+                shift
+                helm_args="${helm_args} --host ${1}"
+                ;;
+            --help|-h )
+                usage
+                exit 0
+                ;;
+            * )
+                echo "ERROR: $1 is an unrecognized argument"
+                exit 1
+                ;;
+        esac
+        shift
+    done
+
+    [[ -z $namespace ]] && { echo "--namespace is a required argument" && exit 2; }
+
+    [[ -z $release_name ]] && { echo "--release-name is a required argument" && exit 2; }
+
+    [[ ( -z ${storage_class} ) && ( -z ${existing_pvc} ) && ( "${advanced_install}" == "false" ) && ( "${helm_cmd}" == "install" ) ]] && \
+        { echo "--storage-class, --existing-pvc or --helm-opt-file must be provided" && exit 2; }
+
+    [[ ( "${db_type}X" != "db2oltpX" ) && ( "${db_type}X" != "db2whX" ) && ( "${helm_cmd}" == "install" ) ]] && \
+        { echo "--db-type must one of: db2wh, db2oltp" && exit 2; }
+}
+
+usage(){
+  cat <<EOM
+
+Usage: ./$(basename $0) --db-type STRING --namespace STRING --release-name STRING [--existing-pvc STRING | --storage-class STRING | --helm-opt-file FILENAME ] [OTHER ARGUMENTS...]
+
+    Install arguments:
+        --db-type STRING            the type of database to deplpy. Must be one of: db2wh, db2oltp (required)
+        --db-name STRING            the name of database to deplpy. The default value is BLUDB (optional). The length of the value must not exceed 8 characters
+        --namespace STRING          namespace/project to install ${PRODUCT} into (required)
+        --release-name STRING       release name for helm (required)
+        --existing-pvc STRING       existing PersistentVolumeClaim to use for persistent storage
+        --storage-class STRING      StorageClass to use to dynamically provision a volume. Use this option for NFS storage class.
+                                    For advanced settings that require multiple storage classes, use help-opt-file instead.
+        --cpu-size STRING           amount of CPU cores to set at engine pod's request
+        --memory-size STRING        amount of memory to set at engine pod's request
+        --helm-opt-file STRING      path to a file containing helm options in key=value format separated by a new line (optional)
+                                    for an example, refer to ./helm_options
+                                    for an exhaustive list of supported options, refer to the Configuration section of the README
+        --accept-eula               accept end user license agreement without prompting the dialog (optional)
+        --upgrade                   upgrade the helm release (optional)
+
+    Helm arguments:
+        --dry-run                   simulate an install/upgrade
+        --tls                       enable TLS for request
+        --tiller-namespace STRING   namespace/project of Tiller (default "kube-system")
+        --tls-ca-cert STRING        path to TLS CA certificate file (default "\$HELM_HOME/ca.pem")
+        --tls-cert STRING           path to TLS certificate file (default "\$HELM_HOME/cert.pem")
+        --tls-key STRING            path to TLS key file (default "\$HELM_HOME/key.pem")
+        --tls-verify                enable TLS for request and verify remote
+        --home STRING               location of your Helm config. Overrides \$HELM_HOME (default "~/.helm")
+        --host STRING               address of Tiller. Overrides \$HELM_HOST
+        --kube-context STRING       name of the kubeconfig context to use
+
+    Miscellaneous arguments:
+        -h, --help                  display the usage
+EOM
+}
+
+parse_command_line_arguments $@
+validate ${helm_args}
+[[ "${accept_eula}" == "false" ]] && prompt_license
+
+# Initialize helm_opt_list with the install_args and storage_args with single storage options
+helm_opt_list="${install_args} ${storage_args}"
+
+# Re-initialize helm_opt_list with helm options from the file and install_args 
+# if it is an advanced install 
+if [[ "${advanced_install}" == "true" ]]; then
+    if [[ -s ${helm_file} ]]; then
+        mapfile -t helm_options < ${helm_file}
+        helm_opt_list=$(echo "${helm_options[@]/#/--set }" | sed -e "s/['\"]//g")
+        helm_opt_list="${helm_opt_list} ${install_args}"
+    else
+        echo "Error: File ${helm_file} does not exist or is empty."
+    fi
+fi
+
+if [[ "${helm_cmd}" == "install" ]]; then
+    # Install the charts
+    helm install \
+        ${helm_args} \
+        --name ${release_name} \
+        --namespace ${namespace} \
+        --values ${VALUES_FILE} \
+        --set arch="${arch}" \
+        --set servicename="${release_name}" \
+        --set ldap.ldap_server="${release_name}-db2u-ldap" \
+        --set global.dbType="${db_type}" \
+        --set database.name="${db_name}" \
+        --set generateSecrets="false" \
+        ${helm_opt_list} \
+        ${CHART}
+elif [[ "${helm_cmd}" == "upgrade" ]]; then
+    # Upgrade the charts
+    helm upgrade ${release_name}\
+        ${helm_args} \
+        --namespace ${namespace} \
+        --set arch="${arch}" \
+        --force \
+        --reuse-values \
+        --values ${UPGRADE_OPTIONS} \
+        ${helm_opt_list} \
+        ${CHART}
+fi
+exit 0
