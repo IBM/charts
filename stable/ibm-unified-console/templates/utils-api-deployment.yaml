@@ -1,0 +1,171 @@
+{{- if or (eq .Values.consoleArch "multi_tenant" ) (.Values.ucgoapi.enabled) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ucgoapi.fullname" . }}
+  labels:
+    app: {{ template "ucgoapi.fullname" . }}
+    component: "ucgoapi"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    chart: "{{ .Chart.Name }}"
+    version: "{{ .Values.ucgoapi.image.tag }}"
+    app.kubernetes.io/instance: {{ template "ucgoapi.fullname" . }}
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: ucgoapi
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ template "ucgoapi.fullname" . }}
+      component: "ucgoapi"
+      chart: "{{ .Chart.Name }}"
+      release: "{{ .Release.Name }}"
+      heritage: "{{ .Release.Service }}"
+  template:
+    metadata:
+      labels:
+{{- if .Values.customLabels }}
+{{ .Values.customLabels | indent 8  }}
+{{- end }}
+        app: {{ template "ucgoapi.fullname" . }}
+        component: "ucgoapi"
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        version: "{{ .Values.ucgoapi.image.tag }}"
+        app.kubernetes.io/instance: {{ template "ucgoapi.fullname" . }}
+        app.kubernetes.io/managed-by: helm
+        app.kubernetes.io/name: ucgoapi
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+      annotations:
+       {{- include "uc.annotations" . | indent 8 }}
+        sidecar.istio.io/inject: "true"
+    spec:
+      {{- if .Values.ucgoapi.enabled }}
+        {{- if .Values.serviceAccountName  }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+        {{- else }}
+          {{- if .Values.global.serviceAccount }}
+      serviceAccountName: {{ .Values.global.serviceAccount }}
+          {{- else }}
+            {{- if  eq ( .Values.platformCode | trunc 14 ) "PLATFORM_ICP4D"  }}
+      serviceAccountName:  "cpd-viewer-sa"
+            {{- end }}   
+          {{- end }}
+        {{- end }}
+      {{- else }}
+      serviceAccountName: {{ template "uc.fullname" . }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsUser: 1000320901
+      {{- if .Values.global.image.secretName }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secretName }}
+      {{- end }}
+      affinity:
+      {{- include "uc.nodeAffinity" . | indent 8 }}
+      {{- include "uc.podAffinity" . | indent 8 }}
+      {{- include "uc.podAntiAffinity" . | indent 8 }}
+      tolerations:
+      {{- include "uc.tolerations" . | indent 8 }}
+      containers:
+      - securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+        name: ucgoapi
+        command: ["/uc-go-api/utils-server"]
+      {{- if .Values.image.arch }}
+        image: "{{ .Values.ucgoapi.image.repository }}:{{ .Values.ucgoapi.image.tag }}-{{ .Values.image.arch }}"
+      {{- else }}
+        image: "{{ .Values.ucgoapi.image.repository }}:{{ .Values.ucgoapi.image.tag }}"        
+      {{- end}}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- if .Values.ucgoapi.enabled }}
+        envFrom:
+        - secretRef:
+            name: {{ template "ucinfluxdb.fullname" . }}-creds
+        - secretRef:
+            name: {{ .Values.dataServer.metadb.pwdSecretName }}
+          {{- if .Values.useConfigMap }}
+        - configMapRef:
+            name: {{ .Values.configMapName }}
+          {{- end }}
+        env:
+        - name: MONITORED_DB_PASSWORD
+          value: $(password)
+        - name: INFLUXDB_HOST
+        {{- if .Values.ucinfluxdb.service.name }}
+          value: {{ .Values.ucinfluxdb.service.name }}
+        {{- else }}
+          value: {{ template "ucinfluxdb.fullname" . }}
+        {{- end }}
+        - name: UC_CONFIG_PATH
+          value: {{ .Values.dataVolume.mountPath }}/Config
+        {{- else }}
+        env:
+        - name: PORT
+         {{- if eq .Values.enableMesh true }}
+          value: "3500"
+         {{- else }}
+          value: "3500"
+         {{- end }}
+        - name: SCHEME
+          value: "https"
+        - name: KUBE_NAMESPACE
+          value: "{{ .Release.Namespace }}"
+        - name: ENABLE_MESH
+          value: "{{ .Values.enableMesh }}"
+        - name: CLUSTER_NAME
+          value: "{{ .Values.clusterName }}"
+        - name: PRODUCT_ID
+          value: cloud_db2oltp
+        - name: UC_API_KEY_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: console-api-key
+              key: consoleApiKey
+        {{- end }}
+        ports:
+        - containerPort: {{ .Values.ucgoapi.deployment.port }}
+          name: uc-go-api
+        livenessProbe:
+          httpGet:
+            path: /utils/health
+            port: {{ .Values.ucgoapi.service.httpsPort }}
+            scheme: HTTPS
+          initialDelaySeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /utils/health
+            port: {{ .Values.ucgoapi.service.httpsPort }}
+            scheme: HTTPS
+          initialDelaySeconds: 10
+        resources:
+{{ toYaml .Values.ucgoapi.resources | indent 10 }}
+        volumeMounts:
+        {{- if .Values.ucgoapi.enabled }}
+        - name: shared-data
+          mountPath: {{ .Values.dataVolume.mountPath }}
+          subPath: "unified_console_data"
+        {{- else }}
+        - name: console-data
+          mountPath: /mnt
+        {{- end }}
+      volumes:
+      {{- if .Values.ucgoapi.enabled }}
+        {{- if .Values.dataServer.sharedPVC.enabled }}
+      - name: shared-data
+        persistentVolumeClaim:
+          claimName: {{ .Values.dataServer.sharedPVC.name }}
+        {{- end }}
+      {{- else }}
+      - name: console-data
+        emptyDir: {}
+      {{- end }}
+{{- end }}

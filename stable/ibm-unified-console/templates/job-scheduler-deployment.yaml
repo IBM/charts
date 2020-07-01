@@ -1,0 +1,149 @@
+{{- if  (eq .Values.consoleArch "multi_tenant" )  }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "uc.fullname" . }}-job-scheduler
+  labels:
+    app: {{ template "uc.fullname" . }}
+    component: "job-scheduler"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    chart: "{{ .Chart.Name }}"
+    version: "{{ .Values.scheduler.image.tag }}"
+    app.kubernetes.io/instance: {{ template "uc.fullname" . }}-job-scheduler
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: job-scheduler
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ template "uc.fullname" . }}
+      component: "job-scheduler"
+      chart: "{{ .Chart.Name }}"
+      release: "{{ .Release.Name }}"
+      heritage: "{{ .Release.Service }}"
+  template:
+    metadata:
+      labels:
+{{- if .Values.customLabels }}
+{{ .Values.customLabels | indent 8  }}
+{{- end }}
+        app: {{ template "uc.fullname" . }}
+        component: "job-scheduler"
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        version: "{{ .Values.scheduler.image.tag }}"
+        app.kubernetes.io/instance: {{ template "uc.fullname" . }}-job-scheduler
+        app.kubernetes.io/managed-by: helm
+        app.kubernetes.io/name: job-scheduler
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+      annotations:
+{{- if .Values.customAnnotations }}
+{{ .Values.customAnnotations | indent 8  }}
+{{- end }}
+        productName: {{ .Values.productName }}
+        productID: {{ .Values.productID }}
+        {{- if .Values.productVersion  }}
+        productVersion: {{ .Values.productVersion }}
+        {{- else }}
+        productVersion: {{ .Values.image.tag }}
+        {{- end }}
+        sidecar.istio.io/inject: "true"
+    spec:
+      serviceAccountName: {{ template "uc.fullname" . }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 1000320901
+      {{- end }}
+      {{- if .Values.global.image.secretName }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secretName }}
+      {{- end }}
+      affinity:
+      {{- include "uc.nodeAffinity" . | indent 8 }}
+      {{- include "uc.podAffinity" . | indent 8 }}
+      {{- include "uc.podAntiAffinity" . | indent 8 }}
+      tolerations:
+      {{- include "uc.tolerations" . | indent 8 }}
+      containers:
+      - securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+        name: job-scheduler
+        image: "{{ .Values.scheduler.image.repository }}:{{ .Values.scheduler.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: JOBS_CONFIGMAP_NAME
+          value: {{ .Values.jobsConfigMapName }}
+        - name: PORT
+         {{- if eq .Values.enableMesh true }}
+          value: "8080"
+         {{- else }}
+          value: "8443"
+         {{- end }}
+        - name: SCHEME
+         {{- if eq .Values.enableMesh true }}
+          value: "http"
+         {{- else }}
+          value: "https"
+         {{- end }}
+        - name: LOG_TO_STDOUT_STDERR
+          value: "{{ .Values.logToStdoutStderr }}"
+        - name: NAMESPACE
+          value: "{{ .Release.Namespace }}"
+        - name: ENABLE_MESH
+          value: "{{ .Values.enableMesh }}"
+        - name: CLUSTER_NAME
+          value: "{{ .Values.clusterName }}"
+        - name: UC_API_KEY_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: console-api-key
+              key: consoleApiKey
+        envFrom:
+        - secretRef:
+            name: scheduler
+        ports:
+        - containerPort: 8443
+          name: https-register
+        - containerPort: 8080
+          name: http-register
+        livenessProbe:
+          httpGet:
+            path: /status
+            {{- if eq .Values.enableMesh true }}
+            port: 8080
+            scheme: HTTP
+            {{- else }}
+            port: 8443
+            scheme: HTTPS
+            {{- end }}
+          initialDelaySeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /status
+            {{- if eq .Values.enableMesh true }}
+            port: 8080
+            scheme: HTTP
+            {{- else }}
+            port: 8443
+            scheme: HTTPS
+            {{- end }}
+          initialDelaySeconds: 10
+        resources:
+{{ toYaml .Values.scheduler.resources | indent 10 }}
+        volumeMounts:
+        - name: console-data
+          mountPath: /mnt
+       
+      volumes:
+      - name: console-data
+        emptyDir: {}
+{{- end }}
