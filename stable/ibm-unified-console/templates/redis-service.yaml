@@ -1,0 +1,33 @@
+#Redis service to expose port for local dev
+{{- if  and (eq .Values.consoleArch "multi_tenant" ) (eq .Values.debug true) }}
+{{- $replicas := int .Values.redis.replicas }}
+{{- $root := . }}
+{{- range $i := until $replicas }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-external-dev-{{ $i }}
+  labels:
+spec:
+  publishNotReadyAddresses: true
+  type: NodePort
+  ports:
+  - name: server
+    port: 6379
+    protocol: TCP
+    targetPort: 6379
+    {{- $nodePort := printf "port%d" $i }}
+    nodePort: {{ index $root.Values.redis.dev $nodePort }}
+  - name: sentinel
+    port: 26379
+    protocol: TCP
+    targetPort: 26379
+    {{- $nodePort := printf "sentinelPort%d" $i }}
+    nodePort: {{ index $root.Values.redis.dev $nodePort }}
+  selector:
+    release: {{ $root.Release.Name }}
+    app: {{ $root.Values.redis.name }}
+    statefulset.kubernetes.io/pod-name: {{ $root.Release.Name }}-{{ $root.Values.redis.name  }}-server-{{ $i }}
+{{- end }}
+{{- end}}

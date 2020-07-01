@@ -1,0 +1,141 @@
+{{- if and (.Values.ucgoapi.enabled) (eq .Values.repository.dbType "influxdb") }}
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+{{- if .Values.uccollector.deployment.name }}
+  name: {{.Values.uccollector.deployment.name }}
+{{- else }}
+  name: {{ template "uccollector.fullname" . }}
+{{- end }}
+  labels:
+{{- if .Values.customLabels }}
+{{ .Values.customLabels | indent 4  }}
+{{- end }}
+    app: {{ template "uccollector.fullname" . }}
+    component: "uc-collector"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    chart: "{{ .Chart.Name }}"
+    app.kubernetes.io/instance: {{ template "uccollector.fullname" . }}
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: uccollector
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+  annotations:
+{{- if .Values.customAnnotations }}
+{{ .Values.customAnnotations | indent 4  }}
+{{- end }}
+    {{- include "uc.annotations" . | indent 4 }}
+spec:
+  concurrencyPolicy: Replace
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    metadata:
+      labels:
+{{- if .Values.customLabels }}
+{{ .Values.customLabels | indent 8  }}
+{{- end }}
+        app: {{ template "ucapi.fullname" . }}
+        component: "ucgoapi"
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/instance: {{ template "ucgoapi.fullname" . }}
+        app.kubernetes.io/managed-by: helm
+        app.kubernetes.io/name: deployment
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+      annotations:
+{{- if .Values.customAnnotations }}
+{{ .Values.customAnnotations | indent 8  }}
+{{- end }}
+    {{- include "uc.annotations" . | indent 8 }}
+    spec:
+      template:
+        metadata:
+          labels:
+{{- if .Values.customLabels }}
+{{ .Values.customLabels | indent 12  }}
+{{- end }}
+            app: {{ template "ucapi.fullname" . }}
+            component: "ucgoapi"
+            chart: "{{ .Chart.Name }}"
+            release: "{{ .Release.Name }}"
+            heritage: "{{ .Release.Service }}"
+            app.kubernetes.io/instance: {{ template "ucgoapi.fullname" . }}
+            app.kubernetes.io/managed-by: helm
+            app.kubernetes.io/name: deployment
+            helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+          annotations:
+{{- if .Values.customAnnotations }}
+{{ .Values.customAnnotations | indent 12  }}
+{{- end }}
+            {{- include "uc.annotations" . | indent 12 }}
+        spec:
+          affinity:
+          {{- include "uc.nodeAffinity" . | indent 12 }}
+          {{- include "uc.podAffinity" . | indent 12 }}
+          {{- include "uc.podAntiAffinity" . | indent 12 }}
+          tolerations:
+          {{- include "uc.tolerations" . | indent 12 }}
+          containers:
+          - command:
+            - /uc-go-api/monitoring-collector
+            envFrom:
+            - secretRef:
+                name: {{ template "ucinfluxdb.fullname" . }}-creds
+            - secretRef:
+                name: {{ .Values.dataServer.metadb.pwdSecretName }}
+            {{- if .Values.useConfigMap }}
+            - configMapRef:
+                name: {{ .Values.configMapName }}
+            {{- end }}
+            env:
+            {{- if  .Values.dataServer.sharedPVC.enabled }}
+            - name: SPV_CONFIG_PATH
+              value: "{{ .Values.dataServer.sharedPVC.mountRootPath }}/config"
+            {{- end }}
+            - name: MONITORED_DB_PASSWORD
+              value: $(password)
+            - name: INFLUXDB_HOST
+            {{- if .Values.ucinfluxdb.service.name }}
+              value: {{ .Values.ucinfluxdb.service.name }}
+            {{- else }}
+              value: {{ template "ucinfluxdb.fullname" . }}
+            {{- end }}
+            - name: UC_CONFIG_PATH
+              value: {{ .Values.dataVolume.mountPath }}/Config
+          {{- if .Values.image.arch }}
+            image: "{{ .Values.ucgoapi.image.repository }}:{{ .Values.ucgoapi.image.tag }}-{{ .Values.image.arch }}"
+          {{- else }}
+            image: "{{ .Values.ucgoapi.image.repository }}:{{ .Values.ucgoapi.image.tag }}"
+          {{- end }}
+            imagePullPolicy: {{ .Values.ucgoapi.image.pullPolicy }}
+            name: uc-collector
+            volumeMounts:
+            - name: shared-data
+              mountPath: {{ .Values.dataVolume.mountPath }}
+              subPath: "unified_console_data"
+            - name: shared-data
+              mountPath: {{ .Values.dataServer.sharedPVC.mountRootPath }}/config
+              subPath: {{ .Values.dataServer.sharedPVC.subPath.config  }}
+          {{- if .Values.global.image.secretName }}
+          imagePullSecrets:
+          - name: {{ .Values.global.image.secretName }}
+          {{- end }}
+          {{- if .Values.serviceAccountName  }}
+          serviceAccountName: {{ .Values.serviceAccountName }}
+          {{- else }}
+            {{- if .Values.global.serviceAccount }}
+          serviceAccountName: {{ .Values.global.serviceAccount }} 
+            {{- end }}
+          {{- end }}
+          restartPolicy: Never
+          volumes:
+          {{- if .Values.dataServer.sharedPVC.enabled }}
+          - name: shared-data
+            persistentVolumeClaim:
+              claimName: {{ .Values.dataServer.sharedPVC.name }}
+          {{- end }}
+  schedule: '*/1 * * * *'
+  successfulJobsHistoryLimit: 3
+  startingDeadlineSeconds: 60
+  {{- end }}
