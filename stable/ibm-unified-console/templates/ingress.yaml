@@ -1,0 +1,57 @@
+{{- if  (eq .Values.consoleArch "multi_tenant" )  }}
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ template "uc.fullname" . }}-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/affinity: cookie
+    {{- if eq .Values.enableMesh true }}
+    nginx.ingress.kubernetes.io/backend-protocol: HTTP
+    {{- else }}
+    nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+    {{- end }}
+    nginx.ingress.kubernetes.io/session-cookie-hash: sha1
+    nginx.ingress.kubernetes.io/session-cookie-name: ROUTECOOKIE
+    nginx.ingress.kubernetes.io/session-cookie-path: /dbapi
+  {{- if .Values.ingress.controller.ingressClass }}
+    kubernetes.io/ingress.class: {{ .Values.ingress.controller.ingressClass }}
+  {{- else }}
+    kubernetes.io/ingress.class: {{ template "uc.fullname" . }}
+  {{- end }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    app: {{ template "uc.fullname" . }}
+    component: "uc"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/instance: {{ template "uc.fullname" . }}-ingress
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: ingress
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+{{- if eq .Values.enableMesh true }}
+  rules:
+  #force redirect to https if the host name is specified
+  - host: {{ .Values.ingress.fullnameOverride }}-{{ .Values.ingress.controller.name }}.{{ .Release.Namespace }}.{{ .Values.clusterDomainName }}
+    http:
+      paths:
+      - path: /run_sql
+        backend:
+          serviceName: {{ template "uc.fullname" . }}-{{ .Values.runsql.service.name }}
+          servicePort: {{ .Values.service.httpPort }}
+{{- else }}
+  tls:
+  - hosts:
+    - {{ .Values.ingress.fullnameOverride }}-{{ .Values.ingress.controller.name }}.{{ .Release.Namespace }}.{{ .Values.clusterDomainName }}
+    secretName: ingress-secret
+  rules:
+  - host: {{ .Values.ingress.fullnameOverride }}-{{ .Values.ingress.controller.name }}.{{ .Release.Namespace }}.{{ .Values.clusterDomainName }}
+    http:
+      paths:
+      - backend:
+          serviceName: {{ template "uc.fullname" . }}-{{ .Values.runsql.service.name }}
+          servicePort: {{ .Values.service.httpsPort }}
+        path: /run_sql
+{{- end }}
+{{- end }}
+

@@ -1,0 +1,94 @@
+{{- if eq .Values.repository.dbType "influxdb" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ucinfluxdb.fullname" . }}
+  labels:
+{{- if .Values.customLabels }}
+{{ .Values.customLabels | indent 4  }}
+{{- end }}
+    app: {{ template "ucinfluxdb.fullname" . }}
+    component: "ucinfluxdb"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    chart: "{{ .Chart.Name }}"
+    app.kubernetes.io/instance: {{ template "ucinfluxdb.fullname" . }}
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: ucInfluxdb
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ template "ucinfluxdb.fullname" . }}
+      release: "{{ .Release.Name }}"
+      heritage: "{{ .Release.Service }}"
+      component: "ucinfluxdb"
+  template:
+    metadata:
+      labels:
+{{- if .Values.customLabels }}
+{{ .Values.customLabels | indent 8  }}
+{{- end }}
+        app: {{ template "ucinfluxdb.fullname" . }}
+        component: "ucinfluxdb"
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/instance: {{ template "ucinfluxdb.fullname" . }}
+        app.kubernetes.io/managed-by: helm
+        app.kubernetes.io/name: deployment
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+      annotations:
+        {{- include "uc.annotations" . | indent 8 }}
+    spec:
+      {{- if .Values.serviceAccountName  }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- else }}
+         {{- if .Values.global.serviceAccount }}
+      serviceAccountName: {{ .Values.global.serviceAccount }}
+         {{- else }}
+           {{- if  eq ( .Values.platformCode | trunc 14 ) "PLATFORM_ICP4D"  }}
+      serviceAccountName:  "cpd-viewer-sa"
+           {{- end }}   
+         {{- end }}
+      {{- end }}
+      {{- if .Values.global.image.secretName }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secretName }}
+      {{- end }}
+      affinity:
+      {{- include "uc.nodeAffinity" . | indent 8 }}
+      {{- include "uc.podAffinity" . | indent 8 }}
+      {{- include "uc.podAntiAffinity" . | indent 8 }}
+      tolerations:
+      {{- include "uc.tolerations" . | indent 8 }}
+      containers:
+      - envFrom:
+        - secretRef:
+            name: {{ template "ucinfluxdb.fullname" . }}-creds
+      {{- if .Values.image.arch }}
+        image: "{{ .Values.ucinfluxdb.image.repository }}:{{ .Values.ucinfluxdb.image.tag }}-{{ .Values.image.arch }}"
+      {{- else }}
+        image: "{{ .Values.ucinfluxdb.image.repository }}:{{ .Values.ucinfluxdb.image.tag }}"
+      {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.ucinfluxdb.resources | indent 10 }}
+        volumeMounts:
+        - mountPath: /var/lib/influxdb
+          name: shared-data
+          subPath: "unified_console_data/influxdb"
+        name: uc-influxdb
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        runAsUser: 1000320901
+      volumes:
+      {{- if .Values.dataServer.sharedPVC.enabled }}
+      - name: shared-data
+        persistentVolumeClaim:
+          claimName: {{ .Values.dataServer.sharedPVC.name }}
+      {{- end }}
+{{- end }}

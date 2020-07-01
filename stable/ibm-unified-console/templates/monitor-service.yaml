@@ -1,0 +1,62 @@
+{{- if  (eq .Values.consoleArch "multi_tenant" )  }}
+## headless service to access monitor pod directly
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "uc.fullname" . }}-{{ .Values.monitor.service.name }}-stateful
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    app: {{ template "uc.fullname" . }}
+    component: "monitor"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/instance: {{ template "uc.fullname" . }}-monitor
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: monitor
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+  clusterIP: "None"
+  ports:
+  {{- if eq .Values.enableMesh true }}
+  - port: {{ .Values.service.httpPort }}
+    targetPort: 11080
+    protocol: TCP
+    name: {{ .Values.monitor.service.name }}-http
+  {{- else }}
+  - port: {{ .Values.service.httpsPort }}
+    targetPort: 11081
+    protocol: TCP
+    name: {{ .Values.monitor.service.name }}-https
+  {{- end }}
+  selector:
+    app: {{ template "uc.fullname" . }}
+    component: "monitor"
+---
+## normal service to balance monitor pod access
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "uc.fullname" . }}-{{ .Values.monitor.service.name }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    app: {{ template "uc.fullname" . }}
+    component: "monitor"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  ports:
+  {{- if eq .Values.enableMesh true }}
+  - port: {{ .Values.service.httpPort }}
+    targetPort: 11080
+    protocol: TCP
+    name: {{ .Values.monitor.service.name }}-http
+  {{- else }}
+  - port: {{ .Values.service.httpsPort }}
+    targetPort: 11081
+    protocol: TCP
+    name: {{ .Values.monitor.service.name }}-https
+  {{- end }}
+  selector:
+    app: {{ template "uc.fullname" . }}
+    component: "monitor"
+{{- end }}

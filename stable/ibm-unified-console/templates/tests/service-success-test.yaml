@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-svc-succ-test"
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+    app: {{ template "uc.fullname" . }}-svc-succ-test
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/instance: {{ template "uc.fullname" . }}-svc-succ-test
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: test-success
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: false
+    runAsUser: 1000
+  affinity:
+  {{- include "uc.nodeAffinity" . | indent 8 }}
+  tolerations:
+  {{- include "uc.tolerations" . | indent 8 }}
+  containers:
+  - securityContext:
+      privileged: false
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: false
+      runAsUser: 1000
+      capabilities:
+        drop:
+        - ALL
+    name: {{ .Release.Name }}-service-test
+    image: busybox:1.30.1
+    command: ["/bin/sh","-c"]
+    args: ['wget  --no-check-certificate https://{{ template "ucui.fullname" . }}:{{ .Values.ucui.service.httpsPort }} -O /dev/null']
+    resources:
+      requests:
+        memory: 1Gi
+        cpu: 1
+      limits:
+        memory: 1Gi
+        cpu: 1
+  restartPolicy: Never
+
