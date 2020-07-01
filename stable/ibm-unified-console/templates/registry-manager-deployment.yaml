@@ -1,0 +1,194 @@
+{{- if  (eq .Values.consoleArch "multi_tenant" )  }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "uc.fullname" . }}-registry-manager
+  labels:
+{{- if .Values.customLabels }}
+{{ .Values.customLabels | indent 4  }}
+{{- end }}
+    app: {{ template "uc.fullname" . }}
+    component: "registry-manager"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    chart: "{{ .Chart.Name }}"
+    version: "{{ .Values.registry.image.tag }}"
+    app.kubernetes.io/instance: {{ template "uc.fullname" . }}-registry-manager
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: registry-manager
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ template "uc.fullname" . }}
+      component: "registry-manager"
+      chart: "{{ .Chart.Name }}"
+      release: "{{ .Release.Name }}"
+      heritage: "{{ .Release.Service }}"
+  template:
+    metadata:
+      labels:
+{{- if .Values.customLabels }}
+{{ .Values.customLabels | indent 8  }}
+{{- end }}
+        app: {{ template "uc.fullname" . }}
+        component: "registry-manager"
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        version: "{{ .Values.registry.image.tag }}"
+        app.kubernetes.io/instance: {{ template "uc.fullname" . }}-registry-manager
+        app.kubernetes.io/managed-by: helm
+        app.kubernetes.io/name: registry-manager
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+      annotations:
+{{- if .Values.customAnnotations }}
+{{ .Values.customAnnotations | indent 8  }}
+{{- end }}
+        productName: {{ .Values.productName }}
+        productID: {{ .Values.productID }}
+        {{- if .Values.productVersion  }}
+        productVersion: {{ .Values.productVersion }}
+        {{- else }}
+        productVersion: {{ .Values.image.tag }}
+        {{- end }}
+        sidecar.istio.io/inject: "true"
+    spec:
+      serviceAccountName: {{ template "uc.fullname" . }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 1000320901
+      {{- end }}
+      {{- if .Values.global.image.secretName }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secretName }}
+      {{- end }}
+      affinity:
+      {{- include "uc.nodeAffinity" . | indent 8 }}
+      {{- include "uc.podAffinity" . | indent 8 }}
+      {{- include "uc.podAntiAffinity" . | indent 8 }}
+      tolerations:
+      {{- include "uc.tolerations" . | indent 8 }}
+      initContainers:
+        - name: init-check
+      {{- if .Values.image.arch }}
+          image: "{{ .Values.registry.image.repository }}:{{ .Values.registry.image.tag }}-{{ .Values.image.arch }}"
+      {{- else }}
+          image: "{{ .Values.registry.image.repository }}:{{ .Values.registry.image.tag }}"
+      {{- end }}
+          {{- if eq .Values.enableMesh true }}
+          command: ['sh', '-c', 'while [[ $(curl --connect-timeout 5 -sw %{http_code} http://{{ template "uc.fullname" . }}-{{ .Values.dbapi.service.name }}:{{ template "uc.service.port" .}}/dbapi/v4/internal/status -o /dev/null) -ne 200 || $(curl -k --connect-timeout 5 -sw %{http_code} http://{{ template "uc.fullname" . }}-{{ .Values.runsql.service.name }}:{{ template "uc.service.port" .}}/run_sql/internal/status -o /dev/null) -ne 200 || $(curl -k --connect-timeout 5 -sw %{http_code} http://{{ template "uc.fullname" . }}-{{ .Values.admin.service.name }}:{{ template "uc.service.port" .}}/admin/internal/status -o /dev/null) -ne 200 || $(curl -k --connect-timeout 5 -sw %{http_code} http://{{ template "uc.fullname" . }}-{{ .Values.monitor.service.name }}:{{ template "uc.service.port" .}}/monitor/internal/status -o /dev/null) -ne 200 ]]; do echo waiting uc services; sleep 20; done;']
+          {{- else }}
+          command: ['sh', '-c', 'while [[ $(curl -k --connect-timeout 5 -sw %{http_code} https://{{ template "uc.fullname" . }}-{{ .Values.dbapi.service.name }}:{{ template "uc.service.port" .}}/dbapi/v4/internal/status -o /dev/null) -ne 200 || $(curl -k --connect-timeout 5 -sw %{http_code} https://{{ template "uc.fullname" . }}-{{ .Values.runsql.service.name }}:{{ template "uc.service.port" .}}/run_sql/internal/status -o /dev/null) -ne 200 || $(curl -k --connect-timeout 5 -sw %{http_code} https://{{ template "uc.fullname" . }}-{{ .Values.admin.service.name }}:{{ template "uc.service.port" .}}/admin/internal/status -o /dev/null) -ne 200 || $(curl -k --connect-timeout 5 -sw %{http_code} https://{{ template "uc.fullname" . }}-{{ .Values.monitor.service.name }}:{{ template "uc.service.port" .}}/monitor/internal/status -o /dev/null) -ne 200 ]]; do echo waiting uc services; sleep 20; done;']
+          {{- end }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: true
+      containers:
+      - name: registry-manager
+      {{- if .Values.image.arch }}
+        image: "{{ .Values.registry.image.repository }}:{{ .Values.registry.image.tag }}-{{ .Values.image.arch }}"
+      {{- else }}
+        image: "{{ .Values.registry.image.repository }}:{{ .Values.registry.image.tag }}"
+      {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+        env:
+        - name: LOG_TO_STDOUT_STDERR
+          value: "{{ .Values.logToStdoutStderr }}"
+        - name: UC_CONFIGMAP_NAME
+          value: {{ .Values.ucConfigMapName }}
+        - name: ADMIN_SERVICE
+          value: {{ template "uc.fullname" . }}-{{ .Values.admin.service.name }}
+        - name: RUNSQL_SERVICE
+          value: {{ template "uc.fullname" . }}-{{ .Values.runsql.service.name }}
+        - name: DBAPI_SERVICE
+          value: {{ template "uc.fullname" . }}-{{ .Values.dbapi.service.name }}
+        - name: MONITOR_SERVICE
+          value: {{ template "uc.fullname" . }}-{{ .Values.monitor.service.name }}
+        - name: MONITOR_STATEFUL_SERVICE
+          value: {{ template "uc.fullname" . }}-{{ .Values.monitor.service.name }}-stateful
+        - name: CONSOLE_SERVICE_PORT
+          value: {{ include "uc.service.port" . | quote }}
+        - name: MONITOR_POD_PORT
+        {{- if eq .Values.enableMesh true }}
+          value: "11080"
+        {{- else }}
+          value: "11081"
+        {{- end }}
+        - name: PORT
+         {{- if eq .Values.enableMesh true }}
+          value: "8080"
+         {{- else }}
+          value: "8443"
+         {{- end }}
+        - name: SCHEME
+         {{- if eq .Values.enableMesh true }}
+          value: "http"
+         {{- else }}
+          value: "https"
+         {{- end }}
+        - name: NAMESPACE
+          value: "{{ .Release.Namespace }}"
+        - name: ENABLE_MESH
+          value: "{{ .Values.enableMesh }}"
+        - name: CLUSTER_NAME
+          value: "{{ .Values.clusterName }}"
+        - name: UC_API_KEY_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: console-api-key
+              key: consoleApiKey
+        - name: AUTO_DISCOVER_DATA_SERVER
+          value: "{{ .Values.autoDiscoverDataServer | default false }}"
+        - name: ICD_TEST_CLUSTER
+          value: "{{ .Values.icdTestCluster | default false }}"
+        envFrom:
+        - secretRef:
+            name: registry
+        ports:
+        - containerPort: 8443
+          name: register-https
+        - containerPort: 8080
+          name: register-http
+        livenessProbe:
+          httpGet:
+            path: /status
+            {{- if eq .Values.enableMesh true }}
+            port: 8080
+            scheme: HTTP
+            {{- else }}
+            port: 8443
+            scheme: HTTPS
+            {{- end }}
+          initialDelaySeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /status
+            {{- if eq .Values.enableMesh true }}
+            port: 8080
+            scheme: HTTP
+            {{- else }}
+            port: 8443
+            scheme: HTTPS
+            {{- end }}
+          initialDelaySeconds: 5
+        resources:
+{{ toYaml .Values.registry.resources | indent 10 }}
+        volumeMounts:
+        - name: console-data
+          mountPath: /mnt
+       
+      volumes:
+      - name: console-data
+        emptyDir: {}
+{{- end }}

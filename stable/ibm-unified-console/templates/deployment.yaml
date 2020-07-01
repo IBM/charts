@@ -1,0 +1,346 @@
+{{- if  eq .Values.consoleArch "standalone"  }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+{{- if .Values.deployment.name }}
+  name: {{ .Values.deployment.name }}
+{{- else }}
+  name: {{ template "uc.fullname" . }}
+{{- end }}
+  labels:
+{{- if .Values.customLabels }}
+{{ .Values.customLabels | indent 4  }}
+{{- end }}
+    {{- if .Values.customLabelValues.app }}
+    app: {{ .Values.customLabelValues.app }}
+    {{- else }}
+    app: {{ template "uc.fullname" . }}
+    {{- end }}
+    component: "uc"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    chart: "{{ .Chart.Name }}"
+    {{- if .Values.customLabelValues.serviceInstanceID }}
+{{- $customServiceInstanceID := .Values.customLabelValues.serviceInstanceID | int64 }}
+    ServiceInstanceID: "{{ $customServiceInstanceID }}"
+    {{- else }}
+{{- $zenServiceInstanceID := .Values.zenServiceInstanceId | int64 }}
+    ServiceInstanceID: "{{ $zenServiceInstanceID }}"
+    {{- end }}
+    {{- if .Values.customLabelValues.appKubeIo.instance }}
+    app.kubernetes.io/instance: .Values.customLabelValues.appKubeIo.instance }}
+    {{- else }}
+    app.kubernetes.io/instance: {{ template "uc.fullname" . }}
+    {{- end }}
+    app.kubernetes.io/managed-by: helm
+    {{- if .Values.customLabelValues.appKubeIo.name }}
+    app.kubernetes.io/name: {{ .Values.customLabelValues.appKubeIo.name }}
+    {{- else }}
+    app.kubernetes.io/name: {{ .Chart.Name  }}
+    {{- end }}
+    app.kubernetes.io/component: uc-deployment
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+  selector:
+    matchLabels:
+      {{- if .Values.customLabelValues.app }}
+      app: {{ .Values.customLabelValues.app }}
+      {{- else }}
+      app: {{ template "uc.fullname" . }}
+      {{- end }}
+      release: "{{ .Release.Name }}"
+      heritage: "{{ .Release.Service }}"
+      component: "uc"
+  template:
+    metadata:
+      labels:
+{{- if .Values.customLabels }}
+{{ .Values.customLabels | indent 8  }}
+{{- end }}
+        {{- if .Values.customLabelValues.app }}
+        app: {{ .Values.customLabelValues.app }}
+        {{- else }}
+        app: {{ template "uc.fullname" . }}
+        {{- end }}
+        component: "uc"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        chart: "{{ .Chart.Name }}"
+        {{- if .Values.customLabelValues.serviceInstanceID }}
+    {{- $customServiceInstanceID := .Values.customLabelValues.serviceInstanceID | int64 }}
+        ServiceInstanceID: "{{ $customServiceInstanceID }}"
+        {{- else }}
+    {{- $zenServiceInstanceID := .Values.zenServiceInstanceId | int64 }}
+        ServiceInstanceID: "{{ $zenServiceInstanceID }}"
+        {{- end }}
+        {{- if .Values.customLabelValues.appKubeIo.instance }}
+        app.kubernetes.io/instance: {{ .Values.customLabelValues.appKubeIo.instance }}
+        {{- else }}
+        app.kubernetes.io/instance: {{ template "uc.fullname" . }}
+        {{- end }}
+        app.kubernetes.io/managed-by: helm
+        {{- if .Values.customLabelValues.appKubeIo.name }}
+        app.kubernetes.io/name: {{ .Values.customLabelValues.appKubeIo.name }}
+        {{- else }}
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        {{- end }}
+        app.kubernetes.io/component: uc-deployment
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+      annotations:
+{{- if .Values.customAnnotations }}
+{{ .Values.customAnnotations | indent 8  }}
+{{- end }}
+        productName: {{ .Values.productName }}
+        productID: {{ .Values.productID }}
+        {{- if .Values.productVersion  }}
+        productVersion: {{ .Values.productVersion }}
+        {{- else }}
+        productVersion: {{ .Values.image.tag }}
+        {{- end }}
+    spec:
+      {{- if .Values.serviceAccountName  }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- else }}
+         {{- if .Values.global.serviceAccount }}
+      serviceAccountName: {{ .Values.global.serviceAccount }}
+         {{- else }}
+           {{- if  eq ( .Values.platformCode | trunc 14 ) "PLATFORM_ICP4D"  }}
+      serviceAccountName:  "cpd-viewer-sa"
+           {{- end }}   
+         {{- end }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000320901
+      {{- if .Values.global.image.secretName }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secretName }}
+      {{- end }}
+      affinity:
+      {{- include "uc.nodeAffinity" . | indent 8 }}
+      {{- include "uc.podAffinity" . | indent 8 }}
+      {{- include "uc.podAntiAffinity" . | indent 8 }}
+      tolerations:
+      {{- include "uc.tolerations" . | indent 8 }}
+      containers:
+      - securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+        name: uc
+      {{- if ( eq .Values.platformCode "PLATFORM_ICP4D_DV" ) }}
+        image: "{{ .Values.docker_registry_prefix }}/{{ .Values.image.docker_image }}:{{ .Values.image.tag }}"
+      {{- else if ( eq .Values.platformCode "PLATFORM_ICP4D_ZOS" ) }}
+        image: "{{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+      {{- else if .Values.image.arch }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}-{{ .Values.image.arch }}"
+      {{- else }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+      {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: LICENSE
+          value: accept
+        - name: DEV_EDITION
+          value: "false"
+        - name: CONSOLE_SECURE_PORT
+          value: "8443"
+        - name: POD_NAMESPACE
+          value: "{{ .Release.Namespace }}"
+        - name: DISABLE_HOST_CHECK
+          value: "{{ .Values.disableHostCheck }}"
+        {{- if .Values.persistence.enabled }}
+        - name: MOUNT_DATA_PATH
+          value: "{{ .Values.dataVolume.mountPath }}"
+        {{- end }}
+        - name: RUN_NGINX
+          value: "{{ .Values.runNginx }}"
+        - name: LOG_TO_STDOUT_STDERR
+          value: "{{ .Values.logToStdoutStderr }}"
+        - name: CACHE_CRYPT_BY_MEMCHD
+          value: "true"
+        {{- if  .Values.dataServer.sharedPVC.enabled }}
+        - name: SPV_DOWNLOADS_PATH
+          value: "{{ .Values.dataServer.sharedPVC.mountRootPath }}/downloads"
+        - name: SPV_CONFIG_PATH
+          value: "{{ .Values.dataServer.sharedPVC.mountRootPath }}/config"
+        - name: SPV_USER_HOME_PATH
+          value: "{{ .Values.dataServer.sharedPVC.mountRootPath }}/user-home"
+        {{- end }}
+
+      {{- if not .Values.useConfigMap }}
+        - name: PLATFORM_CODE
+        {{- if and .Values.platform (.Values.product) }}
+          value: "{{ .Values.platform }}_{{ .Values.product }}"
+        {{- else }}
+          value: "{{ .Values.platformCode }}"
+        {{- end }}
+        - name: INSTANCE_ID
+          value: "{{ .Values.zenServiceInstanceId }}"
+        - name: ZEN_NAMESPACE
+          value: "{{ .Values.zenNamespace }}"
+        - name: SHARED_PV_MOUNTED
+          value: "{{ .Values.dataServer.sharedPVC.enabled }}"
+        - name: LDAP_HOST
+          value: "{{ .Values.dataServer.ldap.host }}"
+        - name: LDAP_PORT
+          value: "{{ .Values.dataServer.ldap.port }}"
+        - name: LDAP_ROOT_PWD
+          value: "{{ .Values.dataServer.ldap.rootPwd }}"
+        - name: LDAP_BASE_DN
+          value: "{{ .Values.dataServer.ldap.baseDn }}"
+        - name: LDAP_ROOT_DN
+          value: "{{ .Values.dataServer.ldap.rootDn }}"
+        - name: LDAP_USER_GROUP
+          value: "{{ .Values.dataServer.ldap.userGroup }}"    
+        - name: LDAP_ADMIN_GROUP
+          value: "{{ .Values.dataServer.ldap.adminGroup }}"
+        - name: LDAP_SSL_METHOD
+          value: "{{ .Values.dataServer.ldap.sslMethod }}"
+        - name: DSSERVER_USER_HOME
+          value: "{{ .Values.dataServer.userHome }}"
+        - name: METADB_HOST
+          value: "{{ .Values.dataServer.metadb.host }}"
+        - name: METADB_PORT
+          value: "{{ .Values.dataServer.metadb.port }}"
+        - name: METADB_ALTERNATE_HOST
+          value: "{{ .Values.dataServer.metadb.alternateHost }}"
+        - name: METADB_ALTERNATE_PORT
+          value: "{{ .Values.dataServer.metadb.alternatePort }}"
+        - name: METADB_NON_SSL_PORT
+          value: "{{ .Values.dataServer.metadb.nonSSLPort }}"
+        - name: METADB_SSL_PORT
+          value: "{{ .Values.dataServer.metadb.sslPort }}"
+        - name: METADB_USER
+          value: "{{ .Values.dataServer.metadb.user }}"
+        - name: METADB_PWD
+          value: "{{ .Values.dataServer.metadb.pwd }}"
+        - name: METADB_SSL
+          value: "{{ .Values.dataServer.metadb.ssl }}"
+        - name: METADB_SSL_CERT_FILE_NAME
+          value: "{{ .Values.dataServer.metadb.sslCertFileName }}"
+        - name: METADB_SECURITY_MECHANISM
+          value: "{{ .Values.dataServer.metadb.securityMechanism }}"
+        - name: METADB_DB_NAME
+          value: "{{ .Values.dataServer.metadb.dbName }}"
+        - name: METADB_DS_EXT_TYPE
+          value: "{{ .Values.dataServer.metadb.dsExtType }}"
+        - name: METADB_DB2IADM1_GROUP_ID
+          value: "{{ .Values.dataServer.metadb.db2iadm1GroupId }}"
+        - name: CREATE_CUSTOMER_DB_PROFILE
+          value: "{{ .Values.dataServer.createCustomerDBProfile }}"
+        - name: CUSTOMER_DB_PROFILE_NAME
+          value: "{{ .Values.dataServer.customerDBProfileName }}"
+        - name: DB2Z_AGENT_HOST
+        {{- if .Values.dataServer.db2zAgent.host }}
+          value: "{{ .Values.dataServer.db2zAgent.host }}"
+        {{- else }}
+          value: "{{ template "db2zAgent.fullname" . }}"
+        {{- end }}
+        - name: DB2Z_AGENT_PORT
+        {{- if .Values.dataServer.db2zAgent.port }}
+          value: "{{ .Values.dataServer.db2zAgent.port }}"
+        {{- else }}
+          value: "11081"
+        {{- end }}
+      {{- end }}
+
+        {{- if .Values.useConfigMap }}
+        envFrom:
+        - configMapRef:
+          {{- if .Values.configMapName }}
+            name: {{ .Values.configMapName }}
+          {{- else }}
+            name: uc-config-{{ .Values.zenServiceInstanceId }}
+          {{- end }}
+        {{- end }}
+        ports:
+        - containerPort: 8443
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - /usr/bin/status
+          initialDelaySeconds: 1500
+          timeoutSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - /usr/bin/status
+          initialDelaySeconds: 120
+          timeoutSeconds: 10
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        volumeMounts:
+        {{- if .Values.dataServer.metadb.pwdSecretName }}
+        - name: metadb-secret 
+          mountPath: "/etc/metaDBPwdSecret"
+          readOnly: true
+        {{- end }}
+        {{- if .Values.dataServer.ldap.rootPwdSecretName }}
+        - name: ldap-secret
+          mountPath: "/etc/ldapRootPwdSecret"
+          readOnly: true  
+        {{- end }}
+        {{- if .Values.persistence.enabled }}
+          {{- if .Values.dataVolume.existingClaimName }}
+        - name: console-data
+          mountPath: {{ .Values.dataVolume.mountPath }}
+          {{- else if and .Values.dataServer.sharedPVC.enabled (not .Values.dataServer.sharedPVC.onlyForShare) }}
+        - name: shared-data
+          mountPath: {{ .Values.dataVolume.mountPath }}
+          subPath: "unified_console_data"
+          {{- else }}
+        - name: console-data
+          mountPath: {{ .Values.dataVolume.mountPath }}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.dataServer.sharedPVC.enabled }}
+        - name: shared-data
+          mountPath: {{ .Values.dataServer.sharedPVC.mountRootPath }}/downloads
+          subPath: {{ .Values.dataServer.sharedPVC.subPath.downloads  }}
+        - name: shared-data
+          mountPath: {{ .Values.dataServer.sharedPVC.mountRootPath }}/user-home
+          subPath: {{ .Values.dataServer.sharedPVC.subPath.userHome  }}
+        - name: shared-data
+          mountPath: {{ .Values.dataServer.sharedPVC.mountRootPath }}/config
+          subPath: {{ .Values.dataServer.sharedPVC.subPath.config  }}
+        {{- end }}
+      volumes:
+      {{- if .Values.dataServer.metadb.pwdSecretName }}
+      - name: metadb-secret 
+        secret:
+          secretName: {{ .Values.dataServer.metadb.pwdSecretName }} 
+          defaultMode: 420
+      {{- end }}
+      {{- if .Values.dataServer.ldap.rootPwdSecretName }}
+      - name: ldap-secret
+        secret:
+          secretName: {{ .Values.dataServer.ldap.rootPwdSecretName }}
+          defaultMode: 420
+      {{- end }}
+      {{- if or .Values.dataServer.sharedPVC.onlyForShare  (not .Values.dataServer.sharedPVC.enabled) }}
+      - name: console-data
+        {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+          {{- if .Values.dataVolume.existingClaimName }}
+          claimName: {{ .Values.dataVolume.existingClaimName }}
+          {{- else }}
+          claimName: {{ template "uc.fullname" . }}-{{ .Values.dataVolume.name }}
+          {{- end }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.dataServer.sharedPVC.enabled }}
+      - name: shared-data
+        persistentVolumeClaim:
+          claimName: {{ .Values.dataServer.sharedPVC.name }}
+      {{- end }}
+ {{- end  }}
