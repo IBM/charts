@@ -33,7 +33,12 @@ By default, the `internalDatabase.populateSampleData` parameter is set to `true`
 
 - Kubernetes 1.11+ with Beta APIs enabled
 - Helm 2.9.1 and later version
-- One PersistentVolume needs to be created prior to installing the chart if internalDatabase.persistence.enabled=true and internalDatabase.persistence.dynamicProvisioning=false
+- One PersistentVolume needs to be created prior to installing the chart if internalDatabase.persistence.enabled=true and internalDatabase.persistence.dynamicProvisioning=false. In that case, it is required that the securityContext.fsGroup 1001 has read and write permissions on the postgres data directory. You can update the permissions by mounting the volume temporarily or accessing the host machine and performing the following commands:
+```console
+chown -R :1001 /config/dbdata/
+chmod -R ug+rw /config/dbdata/
+chmod o-t /config/dbdata/
+```
 
 Ensure you have a good understanding of the underlying concepts and technologies:
 - Helm chart, Docker, container
@@ -43,17 +48,46 @@ Ensure you have a good understanding of the underlying concepts and technologies
 
 Before you install ODM for developers, you need to gather all the configuration information that you will use for your release. For more details, refer to the [ODM for developers configuration parameters](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.icp/topics/ref_parameters_dev.html).
 
-If you want to create your own decision services from scratch, you need to install Rule Designer from the [Eclipse Marketplace](https://marketplace.eclipse.org/content/ibm-operational-decision-manager-developers-v-8102-rule-designer).
+If you want to create your own decision services from scratch, you need to install Rule Designer from the [Eclipse Marketplace](https://marketplace.eclipse.org/content/ibm-operational-decision-manager-developers-v-8104-rule-designer).
+
+### Service Account Requirements
+
+By default, the chart uses the `default` serviceAccount defined in your Kubernetes namespace.
+
+This means that the product must be deployed in its **own namespace** since the default serviceAccount is shared across the namespace. If another product is deployed in the namespace or if permissions change in the default service account, it will be reflected in the permissions given to the installed application.
+
+You can configure the chart to use a custom serviceAccount. In this case, a cluster administrator can create the custom serviceAccount by applying the following descriptor file in the appropriate namespace:
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ibm-odm-dev-service-account
+```
+
+> **Note**: In OpenShift, the scc must be added to the created serviceAccount with the following command:
+> ```console
+  $ oc adm policy add-scc-to-user ibm-restricted-scc -z ibm-odm-dev-service-account -n <namespace>
+  ```
+
+The namespace administrator is then able to configure the chart to use the created serviceAccount by setting the parameter `serviceAccountName`:
+
+```console
+$ helm install --name my-odm-dev-release \
+  --set serviceAccountName=ibm-odm-dev-service-account \
+  stable/ibm-odm-dev
+```
 
 ### PodSecurityPolicy Requirements
 
-This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. To meet this requirement, a specific cluster and namespace might have to be scoped.
+This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. To meet this requirement, a specific cluster and namespace might have to be scoped by a cluster administrator.
+
 The predefined PodSecurityPolicy name [`ibm-restricted-psp`](https://ibm.biz/cpkspec-psp) has been verifed for this chart. If your target namespace is bound to this PodSecurityPolicy, you can proceed to install the chart.
 
 
-This chart also defines a custom PodSecurityPolicy which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom PodSecurityPolicy using the ICP user interface.
+This chart also defines a custom PodSecurityPolicy which can be used to finely control the permissions/capabilities needed to deploy this chart.
 
-From the user interface, you can copy and paste the following snippets to enable the custom PodSecurityPolicy
+A cluster administrator can create the custom PodSecurityPolicy and the ClusterRole by applying the following descriptors files in the appropriate namespace:
 * Custom PodSecurityPolicy definition:
 
   ```yaml
@@ -110,7 +144,7 @@ From the user interface, you can copy and paste the following snippets to enable
 
 ### Red Hat OpenShift SecurityContextConstraints Requirements
 
-This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
+This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to be performed by a cluster administrator.
 
 The predefined SecurityContextConstraints name: [`ibm-restricted-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
 
@@ -178,6 +212,8 @@ From the user interface, you can copy and paste the following snippets to enable
 
 
 ## Installing the Chart
+
+The following instructions should be executed as namespace administrator.
 
 A release must be configured before it is installed.
 To install a release with the default configuration and a release name of `my-odm-dev-release`, use the following command:
