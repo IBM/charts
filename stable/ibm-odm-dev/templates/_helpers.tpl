@@ -118,3 +118,12 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/name: {{ template "name" . }}
 helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
 {{- end -}}
+
+
+{{- define "odm-serviceAccountName" -}}
+{{- if .Values.serviceAccountName -}}
+serviceAccountName: {{ .Values.serviceAccountName }}
+{{- else -}}
+serviceAccountName: default
+{{- end }}
+{{- end -}}
