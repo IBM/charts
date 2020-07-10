@@ -153,6 +153,7 @@ You can get Db2 Warehouse container images from the IBM Cloud Container Registry
         --db-name STRING            the name of database to deplpy. The default value is BLUDB (optional). The length of the value must not exceed 8 characters
         --namespace STRING          namespace/project to install  into (required)
         --release-name STRING       release name for helm (required)
+        --arch STRING               architecture of the cluster (optional)
         --existing-pvc STRING       existing PersistentVolumeClaim to use for persistent storage
         --storage-class STRING      StorageClass to use to dynamically provision a volume. Use this option for NFS storage class.
                                     For advanced settings that require multiple storage classes, use help-opt-file instead.
