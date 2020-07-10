@@ -1,5 +1,8 @@
 # IBM Spectrum LSF Community Edition
 
+# **Notice of Deprication**
+THIS CHART IS NOW DEPRECATED. On 1st July, 2020 this version of the Helm chart for IBM Spectrum LSF Community Edition will no longer be supported. This chart will be removed from the catalog on August 1st, 2020. There is currently no replacement available for this free version.  
+
 [IBM Spectrum LSF Community Edition](https://www.ibm.com/support/knowledgecenter/en/SSWRJV_10.1.0/lsf_offering/lsfce10.1_quick_start.html) is a no-charge edition of IBM Spectrum LSF workload management platform.
 
 ## Introduction
