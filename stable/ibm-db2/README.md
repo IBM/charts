@@ -227,7 +227,7 @@ You can get Db2 Community Edition container images from the IBM Cloud Container 
   For an exhaustive list of supported options, refer to [Configuration](#configuration) section of this README.
 
 ## SELinux Considerations
-For information on using Red Hat OpenShift with SELinux in enforcing mode, see the [Db2 Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSEPGG_11.5.0/com.ibm.db2.luw.db2u_openshift.doc/doc/c_db2u_selinux.html).
+For information on using Red Hat OpenShift with SELinux in enforcing mode, see the [Db2 Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSEPGG_11.5.0/com.ibm.db2.luw.db2u_openshift.doc/doc/aese-selinux-storage.html).
 
 ## Enabling Db2 HADR
 
@@ -254,13 +254,13 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   labels:
-    app: db2wh-rest
+    app: db2oltp-rest
     app.kubernetes.io/managed-by: Helm
     chart: ibm-db2
-    component: db2wh
+    component: db2oltp
     heritage: Helm
-    release: db2wh-rest
-  name: db2wh-rest-db2u-rest-svc
+    release: db2oltp-rest
+  name: db2oltp-rest-db2u-rest-svc
 spec:
   port:
     targetPort: rest-server
@@ -268,7 +268,7 @@ spec:
     termination: passthrough
   to:
     kind: Service
-    name: db2wh-rest-db2u-rest-svc
+    name: db2oltp-rest-db2u-rest-svc
     weight: 100
   wildcardPolicy: None
 ```
