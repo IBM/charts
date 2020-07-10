@@ -188,7 +188,7 @@ You can get Db2 Warehouse container images from the IBM Cloud Container Registry
   ```bash
   $ cd ./ibm_cloud_pak/pak_extensions/common
   $ ./db2u-install \
-    --db-type db2oltp \
+    --db-type db2wh \
     --db-name MYDB \
     --namespace db2u-project \
     --release-name db2u-release-1 \
@@ -203,7 +203,7 @@ You can get Db2 Warehouse container images from the IBM Cloud Container Registry
   ```bash
   $ cd ./ibm_cloud_pak/pak_extensions/common
   $ ./db2u-install \
-    --db-type db2oltp \
+    --db-type db2wh \
     --namespace db2u-project \
     --release-name db2u-release-2 \ 
     --helm-opt-file ./helm_options
@@ -228,7 +228,7 @@ You can get Db2 Warehouse container images from the IBM Cloud Container Registry
   For an exhaustive list of supported options, refer to [Configuration](#configuration) section of this README.
 
 ## SELinux Considerations
-For information on using Red Hat OpenShift with SELinux in enforcing mode, see the [Db2 Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSEPGG_11.5.0/com.ibm.db2.luw.db2u_openshift.doc/doc/c_db2u_selinux.html).
+For information on using Red Hat OpenShift with SELinux in enforcing mode, see the [Db2 Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSCJDQ/com.ibm.swg.im.dashdb.ucontainer.doc/doc/aese-selinux-storage.html).
 
 ## Enabling Db2 HADR
 
