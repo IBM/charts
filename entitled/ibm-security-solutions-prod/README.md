@@ -14,7 +14,7 @@ The Cases and Postgres operators deployed as part of this chart are Namespace-sc
 
 - The `ibm-security-foundations-prod` chart must be installed prior to this chart
 - This chart must be installed into the same namespace as the `ibm-security-foundations-prod` chart
-- Red Hat OpenShift Container Platform 4.3
+- Red Hat OpenShift Container Platform 4.3 or 4.4
 - IBM Cloud Platform Common Services 3.2.4
 - Cluster Admin privileges
 - Persistent storage is configured
@@ -35,7 +35,7 @@ By default, `ibm-security-solutions-prod` has the following resource requests re
 
 | Service  | Memory (GB) | CPU (cores) 
 | --------- | ----------- | ----------- |
-| Cases  |    9822Mi   |  1710M  |
+| Cases  |    9838Mi   |  1520M  |
 | Platform | 2190Mi | 1225M  |
 | DE | 512Mi | 300M |
 | CAR | 128Mi | 100M | 
@@ -44,6 +44,7 @@ By default, `ibm-security-solutions-prod` has the following resource requests re
 | TII | 900Mi | 600M |
 | TIS | 1536Mi | 600M |
 | CSA Adapter| 256Mi | 200M |
+
 
 See the [configuration](#configuration) section for how to configure these values.
 
@@ -56,7 +57,7 @@ For more details on the size of the persistent volume please refer to [persisten
 
 The persistent volume claim must have an access mode of ReadWriteOnce (RWO).
 
-For volumes that support ownership management, specify the group ID of the group owning the persistent volumes' file systems using the `global.postgres.cases.installOptions.fsGroup` parameter as described in [configuration](#configuration) below.
+For volumes that support ownership management, specify the group ID of the group owning the persistent volumes' file systems using the `global.postgres.cases.installOptions.primary.fsGroup` and `global.postgres.cases.installOptions.backrest.fsGroup` parameters as described in [configuration](#configuration) below.
 
 
 ## Pre-install Steps
@@ -202,7 +203,7 @@ __Expected Result:__ All Helm Tests should have a status of `PASSED`
 
 d. The [checkcr.sh](ibm-security-foundations-prod/ibm_cloud_pak/pak_extensions/support/checkcr.sh) script checks status of the CP4S installation process. The script should be executed specifying the namespace to which the CP4S was deployed by the customer.
 
-`ibm-security-foundations-prod/ibm_cloud_pak/pak_extensions/support/checkcr.sh <NAMESPACE> --all`
+`ibm-security-foundations-prod/ibm_cloud_pak/pak_extensions/support/checkcr.sh [ -n <NAMESPACE> ] --all`
 
 __Expected Result:__ There are no  failures returned from executing  `checkcr.sh`
 
@@ -216,6 +217,8 @@ To upgrade the installation, first run the command:
 ```
 ibm-security-solutions-prod/ibm_cloud_pak/pak_extensions/pre-upgrade/preUpgrade.sh [ -n <NAMESPACE> ]
 ```
+
+
 Prior to executing the `helm upgrade` command below complete the steps in [Check prerequisites](#check-prerequisites)
 
 Then execute the following `getSetupParameters.sh` script to retrieve your environment specific values set in the previous install of Cloud Pak for Security:
@@ -290,12 +293,22 @@ The following table lists the configurable parameters of the ibm-security-soluti
 |global.invokerReplicaCount| Openwhisk Invoker Replicas | 3 |
 |global.poddisruptionbudget| Enables application availability during a cluster node maintenance. Administrator role or higher required to enable PDB.| false |
 |global.poddisruptionbudget.minAvailable| Minimum number of probe replicas that must be available during pod eviction| 1 |
-|global.postgres.cases.installOptions.requests.cpu | CPU requests for PgClusters created by Cases Postgres Operator | 500m |
-|global.postgres.cases.installOptions.requests.memory | Memory requests for PgClusters created by Cases Postgres Operator | 500Mi |
-|global.postgres.cases.installOptions.storageClassName| Specify the Postgres storage class. If unspecified, `global.storageClass` is used. The specified storage class must support fsGroup.| ""|
-|global.postgres.cases.installOptions.storageSize| Storage size for PgClusters created by the Cases Postgres Operator| 100Gi |
-|global.postgres.cases.installOptions.fsGroup| fsgroup for Postgres Operator| 26 |
-|global.postgres.cases.installOptions.supplementalGroups| supplementalGroups for Postgres Operator| ""|
+|global.postgres.cases.installOptions.primary.limits.cpu | CPU limit for cases Postgresql cluster | 750m |
+|global.postgres.cases.installOptions.primary.limits.memory | Memory limit for cases Postgresql cluster | 1Gi |
+|global.postgres.cases.installOptions.primary.requests.cpu | CPU requests for cases Postgresql cluster | 300m |
+|global.postgres.cases.installOptions.primary.requests.memory | Memory requests for cases Postgresql cluster | 500Mi |
+|global.postgres.cases.installOptions.primary.storageClassName| Specify the Postgres storage class for cases Postgresql cluster. If unspecified, `global.storageClass` is used. The specified storage class must support fsGroup. | ""|
+|global.postgres.cases.installOptions.primary.storageSize| Storage size for cases Postgresql cluster | 100Gi |
+|global.postgres.cases.installOptions.primary.fsGroup| fsgroup for cases Postgresql cluster storage | 26 |
+|global.postgres.cases.installOptions.primary.supplementalGroups| supplementalGroups for cases Postgresql cluster storage | ""|
+|global.postgres.cases.installOptions.backrest.limits.cpu | CPU limit for pgbackrest service | 500m |
+|global.postgres.cases.installOptions.backrest.limits.memory | Memory limit for pgbackrest service | 200Mi |
+|global.postgres.cases.installOptions.backrest.requests.cpu | CPU requests for pgbackrest service | 20m |
+|global.postgres.cases.installOptions.backrest.requests.memory | Memory requests for pgbackrest service | 48Mi |
+|global.postgres.cases.installOptions.backrest.storageClassName| Specify the Postgres storage class for pgbackrest service. If unspecified, `global.storageClass` is used. The specified storage class must support fsGroup.| ""|
+|global.postgres.cases.installOptions.backrest.storageSize| Storage size for pgbackrest service | 50Gi |
+|global.postgres.cases.installOptions.backrest.fsGroup| fsgroup for backrest storage service | 26 |
+|global.postgres.cases.installOptions.backrest.supplementalGroups| supplementalGroups for backrest storage service | ""|
 |global.replicas| Number of Replicas | 2 |
 |global.repository| Platform Repository | cp.icr.io/cp/cp4s |
 |global.repositoryType| Repository Type from which the Images will pulled from. Options available are: entitled, local. Use `entitled` for Entitled Registry or `local`for all other repository types  | `entitled` |
