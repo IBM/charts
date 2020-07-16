@@ -103,6 +103,7 @@ set_namespace()
     exit 1
   fi
 }
+
 uninstall_cases_operator() {
     echo "Delete Cases Resources"
     kubedel cases.isc.ibm.com --all --wait=false
@@ -110,21 +111,20 @@ uninstall_cases_operator() {
     wait_crs 'cases.isc.ibm.com' 'none'
     kubedelc crd cases.isc.ibm.com
 
-    #Log details of resources that were not deleted.
-    echo "The CASES objects not propertly deleted:"
-    kubectl get crd,pvc,configmap,serviceaccount,secret,service,deployment,routes,statefulset,jobs -l app.kubernetes.io/instance=ibm-isc-cases-prod -o=jsonpath='{range .items[*]}{.kind}{"\t"}{.metadata.name}{"\t"}{.metadata.ownerReferences}{"\n"}{end}'
+    kubedel deploy isc-cases-operator isc-cases-activemq isc-cases-application
+    kubedel $(oc get jobs --selector delete.on.completion=true -o name)
+
+    kubedelc clusterrole isc-cases-operator
+    kubedelc clusterrolebinding isc-cases-operator
+    kubedel serviceaccount isc-cases-operator
 
     #Remove the ambassador-stomp svc finaliser
     kubectl patch -n $NAMESPACE svc ambassador-stomp --type json -p='[{"op": "remove", "path": "/metadata/finalizers"}]'
-    for n in $(kubectl get -o=name clusterrole,clusterrolebinding,role,rolebinding,configmap,serviceaccount,secret,service,deployment,routes,statefulset,jobs -l app.kubernetes.io/instance=ibm-isc-cases-prod)
+    kubedel svc ambassador-stomp isc-cases-activemq isc-cases-activemq-stomp isc-cases-application isc-cases-application-rest
+    kubedel configmap isc-cases-activemq-keystore isc-cases-application-keystore
+    for pod in $(kubectl get pods -l 'name in (isc-cases-activemq, isc-cases-application, isc-cases-resutil, isc-cases-operator)' -o name)
     do
-        kubedel $n
-    done
-
-    echo "Delete Cases Pods"
-    for n in $(kubectl get -o=name pods -l app.kubernetes.io/instance=ibm-isc-cases-prod)
-    do
-        kubedel $n --wait=false
+      kubedel $pod --wait=false
     done
 }
 
@@ -134,18 +134,34 @@ uninstall_cp4s_postgres_operator() {
     #wait_crs function ensures CR is removed, it removes finalizer if required
     wait_crs 'postgresqloperators.isc.ibm.com' 'none'
     kubedelc crd postgresqloperators.isc.ibm.com
+
+    kubedel deploy -lname=cp4s-pgoperator
+    kubedel job cp4s-pgoperator-create-cr-1 job cp4s-pgoperator-delete-cr-1
+
+    kubedelc clusterrolebinding cp4s-pgoperator-pgo-clusterrolebinding pgo-cluster-role
+    kubedelc clusterrole cp4s-pgoperator-pgo-clusterrole pgo-cluster-role
+    kubedelc role cp4s-pgoperator-pgo-role cp4s-pgoperator
+    kubedelc rolebinding cp4s-pgoperator-pgo-rolebinding cp4s-pgoperator
+    kubedel serviceaccount cp4s-pgoperator
+    kubedel pods -l name=cp4s-pgoperator --wait=false
 }
 
 uninstall_pgcluster() {
     echo "Delete PgCluster Resources"
-    kubedel deploy isc-cases-postgres
-    kubedel svc isc-cases-postgres
+    kubedel deploy isc-cases-postgres isc-cases-postgres-backrest-shared-repo
+    kubedel svc isc-cases-postgres isc-cases-postgres-backrest-shared-repo
+    kubedel configmap isc-cases-pgcluster-configmap isc-cases-postgres-ca-cert pgo-config
+    kubedel secret ibmcp4s-image-pull-secret isc-cases-postgres-testuser-secret isc-cases-postgres-primaryuser-secret \
+ isc-cases-postgres-postgres-secret isc-cases-postgres-backrest-repo-config pgo-user pgo.tls pgo-backrest-repo-config
+    kubedel job backrest-backup-isc-cases-postgres isc-cases-postgres-full-sch-backup isc-cases-postgres-stanza-create
+    kubedel cm isc-cases-postgres-pgbackrest-full isc-cases-postgres-pgha-config isc-cases-postgres-config isc-cases-postgres-leader
+
     for pvc in $(kubectl get -n $NAMESPACE pvc -o name|grep 'persistentvolumeclaim/isc-cases-postgres')
     do
-      kubedel --wait=false $pvc
+      kubedel $pvc --wait=false
     done
-    kubedel secret isc-cases-postgres-testuser-secret isc-cases-postgres-primaryuser-secret \
-      isc-cases-postgres-postgres-secret isc-cases-postgres-backrest-repo-config
+
+    kubedel pods -l name=isc-cases-postgres --wait=false
 }
 
 uninstall_crunchy_operator() {
@@ -218,7 +234,7 @@ kubedel redis --all --wait=false
 echo "Removing couchdb resources:"
 kubedel couchdb --all --wait=false
 echo "Removing etcd resources:"
-kubedel etcd --all --wait=false
+kubedel etcds.isc.ibm.com --all --wait=false
 echo "Removing minio resources:"
 kubedel minio --all --wait=false
 echo "Removing oidcclient resources"
@@ -237,7 +253,7 @@ kubedel connectors.connector.isc.ibm.com --all --wait=false
 
 wait_crs 'redis' 'middleware'
 wait_crs 'couchdb' 'middleware'
-wait_crs 'etcd' 'middleware'
+wait_crs 'etcds.isc.ibm.com' 'middleware'
 wait_crs 'minio' 'middleware'
 wait_crs 'iscopenwhisk' 'middleware'
 wait_crs 'elastic' 'middleware'
