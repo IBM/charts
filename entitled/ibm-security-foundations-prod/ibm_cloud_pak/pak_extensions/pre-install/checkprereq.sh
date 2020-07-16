@@ -28,6 +28,28 @@ isPresent() {
   fi
 }
 
+checkKubeSystem() {
+  pods=$(kubectl get pod -n kube-system|grep -vE 'Running|Completed|NAME')
+  if [ "X$pods" != "X" ]; then
+    echo "ERROR: Some of kube-system pods are in failed state:"
+    echo "$pods"
+    exit 1
+  fi
+
+  # check if necessary components are installed
+  for app in auth-idp auth-pap auth-idp helm  \
+             platform-api icp-management-ingress \
+             oidcclient-watcher secret-watcher
+  do
+     pod=$(kubectl get pod -o name -n kube-system -lapp=$app)
+     if [ "X$pod" == "X" ]; then
+         echo "ERROR: Common services application $app not installed or failed"
+         exit 1
+     fi
+  done
+  echo "INFO: Common Services applications are ok"
+}
+
 set_namespace()
 {
   NAMESPACE="$1"
@@ -62,6 +84,9 @@ do
      ;;
   esac
 done
+
+
+checkKubeSystem
 
 nodes=$(kubectl get node -o name -lnode-role.kubernetes.io/compute=true)
 if [ "X$nodes" == "X" ]; then

@@ -88,4 +88,5 @@ do
    ${dir}/runseq.sh $sequence
 done
 
-
+echo "Redeploy UDI Components"
+${dir}/rerunJob.sh uds-deploy-functions
