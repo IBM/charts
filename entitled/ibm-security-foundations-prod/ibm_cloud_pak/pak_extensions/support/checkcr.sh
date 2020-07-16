@@ -105,6 +105,37 @@ checkCR() {
     return
 }
 
+checkKubeSystem() {
+  pods=$(kubectl get pod -n kube-system|grep -vE 'Running|Completed|NAME')
+  if [ "X$pods" != "X" ]; then
+    echo "ERROR: Some of kube-system pods are in failed state:"
+    echo "$pods"
+  fi
+
+  # check if necessary components are installed
+  for app in auth-idp auth-pap auth-idp helm  \
+             platform-api icp-management-ingress \
+             oidcclient-watcher secret-watcher
+  do
+     pod=$(kubectl get pod -o name -n kube-system -lapp=$app)
+     if [ "X$pod" == "X" ]; then
+         echo "ERROR: Common services application $app not installed or failed"
+     fi
+  done
+}
+
+checkOIDC() {
+  checkCR "Client"
+  secret=$(kubectl get secret ibm-isc-oidc-credentials -o name)
+  if [ "X$secret" == "X" ]; then
+    echo "ERROR: secret ibm-isc-oidc-credentials has not been created"
+  else
+    if [ $ALL -eq 1 ]; then
+       echo "INFO: secret ibm-isc-oidc-credentials has been created"
+    fi
+  fi
+}
+
 set_namespace() {
   NAMESPACE="$1"
   ns=$(kubectl get namespace $NAMESPACE -o name 2>/dev/null)
@@ -140,6 +171,9 @@ do
     ;;
 esac
 done
+
+checkKubeSystem
+checkOIDC
 
 checkSeq
 for crd in couchdb redis etcd minio iscopenwhisk elastic cases connectors appentitlements

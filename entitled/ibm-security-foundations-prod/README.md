@@ -24,7 +24,7 @@ The Middleware and Sequence operator deployed as part of this chart are Namespac
 
 ## Prerequisites
 
-- Red Hat OpenShift Container Platform 4.3
+- Red Hat OpenShift Container Platform 4.3 or 4.4
 - IBM Cloud Platform Common Services 3.2.4
 - Cluster admin privileges
 
@@ -137,12 +137,9 @@ where arguments may be
 | -n NAMESPACE | Change namespace from current
 | -force | Force update of the existing cluster configuration
 | -repo REPOSITORY REPO_USERNAME REPO_PASSWORD | Set the image repository and repository credentials as documented per install type (Entitled Registry or PPA)
-| -sysctl | Enable net.core.somaxconn sysctl change
 | -ibmcloud | Indicates target environment is IBM Cloud
 
 
-Note:  `-ibmcloud` option is mutually exclusive with `-sysctl` option. 
-  
 ### Check Prerequisites	
 
 A script is provided which should be run to validate pre-requisites before beginning the install of `ibm-security-foundations-prod`. 	
@@ -154,7 +151,7 @@ This script is run with the following command :
 ibm-security-foundations-prod/ibm_cloud_pak/pak_extensions/pre-install/checkprereq.sh -n <NAMESPACE> 	
 ```	
 
-Output will display the default storage class and when successfull will indicate : 	
+Output will display the default storage class and when successful will indicate : 	
 
 ```	
 INFO: ibm-security-foundations prerequisites are OK	
@@ -253,8 +250,10 @@ If you have previously installed Cloud Pak for Security, you can upgrade to a la
 
 > **IMPORTANT** : It is highly recommended to perform a backup procedure prior to beginning the upgrade. The procedure to backup Couchdb and Cases should be followed as per the latest CP4S 1.3 [documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.3.0/cp4s_v1r3/docs/scp-core/backup-intro.html). 
 
-> **Note** ArangoDB is not present in CP4S 1.2 and therefore is not required to be backed up.
-
+The preUpgrade.sh script must be run before upgrade process:
+```
+ibm-security-foundations-prod/ibm_cloud_pak/pak_extensions/pre-upgrade/preUpgrade.sh -n <NAMESPACE>
+```
 
 Prior to executing the `helm upgrade` command below complete the steps in [Check Prerequisites](#check-prerequisites)
 
