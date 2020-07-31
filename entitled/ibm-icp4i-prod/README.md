@@ -169,9 +169,9 @@ The following table lists the configurable parameters of the navigator chart and
 | Parameter                                                     | Description                                             | Default                      |
 | ------------------------------------------------------------- | ------------------------------------------------------- | ---------------------------- |
 | `replicaCount`                                                | Number of deployment replicas                           | `3`                          |
-| `image.navigator`                                             | ICP4I Navigator docker image:tag                        | `icip-navigator:3.1.0`       |
+| `image.navigator`                                             | ICP4I Navigator docker image:tag                        | `icip-navigator:3.1.1`       |
 | `image.configurator`                                          | ICP4I Configurator docker image:tag                     | `icip-configurator:3.1.0`    |
-| `image.services`                                              | ICP4I Services docker image:tag                         | `icip-services:3.1.0`        |
+| `image.services`                                              | ICP4I Services docker image:tag                         | `icip-services:3.1.1`        |
 | `image.pullPolicy`                                            | Image pull policy                                       | `IfNotPresent`               |
 | `image.pullSecret`                                            | Image pull secret                                       | `nil`                        |
 | `nodeTuning.enabled`                                          | Enable or disable node tuning                           | `enabled`                    |
