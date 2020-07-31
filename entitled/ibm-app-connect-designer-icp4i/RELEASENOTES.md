@@ -2,7 +2,7 @@
 
 * None
 
-# What’s new in IBM App Connect Designer Chart Version 3.1.3
+# What’s new in IBM App Connect Designer Chart Version 3.1.4
 
 You can perform the following tasks with the IBM App Connect Designer chart:
 
@@ -12,7 +12,7 @@ You can perform the following tasks with the IBM App Connect Designer chart:
 
 # Fixes
 
-Version 3.1.3 contains fixes for user interface issues identified in the 3.1.0 and 3.1.1 releases.
+Version 3.1.4 contains fixes for user interface issues identified in the 3.1.0 and 3.1.1 releases.
 
 # Prerequisites
 
@@ -21,13 +21,14 @@ Version 3.1.3 contains fixes for user interface issues identified in the 3.1.0 a
 # Documentation
 For more information go to:
 * IBM App Connect: https://ibm.biz/acdeploydesignerflow-ace
-* IBM App Connect Enterprise certified container: https://www.ibm.com/support/knowledgecenter/en/SSTTDS_11.0.0/com.ibm.ace.icp.doc/icp0001_.htm
+* IBM App Connect Enterprise certified container: https://ibm.biz/ACEv11ContainerDocs
 
 For any latest service bulletins register here: https://www.ibm.com/support/pages/stay-date-my-notifications 
 
 # Version History
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 3.1.4 | July 2020 | >=v1.14.0 | = ACE 11.0.0.9-r2 | none | Dependency updates (no functional changes) | 
 | 3.1.3 | June 2020 | >=v1.14.0 | 11.0.0.9-r1 | none | Add support for OpenShift Container Platform 4.4, 11.0.0.9 FP Update |
 | 3.1.2 | May 2020 | >=v1.14.0 | 11.0.0.8-r1, 11.0.0.8-r2 (ibm-appconnect-ui only) | none | Fixes for the UI |
 | 3.1.1 | Mar 2020 | >=v1.14.0 | 11.0.0.8-r1 | none | Minor fix |

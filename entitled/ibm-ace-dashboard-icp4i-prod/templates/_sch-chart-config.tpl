@@ -32,7 +32,7 @@ sch:
       productID: 606f1a9feb4f4cbc85b17a637f6a6b24
       productVersion: "11.0.0.9"
       productMetric: VIRTUAL_PROCESSOR_CORE
-      productChargedContainers: All
+      productChargedContainers: ''
       cloudpakName: IBM Cloud Pak for Integration
       cloudpakId: c8b82d189e7545f0892db9ef2731b90d
       cloudpakVersion: 2020.1.1
@@ -42,7 +42,7 @@ sch:
       productID: 30fd0181a948441ebe3be59192171987
       productVersion: "11.0.0.9"
       productMetric: VIRTUAL_PROCESSOR_CORE
-      productChargedContainers: All
+      productChargedContainers: ''
       cloudpakName: IBM Cloud Pak for Integration
       cloudpakId: c8b82d189e7545f0892db9ef2731b90d
       cloudpakVersion: 2020.1.1
