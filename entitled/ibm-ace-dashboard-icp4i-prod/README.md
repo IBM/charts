@@ -20,7 +20,7 @@ This chart deploys a single IBM App Connect Enterprise dashboard into a Kubernet
 * A user with administrator role is required to install the chart
 * If persistence is enabled (see [configuration](#configuration)):
   * You must either create a persistent volume, or specify a storage class if classes are defined in your cluster.
-  * The storage class must support read-write-many. On IBM Cloud `ibmc-block-gold` must be used. 
+  * The storage class must support read-write-many. On IBM Cloud `ibmc-file-gold` must be used. 
 
 ## Red Hat OpenShift SecurityContextConstraints Requirements
 
@@ -164,10 +164,10 @@ The following table lists the configurable parameters of the `ibm-ace-dashboard-
 
 | Parameter                                 | Description                                     | Default                                                    |
 | ----------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------- |
-| `image.contentServer`                     | Content server Docker image                     | `cp.icr.io/cp/icp4i/ace/ibm-ace-content-server-prod:11.0.0.9-r1`                   |
-| `image.controlUI`                         | Control UI Docker image                         | `cp.icr.io/cp/icp4i/ace/ibm-ace-dashboard-prod:11.0.0.9-r1`                       |
-| `image.configurator`                      | Configurator Docker image                       | `cp.icr.io/cp/icp4i/ace/ibm-acecc-configurator-prod:11.0.0.9-r1`                 |
-| `image.infra`                      | Configurator Docker image                       | `cp.icr.io/cp/icp4i/ace/ibm-acecc-infra-prod:11.0.0.9-r1`                 |
+| `image.contentServer`                     | Content server Docker image                     | `cp.icr.io/cp/icp4i/ace/ibm-ace-content-server-prod:11.0.0.9-r2`                   |
+| `image.controlUI`                         | Control UI Docker image                         | `cp.icr.io/cp/icp4i/ace/ibm-ace-dashboard-prod:11.0.0.9-r2`                       |
+| `image.configurator`                      | Configurator Docker image                       | `cp.icr.io/cp/icp4i/ace/ibm-acecc-configurator-prod:11.0.0.9-r2`                 |
+| `image.infra`                      | Configurator Docker image                       | `cp.icr.io/cp/icp4i/ace/ibm-acecc-infra-prod:11.0.0.9-r2`                 |
 | `image.pullPolicy`                        | Image pull policy.                               | `IfNotPresent`                                             |
 | `image.pullSecret`                        | Image pull secret, if you are using a private Docker registry. | `nil`                                        |
 | `arch`                                    | Architecture scheduling preference for worker node (only amd64 supported) - readonly. | `amd64`               |

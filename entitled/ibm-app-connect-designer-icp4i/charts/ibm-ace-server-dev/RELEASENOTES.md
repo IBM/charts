@@ -26,6 +26,7 @@ For more information go to [IBM App Connect Enterprise Knowledge Center](https:/
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ----| ------------------- | ------------------ | ---------------- | ------- |
+| 3.1.4 | July 2020 | >=v1.14.0 | = ACE 11.0.0.9-r2 | none | Dependency updates (no functional changes) | 
 | 3.1.3 | June 2020 | >=v1.14.0 | = ACE 11.0.0.9-r1 | none | Add support for OpenShift Container Platform 4.4, 11.0.0.9 FP Update |
 | 3.1.0 | Mar 2020 | >=v1.11.0 | = ACE 11.0.0.8-r1 | none | Update BAR files |
 | 3.0.0 | Nov 2019 | >=v1.11.0 | = ACE 11.0.0.6.1 | Removal of proxy node IP or FQDN value, custom port changes, `designerFlowsEnabled` replaced | Support for OpenShift 4.2, `log.format` now defaults to basic |
