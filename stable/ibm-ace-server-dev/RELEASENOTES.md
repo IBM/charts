@@ -4,7 +4,7 @@
 * Custom ports can no longer be specified via the Helm UI and must be configured by customising the charts
 * Version 3.0.0 of this chart introduced the string `designerFlowsOperationMode` to replace the boolean `designerFlowsEnabled` from Versions 2.x of this chart in order to introduce more options for deployment of App Connect Designer flows. Users of Versions 2.x who had `designerFlowsEnabled` set to true can reuse existing values when upgrading to 3.1.0, but must select one of the two new options to continue deploying the additional sidecars for Designer flows.
 
-# What’s new in IBM App Connect Enterprise certified container Version 3.1.3
+# What’s new in IBM App Connect Enterprise certified container Version 3.1.4
 
 In this version of IBM App Connect Enterprise certified container, the following new features are available:
 
@@ -28,6 +28,7 @@ For more information go to [IBM App Connect Enterprise Knowledge Center](https:/
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ----| ------------------- | ------------------ | ---------------- | ------- |
+| 3.1.4 | July 2020 | >=v1.14.0 | = ACE 11.0.0.9-r2 | none | Dependency updates (no functional changes) |
 | 3.1.3 | June 2020 | >=v1.14.0 | = ACE 11.0.0.9-r1 | none | Add support for OpenShift Container Platform 4.4, 11.0.0.9 FP Update |
 | 3.1.0 | Mar 2020 | >=v1.14.0 | = ACE 11.0.0.8-r1 | none | Update BAR files, New create server interface, Delete servers in dashboard |
 | 2.2.0 | Oct 2019 | >=v1.11.0 | = ACE 11.0.0.6 | none | Updates ACE version, Operational Dashboard Tracing |
