@@ -19,7 +19,8 @@ See [README.md](README.md).
 ## Version History
 | Chart Version | Date Released  | Kubernetes Required | Images Supported                                                   | Breaking Changes | Details                                                                   |
 | ------------- | -------------- | ------------------- | ------------------------------------------------------------------ | ---------------- | ------------------------------------------------------------------------- |
-| 3.1.0         | Mar 27th, 2019 | \>=1.14             | icip-navigator:3.1.0, icip-configurator:3.1.0, icip-services:3.1.0 | N/A              | Support for IBM App Connect Designer                                      |
+| 3.1.1         | Jul 31st, 2020 | \>=1.14             | icip-navigator:3.1.1, icip-configurator:3.1.0, icip-services:3.1.1 | N/A              | Security fixes                                                            |
+| 3.1.0         | Mar 27th, 2020 | \>=1.14             | icip-navigator:3.1.0, icip-configurator:3.1.0, icip-services:3.1.0 | N/A              | Support for IBM App Connect Designer                                      |
 | 3.0.1         | Dec 4th, 2019  | \>=1.11             | icip-navigator:3.0.1, icip-configurator:3.0.1, icip-services:3.0.1 | N/A              | Fixes                                                                     |
 | 3.0.0         | Nov 29th, 2019 | \>=1.11             | icip-navigator:3.0.0, icip-configurator:3.0.0, icip-services:3.0.0 | N/A              | Support for OpenShift 4.2                                                 |
 | 2.2.0         | Oct 28th, 2019 | \>=1.11             | icip-navigator:2.2.0, icip-configurator:2.2.0, icip-services:2.2.0 | N/A              | Support for Operations Dashboard                                          |
