@@ -116,13 +116,13 @@ The following table lists the configurable parameters of the `ibm-app-connect-de
 
 | Parameter                                 | Description                                     | Default                                                    |
 | ----------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------- |
-| `image.fireflyFlowdocAuthoring`           | Image for flow document authoring.               | `cp.icr.io/ibm-app-connect-flowdoc-authoring-prod:11.0.0.9-r1`          |
-| `image.fireflyFlowTestManager`            | Image for flow test manager.                     | `cp.icr.io/ibm-app-connect-flow-test-manager-prod:11.0.0.9-r1`          |
-| `image.fireflyRuntime`                    | Image for runtime.                               | `cp.icr.io/ibm-app-connect-runtime-prod:11.0.0.9-r1`                    |
-| `image.fireflyUi`                         | Image for Dashboard UI.                          | `cp.icr.io/ibm-app-connect-ui-prod:11.0.0.9-r1`                         |
-| `image.connectorAuthService`              | Image for connector auth service.                | `cp.icr.io/ibm-app-connect-connector-auth-service-prod:11.0.0.9-r1`     |
-| `image.proxy`                             | Image for proxy.                                 | `cp.icr.io/ibm-app-connect-proxy-prod:11.0.0.9-r1`                      |
-| `image.configurator`                      | Image for configurator.                          | `cp.icr.io/ibm-acecc-configurator-prod:11.0.0.9-r1`                   |
+| `image.fireflyFlowdocAuthoring`           | Image for flow document authoring.               | `cp.icr.io/ibm-app-connect-flowdoc-authoring-prod:11.0.0.9-r2`          |
+| `image.fireflyFlowTestManager`            | Image for flow test manager.                     | `cp.icr.io/ibm-app-connect-flow-test-manager-prod:11.0.0.9-r2`          |
+| `image.fireflyRuntime`                    | Image for runtime.                               | `cp.icr.io/ibm-app-connect-runtime-prod:11.0.0.9-r2`                    |
+| `image.fireflyUi`                         | Image for Dashboard UI.                          | `cp.icr.io/ibm-app-connect-ui-prod:11.0.0.9-r2`                         |
+| `image.connectorAuthService`              | Image for connector auth service.                | `cp.icr.io/ibm-app-connect-connector-auth-service-prod:11.0.0.9-r2`     |
+| `image.proxy`                             | Image for proxy.                                 | `cp.icr.io/ibm-app-connect-proxy-prod:11.0.0.9-r2`                      |
+| `image.configurator`                      | Image for configurator.                          | `cp.icr.io/ibm-acecc-configurator-prod:11.0.0.9-r2`                   |
 | `image.pullPolicy`                        | Image pull policy.                               | `IfNotPresent`                                           |
 | `image.pullSecret`                        | Image pull secret, if you are using a private Docker registry. | `nil`                                      |
 | `arch`                                    | Architecture scheduling preference for worker node (only amd64 supported) - readonly. | `amd64`             |
