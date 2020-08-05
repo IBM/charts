@@ -1,6 +1,6 @@
 # IBM Event Streams
 
-Built on Apache Kafka®, [IBM Event Streams](https://ibm.github.io/event-streams/) is a high-throughput, fault-tolerant, event streaming platform that helps you build intelligent, responsive, event-driven applications. Event Streams release 2019.4.2 uses the [Kafka](https://kafka.apache.org/) 2.3.1 release and supports the use of all Kafka interfaces.
+Built on Apache Kafka®, [IBM Event Streams](https://ibm.github.io/event-streams/) is a high-throughput, fault-tolerant, event streaming platform that helps you build intelligent, responsive, event-driven applications. Event Streams release 2019.4.3 uses the [Kafka](https://kafka.apache.org/) 2.3.1 release and supports the use of all Kafka interfaces.
 
 ## Introduction
 
