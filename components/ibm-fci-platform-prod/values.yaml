@@ -112,6 +112,13 @@ global:
   #   - "hdp3.yourcompany.com"
 
 
+  # The product name to brand the login page
+  productName: "IBM Financial Crimes Insight"
+
+  # Set to "true" to update the branding of the Cloud Pak for Data login page.
+  # Set to "false" otherwise.
+  updateProductName: "true"
+
   swidtag:
     # Indicate license used for this installation.
     # For production use, set file to: ibm.com_IBM_Cloud_Pak_for_Data_Financial_Crimes_Insight-6.5.1.swidtag
@@ -151,8 +158,9 @@ global:
   smtp_auth_username: "<string>"
   smtp_auth_password: "<secret>"
 
-  # The type of LDAP server being used.
+  # The type of identity server being used.
   # Options include 'msad', 'sds', 'open', or 'none' (Keep the ' around the value)
+  # CLOUD_PAK -- Cloud Pak for Data authentication
   # msad -- Microsoft Active Directory
   # sds -- IBM Security Directory Server, formerly known as Tivoli Directory Server
   # open -- OpenLDAP
@@ -190,6 +198,44 @@ global:
   # Performs a nested group search.
   # Set to true only if the LDAP server does not support recursive server-side searches.
   LDAP_SERVER_RECURSIVE_SEARCH: 'false'
+
+  auth:
+    # Role definitions
+    # Do not modify  the Role definitions below
+    ROLE_ANALYST: 'analyst'
+    ROLE_INVESTIGATOR: 'investigator'
+    ROLE_SUPERVISOR: 'supervisor'
+    ROLE_ADMIN: 'admin'
+    ROLE_DATA_SCIENTIST: 'data_scientist'
+    ROLE_EXECUTIVE: 'executive'
+    ROLE_QUALITY_ASSURANCE: 'quality_assurance'
+    ROLE_READ_ONLY: 'read_only'
+    ROLE_CONFIDENTIAL: 'confidential'
+
+    # UI configuration definitions
+    # Do not modify the UI configurations below
+    ROLE_SURVEILLANCE: 'si'
+    ROLE_COMPLAINTS: 'si-complaints'
+    ROLE_VOICE: 'si-voice'
+    ROLE_CASE_MANAGER: 'case_manager'
+    ROLE_INSURANCE: 'insurance'
+    ROLE_KYC: 'kyc'
+    ROLE_GRAPH: 'graph'
+    ROLE_ALERTS_INSIGHT: 'alerts_insight'
+    ROLE_TOOLING: 'tooling'
+    ROLE_TLS: 'tls'
+
+    # Team definitions
+    # NOTE: The team names must begin with TEAM_
+    # These values can be changed but you must follow documentation
+    # under the section called Changing Team Names (do a search for it in the
+    # documentation). It is under topic Managing groups, roles, UI configurations, and teams
+    TEAM_TRIAGE_TEAM: 'TriageTeam'
+    TEAM_INVESTIGATION_TEAM: 'InvestigationTeam'
+    TEAM_SUPERVISOR_TEAM: 'SupervisorTeam'
+    TEAM_CONFIDENTIAL_TEAM: 'confidential'
+    TEAM_VENDOR_TEAM: 'VendorTeam'
+    TEAM_LEGAL_TEAM: 'LegalTeam'
 
   # Set the Additional Group ID settings that the containers should run as
   # This depends on the GID of the shared storage like NFS
@@ -245,10 +291,23 @@ global:
     hbase_zookeeper_property_clientPort: '2181'
 
   commonUI:
-    # For ROKS and CP4D releases, add full hostname (subdomain of the ingress subdomain) of fci-common-ui-nginx route for http traffic
+    # For ROKS and Cloud Pak for Data releases, add full hostname (subdomain of the ingress subdomain) of fci-common-ui-nginx route for http traffic
     SSO_HOSTNAME: "<roks_subdomain>"
     # Prior releases to 6.5, keep this to 3000 for the security-auth service port.
     SSO_PORT: "443"
+
+translationJob:
+  image:
+    repository: ibmcom/fci-translations
+    tag: <BUILD_TAG>
+    pullPolicy: "Always"
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
 
 db2:
   hostIPC: true
@@ -265,7 +324,7 @@ db2:
       memory: "32Gi"
       cpu: "8"
 
-  # Load Balancer Node Ports - Ports to expose in load balancer for CP4D installs
+  # Load Balancer Node Ports - Ports to expose in load balancer for Cloud Pak for Data installs
   # Set to an empty string to use a random port
   sslNodePort: "30560"
 
@@ -397,6 +456,12 @@ kafka:
       storageClassName: null
       size: 10Gi
 
+ibm-sch:
+  image:
+    repository: opencontent-common-utils
+    tag: 1.1.4
+    pullPolicy: IfNotPresent
+
 mongodb:
   enabled: True
   securityContext:
@@ -511,7 +576,7 @@ cognos:
   config:
     # MAX_HTTP_HEADER_SIZE is the maximum size, in bytes, of HTTP headers that Cognos will allow
     # in HTTP requests
-    MAX_HTTP_HEADER_SIZE: "8000"
+    MAX_HTTP_HEADER_SIZE: "16000"
 
   proxy:
     resources: {}
@@ -660,6 +725,25 @@ security-audit:
 
   config:
     FLYWAY_BASELINE_VERSION: '2019.02.28.13.59.00'
+    AUDIT_STORE: "CLOUD_PAK"
+    AUDIT_FILE_LOCATION: "/var/log/fciAudit-%g.log"
+    AUDIT_FILE_SIZE_IN_BYTES: "10000000"
+    AUDIT_NUM_FILES: "2"
+    CONTAINERNAME: "audit"
+    ENABLE_AUDIT: "true"
+
+  sidecar:
+    image:
+      repository: ibmcom/fci-audit-sidecar
+      tag: '<BUILD_TAG>'
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: ".2"
+      limits:
+        memory: "512Mi"
+        cpu: ".5"
 
   db2:
     image:
@@ -687,42 +771,6 @@ security-auth:
     # set to '0' to disable auditing in a non-production environment
     AUDIT_ACTIVE: '1'
 
-    # Role definitions
-    # Do not modify  the Role definitions below
-    ROLE_ANALYST: 'analyst'
-    ROLE_INVESTIGATOR: 'investigator'
-    ROLE_SUPERVISOR: 'supervisor'
-    ROLE_ADMIN: 'admin'
-    ROLE_DATA_SCIENTIST: 'data_scientist'
-    ROLE_EXECUTIVE: 'executive'
-    ROLE_QUALITY_ASSURANCE: 'quality_assurance'
-    ROLE_READ_ONLY: 'read_only'
-    ROLE_CONFIDENTIAL: 'confidential'
-
-    # UI configuration definitions
-    # Do not modify the UI configurations below
-    ROLE_SURVEILLANCE: 'si'
-    ROLE_COMPLAINTS: 'si-complaints'
-    ROLE_CASE_MANAGER: 'case_manager'
-    ROLE_INSURANCE: 'insurance'
-    ROLE_KYC: 'kyc'
-    ROLE_GRAPH: 'graph'
-    ROLE_ALERTS_INSIGHT: 'alerts_insight'
-    ROLE_TOOLING: 'tooling'
-    ROLE_TLS: 'tls'
-
-    # Team definitions
-    # NOTE: The team names must begin with TEAM_
-    # These values can be changed but you must follow documentation
-    # under the section called Changing Team Names (do a search for it in the
-    # documentation). It is under topic Managing groups, roles, UI configurations, and teams
-    TEAM_TRIAGE_TEAM: 'TriageTeam'
-    TEAM_INVESTIGATION_TEAM: 'InvestigationTeam'
-    TEAM_SUPERVISOR_TEAM: 'SupervisorTeam'
-    TEAM_CONFIDENTIAL_TEAM: 'confidential'
-    TEAM_VENDOR_TEAM: 'VendorTeam'
-    TEAM_LEGAL_TEAM: 'LegalTeam'
-
     # Role groups
     GROUP_ANALYST: 'CN=analysts,CN=Users,DC=aml,DC=ibm,DC=com'
     GROUP_INVESTIGATOR: 'CN=investigators,CN=Users,DC=aml,DC=ibm,DC=com'
@@ -737,6 +785,7 @@ security-auth:
     # UI configuration groups
     GROUP_SURVEILLANCE: 'CN=surveillance,CN=Users,DC=aml,DC=ibm,DC=com'
     GROUP_COMPLAINTS: 'CN=complaints,CN=Users,DC=aml,DC=ibm,DC=com'
+    GROUP_VOICE: 'CN=voice,CN=Users,DC=aml,DC=ibm,DC=com'
     GROUP_CASE_MANAGER: 'CN=casemanager,CN=Users,DC=aml,DC=ibm,DC=com'
     GROUP_INSURANCE: 'CN=insurance,CN=Users,DC=aml,DC=ibm,DC=com'
     GROUP_KYC: 'CN=kyc,CN=Users,DC=aml,DC=ibm,DC=com'
@@ -753,7 +802,10 @@ security-auth:
     GROUP_VENDOR_TEAM: 'CN=VendorTeam,CN=Users,DC=aml,DC=ibm,DC=com'
     GROUP_LEGAL_TEAM: 'CN=LegalTeam,CN=Users,DC=aml,DC=ibm,DC=com'
 
-
+    # If integrating with Cloud Pak for Data authentication, this property specifies
+    # whether to create internal users in the Cloud Pak for Data user registry.
+    # Valid values are "True" and "False".
+    CREATE_CP_INTERNAL_USERS: "True"
 
     # specify internal user registry (also known as basic user registry) from WebSphere Liberty
     # for each numbered user, specify the user's id, roles, tenants, and password
@@ -764,23 +816,28 @@ security-auth:
     # to add additional users, add additional user properties numbered 17, 18, etc.
     USER_ID_1: fciadmin
     USER_ROLES_1: admin,supervisor,investigator,analyst,data_scientist
+    USER_CPROLE_1: FCI administrator
     USER_TEAMS_1: SupervisorTeam,InvestigationTeam,TriageTeam
     USER_TENANTS_1: ibm.com
     USER_ID_2: fcianalyst
     USER_ROLES_2: analyst
+    USER_CPROLE_2: FCI analyst
     USER_TEAMS_2: TriageTeam
     USER_TENANTS_2: ibm.com
     USER_ID_3: fciinvestigator
     USER_ROLES_3: investigator
+    USER_CPROLE_3: FCI investigator
     USER_TEAMS_3: InvestigationTeam
     USER_TENANTS_3: ibm.com
     USER_ID_4: fcisupervisor
     USER_ROLES_4: supervisor
+    USER_CPROLE_4: FCI supervisor
     USER_TEAMS_4: SupervisorTeam,InvestigationTeam,TriageTeam
     USER_TENANTS_4: ibm.com
-    USER_ID_5: fcidatascientist
-    USER_ROLES_5: data_scientist
-    USER_TEAMS_5: InvestigationTeam
+    USER_ID_5: fcivendor
+    USER_ROLES_5: analyst,insurance
+    USER_CPROLE_5: Claims Fraud vendor
+    USER_TEAMS_5: VendorTeam
     USER_TENANTS_5: ibm.com
     USER_ID_6: fciconfidential
     USER_ROLES_6: confidential
@@ -788,18 +845,22 @@ security-auth:
     USER_TENANTS_6: ibm.com
     USER_ID_7: fciiadmin
     USER_ROLES_7: admin,insurance
+    USER_CPROLE_7: Claims Fraud administrator
     USER_TEAMS_7: SupervisorTeam,InsuranceTeam
     USER_TENANTS_7: ibm.com
     USER_ID_8: fciianalyst
     USER_ROLES_8: analyst,insurance
+    USER_CPROLE_8: Claims Fraud analyst
     USER_TEAMS_8: TriageTeam,InsuranceTeam
     USER_TENANTS_8: ibm.com
     USER_ID_9: fciiinvestigator
     USER_ROLES_9: investigator,insurance
+    USER_CPROLE_9: Claims Fraud investigator
     USER_TEAMS_9: InvestigationTeam,InsuranceTeam
     USER_TENANTS_9: ibm.com
     USER_ID_10: fciisupervisor
     USER_ROLES_10: supervisor,insurance
+    USER_CPROLE_10: Claims Fraud supervisor
     USER_TEAMS_10: SupervisorTeam,InsuranceTeam
     USER_TENANTS_10: ibm.com
     USER_ID_11: tlsadmin
@@ -828,26 +889,32 @@ security-auth:
     USER_TENANTS_16: ibm.com
     USER_ID_17: toolingadmin
     USER_ROLES_17: admin,data_scientist,tooling
+    USER_CPROLE_17: Conduct Surveillance tooling administrator
     USER_TEAMS_17: SupervisorTeam
     USER_TENANTS_17: ibm.com
     USER_ID_18: graphadmin
     USER_ROLES_18: admin,supervisor,graph
+    USER_CPROLE_18: Graph analytics admin
     USER_TEAMS_18: SupervisorTeam
     USER_TENANTS_18: ibm.com
     USER_ID_19: sisupervisor
     USER_ROLES_19: si,si-complaints,supervisor
+    USER_CPROLE_19: Conduct Surveillance supervisor
     USER_TEAMS_19: SupervisorTeam,InvestigationTeam,TriageTeam
     USER_TENANTS_19: ibm.com
     USER_ID_20: sianalyst
     USER_ROLES_20: si,analyst
+    USER_CPROLE_20: Conduct Surveillance analyst
     USER_TEAMS_20: TriageTeam
     USER_TENANTS_20: ibm.com
     USER_ID_21: siinvestigator
     USER_ROLES_21: si,investigator
+    USER_CPROLE_21: Conduct Surveillance investigator
     USER_TEAMS_21: InvestigationTeam
     USER_TENANTS_21: ibm.com
     USER_ID_22: siadmin
-    USER_ROLES_22: si,admin
+    USER_ROLES_22: si,si-voice,admin
+    USER_CPROLE_22: Conduct Surveillance administrator
     USER_TEAMS_22: SupervisorTeam,InvestigationTeam,TriageTeam
     USER_TENANTS_22: ibm.com
     USER_ID_23: kycadmin
@@ -858,12 +925,9 @@ security-auth:
     USER_TENANTS_23: ibm.com
     USER_ID_24: fcilegal
     USER_ROLES_24: supervisor,insurance
+    USER_CPROLE_24: Claims Fraud legal
     USER_TEAMS_24: LegalTeam
     USER_TENANTS_24: ibm.com
-    USER_ID_25: fcivendor
-    USER_ROLES_25: analyst,insurance
-    USER_TEAMS_25: VendorTeam
-    USER_TENANTS_25: ibm.com
 
     # JWT_KEY_EXPIRY is the length of time before the security token expires
     # This controls the length of a user's session after logging in.
@@ -927,6 +991,7 @@ security-auth:
     MULTI_TENANCY_ENABLED: 'true'
     # Default tenants to use if none provided by LDAP and MULTI_TENANCY_ENABLED is set to true
     DEFAULT_TENANT_IF_MISSING: 'ibm.com'
+    CLOUD_PAK_TOKEN: '/var/run/sharedsecrets/token'
 
 case-manager:
   # set to False to disable Case Manager
@@ -934,7 +999,7 @@ case-manager:
   enabled: True
 
   mq:
-    # Load Balancer Node Ports - Port to expose in loadbalancer for CP4D installs
+    # Load Balancer Node Ports - Port to expose in loadbalancer for Cloud Pak for Data installs
     # Set to an empty string to use a random port
     mqNodePort: "30683"
     mqSeriesNodePort: "30997"
@@ -1279,3 +1344,40 @@ graph-writer:
       - ReadWriteMany
     storageClassName: null
     size: 1Gi
+
+analytics-runtime:
+  # set to False to disable Analytics Runtime
+  # set to True otherwise
+  enabled: False
+
+  arLiberty:
+    image:
+      pullPolicy: IfNotPresent
+      repository: ibmcom/fci-analytics-runtime-liberty
+      tag: <BUILD_TAG>
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "1"
+      limits:
+        memory: "8Gi"
+        cpu: "4"
+
+  arCanvas:
+    image:
+      pullPolicy: IfNotPresent
+      repository: ibmcom/fci-analytics-runtime-canvas
+      tag: <BUILD_TAG>
+    resources:
+      requests:
+        cpu: "0.5"
+        memory: "256Mi"
+      limits:
+        cpu: "2"
+        memory: "2Gi"
+
+  arLibertyPvcSpec:
+    accessModes:
+      - ReadWriteMany
+    storageClassName: null
+    size: 20Gi

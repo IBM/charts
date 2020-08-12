@@ -1,0 +1,143 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "analytics-runtime.fullname" . }}-liberty
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "analytics-runtime.name" .) "liberty") (include "analytics-runtime.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+{{ include "common.scaleDownIfDisabled" . | indent 2 }}
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "analytics-runtime.name" .) "liberty") .Release.Name ) | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "analytics-runtime.name" .) "liberty") (include "analytics-runtime.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      {{- if .Values.global.pvRequiresPermissionsFix }}
+      serviceAccountName: fci-kube-api-fowner
+      {{- else }}
+      serviceAccountName: fci-common-scripts
+      {{- end }}
+      volumes:
+        - name: file-secrets
+          secret:
+            secretName: {{ .Release.Name }}-platform-secret-files
+        - name: ar-mount
+          persistentVolumeClaim:
+            claimName: {{ template "analytics-runtime.fullname" . }}-liberty
+        - name: logs
+          emptyDir: {}
+      initContainers:
+        {{- if .Values.global.pvRequiresPermissionsFix }}
+        - name: pv-permissions
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          securityContext:
+{{ include "common.RootFownerContainerSecurityContext" . | indent 12 }}
+          args:
+          - chmod -R g+w /mount;
+          command:
+          - /bin/sh
+          - -c
+          volumeMounts:
+          - mountPath: /mount
+            name: ar-mount
+        {{- end }}
+      containers:
+        - name: ar-liberty
+          image: "{{ required "When global.createPv is set to true, global.nfsServer must specify the NFS server that holds the persistent volume." .Values.global.dockerRegistryPrefix }}/{{ .Values.arLiberty.image.repository }}:{{ .Values.arLiberty.image.tag }}"
+          imagePullPolicy: {{ .Values.arLiberty.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+            {{- if .Values.global.pvRequiresPermissionsFix }}
+            runAsUser: {{ .Values.global.runAsUser}}
+            {{- end }}
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+{{ toYaml .Values.arLiberty.livenessProbe | indent 12 }}
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+{{ toYaml .Values.arLiberty.readinessProbe | indent 12 }}
+          envFrom:
+          - configMapRef:
+              name: {{ template "analytics-runtime.fullname" . }}-liberty
+          ports:
+          - containerPort: 9080
+          - containerPort: 9443
+          volumeMounts:
+          - name: file-secrets
+            mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.jks
+            subPath: fci_universal_ks.jks
+          - name: file-secrets
+            mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/kafka.client.truststore.jks
+            subPath: fci_universal_ks.jks
+          - name: file-secrets
+            mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/kafka.client.keystore.jks
+            subPath: fci_universal_ks.jks
+          - name: file-secrets
+            mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_kafka_msg.p12
+            subPath: fci_kafka_msg.p12
+          - name: logs
+            mountPath: /opt/ibm/wlp/usr/servers/fciServer/logs
+          - name: ar-mount
+            mountPath: /fci-analytics-runtime-data
+          resources:
+{{ toYaml .Values.arLiberty.resources | indent 12 }}
+{{- with .Values.arLiberty.nodeSelector }}
+          nodeSelector:
+{{ toYaml . | indent 12 }}
+{{- end }}
+{{- with .Values.arLiberty.affinity }}
+          affinity:
+{{ toYaml . | indent 12 }}
+{{- end }}
+{{- with .Values.arLiberty.tolerations }}
+          tolerations:
+{{ toYaml . | indent 12 }}
+{{- end }}
+        - name: message-log
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          args: [/bin/sh, -c, 'tail -n+1 -F /logs/messages.log']
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+            {{- if .Values.global.pvRequiresPermissionsFix }}
+            runAsUser: {{ .Values.global.runAsUser}}
+            {{- end }}
+{{ include "common.sideCarHealthCheck" . | indent 10 }}
+          volumeMounts:
+          - name: logs
+            mountPath: /logs
+        - name: trace-log
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          args: [/bin/sh, -c, 'tail -n+1 -F /logs/trace.log']
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+            {{- if .Values.global.pvRequiresPermissionsFix }}
+            runAsUser: {{ .Values.global.runAsUser}}
+            {{- end }}
+{{ include "common.sideCarHealthCheck" . | indent 10 }}
+          volumeMounts:
+          - name: logs
+            mountPath: /logs
