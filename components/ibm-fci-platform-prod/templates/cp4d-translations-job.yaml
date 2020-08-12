@@ -1,0 +1,36 @@
+{{ if eq .Values.global.IDENTITY_SERVER_TYPE "CLOUD_PAK" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+{{- include "common.label.metadata" (list . (include "fci-core-services.name" .)  (include "fci-core-services.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+  name: {{ .Release.Name }}-translations-job
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (include "fci-core-services.name" .)  (include "fci-core-services.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: fci-common
+      containers:
+      - command:
+        - /coreapi-server
+        - post-translations
+        image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.translationJob.image.repository }}:{{ .Values.translationJob.image.tag }}"
+        imagePullPolicy: {{ .Values.translationJob.image.pullPolicy }}
+        name: translations-job
+        resources:
+{{ toYaml .Values.translationJob.resources | indent 10 }}
+        volumeMounts:
+        - mountPath: /var/run/sharedsecrets
+          name: zen-service-broker-secret
+      volumes:
+      - name: zen-service-broker-secret
+        secret:
+          defaultMode: 420
+          secretName: zen-service-broker-secret
+{{ end }}

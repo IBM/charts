@@ -1,0 +1,58 @@
+{{- if eq .Values.global.IDENTITY_SERVER_TYPE "CLOUD_PAK" }}
+{{- if eq .Values.securityAuthConfig.CREATE_CP_INTERNAL_USERS "True" }}
+{{- $releaseName := .Release.Name }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "security-auth.fullname" . }}-create-cpusers
+  labels:
+{{- include "common.label.metadata" (list . (include "security-auth.name" .) (include "security-auth.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (include "security-auth.name" .) (include "security-auth.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      restartPolicy: Never
+      volumes:
+        - name: zen-service-broker-secret
+          secret:
+            defaultMode: 420
+            secretName: zen-service-broker-secret
+      serviceAccountName: fci-common
+      containers:
+        - name: {{ template "security-auth.fullname" . }}
+          envFrom:
+          - configMapRef:
+              name: {{ template "security-auth.fullname" . }}
+          volumeMounts:
+          - mountPath: /var/run/sharedsecrets
+            name: zen-service-broker-secret
+          env:
+          {{- range $key, $value := .Values.securityAuthConfig }}
+          {{- if hasPrefix "USER_ID_" $key }}
+          - name: {{ $key | replace "_ID_" "_PASSWORD_" }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ $releaseName }}-auth-secrets-env
+                key: {{ $key | replace "_ID_" "_PASSWORD_" }}
+          {{- end }}
+          {{- end }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          imagePullPolicy: {{ .Values.global.commonScripts.image.pullPolicy }}
+          command:
+            - bash
+            - -c
+            - /common-scripts/createCpUsers.sh
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+{{- end }}
+{{- end }}
