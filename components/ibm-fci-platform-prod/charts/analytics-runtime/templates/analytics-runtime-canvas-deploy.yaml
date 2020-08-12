@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "analytics-runtime.fullname" . }}-canvas
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "analytics-runtime.name" .) "canvas") (include "analytics-runtime.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+{{ include "common.scaleDownIfDisabled" . | indent 2 }}
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "analytics-runtime.name" .) "canvas") .Release.Name ) | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "analytics-runtime.name" .) "canvas") (include "analytics-runtime.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      serviceAccountName: fci-common-scripts
+      volumes:
+        - name: file-secrets
+          secret:
+            secretName: {{ .Release.Name }}-platform-secret-files
+      containers:
+        - name: ar-canvas
+          image: "{{ required "When global.createPv is set to true, global.nfsServer must specify the NFS server that holds the persistent volume." .Values.global.dockerRegistryPrefix }}/{{ .Values.arCanvas.image.repository }}:{{ .Values.arCanvas.image.tag }}"
+          imagePullPolicy: {{ .Values.arCanvas.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          livenessProbe:
+{{ toYaml .Values.arCanvas.livenessProbe | indent 12 }}
+          readinessProbe:
+{{ toYaml .Values.arCanvas.readinessProbe | indent 12 }}
+          env:
+          - name: NODE_ENV
+            value: production 
+          ports:
+          - containerPort: 3001
+          volumeMounts:
+          - name: file-secrets
+            mountPath: /certs/fci-canvas.pem
+            subPath: fci_universal_ks.pvtk.pem
+          - name: file-secrets
+            mountPath: /certs/fci-canvas.crt
+            subPath: fci_universal_ks.crt.pem
+          resources:
+{{ toYaml .Values.arCanvas.resources | indent 12 }}
+{{- with .Values.arCanvas.nodeSelector }}
+          nodeSelector:
+{{ toYaml . | indent 12 }}
+{{- end }}
+{{- with .Values.arCanvas.affinity }}
+          affinity:
+{{ toYaml . | indent 12 }}
+{{- end }}
+{{- with .Values.arCanvas.tolerations }}
+          tolerations:
+{{ toYaml . | indent 12 }}
+{{- end }}

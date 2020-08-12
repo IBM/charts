@@ -21,6 +21,7 @@ This Helm chart will install the following:
 - A Graph component as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) to support graph analytics
 - An audit server using a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) to support auditing user actions
 - An authentication server using a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) to support authentication of end users through LDAP, SAML, IBM App ID, or internal registry.
+- An Analytics Runtime component as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) to leverage the Cloud Pak for Data services for FCI.
 
 ## Prerequisites
 To install using the command line, ensure you have the following:

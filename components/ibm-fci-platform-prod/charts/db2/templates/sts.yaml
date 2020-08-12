@@ -135,6 +135,26 @@ spec:
           secret:
             secretName: {{ .Release.Name }}-platform-secret-files
       initContainers:
+        {{- if .Values.unrootsquash }}
+        - image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          name: unrootsquash
+          command: ["/bin/sh", "-c"]
+          args:
+            - >
+              set -x;
+              grep "^Domain = slnfsv4.com" /modifyetc/idmapd.conf;
+              if [ "$?" -ne "0" ] ; then
+                sed -i 's/.*Domain =.*/Domain = slnfsv4.com/g' /modifyetc/idmapd.conf;
+                nfsidmap -c;
+              fi
+          securityContext:
+{{ include "common.RootUserContainerSecurityContext" . | indent 12 }}
+          volumeMounts:
+            - name: modifyetc
+              mountPath: /modifyetc
+        {{- end }}
         - name: init-db2
           image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -157,26 +177,6 @@ spec:
           - name: sys
             mountPath: /host/proc/sys
             readOnly: false
-        {{- if .Values.unrootsquash }}
-        - image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
-          resources:
-{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
-          name: unrootsquash
-          command: ["/bin/sh", "-c"]
-          args:
-            - >
-              set -x;
-              grep "^Domain = slnfsv4.com" /modifyetc/idmapd.conf;
-              if [ "$?" -ne "0" ] ; then
-                sed -i 's/.*Domain =.*/Domain = slnfsv4.com/g' /modifyetc/idmapd.conf;
-                nfsidmap -c;
-              fi
-          securityContext:
-{{ include "common.RootUserContainerSecurityContext" . | indent 12 }}
-          volumeMounts:
-            - name: modifyetc
-              mountPath: /modifyetc
-        {{- end }}
       containers:
         - name: db2-data-store
           image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
