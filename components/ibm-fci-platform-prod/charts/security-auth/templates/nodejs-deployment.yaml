@@ -18,11 +18,7 @@ spec:
 {{- include "common.label.metadata" (list . (printf "%s-%s" (include "security-auth.name" .) "nodejs") (include "security-auth.chart" .) .Release.Name .Release.Service ) | indent 8 }}
 {{- include "common.using-secrets" (list "auth" "platform") | indent 8 }}
     spec:
-{{- if eq .Values.global.IDENTITY_SERVER_TYPE "cp4d" }}
-      serviceAccountName: {{ .Values.securityAuthConfig.CP_ADMIN_SA }}
-{{- else }}
       serviceAccountName: fci-common
-{{- end }}
 {{ include "common.configureHostAliases" . | indent 6 }}
 {{ include "common.PodHostConfig" . | indent 6 }}
       securityContext:
@@ -30,10 +26,11 @@ spec:
       affinity:
 {{ include "common.ArchNodeAffinity" . | indent 8 }}
       volumes:
-{{- if eq .Values.global.IDENTITY_SERVER_TYPE "cp4d" }}
-        - name: user-home-mount
-          persistentVolumeClaim:
-            claimName: "user-home-pvc"
+{{- if eq .Values.global.IDENTITY_SERVER_TYPE "CLOUD_PAK" }}
+        - name: zen-service-broker-secret
+          secret:
+            defaultMode: 420
+            secretName: zen-service-broker-secret
 {{- end }}
         - name: file-secrets
           secret:
@@ -84,9 +81,9 @@ spec:
         - name: file-secrets
           mountPath: /opt/ibm/fci/security-auth/certs/ldap.crt
           subPath: fci_universal_ks.crt.pem
-{{- if eq .Values.global.IDENTITY_SERVER_TYPE "cp4d" }}
-        - mountPath: /user-home
-          name: user-home-mount
+{{- if eq .Values.global.IDENTITY_SERVER_TYPE "CLOUD_PAK" }}
+        - mountPath: /var/run/sharedsecrets
+          name: zen-service-broker-secret
 {{- end }}
         imagePullPolicy: {{ .Values.nodejs.image.pullPolicy }}
         image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.nodejs.image.repository }}:{{ .Values.nodejs.image.tag }}
