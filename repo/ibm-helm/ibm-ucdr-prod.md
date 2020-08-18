@@ -65,7 +65,7 @@ spec:
 
 Example setup scripts to create the Persistent Volume and Persistent Volume Claim are included in the Helm chart under pak_extensions/pre-install/persistentStorageAdministration directory.
 
-5. Secret - A Kubernetes Secret object must be created to store the CodeStation authentication token.  The authentication token is retrieved during Helm chart installation.  By default, the chart will look for a secret named 'HelmReleaseName-secrets' where 'HelmReleaseName' is the release name you give when installing this Helm chart.  You can also create a secret with a different name and specify it in the Values.secret.name field 
+5. Secret - A Kubernetes Secret object must be created to store the CodeStation authentication token.  The authentication token is retrieved during Helm chart installation.  By default, the chart will look for a secret named 'HelmReleaseName-secrets' where 'HelmReleaseName' is the release name you give when installing this Helm chart.  You can also create a secret with a different name and specify it in the Values.secret.name field
 
 * Through the kubectl CLI, create a Secret object in the target namespace.
     Generate the base64 encoded value for the CodeStation authentication token.
@@ -313,7 +313,7 @@ The Helm chart has the following values that can be overriden using the --set pa
 |            | existingClaimName | The name of an existing Persistent Volume Claim that references the Persistent Volume that will be used to hold the UCD agent conf directory. |  |
 |            | storageClassName | The name of the storage class to use when persistence.useDynamicProvisioning is set to "true". |  |
 |            | size | Size of the volume to hold the UCD agent conf directory |  |
-| serverHostPort |  | UCD server hostname and JMS port in the form hostname:port. If specifying failover info, separate multiple hostname:port with a comma. For example, ucd1.example.com:7918,ucd2.example.com:7918) |  |
+| serverHostPort |  | UCD server hostname and WSS port in the form hostname:port. If specifying failover info, separate multiple hostname:port with a comma. For example, wss://ucd1.example.com:7919,wss://ucd2.example.com:7919) |  |
 | codeStationReplication | enabled | Specify true to enable artifact caching on the relay. |  |
 |                        | persisted | Specify true to persist the artifact cache when the relay container is restarted. |  |
 |                        | serverUrl | The full URL of the central server to connect to, such as https://myserver.example.com:8443. |  |
@@ -321,7 +321,6 @@ The Helm chart has the following values that can be overriden using the --set pa
 |                        | maxCacheSize | The size to which to limit the artifact cache, such as 500M for 500 MB or 5G for 5 GB. To not put a limit on the cache, specify none. |  |
 |                        | geotags | If you choose to cache files on the relay, you can specify one or more component version statuses here, separated by semicolons. The agent relay automatically caches component versions with any of these statuses so that those versions are ready when they are needed for a deployment. A status can contain a space except in the first or last position. A status can contain commas. The special * status replicates all artifacts, but use this status with caution, because it can make the agent relay store a large amount of data. If no value is specified, no component versions are cached automatically. |  |
 | ingress | httpproxyhost | Hostname used by UrbanCode Deploy Agent Relay for HTTP proxy connections via Ingress (e.g. relayhttpproxyhost.<proxy node address>.nip.io). | |
-|         | jmshost | Hostname used to access UrbanCode Deploy Agent Relay jms port via Ingress (e.g. relayjmshost.<proxy node address>.nip.io:443). See chart readme documentation for more details | |
 |          | codestationhost | Hostname used by UrbanCode Deploy Agent Relay for artifact cache requests via Ingress (e.g. codestationhost.<proxy node address>.nip.io:443). See chart readme documentation for more details | |
 | resources | constraints.enabled | Specifies whether the resource constraints specified in this helm chart are enabled.   | false (default) or true  |
 |           | limits.cpu  | Describes the maximum amount of CPU allowed | Default is 2000m. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu)  |
