@@ -7,6 +7,8 @@
 
 # IBM Watson Machine Learning Community Edition
 
+THIS CHART IS NOW DEPRECATED. On August 20th, this version of the Helm chart for IBM WML CE will no longer be supported. This chart will be removed on September 20th, 2020.
+
 [IBM Watson Machine Learning Community Edition (WML CE)](https://developer.ibm.com/linuxonpower/deep-learning-powerai/) makes deep learning, machine learning, and AI more accessible and more performant.
 
 ## Introduction
