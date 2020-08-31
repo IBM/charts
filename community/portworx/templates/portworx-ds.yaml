@@ -193,7 +193,7 @@ spec:
 
             {{- if eq $csi true }}
             - name: CSI_ENDPOINT
-              value: unix:///var/lib/kubelet/plugins/com.openstorage.pxd/csi.sock
+              value: unix:///var/lib/kubelet/plugins/pxd.portworx.com/csi.sock
             {{- end }}
 
           livenessProbe:
@@ -247,16 +247,18 @@ spec:
             - name: crioconf
               mountPath: /etc/crictl.yaml
           {{- if eq $csi true }}
-        - name: csi-driver-registrar
+        - name: csi-node-driver-registrar
           imagePullPolicy: Always
           {{- if eq $customRegistryURL "none" }}
-          image: "quay.io/k8scsi/driver-registrar:v0.2.0"
+          image: "quay.io/k8scsi/csi-node-driver-registrar:v1.1.0"
           {{- else }}
-          image: "{{ $customRegistryURL }}/quay.io/k8scsi/driver-registrar:v0.2.0"
+          image: "{{ $customRegistryURL }}/quay.io/k8scsi/csi-node-driver-registrar:v1.1.0"
           {{- end}}
+          imagePullPolicy: Always
           args:
             - "--v=5"
             - "--csi-address=$(ADDRESS)"
+            - "--kubelet-registration-path=/var/lib/kubelet/plugins/pxd.portworx.com/csi.sock"
           env:
             - name: ADDRESS
               value: /csi/csi.sock
@@ -264,9 +266,13 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+          securityContext:
+            privileged: true
           volumeMounts:
             - name: csi-driver-path
               mountPath: /csi
+            - name: registration-dir
+              mountPath: /registration
            {{- end }}
       restartPolicy: Always
       serviceAccountName: px-account
@@ -286,11 +292,18 @@ spec:
           hostPath:
             path: /run/containerd
           {{- if eq $csi true}}
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry
+            type: DirectoryOrCreate
         - name: csi-driver-path
           hostPath:
-            path: /var/lib/kubelet/plugins/com.openstorage.pxd
+            path: /var/lib/kubelet/plugins/pxd.portworx.com
             type: DirectoryOrCreate
           {{- end}}
+        - name: dev
+          hostPath:
+            path: /dev
         - name: etcpwx
           hostPath:
             path: /etc/pwx
