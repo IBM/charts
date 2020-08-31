@@ -113,7 +113,7 @@ In addition to the [general hardware requirements and recommendations](https://w
 
 - x86 is the only architecture supported.
 - Minimum CPU - 11
-- Minimum Memory - 80Gi
+- Minimum Memory - 100Gi
 
 ## Storage
 
@@ -121,10 +121,10 @@ NFS volumes, Local volumes and Portworx can be used as a storage type for this c
 
 | Component  | Number of replicas | Space per PVC | Number of PVs |
 | ---------- | :----------------: | ------------- | :-----------: |
-| PostgreSQL |         2          | 10 Gi         |       2       |
+| PostgreSQL |         3          | 10 Gi         |       3       |
 | Minio      |         4          | 50 Gi         |       4       |
 | MongoDB    |         3          | 20 Gi         |       3       |
-| etcd       |         3          | 10 Gi         |       3       |
+| etcd       |         5          | 10 Gi         |       5       |
 | ARE        |         2          | 20 Gi         |       1       |
 
 ## Storage Class
@@ -197,16 +197,53 @@ oc label --overwrite namespace {cp4d_namespace} ns={cp4d_namespace}
 
 ### Deploy Watson Knowledge Studio
 
+Create an override YAML file `your_override_values.yaml` before installation.
+
+```yaml
+global:
+  persistence:
+    storageClassName: "${storage_class}"
+awt:
+  persistentVolume:
+    storageClassName: "{storage_class_shared}"
+```
+
+- `{storage_class}` is the name of the storage class to use for ReadWriteOnce storage. When using Portworx, `portworx-db-gp3` is recommended.
+- `{storage_class_shared}` is the name of the storage class to use for ReadWriteMany storage. When using Portworx, `portworx-shared-gp3` is recommended.
+
 After then, you can deploy Watson Knowledge Studio by the following commands.
 
 ```bash
 cd bin/
 ./cpd-linux adm -s ../repo.yaml --assembly watson-ks --namespace {cp4d_namespace} --apply
-./cpd-linux --repo ../repo.yaml --assembly watson-ks --namespace {cp4d_namespace} --storageclass {storage_class}
+./cpd-linux --repo ../repo.yaml --assembly watson-ks --namespace {cp4d_namespace} --storageclass {storage_class} --override your_override_values.yaml \
+  --transfer-image-to {registry_location}/{cp4d_namespace} \
+  --target-registry-username {admin_username} \
+  --target-registry-password {admin_token} \
+  --cluster-pull-prefix {registry_from_cluster}/{cp4d_namespace}
 ```
 
 - `{cp4d_namespace}` is the namespace where CP4D is installed.
-- `{storage_class}` is the StorageClass name specified in the StorageClass definition.
+- `{storage_class}` is the name of the storage class to use for ReadWriteOnce storage.
+- `{registry_location}` - is the location to store the images in the registry server. You can run the following command to find the route to the registry:
+  ```bash
+  oc get routes --all-namespaces
+  ```
+- `{admin_username}` is a username of the OpenShift administrator.
+- `{admin_token}` is a token of the OpenShift administrator. You can run the following command to obtain it:
+  ```bash
+  oc whoami -t
+  ```
+- `{registry_from_cluster}` is the location from which pods on the cluster can pull images. The default value is:
+  - OpenShift 3.11:
+    ```
+    docker-registry.default.svc:5000
+    ```
+  - OpenShift 4.3:
+    ```
+    image-registry.openshift-image-registry.svc:5000
+    ```
+- Note: If you are using the default self-signed certificate, specify the `--insecure-skip-tls-verify` flag to prevent x509 errors.
 
 ## Verification of deployment
 
@@ -259,9 +296,12 @@ Before you can install a new version of the service on the same cluster, you mus
 The following table lists the configurable parameters of the WKS chart and their default values.
 These value can be changed on installation by specifying `-o` option of `cpd-linux`.
 
-1. Create your own override yaml file `your_override_values.yaml`. Below example is to extend Minio storage size and maximum amount of training jobs running in parallel.
+1. Create your own override YAML file `your_override_values.yaml`. Below example is to extend Minio storage size and maximum amount of training jobs running in parallel.
 
     ```yaml
+    global:
+      persistence:
+        storageClassName: "${storage_class}"
     minio:
       persistence:
         size: 100Gi
@@ -270,12 +310,17 @@ These value can be changed on installation by specifying `-o` option of `cpd-lin
         tenants:
           train:
             max_active_per_user: 4
+    awt:
+      persistentVolume:
+        storageClassName: "{storage_class_shared}"
     ```
     
     Below is another example to run Watson Knowledge Studio with minimum CPU and memory resource. This can be used for a PoC（Proof of Concept).
     
     ```yaml
     global:
+      persistence:
+        storageClassName: "${storage_class}"
       highAvailabilityMode: false
     replicaCount: 1
     broker:
@@ -291,13 +336,15 @@ These value can be changed on installation by specifying `-o` option of `cpd-lin
         replicas: 1
     awt:
       replicas: 1
+      persistentVolume:
+        storageClassName: "{storage_class_shared}"
     ```
 
-1. Install Watson Knowledge Studio with `-o` option.
+1. Install Watson Knowledge Studio with `--override` option.
 
     ```bash
     ./cpd-linux adm -s ../repo.yaml --assembly watson-ks --namespace {cp4d_namespace} --apply
-    ./cpd-linux --repo ../repo.yaml --assembly watson-ks --namespace {cp4d_namespace} --storageclass {storage_class} -o your_override_values.yaml
+    ./cpd-linux --repo ../repo.yaml --assembly watson-ks --namespace {cp4d_namespace} --storageclass {storage_class} --override your_override_values.yaml
     ```
 
 ### Global parameters
@@ -413,7 +460,7 @@ Following table lists the affinity parameters for the components in the WKS char
 
 | Parameter                            | Description                                                                                                                                                                                                                                                                      | Default         |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
-| `etcd.replicaCount`                  | Number of etcd nodes                                                                                                                                                                                                                                                             | `3`             |
+| `etcd.replicaCount`                  | Number of etcd nodes                                                                                                                                                                                                                                                             | `5`             |
 | `etcd.maxEtcdThreads`                | Maximum Number of Threads Etcd Can Use                                                                                                                                                                                                                                           | `2`             |
 | `etcd.persistence.enabled`           | Enables use of Persistent Volumes                                                                                                                                                                                                                                                | `true`          |
 | `etcd.dataPVC.accessMode`            | Access Mode for the Persistent Volume                                                                                                                                                                                                                                            | `ReadWriteOnce` |
