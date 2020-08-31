@@ -1,7 +1,7 @@
-Latest: v1.1.2
+Latest: v1.1.3
 
 ### What's new...
-* Support Assembly Install
+* Security updates
 
 ### Fixes
 
@@ -15,6 +15,9 @@ Latest: v1.1.2
 * See README.md
 
 ### Version History
+
+v1.1.3
+* Security updates
 
 v1.1.2
 * Support Assembly Install
