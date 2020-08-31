@@ -1,0 +1,98 @@
+{{- if (.Values.csi) and (eq .Values.csi true)}}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: px-csi-ext
+  namespace: kube-system
+  labels:
+{{- include "px.labels" . | nindent 4 }}
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: px-csi-driver
+  template:
+    metadata:
+      labels:
+        app: px-csi-driver
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: px/enabled
+                operator: NotIn
+                values:
+                - "false"
+              - key: node-role.kubernetes.io/master
+                operator: DoesNotExist
+      serviceAccount: px-csi-account
+      containers:
+        - name: csi-external-provisioner
+          image: quay.io/openstorage/csi-provisioner:v1.6.0-1
+          imagePullPolicy: Always
+          args:
+            - "--v=5"
+            - "--provisioner=pxd.portworx.com"
+            - "--csi-address=$(ADDRESS)"
+            - "--enable-leader-election"
+            - "--leader-election-type=leases"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-snapshotter
+          image: quay.io/k8scsi/csi-snapshotter:v2.1.0
+          imagePullPolicy: Always
+          args:
+            - "--v=3"
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election=true"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-snapshot-controller
+          image: quay.io/k8scsi/snapshot-controller:v2.1.0
+          imagePullPolicy: Always
+          args:
+            - "--v=3"
+            - "--leader-election=true"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-resizer
+          image: quay.io/k8scsi/csi-resizer:v0.5.0
+          imagePullPolicy: Always
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election=true"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+      volumes:
+        - name: socket-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/pxd.portworx.com
+            type: DirectoryOrCreate
+{{- end }}
