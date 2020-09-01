@@ -186,14 +186,47 @@ $ helm install --set persistence.existingClaim=PVC_NAME
 
 The volume defaults to mount at a subdirectory of the volume instead of the volume root to avoid the volume's hidden directories from interfering with database creation.
 
-## Retrieving the PostgreSQL user password
-
-The PostgreSQL user password is either auto-generated to a 10 character random password or user-specified. To retrieve the PostgreSQL user password, the user can execute the following command, where <SECRET NAME> is the secret for the deployment as retrieved by `kubectl get secrets`:
-
-`kubectl get secret --namespace default <SECRET NAME> -o jsonpath="{.data.password}" | base64 --decode; echo`
-
-The command will output the decoded secret. 
-
 ## Limitations
 
 None
+
+## Security Context Constraints
+
+This chart requires the use of `restricted` SCC to be bound to the service account.
+
+```
+Name:						restricted
+Priority:					<none>
+Access:						
+  Users:					
+  Groups:					system:authenticated
+Settings:					
+  Allow Privileged:				false
+  Allow Privilege Escalation:			true
+  Default Add Capabilities:			SYS_ADMIN
+  Required Drop Capabilities:			KILL,MKNOD,SETUID,SETGID
+  Allowed Capabilities:				<none>
+  Allowed Seccomp Profiles:			<none>
+  Allowed Volume Types:				configMap,downwardAPI,emptyDir,persistentVolumeClaim,projected,secret
+  Allowed Flexvolumes:				<all>
+  Allowed Unsafe Sysctls:			<none>
+  Forbidden Sysctls:				<none>
+  Allow Host Network:				false
+  Allow Host Ports:				false
+  Allow Host PID:				false
+  Allow Host IPC:				false
+  Read Only Root Filesystem:			false
+  Run As User Strategy: MustRunAsRange		
+    UID:					<none>
+    UID Range Min:				<none>
+    UID Range Max:				<none>
+  SELinux Context Strategy: MustRunAs		
+    User:					<none>
+    Role:					<none>
+    Type:					<none>
+    Level:					<none>
+  FSGroup Strategy: MustRunAs			
+    Ranges:					<none>
+  Supplemental Groups Strategy: RunAsAny	
+    Ranges:					<none>
+```
