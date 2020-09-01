@@ -25,5 +25,16 @@ productID: "ICP4D-addon-5737-H42"
 {{- else }}
 productID: "5737-H42"
 {{- end }}
-productVersion: "1.0.1"
+productVersion: "1.0.2"
+productMetric: VIRTUAL_PROCESSOR_CORE
+productChargedContainers: All
+cloudpakName: IBM Cloud Pak for Data
+cloudpakId: eb9998dcc5d24e3eb5b6fb488f750fe2
+cloudpakVersion: 3.0.1
+{{- end }}
+
+{{- define "mongo.hostaccess" }}
+hostNetwork: false
+hostPID: false
+hostIPC: false
 {{- end }}

@@ -16,17 +16,29 @@ spec:
         chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
         release: "{{ .Release.Name }}"
         heritage: "{{ .Release.Service }}"
+        icpdsupport/app: config
+        icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
       annotations:
         {{- include "mongo.annotations" .  | indent 8 }}
     spec:
       {{- include "nodeaffinity" . | indent 6 }}
       {{- include "tolerations" . | indent 6 }}
-      {{- include "mongodbSecurityContext" . | indent 6 }}
+      {{- include "mongo.hostaccess" .  | indent 6 }}
       serviceAccount: {{ .Values.global.serviceAccount }}
       containers:
       - name: mongodb-startreplicaset
         image: {{ .Values.opsmanagerConfigs.image.repository }}:{{ .Values.opsmanagerConfigs.image.tag }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         command: ['/bin/sh']
-        args: ['-cx', '/var/mongodb_setup/operator/manage-operator.sh --namespace {{ .Release.Namespace }} --opimage {{ .Values.operator.image.repository }} --optag {{ .Values.operator.image.tag }} --env {{ .Values.env }} --dbimage {{ .Values.database.image.repository }}  --dbtag {{ .Values.database.image.tag }}']
+        args: ['-cx', '/var/mongodb_setup/operator/manage-operator.sh --namespace {{ .Release.Namespace }} 
+        --opimage {{ .Values.operator.image.repository }} --optag {{ .Values.operator.image.tag }} 
+        --env {{ .Values.env }} 
+        --dbimage {{ .Values.database.image.repository }}  --dbtag {{ .Values.database.image.tag }} 
+        --omimage {{.Values.opsManager.image.repository}} --omtag {{.Values.opsManager.image.tag}} 
+        --iomimage {{.Values.initOpsManager.image.repository}} --iomtag {{.Values.initOpsManager.image.tag}}
+        --appdbimage {{.Values.appdb.image.repository}} --appdbtag {{.Values.appdb.image.tag}}
+        --iappdbimage {{.Values.initAppdb.image.repository}} --iappdbtag {{.Values.initAppdb.image.tag}}
+        --instanceID {{ .Values.zenServiceInstanceId | int64 }}'
+        ]
+        {{- include "mongodbSecurityContext" . | indent 8 }}
       restartPolicy: Never

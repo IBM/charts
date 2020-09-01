@@ -22,17 +22,21 @@ spec:
         chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
         release: "{{ .Release.Name }}"
         heritage: "{{ .Release.Service }}"
+        icpdsupport/app: config
+        icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
       annotations:
         {{- include "mongo.annotations" .  | indent 8 }}
     spec:
       {{- include "nodeaffinity" . | indent 6 }}
       {{- include "tolerations" . | indent 6 }}
-      {{- include "mongodbSecurityContext" . | indent 6 }}
+      {{- include "mongo.hostaccess" .  | indent 6 }}
       serviceAccount: {{ .Values.global.serviceAccount }}
       containers:
       - name: mongodb-addfirstuser
         image: {{ .Values.opsmanagerConfigs.image.repository }}:{{ .Values.opsmanagerConfigs.image.tag }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         command: ['/bin/sh']
-        args: ['-cx', '/var/mongodb_setup/configure-ops/configure.sh --username {{ .Values.username }} --password {{ .Values.password }} --firstname {{ .Values.firstname }} --lastname {{ .Values.lastname }} --emailaddress {{ .Values.emailaddress }} --projectname {{ .Values.projectname }} --namespace {{ .Release.Namespace }} --service-name {{ .Values.servicename }}']
+        args: ['-cx', '/var/mongodb_setup/configure-ops/configure.sh --emailaddress {{ .Values.emailaddress }} --projectname {{ .Values.projectname }} --namespace {{ .Release.Namespace }} --service-name {{ .Values.servicename }}
+        --storage {{ .Values.pvcSettings.size }} --storage-class {{ .Values.storage.storageLocation.metaStorage.pvc.claim.storageClassName }} --version {{ .Values.opsmanagerConfigs.image.tag }} --dedicated {{ .Values.dedicated }} --instanceID {{ .Values.zenServiceInstanceId | int64 }}']
+        {{- include "mongodbSecurityContext" . | indent 8 }}      
       restartPolicy: Never

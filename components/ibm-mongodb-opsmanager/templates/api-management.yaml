@@ -1,4 +1,4 @@
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: "{{ .Values.servicename }}-api-management"
@@ -9,6 +9,9 @@ metadata:
     heritage: "{{ .Release.Service }}"
     component: mongodb
 spec:
+  selector:
+    matchLabels:
+      api-database-status: "{{ .Values.servicename }}-mongodb-api"
   replicas: 1
   revisionHistoryLimit: 2
   template:
@@ -22,17 +25,30 @@ spec:
         release: "{{ .Release.Name }}"
         heritage: "{{ .Release.Service }}"
         component: mongodb
+        icpdsupport/app: config
+        icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
       annotations:
         {{- include "mongo.annotations" .  | indent 8 }}
     spec:
       {{- include "nodeaffinity" . | indent 6 }}
       {{- include "tolerations" . | indent 6 }}
-      {{- include "mongodbSecurityContext" . | indent 6 }}
+      {{- include "mongo.hostaccess" .  | indent 6 }}
       serviceAccount: {{ .Values.global.serviceAccount }}
       containers:
       - name: mongo-status
         image: {{ .Values.apiManagement.image.repository }}:{{ .Values.apiManagement.image.tag }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        livenessProbe:
+          exec:
+            command: ["/bin/bash", "-c", "ls /var/mongodb_setup"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        readinessProbe:
+          exec:
+            command: ["/bin/bash", "-c", "ls /var/mongodb_setup"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        {{- include "mongodbSecurityContext" . | indent 8 }}
         env:
         - name: NAMESPACE
           value: {{ .Release.Namespace }}
