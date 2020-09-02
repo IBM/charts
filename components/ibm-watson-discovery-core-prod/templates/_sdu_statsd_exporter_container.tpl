@@ -8,12 +8,14 @@
      {{- $root.Values.sdu.statsd.image.tag }}
 {{ include "sch.security.securityContext" (list $root $root.sch.chart.watsonUserSecurityContext) | indent 2 }}
   resources:
-{{ toYaml $root.Values.sdu.statsd.resources | indent 4 }}  
-  args:
-    - "--statsd.listen-udp=localhost:{{- $root.Values.sdu.statsd.port -}}"
-    - "--statsd.mapping-config"
-    - "/etc/statsd/statsd_exporter_mapping.yml"
-    - "--web.listen-address=:{{ $root.Values.sdu.statsd.prom_port }}"
+{{ toYaml $root.Values.sdu.statsd.resources | indent 4 }}
+  env:
+    - name: STATSD_PORT
+      value: "{{ $root.Values.sdu.statsd.port }}"
+    - name: STATSD_MAPPING_FILE
+      value: "/etc/statsd/statsd_exporter_mapping.yml"
+    - name: PROMETHEUS_PORT
+      value: "{{ $root.Values.sdu.statsd.prom_port }}"
   ports:
     - containerPort: {{ $root.Values.sdu.statsd.prom_port }}
   livenessProbe:

@@ -1,3 +1,4 @@
+{{- if .Values.global.private }}
 {{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
 {{- $compName := .sch.chart.components.wexCore.name }}
 {{- $subCompName := .sch.chart.components.wexCore.minerapp.name }}
@@ -61,10 +62,29 @@ spec:
         image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.core.image.minerapp.name }}:{{ .Values.core.image.minerapp.tag }}"
         imagePullPolicy: "{{ .Values.global.image.pullPolicy }}"
         env:
+        - name: CLOUD_ENVIRONMENT
+          value: "icp"
+        - name: SESSION_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: session-secret
+              name: tooling-secrets
+        - name: RESOURCE_CONTROLLER_ENDPOINT
+          value: {{ include "watson.gateway.endpoint" . | quote }}
+        - name: USER_MANAGEMENT_ENDPOINT
+          value: {{ printf "%s/api/v1/usermgmt" (include "cp4d.nginx.endpoint" .) | quote }}
+        - name: RESOURCE_CONTROLLER_INSTANCES_PATH
+          value: "/api/ibmcloud/resource-controller/resource_instances"
+        - name: RESOURCE_CONTROLLER_KEYS_PATH
+          value: "/api/ibmcloud/resource-controller/resource_keys/:instanceId"
+        - name: RESOURCE_CONTROLLER_RESOURCE_ID
+          value: {{ .Values.gateway.addon.serviceId }}
         - name: WLP_MAX_HEAP
           value: "$(MINER_WLP_MAX_HEAP)"
         - name: CONTEXT_PATH
           value: {{ include "discovery.core.minerapp.path" . | quote }}
+        - name: WEX_SSL_CAPATH
+          value: /opt/tls/nginx/tls.crt
 {{ include "discovery.core.gateway.envVars" . | indent 8 }}
         envFrom:
         - configMapRef:
@@ -99,7 +119,7 @@ spec:
             - bash
             - -ce
             - |
-              curl -slk -w "%{http_code}" -o /dev/null https://localhost:9483/health | grep 200
+              curl -slk -w "%{http_code}" -o /dev/null https://localhost:4000/health | grep 200
 {{ toYaml .Values.core.minerapp.readinessProbe | indent 10 }}
         livenessProbe:
           exec:
@@ -107,7 +127,7 @@ spec:
             - bash
             - -ce
             - |
-              curl -slk -w "%{http_code}" -o /dev/null https://localhost:9483/health | grep 200
+              curl -slk -w "%{http_code}" -o /dev/null https://localhost:4000/health | grep 200
 {{ toYaml .Values.core.minerapp.livenessProbe | indent 10 }}
 {{- include "sch.security.securityContext" (list . .sch.chart.wexUserPodSecurityContext) | indent 8 }}
       - name: adminapp
@@ -179,3 +199,4 @@ spec:
       - name: certificate-postgresql
         secret:
           secretName: {{ include "discovery.crust.postgresql.ca" . }}
+{{- end }}

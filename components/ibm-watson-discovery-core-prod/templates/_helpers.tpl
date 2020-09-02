@@ -27,11 +27,6 @@
   {{- printf "%s-%s" (index .Values.global.components "ibm-watson-discovery-core-prod").releaseName .Values.global.appName | trunc 55 }}-cnm-api
 {{- end -}}
 
-{{- define "discovery.cnm.apiEndpoint" -}}
-  {{- $svc := include "discovery.cnm.service" . -}}
-  {{- printf "https://%s.%s.svc.%s:9443" $svc .Release.Namespace .Values.global.clusterDomain }}
-{{- end -}}
-
 {{- define "discovery.cnm.apiServer.replicas" -}}
   {{- if .Values.cnm.apiServer.replicas -}}
     {{- .Values.cnm.apiServer.replicas -}}
@@ -895,6 +890,14 @@ resources:
     {{- tpl .Values.core.minerapp.adminapp.pathTemplate . -}}
   {{- else -}}
     {{- printf "/%s/%s/cm/admin" .Values.gateway.addon.serviceId .Release.Name -}}
+  {{- end -}}
+{{- end -}}
+
+{{- define "discovery.core.cm.path" -}}
+  {{- if tpl .Values.core.minerapp.cm.pathTemplate . -}}
+    {{- tpl .Values.core.minerapp.cm.pathTemplate . -}}
+  {{- else -}}
+    {{- printf "/%s/%s/cm" .Values.gateway.addon.serviceId .Release.Name -}}
   {{- end -}}
 {{- end -}}
 

@@ -3,24 +3,28 @@
 {{- $app := .Values.global.appName -}}
 {{- $tlsSecret := include "discovery.admin.tls" . -}}
 {{- $tenantLabel := .Values.global.tenant }}
-
+{{- $wireConfigName := include "sch.names.fullCompName" (list . "wire-config" ) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "sch.names.fullCompName" (list . $compName) }}
   labels:
-{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "dfs-modelmesh" "squad" "wire" "service" "discovery" "tenant" $tenantLabel)) | indent 4 }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" $compName "squad" "wire" "service" "discovery" "tenant" $tenantLabel)) | indent 4 }}
 spec:
   replicas: {{ include "discovery.dfs.mmReplicas" . }}
   selector:
     matchLabels:
-{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "dfs-modelmesh" "app.kubernetes.io/name" "dfs-modelmesh" "squad" "wire" "app" $app "service" "discovery" "tenant" $tenantLabel)) | indent 6 }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" $compName "app.kubernetes.io/name" $compName "squad" "wire" "app" $app "service" "discovery" "tenant" $tenantLabel)) | indent 6 }}
   template:
     metadata:
       annotations:
 {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+{{- if .Values.global.metricsCollection.enabled }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: '{{ .Values.wire.statsd.exporterPrometheusPort }}'
+{{- end }}
       labels:
-{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "dfs-modelmesh" "app.kubernetes.io/name" "dfs-modelmesh" "squad" "wire" "app" $app "service" "discovery" "tenant" $tenantLabel)) | indent 8 }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" $compName "app.kubernetes.io/name" $compName "squad" "wire" "app" $app "service" "discovery" "tenant" $tenantLabel)) | indent 8 }}
     spec:
       serviceAccountName: {{ include "discovery.admin.serviceAccount" . }}
       affinity:
@@ -36,8 +40,13 @@ spec:
 {{ include "discovery.etcdInitContainer" . | indent 8 }}
 {{- end }}
       containers:
+{{ include "wire.statsdExporter.container" (list . ) | indent 6 }}
       - name: modelmesh-sidecar
+{{- if .Values.global.private }}
         image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.mm.mmSideCar.image.name}}:{{ .Values.mm.mmSideCar.image.tag }}"
+{{- else }}
+        image: "{{ .Values.mm.modelMeshDockerRegistryPrefix }}/{{ .Values.mm.mmSideCar.image.name}}:{{ .Values.mm.mmSideCar.image.tag }}"
+{{- end }}
 {{ include "sch.security.securityContext" (list . .sch.chart.restrictedSecurityContext) | indent 8 }}
         ports:
         - name: thrift
@@ -62,6 +71,8 @@ spec:
         #  value: max-grpc-msg-size-in-bytes
         - name: KV_STORE
           value: etcd:/opt/watson/mmesh/dynconfig/etcd_connection
+        - name: MM_METRICS
+          value: {{ printf "prometheus:scheme=http;port=%d" .Values.wire.statsd.exporterPrometheusPort | quote }}
         # [*] LOG_TO_DB is optional and needs to be set only if you want
         # the start script to log to a database.  Any non-empty value
         # will activate it.
@@ -225,6 +236,10 @@ spec:
           value: "{{ .Values.mm.mmServer.env.memoryLimitInMb }}"
         - name: mem_reserved_size_in_mb
           value: "100"
+        - name: PALM_STATS_D_METRIC_TYPE_PREFIX_ENABLED
+          value: "true"
+        - name: PALM_STATS_D_PREFIX
+          value: "dfs_model_mesh"
         imagePullPolicy: {{ .Values.global.image.pullPolicy }}
       # longer grace period to allow for model propagation
       terminationGracePeriodSeconds: 90
@@ -253,6 +268,11 @@ spec:
         secret:
           defaultMode: 420
           secretName: '{{ include "discovery.core.javaKeyStore" . }}'
+{{- end }}
+{{- if .Values.global.metricsCollection.enabled }}
+      - name: {{ .Values.wire.configVolume }}
+        configMap:
+          name: {{ $wireConfigName }}
 {{- end }}
   strategy:
     rollingUpdate:
