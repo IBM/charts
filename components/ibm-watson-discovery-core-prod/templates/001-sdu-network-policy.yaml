@@ -1,0 +1,38 @@
+{{- if or (.Values.networkPolicy.create) (not .Values.global.private) }}
+  {{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+  {{- $app := .Values.global.appName }}
+  {{- $tenant := .Values.global.tenant }}
+  {{- $compName := .sch.chart.components.sdu.name -}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-discovery-sdu-api" $tenant }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" "sdu" "app.kubernetes.io/name" "sdu" "squad" "sdu" "app" $app "service" "discovery")) | indent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: "sdu-api"
+      app.kubernetes.io/instance: {{ $tenant | quote }}
+      service: "discovery"
+      tenant: {{ $tenant | quote }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          run: "gateway"
+          tenant: {{ $tenant | quote }}
+    - podSelector:
+        matchLabels:
+          run: "converter"
+          tenant: {{ $tenant | quote }}
+    {{- if not .Values.global.private }}
+    - podSelector:
+        matchLabels:
+          app: "po-box"
+          tenant: {{ $tenant | quote }}
+    {{- end }}
+{{- end }}

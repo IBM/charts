@@ -1,0 +1,36 @@
+{{- if or (.Values.mantle.networkPolicy.create) (not .Values.global.private) }}
+{{- include "sch.config.init" (list . "glimpse.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.glimpse.query.name -}}
+{{- $cnmCompName := .sch.chart.components.cnm.apiServer.name -}}
+{{- $mantle := (index .Values.global.components "ibm-watson-discovery-mantle-prod").releaseName -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName ) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "service" "discovery")) | indent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+{{- if .Values.global.private }}
+      app: glimpse-query
+      release: {{ $mantle }}
+{{- else }}
+      app: glimpse-query-{{ $mantle }}
+{{- end }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+{{ include "discovery.glimpse.cnm.matchLabels" . | indent 10 }}
+    - podSelector:
+        matchLabels:
+{{- if .Values.global.private }}
+          app: glimpse-builder
+          release: {{ $mantle }}
+{{- else }}
+          app: glimpse-builder-{{ $mantle }}
+{{- end }}
+{{- end }}

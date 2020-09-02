@@ -30,6 +30,8 @@ spec:
         run: {{ $subCompName }}
       annotations:
 {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        prometheus.io/port: {{ .Values.core.management.metrics.prometheusPort | quote }}
+        prometheus.io/scrape: {{ .Values.global.metricsCollection.enabled | quote }}
     spec:
       serviceAccountName: {{ .Values.global.serviceAccount.name }}
 {{- include "sch.security.securityContext" (list . .sch.chart.wexUserSpecSecurityContext) | indent 6 }}
@@ -56,7 +58,7 @@ spec:
       initContainers:
 {{ include "discovery.core.initContainer.etcdCheck" . | indent 6 }}
 {{ include "discovery.core.initContainer.postgresqlCheck" . | indent 6 }}
-{{ include "discovery.core.initContainer.rapiCheck" . | indent 6 }}
+{{ include "discovery.elasticInitContainer" . | indent 6 }}
 {{- if .Values.global.private }}
 {{ include "discovery.core.initContainer.minioCheck" . | indent 6 }}
 {{- end }}
@@ -113,10 +115,11 @@ spec:
               key: tls.crt
         - name: DLAAS_SERVICE_URL
           value: {{ include "dlaas.hostPort" . | quote}}
-        - name: DLAAS_DATASTORE_TYPE
-          value: "s3_datastore"
         - name: DLAAS_AUTHORITY
           value: "dlaas.ibm.com"
+{{- if .Values.global.private }}
+        - name: DLAAS_DATASTORE_TYPE
+          value: "s3_datastore"
         - name: SENTENCE_TRAIN_GPU_COUNT
           value: "0"
         - name: SENTENCE_TRAIN_GPU_TYPE
@@ -125,14 +128,28 @@ spec:
           value: "8"
         - name: SENTENCE_TRAIN_CPU_MEMORY
           value: "12000"
+        - name: SENTENCE_TRAIN_IMAGE_NAME
+          value: "sentence-classification"
+{{- else }}
+        - name: DLAAS_DATASTORE_TYPE
+          value: "mount_cos"
+        - name: SENTENCE_TRAIN_GPU_COUNT
+          value: "1"
+        - name: SENTENCE_TRAIN_GPU_TYPE
+          value: "nvidia-TeslaK80"
+        - name: SENTENCE_TRAIN_CPU_COUNT
+          value: "4"
+        - name: SENTENCE_TRAIN_CPU_MEMORY
+          value: "8000"
+        - name: SENTENCE_TRAIN_IMAGE_NAME
+          value: "sentence-classification-gpu"
+{{- end }}
+        - name: SENTENCE_TRAIN_IMAGE_VERSION
+          value: "v1.0.9"
         - name: SENTENCE_TRAIN_BATCH_SIZE
           value: "16"
         - name: SENTENCE_TRAIN_NUM_EPOCHS
           value: "2"
-        - name: SENTENCE_TRAIN_IMAGE_NAME
-          value: "sentence-classification"
-        - name: SENTENCE_TRAIN_IMAGE_VERSION
-          value: "v1.0.7"
         - name: SENTENCE_TRAIN_IMAGE_REGISTRY
           value: {{ .Values.global.dockerRegistryPrefix | splitList "/" | first }}
         - name: SENTENCE_TRAIN_IMAGE_NAMESPACE
@@ -147,16 +164,28 @@ spec:
               key: .dockerconfigjson
 {{- end }}
         - name: SENTENCE_TRAIN_INPUT_BUCKET_NAME
-          value: "discovery-sentence-classification-input"
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.crust.minio.configmap" . }}
+              key: bucketScInput
         - name: SENTENCE_TRAIN_OUTPUT_BUCKET_NAME
-          value: "discovery-sentence-classification-results"
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "discovery.crust.minio.configmap" . }}
+              key: bucketScResults
         - name: ETCD_SSL_CERT
           valueFrom:
             secretKeyRef:
+            {{- if .Values.global.private }}
               name: {{ include "discovery.admin.tls" . }}
+            {{- else }}
+              name: {{ include "discovery.crust.etcd.secret" . }}
+            {{- end }}
               key: tls.cacrt
         - name: SSL_CERTFILE
           value: "/opt/tls/wlp/tls.crt"
+        - name: ENABLE_METRICS
+          value: {{ .Values.global.metricsCollection.enabled | quote }}
         envFrom:
         - configMapRef:
             name: {{ include "sch.names.fullCompName" (list . $compName ) }}

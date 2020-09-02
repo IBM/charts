@@ -1,0 +1,26 @@
+{{- if (not .Values.global.private) }}
+  {{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+  {{- $app := .Values.global.appName }}
+  {{- $tenant := .Values.global.tenant }}
+  {{- $compName := .sch.chart.components.mm.name -}}
+  {{- $dfsCompName := .sch.chart.components.dfs.name -}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" $compName "squad" "wire" "service" "discovery" "tenant" $tenant)) | indent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "run" $compName "app.kubernetes.io/name" $compName "squad" "wire" "app" $app "service" "discovery" "tenant" $tenant)) | indent 6 }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          run: {{ $dfsCompName | quote }}
+          tenant: {{ $tenant | quote }}
+{{- end }}

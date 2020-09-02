@@ -1,0 +1,26 @@
+{{- if (not .Values.global.private) }}
+  {{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+  {{- $rapiCompName := .sch.chart.components.wexCore.rapi.name }}
+  {{- $wexCoreCompName := .sch.chart.components.wexCore.name }}
+  {{- $gatewayCompName := .sch.chart.components.wexCore.gateway.name }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $rapiCompName ) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $wexCoreCompName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 4 }}
+    run: {{ $rapiCompName }}
+spec:
+  podSelector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $wexCoreCompName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 6 }}
+      run: {{ $rapiCompName }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $wexCoreCompName) | indent 10 }}
+          run: {{ $gatewayCompName }}
+{{- end }}

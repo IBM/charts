@@ -191,10 +191,12 @@ spec:
         env:
         - name: JAVA_TOOL_OPTIONS
           value: {{ .Values.wire.trainingRest.javaOpts }}
-        - name: GRPC_SERVER_HOST
-          value: {{ include "discovery.wire.trainingCrud.service" . }}
         - name: CRUD_SERVER_HOST
           value: {{ include "discovery.wire.trainingCrud.service" . }}
+        - name: WIRE_DOMAIN_NAME_OVERRIDE
+          value: "{{$tdCrudName}}.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }}"
+        - name: WIRE_PRIVATE_KEY_PASSPHRASE_ENABLED
+          value: {{ .Values.wire.privateKeyPassphraseEnabled | quote }}
         - name: WIRE_PRIVATE_KEY_PASSPHRASE
           valueFrom:
             secretKeyRef:
@@ -242,6 +244,16 @@ spec:
           value: /rabbitmq-client.crt
         - name: DATA_EXHAUST_ENABLED
           value: "false"
+        - name: USERDATA_TRAININGDATA_EXCHANGE_NAME
+          value: "discoV2Messages"
+        - name: USERDATA_TRAININGDATA_ROUTING_KEY
+          value: "user_data.delete"
+        - name: USERDATA_DATAEXHAUST_EXCHANGE_NAME
+          value: "discoV2Messages"
+        - name: COLLECTION_DELETE_EXCHANGE_NAME
+          value: "discoV2Messages"
+        - name: ENVIRONMENT_DELETE_EXCHANGE_NAME
+          value: "discoV2Messages"
         livenessProbe:
           httpGet:
             scheme: HTTPS
@@ -264,5 +276,13 @@ spec:
           mountPath: /rabbitmq-client.crt
           subPath: rabbitmq-client.crt
           readOnly: true
+        - mountPath: /server.crt
+          name: tls
+          readOnly: true
+          subPath: server.crt
+        - mountPath: /server.pem
+          name: tls
+          readOnly: true
+          subPath: server.pem
 {{- end }}
 {{ include "wire.statsdExporter.container" (list . ) | indent 6 }}

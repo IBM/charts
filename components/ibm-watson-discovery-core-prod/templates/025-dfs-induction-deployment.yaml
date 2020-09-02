@@ -6,6 +6,7 @@
 {{- $elasticConfigMapName := include "discovery.mantle.elastic.configmap" . -}}
 {{- $dbcheck := "postgres-db-check" -}}
 {{- $tenantLabel := .Values.global.tenant }}
+{{- $wireConfigName := include "sch.names.fullCompName" (list . "wire-config" ) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,6 +22,10 @@ spec:
     metadata:
       annotations:
 {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+{{- if .Values.global.metricsCollection.enabled }}
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '{{ .Values.wire.statsd.exporterPrometheusPort }}'
+{{- end }}
       labels:
 {{ include "sch.metadata.labels.standard" (list . $compName (dict "run" $compName "app.kubernetes.io/name" $compName "squad" "wire" "app" $app "service" "discovery" "tenant" $tenantLabel)) | indent 8 }}
     spec:
@@ -92,6 +97,7 @@ spec:
 {{- end }}
 {{/* End of init containers if-else block */}}
       containers:
+{{ include "wire.statsdExporter.container" (list . ) | indent 6 }}
       - name: dfs-induction
         image: {{ .Values.global.dockerRegistryPrefix }}/
           {{- .Values.dfs.image.name }}:
@@ -135,8 +141,6 @@ spec:
           value: "{{ .Values.dfs.env.realmInfo }}"
         - name: SERVER_MODE
           value: "kg-induction-server"
-        - name: train_trigger_vocab_size_threshold
-          value: "{{ .Values.dfs.env.trainTriggerVocabSizeThreshold }}"
         - name: cos_connection_url
           valueFrom:
             configMapKeyRef:
@@ -153,6 +157,8 @@ spec:
           value: "true"
         - name: initialize_postgres
           value: "true"
+        - name: gdpr_tenantid_override
+          value: "{{ .Values.dfs.env.gdpr.tenantIdOverride }}"
         - name: kgdb_url
           valueFrom:
             configMapKeyRef:
@@ -168,6 +174,10 @@ spec:
           value: {{ include "sch.names.fullCompName" (list . $MMcompName) | quote }}
         - name: modelmesh_server_port
           value: {{ .Values.dfs.env.modelmeshServerPort | quote }}
+        - name: PALM_STATS_D_METRIC_TYPE_PREFIX_ENABLED
+          value: "true"
+        - name: PALM_STATS_D_PREFIX
+          value: "dfs_induction"
         - name: elastic_user
           valueFrom:
             secretKeyRef:
@@ -270,3 +280,8 @@ spec:
 {{- end }}
       - name: mc-config-dir
         emptyDir: {}
+{{- if .Values.global.metricsCollection.enabled }}
+      - name: {{ .Values.wire.configVolume }}
+        configMap:
+          name: {{ $wireConfigName }}
+{{- end }}

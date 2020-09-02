@@ -1,0 +1,31 @@
+{{- if or (.Values.networkPolicy.create) (not .Values.global.private) }}
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.cnm.apiServer.name -}}
+{{- $wexCoreCompName := .sch.chart.components.wexCore.name }}
+{{- $gatewayCompName := .sch.chart.components.wexCore.gateway.name }}
+{{- $coreRelease := (index .Values.global.components "ibm-watson-discovery-core-prod").releaseName -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName ) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "service" "discovery")) | indent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "service" "discovery")) | indent 6 }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $wexCoreCompName) | indent 10 }}
+          run: {{ $gatewayCompName }}
+{{- if not .Values.global.private }}
+    - podSelector:
+        matchLabels:
+          app: "po-box"
+          release: {{ $coreRelease }}
+{{- end }}
+{{- end }}
