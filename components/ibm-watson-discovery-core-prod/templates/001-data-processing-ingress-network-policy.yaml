@@ -1,0 +1,48 @@
+{{- if or (.Values.networkPolicy.create) (not .Values.global.private) }}
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.wexCore.name }}
+{{- $compDataProcessingNetworkPolicyName := .sch.chart.components.wexCore.dataProcessing.networkPolicy.name }}
+{{- $compHdpName := .sch.chart.components.hdp.name }}
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compDataProcessingNetworkPolicyName ) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - {key: "app.kubernetes.io/component", operator: In, values: [{{ $compName }}]}
+      - {key: "run", operator: NotIn, values: [gateway]}
+      - {key: "service", operator: In, values: [discovery]}
+      - {key: "tenant", operator: In, values: [{{ .Values.global.tenant }}]}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchExpressions:
+          - {key: "app.kubernetes.io/component", operator: In, values: [{{ $compName }}]}
+          - {key: "run", operator: NotIn, values: [gateway]}
+          - {key: "service", operator: In, values: [discovery]}
+          - {key: "tenant", operator: In, values: [{{ .Values.global.tenant }}]}
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: {{ $compName | quote }}
+          run: "gateway"
+          service: "discovery"
+          tenant: {{ .Values.global.tenant | quote }}
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: {{ $compHdpName | quote }}
+          service: "discovery"
+          tenant: {{ .Values.global.tenant | quote }}
+    {{- if not .Values.global.private }}
+    - podSelector:
+        matchLabels:
+          app: "po-box"
+          service: "discovery"
+          tenant: {{ .Values.global.tenant | quote }}
+    {{- end }}
+{{- end }}

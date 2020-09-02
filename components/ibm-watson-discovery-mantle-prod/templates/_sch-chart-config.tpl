@@ -3,8 +3,23 @@ sch:
   chart:
     appName: "{{ .Values.global.appName }}"
     components:
+      hdp:
+        name: hdp
+        networkPolicy:
+          name: hdp-network-policy
       postgresConfigJob:
         name: "dlaas-postgres-config"
+      glimpse:
+        builder:
+          name: "glimpse-builder"
+        query:
+          name: "glimpse-query"
+      cnm:
+        name: cnm
+        apiServer:
+          name: cnm-api
+        test:
+          name: cnm-api-test
     labelType: "prefixed"
     metering:
       productName: {{ .Values.global.metering.productName }}

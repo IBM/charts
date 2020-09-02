@@ -1,0 +1,38 @@
+{{- if or (.Values.mantle.networkPolicy.create) (not .Values.global.private) }}
+{{- include "sch.config.init" (list . "discovery.mantle.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.hdp.name }}
+{{- $compHdpNetworkPolicyName := .sch.chart.components.hdp.networkPolicy.name }}
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compHdpNetworkPolicyName ) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" (tpl .Values.global.tenant .) "service" "discovery")) | indent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: {{ $compName | quote }}
+      service: "discovery"
+      tenant: {{ .Values.global.tenant | quote }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: {{ $compName | quote }}
+          service: "discovery"
+          tenant: {{ .Values.global.tenant | quote }}
+    - podSelector:
+        matchExpressions:
+          - {key: "app.kubernetes.io/component", operator: In, values: [wex-core]}
+          - {key: "run", operator: NotIn, values: [gateway]}
+          - {key: "service", operator: In, values: [discovery]}
+          - {key: "tenant", operator: In, values: [{{ .Values.global.tenant }}]}
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: "sdu-api"
+          service: "discovery"
+          tenant: {{ .Values.global.tenant | quote }}
+{{- end }}

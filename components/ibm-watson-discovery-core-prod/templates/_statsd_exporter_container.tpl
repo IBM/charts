@@ -9,11 +9,13 @@
 {{ include "sch.security.securityContext" (list $root $root.sch.chart.restrictedSecurityContext) | indent 2 }}
   resources:
 {{ toYaml $root.Values.wire.statsd.resources | indent 4 }}
-  args:
-  - "--statsd.listen-udp=localhost:8125"
-  - "--statsd.mapping-config"
-  - "/etc/statsd/statsd_exporter_mapping.yml"
-  - "--web.listen-address=:{{ $root.Values.wire.statsd.exporterPrometheusPort }}"
+  env:
+    - name: STATSD_PORT
+      value: "8125"
+    - name: STATSD_MAPPING_FILE
+      value: "/etc/statsd/statsd_exporter_mapping.yml"
+    - name: PROMETHEUS_PORT
+      value: "{{ $root.Values.wire.statsd.exporterPrometheusPort }}"
   ports:
   - containerPort: {{ $root.Values.wire.statsd.exporterPrometheusPort }}
   livenessProbe:
