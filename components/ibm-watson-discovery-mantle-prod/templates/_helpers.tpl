@@ -100,6 +100,13 @@
   {{- end -}}
 {{- end -}}
 
+{{- define "discovery.glimpse.cnm.matchLabels" -}}
+  {{- $coreName := (index .Values.global.components "ibm-watson-discovery-core-prod").releaseName -}}
+app.kubernetes.io/component: cnm-api
+release: {{ $coreName }}
+service: discovery
+{{- end -}}
+
 {{- define "discovery.mantle.elastic.secret" -}}
   {{- if tpl .Values.global.mantle.elastic.secret . }}
     {{- tpl .Values.global.mantle.elastic.secret . }}

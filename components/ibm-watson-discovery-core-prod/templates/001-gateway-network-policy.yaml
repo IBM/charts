@@ -1,0 +1,125 @@
+{{- if (not .Values.global.private) }}
+  {{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+  {{- $app := .Values.global.appName }}
+  {{- $tenant := .Values.global.tenant }}
+  {{- $compName := .sch.chart.components.gateway.name -}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $tenant }}-discovery-gateway-ingress
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "tenant" $tenant "service" "discovery")) | indent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      run: gateway
+      service: discovery
+      tenant: {{ $tenant }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          run: gateway
+          tenant: {{ $tenant }}
+    - podSelector:
+        matchLabels:
+          app: cnm-api
+          tenant: {{ $tenant }}
+    - podSelector:
+        matchLabels:
+          app: crow
+          tenant: {{ $tenant }}
+    - podSelector:
+        matchLabels:
+          app: data-loader
+          tenant: {{ $tenant }}
+    - podSelector:
+        matchLabels:
+          run: dfs-induction
+          tenant: {{ $tenant }}
+    - podSelector:
+        matchLabels:
+          run: dfs-modelmesh
+          tenant: {{ $tenant }}
+    - podSelector:
+        matchLabels:
+          run: sdu
+          tenant: {{ $tenant }}
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: metering
+          tenant: {{ $tenant }}
+    - podSelector:
+        matchLabels:
+          run: haywire
+          tenant: {{ $tenant}}
+    - podSelector:
+        matchLabels:
+          run: management
+          tenant: {{ $tenant }}
+    - podSelector:
+        matchLabels:
+          run: orchestrator
+          tenant: {{ $tenant}}
+    - podSelector:
+        matchLabels:
+          run: project-data-prep-agent
+          app.kubernetes.io/instance: {{ $tenant }}
+    - namespaceSelector:
+        matchLabels:
+          wdc.ibm.com/namespace: kube-system
+      podSelector:
+        matchLabels:
+          public: alb1
+    - namespaceSelector:
+        matchLabels:
+          wdc.ibm.com/namespace: kube-system
+      podSelector:
+        matchLabels:
+          public: alb2
+    - namespaceSelector:
+        matchLabels:
+          wdc.ibm.com/namespace: kube-system
+      podSelector:
+        matchLabels:
+            public: alb3
+    - namespaceSelector:
+        matchLabels:
+          wdc.ibm.com/namespace: kube-system
+      podSelector:
+        matchLabels:
+          private: alb1
+    - namespaceSelector:
+        matchLabels:
+          wdc.ibm.com/namespace: kube-system
+      podSelector:
+        matchLabels:
+          private: alb2
+    - namespaceSelector:
+        matchLabels:
+          wdc.ibm.com/namespace: kube-system
+      podSelector:
+        matchLabels:
+          private: alb3
+    - namespaceSelector:
+        matchLabels:
+          wdc.ibm.com/namespace: cerberus
+      podSelector:
+        matchLabels:
+          app:  metrics-fetcher
+    - namespaceSelector:
+        matchLabels:
+          wdc.ibm.com/namespace: common-service-broker
+      podSelector:
+        matchLabels:
+          app: runtime-common-service-broker
+    - namespaceSelector:
+        matchLabels:
+          wdc.ibm.com/namespace: cerberus
+      podSelector:
+        matchLabels:
+          app: envoy
+{{- end }}

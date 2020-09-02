@@ -26,6 +26,8 @@ sch:
         name: "haywire"
       haywireTest:
         name: "haywire-test"
+      hdp:
+        name: hdp
       mm:
         name: "dfs-modelmesh"
       mmRuntime:
@@ -56,16 +58,12 @@ sch:
         name: "ranker-secret"
       sdu:
         name: "sdu-api"
-      sduApiTest:
-        name: "sdu-api-test"
       serveRanker:
         name: "serve-ranker"
       serveRankerTest:
         name: "serve-ranker-test"
       tooling:
-        name: "discovery-tooling"
-      toolingTest:
-        name: tooling-test
+        name: "tooling"
       trainingAgents:
         name: "training-agents"
       trainingAgentsTest:
@@ -96,6 +94,9 @@ sch:
           name: converter
         crawler:
           name: crawler
+        dataProcessing:
+          networkPolicy:
+            name: data-processing-network-policy
         gateway:
           name: gateway
           init:
@@ -116,7 +117,7 @@ sch:
           port: 9443
         minerapp:
           name: minerapp
-          port: 9483
+          port: 4000
           adminapp:
             port: 9473
         orchestrator:

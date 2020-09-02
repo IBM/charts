@@ -1,10 +1,10 @@
-# What's new in IBM Watson Discovery v2.1.3
+# What's new in IBM Watson Discovery v2.1.4
 
 - Watson Discovery is now offered as a Cloud Pak for Data Assembly to be installed using the Courier (also known as `cpd`) install utility.
 
 # Breaking Changes
 
-Watson Discovery 2.1.3 does not support IBM Cloud Private Foundations as an install target, and can only be installed on RedHat OpenShift running IBM Cloud Pak for Data 2.5 or 3.0.1.
+- No breaking changes to the IBM Watson Discovery product are included in this release.
 
 # Limitations
 
@@ -19,7 +19,7 @@ Watson Discovery 2.1.3 does not support IBM Cloud Private Foundations as an inst
 
 # Prerequisites
 
-- IBM® Cloud Pak for Data 2.1.0.1 or IBM® Cloud Pak for Data 2.5.0.0
+- IBM® Cloud Pak for Data 2.5.0.0 or IBM® Cloud Pak for Data 3.0.1
 
 
 # Documentation
@@ -31,7 +31,8 @@ For detailed installation instructions go to the [documentation](https://docs-ic
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
-| 2.1.3 | 19 June, 2020 | >-1.11.0 | This chart consists of a number of versioned images. The combination of images in use must not be changed from those shipped by the release. | IBM Cloud Private is no longer supported | |
+| 2.1.4 | 31 August, 2020 | >=1.11.0 | This chart consists of a number of versioned images. The combination of images in use must not be changed from those shipped by the release. | | |
+| 2.1.3 | 19 June, 2020 | >=1.11.0 | This chart consists of a number of versioned images. The combination of images in use must not be changed from those shipped by the release. | IBM Cloud Private is no longer supported | |
 | 2.1.2 | 31 March, 2020 | >=1.11.0 | This chart consists of a number of versioned images. The combination of images in use must not be changed from those shipped by the release. | | |
 | 2.1.1 | 24 January, 2020 | >=1.11.0 | This chart consists of a number of versioned images. The combination of images in use must not be changed from those shipped by the release. | | |
 | 2.1.0 | 15 November, 2019 | >=1.11.0 | This chart consists of a number of versioned images. The combination of images in use must not be changed from those shipped by the release. | | |
