@@ -13,3 +13,5 @@
 ## Version History
 - 2.0.49
 	- Initial Release
+- 2.0.50
+	- Add OCP 4.5.4 compatibility
