@@ -50,10 +50,10 @@ productVersion: {{ .Values.imageVersion }}
     {{- if (eq "/" (.Values.customRegistryURL | regexFind "/")) -}}
         {{ trim .Values.customRegistryURL }}
     {{- else -}}
-        {{cat (trim .Values.customRegistryURL) "/gcr.io/google_containers" | replace " " ""}}
+        {{cat (trim .Values.customRegistryURL) "/k8s.gcr.io" | replace " " ""}}
     {{- end -}}
 {{- else -}}
-        {{ "gcr.io/google_containers" }}
+        {{ "k8s.gcr.io" }}
 {{- end -}}
 {{- end -}}
 
