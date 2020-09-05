@@ -1,0 +1,112 @@
+{{- if .Values.service.enabled.mqtt }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "informix-ibm.fullname" . }}-mqtt-config
+  labels:
+    {{ include "tests.labels" . | indent 4 }}
+data:
+  Main.java: |-
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.PreparedStatement;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+    import org.eclipse.paho.client.mqttv3.MqttClient;
+    import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
+    import org.eclipse.paho.client.mqttv3.MqttException;
+    import org.eclipse.paho.client.mqttv3.MqttMessage;
+    import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
+
+    public class Main {
+
+      public static void main(String [] args) {
+        String dbUrl = "jdbc:informix-sqli://" + System.getenv("JDBC_URL");
+        System.out.println(dbUrl);
+        System.out.println("USER:" + System.getenv("DB_USERNAME"));
+        System.out.println("PASS:" + System.getenv("DB_PASSWORD"));
+        try(Connection con = DriverManager.getConnection(dbUrl, System.getenv("DB_USERNAME") , System.getenv("DB_PASSWORD"))) {
+          System.out.println("Driver Info: " + con.getMetaData().getDriverName() + " : " + con.getMetaData().getDriverVersion());
+          try(Statement s = con.createStatement()) {
+            s.execute("DATABASE sysmaster");
+            s.execute("DROP DATABASE IF EXISTS mqtt_test");
+            s.execute("CREATE DATABASE mqtt_test WITH LOG");
+            s.execute("CREATE TABLE mqtt (a int, b varchar(255))");
+          }
+          System.out.println("Test Successful");
+        } catch(SQLException e) {
+          System.out.println("Test Unsuccessful");
+          System.out.println(e.getMessage());
+          System.err.println(e.getErrorCode());
+          e.printStackTrace();
+          System.exit(1);
+        }
+
+        String topic        = "mqtt_test.mqtt";
+        String content      = "{ \"a\" : 123, \"b\" : \"Hello there\"}";
+        int qos             = 2;
+        String broker       = "tcp://" + System.getenv("MQTT_URL");
+        String clientId     = "JavaSample";
+        MemoryPersistence persistence = new MemoryPersistence();
+
+        try {
+          MqttClient sampleClient = new MqttClient(broker, clientId, persistence);
+          MqttConnectOptions connOpts = new MqttConnectOptions();
+          connOpts.setCleanSession(true);
+          System.out.println("Connecting to broker: "+broker);
+          sampleClient.connect(connOpts);
+          System.out.println("Connected");
+          System.out.println("Publishing message: "+content);
+          MqttMessage message = new MqttMessage(content.getBytes());
+          message.setQos(qos);
+          sampleClient.publish(topic, message);
+          System.out.println("Message published");
+          sampleClient.disconnect();
+          System.out.println("Disconnected");
+        } catch(MqttException me) {
+          System.out.println("reason "+me.getReasonCode());
+          System.out.println("msg "+me.getMessage());
+          System.out.println("cause "+me.getCause());
+          System.out.println("excep "+me);
+          me.printStackTrace();
+          System.exit(1);
+        }
+        try(Connection con = DriverManager.getConnection(dbUrl, System.getenv("DB_USERNAME") , System.getenv("DB_PASSWORD"))) {
+          System.out.println("Driver Info: " + con.getMetaData().getDriverName() + " : " + con.getMetaData().getDriverVersion());
+          try(Statement s = con.createStatement()) {
+            s.execute("DATABASE mqtt_test");
+            try(ResultSet rs = s.executeQuery("SELECT * FROM mqtt")) {
+              rs.next();
+              if(rs.getInt(1) != 123) {
+                throw new RuntimeException("Incorrect value returned: " + rs.getInt(1));
+              }
+            }
+          }
+          System.out.println("Test Successful");
+        } catch(SQLException e) {
+          System.out.println("Test Unsuccessful");
+          System.out.println(e.getMessage());
+          System.err.println(e.getErrorCode());
+          e.printStackTrace();
+          System.exit(1);
+        }
+      }
+    }
+  test-script: |-
+    #!/bin/sh
+
+    echo "Downloading driver from" $JDBC_DRIVER_DOWNLOAD_URL
+    wget -O driver1.jar $JDBC_DRIVER_DOWNLOAD_URL
+
+    echo "Downloading driver from" $MQTT_DRIVER_DOWNLOAD_URL
+    wget -O driver2.jar $MQTT_DRIVER_DOWNLOAD_URL
+
+
+    echo -e "Compiling Main.java file\n"
+    javac -cp driver1.jar:driver2.jar:. Main.java
+
+    echo -e "Running Main\n"
+    java -cp driver1.jar:driver2.jar:. Main
+
+{{ end }}
