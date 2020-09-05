@@ -1,0 +1,34 @@
+{{- if .Values.service.enabled.rest }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "informix-ibm.fullname" . }}-test-rest"
+  labels:
+    {{ include "tests.labels" . | indent 4 }}
+  annotations:
+    "helm.sh/weight": "7" 
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  {{- include "affinity.node" . | indent 2 }}
+  {{- include "securityContext.root" . | indent 2 }} 
+  volumes:
+    - name: rest-test
+      configMap:
+        name: {{ include "informix-ibm.fullname" . }}-rest-config
+        defaultMode: 0755
+  containers:
+    - name: golang
+      {{- include "tests.resources" . | indent 6 }}
+      {{- include "securityContext.containers.root" . | indent 6 }}
+      image: "{{ .Values.test.rest.image.repository }}:{{ .Values.test.rest.image.tag }}"
+      env:
+        - name: REST_URL
+          value: "{{ include "informix-ibm.fullname" . }}-rest:{{ .Values.service.port.rest }}"      
+      command: ['sh', '-c', 'cd /go/src && ls -l && go test -v']
+      volumeMounts:
+        - name: rest-test
+          mountPath: /go/src/solution_test.go
+          subPath: solution_test.go
+  restartPolicy: Never
+{{ end }}

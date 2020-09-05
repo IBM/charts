@@ -1,0 +1,46 @@
+{{- if .Values.service.enabled.drda }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "informix-ibm.fullname" . }}-drda-config
+  labels:
+  {{ include "tests.labels" . | indent 4 }}
+data:
+  Main.java: |-
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.PreparedStatement;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+
+    public class Main{
+
+      public static void main(String [] args){
+        String dbUrl = "jdbc:db2://" + System.getenv("DRDA_URL") + "/sysmaster";
+        System.out.println("DRDA URL: " + dbUrl);
+        try(Connection con = DriverManager.getConnection(dbUrl, System.getenv("DB_USERNAME") , System.getenv("DB_PASSWORD"))) {
+          try(Statement s = con.createStatement()) {
+            s.execute("SELECT * FROM systables");
+          }
+          System.out.println("Test Successful");
+        } catch(Exception e) {
+          System.out.println("Test Unsuccessful");
+          System.out.println(e.getMessage());
+          System.exit(1);
+        }
+      }
+    }
+  test-script: |-
+    #!/bin/sh
+
+    echo "Downloading driver from" $DRDA_DRIVER_DOWNLOAD_URL
+    wget -O driver.jar $DRDA_DRIVER_DOWNLOAD_URL
+
+    echo -e "Compiling Main.java file\n"
+    javac Main.java
+
+    echo -e "Running Main\n"
+    java -cp ".:driver.jar" Main
+    
+{{ end }}
