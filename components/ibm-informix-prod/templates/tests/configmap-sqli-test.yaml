@@ -1,0 +1,55 @@
+{{- if  .Values.service.enabled.sqli }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "informix-ibm.fullname" . }}-sqli-test
+  labels:
+  {{ include "tests.labels" . | indent 4 }}
+data:
+  Main.java: |-
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.PreparedStatement;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+
+    public class Main{
+
+      public static void main(String [] args){
+
+        // Not required in Java 8 and above.
+        // DriverManager will automatically load the required drivers from respective jars
+        // For more information, https://docs.oracle.com/javase/8/docs/api/java/sql/DriverManager.html
+        //Class.forName("com.informix.jdbc.IfxDriver").newInstance();
+
+        String dbUrl = "jdbc:informix-sqli://" + System.getenv("JDBC_URL");
+
+        try(Connection con = DriverManager.getConnection(dbUrl, System.getenv("DB_USERNAME") , System.getenv("DB_PASSWORD"))){
+
+          try(Statement s = con.createStatement()) {
+            s.execute("DATABASE sysmaster");
+            s.execute("DROP DATABASE IF EXISTS sqli_db1");
+            s.execute("CREATE DATABASE sqli_db1 WITH LOG");
+          }
+          System.out.println("Test Successful");
+        }catch(Exception e){
+          System.out.println("Test Unsuccessful");
+          System.out.println(e.getMessage());
+          System.exit(1);
+        }
+      }
+    }
+  test-script: |-
+    #!/bin/sh
+
+    echo "Downloading driver from" $JDBC_DRIVER_DOWNLOAD_URL
+    wget -O driver.jar $JDBC_DRIVER_DOWNLOAD_URL
+
+    echo -e "Compiling Main.java file\n"
+    javac Main.java
+
+    echo -e "Running Main\n"
+    java -cp ".:driver.jar" Main
+    
+{{ end }}

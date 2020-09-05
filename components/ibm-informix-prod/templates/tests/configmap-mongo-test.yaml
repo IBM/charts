@@ -1,0 +1,63 @@
+{{- if  .Values.service.enabled.mongo }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "informix-ibm.fullname" . }}-mongo-config
+  labels:
+    {{ include "tests.labels" . | indent 4 }}
+data:
+  Main.java: |-
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.PreparedStatement;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+    import com.mongodb.DB;
+    import com.mongodb.DBCollection;
+    import com.mongodb.MongoClient;
+    import com.mongodb.BasicDBObject;
+
+
+    public class Main{
+
+      public static void main(String [] args){
+
+        try {
+          String dbUrl   = System.getenv("MONGO_URL");
+          String dbPort = System.getenv("MONGO_PORT");
+
+          MongoClient mongo = new MongoClient(dbUrl,Integer.valueOf(dbPort));
+          DB db = mongo.getDB("mongo_db1");
+          DBCollection collection = db.getCollection("tab1");
+
+          BasicDBObject document = new BasicDBObject();
+          document.put("db", "Should be mongo_db1");
+          document.put("table", "Should be tab1");
+
+          collection.insert(document);
+
+          System.out.println("Test Successful");
+        }catch(Exception e){
+          System.out.println("Test Unsuccessful");
+          e.printStackTrace();
+          System.out.println(e.getMessage());
+          System.exit(1);
+        }
+
+      }
+    }
+  test-script: |-
+    #!/bin/sh
+
+    echo "Downloading driver from" $MONGO_DRIVER_DOWNLOAD_URL
+    wget -O driver.jar $MONGO_DRIVER_DOWNLOAD_URL
+
+    echo -e "Compiling Main.java file\n"
+    javac -cp ".:driver.jar" Main.java
+
+    echo -e "Running Main\n"
+    java -cp ".:driver.jar" Main
+
+
+{{ end }}
