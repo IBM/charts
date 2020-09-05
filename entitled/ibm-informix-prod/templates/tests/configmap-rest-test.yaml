@@ -1,0 +1,132 @@
+{{- if .Values.service.enabled.rest }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "informix-ibm.fullname" . }}-rest-config
+  labels:
+    {{ include "tests.labels" . | indent 4 }}
+data:
+  solution_test.go: |-
+    package main
+
+    import (
+      "crypto/tls"
+      "io/ioutil"
+      "log"
+      "net/http"
+      "os"
+      "strings"
+      "testing"
+    )
+
+    var remoteURL = "http://" + os.Getenv("REST_URL")
+    var tr = &http.Transport{
+      TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+    }
+
+    var authorizationHeader = ""
+    var client = &http.Client{Transport: tr}
+
+    func TestMain(m *testing.M) {
+      setup()
+      code := m.Run()
+      // shutdown()
+      os.Exit(code)
+    }
+
+    func setup() {
+      // before tests
+      authorizationHeader = strings.TrimSpace(authorizationHeader)
+      if !strings.HasPrefix(authorizationHeader, "Bearer ") {
+        authorizationHeader = "Bearer " + authorizationHeader
+      }
+      log.Println("authorizationHeader: ", authorizationHeader)
+    }
+
+    func TestInformixGET(t *testing.T) {
+      req, err := http.NewRequest("GET", remoteURL, nil)
+      req.Header.Add("Authorization", authorizationHeader)
+      if err != nil {
+        t.Error(err)
+      }
+      response := executeRequest(req)
+      checkResponseCode(t, http.StatusOK, response.StatusCode)
+      defer response.Body.Close()
+      body, err := ioutil.ReadAll(response.Body)
+      if err != nil {
+        t.Log("Error has occurred: ", err)
+        t.Error(err)
+      }
+      t.Log("GET Response: ", string(body))
+    }
+
+    func TestInformixPOST(t *testing.T) {
+      payload := strings.NewReader("{ \"name\":\"John\", \"age\":30 }")
+      req, err := http.NewRequest("POST", remoteURL+"/rest_db1/employee", payload)
+      if err != nil {
+        t.Error(err)
+      }
+      req.Header.Add("Authorization", authorizationHeader)
+      req.Header.Add("Content-Type", "application/json")
+      response := executeRequest(req)
+      checkResponseCode(t, http.StatusOK, response.StatusCode)
+      defer response.Body.Close()
+      body, err := ioutil.ReadAll(response.Body)
+      if err != nil {
+        t.Log("Error has occurred: ", err)
+        t.Error(err)
+      }
+      t.Log("POST Response: ", string(body))
+    }
+
+    func TestInformixEmployeeGET(t *testing.T) {
+      req, err := http.NewRequest("GET", remoteURL+"/rest_db1/employee", nil)
+      req.Header.Add("Authorization", authorizationHeader)
+      if err != nil {
+        t.Error(err)
+      }
+      response := executeRequest(req)
+      checkResponseCode(t, http.StatusOK, response.StatusCode)
+      defer response.Body.Close()
+      body, err := ioutil.ReadAll(response.Body)
+      if err != nil {
+        t.Log("Error has occurred: ", err)
+        t.Error(err)
+      }
+      t.Log("GET Response: ", string(body))
+    }
+
+    func TestInformixPUT(t *testing.T) {
+      payload := strings.NewReader("{\"$set\":{\n\"name\":\"Bose\"\n}\n}")
+      req, err := http.NewRequest("PUT", remoteURL+"/rest_db1/employee", payload)
+      if err != nil {
+        t.Error(err)
+      }
+      req.Header.Add("Authorization", authorizationHeader)
+      req.Header.Add("Content-Type", "application/json")
+      response := executeRequest(req)
+      checkResponseCode(t, http.StatusOK, response.StatusCode)
+      defer response.Body.Close()
+      body, err := ioutil.ReadAll(response.Body)
+      if err != nil {
+        t.Log("Error has occurred: ", err)
+        t.Error(err)
+      }
+      t.Log("PUT Response: ", string(body))
+    }
+
+    func executeRequest(req *http.Request) *http.Response {
+      resp, err := client.Do(req)
+      if err != nil {
+        log.Println("Error has occured: ", err)
+      }
+      return resp
+    }
+
+    func checkResponseCode(t *testing.T, expected, actual int) {
+      if expected != actual {
+        t.Errorf("Expected response code %d. Got %d\n", expected, actual)
+      }
+    }
+
+{{ end }}

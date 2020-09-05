@@ -1,0 +1,245 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "informix-ibm.fullname" . }}-eng
+  labels:
+{{ include "informix-ibm.labels" . | indent 4 }}
+spec:
+  strategy:
+    type: Recreate
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "informix-ibm.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "informix-ibm.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: helm
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: "{{ .Release.Name }}"
+      annotations:
+        {{- include "informix.annotations" . | indent 8 }}
+    spec:
+      serviceAccount: informix
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+    {{- if .Values.images.pullSecretName }}
+      imagePullSecrets:
+        - name: {{ .Values.images.pullSecretName }}
+    {{- end }}
+
+      securityContext:
+        fsGroup: 200
+        runAsNonRoot: true
+        runAsUser: 200
+        runAsGroup: 200
+
+      initContainers: 
+        - name: init-data
+          image: busybox:1.31
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "50Mi"
+            limits:
+              cpu: "200m"
+              memory: "100Mi"
+          volumeMounts:
+            - name: data
+              mountPath: /opt/ibm/data
+            - name: data
+              mountPath: /opt/ibm/config
+          command: [ "sh", "-c", "chown 200:200 /opt/ibm/data /opt/ibm/config && chmod 755 /opt/ibm/data /opt/ibm/config" ]
+          # command: [ "sh", "-c", "chown 200:200 /opt/ibm/config" ]
+          {{- include "securityContext.containers.init-cont" . | indent 10 }}
+
+      volumes:
+        - name: data
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+          {{- if .Values.pvcSettings.existingClaimName }}
+            claimName: {{ .Values.pvcSettings.existingClaimName }}
+          {{- else }}
+            claimName: {{ default (include "informix-ibm.fullname" . ) }}
+          {{- end }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: init
+          configMap:
+            name: {{ include "informix-ibm.fullname" . }}-init
+            defaultMode: 0755
+        - name: onconfig
+          configMap:
+            name: {{ include "informix-ibm.fullname" . }}-onconfig
+            defaultMode: 0755
+        {{- if .Values.service.enabled.rest }}
+        - name: rest-listener
+          configMap:
+            name: {{ include "informix-ibm.fullname" . }}-rest-listener
+            defaultMode: 0750
+        {{- end }}
+        {{- if .Values.service.enabled.mongo }}
+        - name: mongo-listener
+          configMap:
+            name: {{ include "informix-ibm.fullname" . }}-mongo-listener
+            defaultMode: 0750
+        {{- end }}
+        {{- if .Values.service.enabled.mqtt }}
+        - name: mqtt-listener
+          configMap:
+            name: {{ include "informix-ibm.fullname" . }}-mqtt-listener
+            defaultMode: 0750
+        {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.images.eng.image.registry }}/{{ .Values.images.eng.image.repository }}:{{ .Values.images.eng.image.tag }}"
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          {{- include "securityContext.containers.ifx" . | indent 10 }}
+          ports:
+            - name: sqli
+              containerPort: 9088
+              protocol: TCP
+            - name: rest
+              containerPort: 27018
+              protocol: TCP
+            - name: drda
+              containerPort: 9089
+              protocol: TCP
+            - name: mongo
+              containerPort: 27017
+              protocol: TCP
+            {{ if .Values.service.enabled.mqtt }}
+            - name: mqtt
+              containerPort: 27883
+              protocol: TCP
+            {{- end }}
+            {{- if .Values.service.runHQ}}
+            - name: hq
+              containerPort: 8080
+              protocol: TCP
+            {{- end }}
+          env:
+            {{- if .Values.systemSetup.dbserveralias }}
+            - name: DBSERVERALIAS 
+              value: {{ include "informix-ibm.dbserveralias" . }}
+            {{- end }}
+            - name: LICENSE
+              value: "accept"
+            - name: SIZE
+              value: {{ .Values.informix.size }}
+            {{- if .Values.debug }}
+            - name: DEBUG 
+              value: "ON"
+            {{- end }}
+            {{- if .Values.systemSetup.ear }}
+            - name: DISK_ENCRYPTION 
+              value: "ON"
+            {{- end }}
+            - name: USER_MANAGEMENT
+              value: "true"
+            {{- if .Values.service.runHQ}}
+            - name: HQSERVER
+              value: "start"
+            - name: MAPPED_HOSTNAME
+              value: {{ include "informix-ibm.fullname" . }}-sqli
+            - name: MAPPED_SQLI_PORT
+              value: "{{ .Values.service.port.sqli }}"
+            - name: HQSERVER_MAPPED_HOSTNAME
+              value: {{ include "informix-ibm.fullname" . }}-hq
+            {{- end }}
+            {{- if .Values.monitoring.enabled }}
+            - name: HQAGENT
+              value: "start"
+            - name: MAPPED_SQLI_PORT
+              value: "{{ .Values.service.port.sqli }}"
+            - name: MAPPED_HOSTNAME
+              value: {{ include "informix-ibm.fullname" . }}-sqli
+            - name: HQSERVER_MAPPED_HOSTNAME
+              value: {{ include "informix-ibm.fullname" . }}-hq
+            - name: HQSERVER_MAPPED_HTTP_PORT
+              value: "{{ .Values.service.port.hq}}"
+            {{- end }}
+            {{- if not .Values.service.enabled.drda }}
+            - name: PORT_DRDA
+              value: "OFF"
+            {{- end }}
+            {{- if not .Values.service.enabled.rest }}
+            - name: PORT_REST
+              value: "OFF"
+            {{- end }}
+            {{- if not .Values.service.enabled.mongo }}
+            - name: PORT_MONGO 
+              value: "OFF"
+            {{- end }}
+            {{- if not .Values.service.enabled.mqtt }}
+            - name: PORT_MQTT 
+              value: "OFF"
+            {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /opt/ibm/data
+            - name: data
+              mountPath: /opt/ibm/config
+            - name: onconfig
+              mountPath: /opt/ibm/config/onconfig.mod
+              subPath: onconfig.mod
+            - name: init
+              mountPath: /opt/ibm/config/sch_init_informix.sql
+              subPath: sch_init_informix.sql
+            {{- if .Values.service.enabled.mongo }}
+            - name: mongo-listener
+              mountPath: /opt/ibm/config/wl_mongo.properties.mod
+              subPath: wl_mongo.properties.mod
+            {{- end }}
+            {{- if .Values.service.enabled.rest }}
+            - name: rest-listener
+              mountPath: /opt/ibm/config/wl_rest.properties.mod
+              subPath: wl_rest.properties.mod
+            {{- end }}
+            {{- if .Values.service.enabled.mqtt }}
+            - name: mqtt-listener
+              mountPath: /opt/ibm/config/wl_mqtt.properties.mod
+              subPath: wl_mqtt.properties.mod
+            {{- end }}
+          livenessProbe:
+            exec:
+              command:
+            {{- if .Values.service.runHQ }}
+              - /opt/ibm/scripts/informix_alive_hq.sh
+            {{- else }}
+              - /opt/ibm/scripts/informix_alive.sh
+            {{- end }}
+            initialDelaySeconds: 150
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command:
+            {{- if .Values.service.runHQ }}
+              - /opt/ibm/scripts/informix_alive_hq.sh
+            {{- else }}
+              - /opt/ibm/scripts/informix_alive.sh
+            {{- end }}
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                - /opt/ibm/scripts/informix_prestop.sh
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- include "affinity.node.ifx" . | indent 6 }}
+      {{- include "tolerations.ifx" . | indent 6 }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}

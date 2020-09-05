@@ -1,0 +1,43 @@
+{{- if .Values.service.enabled.drda }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "informix-ibm.fullname" . }}-test-drda
+  labels:
+    {{- include "tests.labels" . | indent 4 }}
+  annotations:
+    "helm.sh/weight": "3"
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  {{- include "affinity.node" . | indent 2 }}
+  {{- include "securityContext.root" . | indent 2 }}
+  volumes:
+    - name: drda-test 
+      configMap:
+        name: {{ include "informix-ibm.fullname" . }}-drda-config
+        defaultMode: 0755
+  containers:
+    - name: openjdk
+      {{- include "tests.resources" . | indent 6 }}
+      {{- include "securityContext.containers.root" . | indent 6 }}
+      image: "{{ .Values.test.drda.image.repository }}:{{ .Values.test.drda.image.tag }}"
+      env:
+        - name: DRDA_URL
+          value: "{{ include "informix-ibm.fullname" . }}-drda:{{ .Values.service.port.drda }}"
+        - name: DB_USERNAME
+          value: informix
+        - name: DB_PASSWORD
+          value: in4mix
+        - name: DRDA_DRIVER_DOWNLOAD_URL
+          value: {{ .Values.test.drda.driverDownloadURL }}         
+      command: ['sh', '-c', 'cd /home/test && ls -l && ./test-script']
+      volumeMounts:
+        - name: drda-test
+          mountPath: /home/test/Main.java
+          subPath: Main.java
+        - name: drda-test
+          mountPath: /home/test/test-script
+          subPath: test-script
+  restartPolicy: Never
+{{ end }}

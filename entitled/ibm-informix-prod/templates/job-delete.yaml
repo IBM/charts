@@ -1,0 +1,53 @@
+{{- if ( eq .Values.runtime "ICP4Data" ) }}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: {{ .Release.Name }}-deletejob
+  labels:
+    app.kubernetes.io/name: {{ include "informix-ibm.name" . }}-deletejob
+    app.kubernetes.io/instance: {{ .Release.Name }}-deletejob
+    app.kubernetes.io/managed-by: helm
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}-deletejob
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-delete-policy": "hook-succeeded, hook-failed"
+    {{- include "informix.annotations" . | indent 4 }}  
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 120
+  template:
+    metadata:
+      labels:        
+        app.kubernetes.io/name: {{ include "informix-ibm.name" . }}-deletejob
+        app.kubernetes.io/instance: {{ .Release.Name }}-deletejob
+        app.kubernetes.io/managed-by: helm
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}-deletejob
+      annotations:
+        {{- include "informix.annotations" .  | indent 8 }}
+    spec:
+      serviceAccount: informix  
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        fsGroup: 200
+        runAsNonRoot: true
+        runAsUser: 200
+        runAsGroup: 200         
+      containers:
+        - name: {{ .Chart.Name }}-delete
+          image: "{{ .Values.images.api.image.registry }}/{{ .Values.images.api.image.repository }}:{{ .Values.images.api.image.tag }}"
+          imagePullPolicy: {{ .Values.images.pullPolicy }}       
+          {{- include "securityContext.containers.nonroot" . | indent 10 }}      
+          command: ['/bin/sh']
+          args: ["-cx", "/tools/deleteNginxConfig.sh --namespace {{ .Values.baseNamespace }} --runtime {{ .Values.runtime }} --service-name {{ .Values.servicename }}"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "100Mi"
+            limits:
+              cpu: "100m"
+              memory: "100Mi"          
+      restartPolicy: Never
+      {{- include "affinity.node" . | indent 6 }}  
+{{- end }}
