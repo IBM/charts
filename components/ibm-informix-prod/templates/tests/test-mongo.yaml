@@ -1,0 +1,45 @@
+{{- if .Values.service.enabled.mongo }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "informix-ibm.fullname" . }}-test-mongo"
+  labels:
+    {{ include "tests.labels" . | indent 4 }}
+  annotations:
+    "helm.sh/weight": "5" 
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  {{ include "affinity.node" . | indent 2 }}
+  {{ include "securityContext.root" . | indent 2 }}
+  volumes:
+    - name: mongo-test
+      configMap:
+        name: {{ include "informix-ibm.fullname" . }}-mongo-config
+        defaultMode: 0755
+  containers:
+    - name: openjdk 
+      {{- include "tests.resources" . | indent 6 }}
+      {{ include "securityContext.containers.root" . | indent 6 }}
+      image: "{{ .Values.test.mongo.image.repository }}:{{ .Values.test.mongo.image.tag }}"
+      env:
+        - name: MONGO_URL 
+          value: "{{ include "informix-ibm.fullname" . }}-mongo"
+        - name: MONGO_PORT
+          value: "{{ .Values.service.port.mongo }}"
+        - name: DB_USERNAME
+          value: informix
+        - name: DB_PASSWORD
+          value: in4mix
+        - name: MONGO_DRIVER_DOWNLOAD_URL
+          value: {{ .Values.test.mongo.driverDownloadURL }}       
+      command: ['sh', '-c', 'cd /home/test && ls -l && ./test-script ']
+      volumeMounts:
+        - name: mongo-test
+          mountPath: /home/test/Main.java
+          subPath: Main.java 
+        - name: mongo-test
+          mountPath: /home/test/test-script
+          subPath: test-script 
+  restartPolicy: Never
+{{ end }}
