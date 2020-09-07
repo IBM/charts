@@ -1,0 +1,101 @@
+{{/*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullName" (list . 63) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      affinity:
+        nodeAffinity:
+{{ include "noi.nodeAffinity.arch" . | indent 10 }}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ include "image.docker.repository" . -}}/{{- include "image.family" . -}}-{{ .Values.image.name }}-{{- include "image.edition" . -}}{{ include "image.suffix" (list . .Values.image) }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 65534
+            capabilities:
+              drop:
+              - ALL
+              add: ["NET_BIND_SERVICE"]
+          env:
+          - name: CONFIG_MAP_NAME
+            value: "{{ .Release.Name }}-{{ .Values.proxy.configmap.name }}"
+          - name: LICENSE
+            value: "{{ .Values.global.license }}"
+          {{ if eq .Values.proxy.tls.enabled true }}
+          - name: TLS_CERT
+            valueFrom:
+              secretKeyRef:
+                name: "{{ .Release.Name }}-proxy-tls-secret"
+                key: "tls.crt"
+          - name: TLS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: "{{ .Release.Name }}-proxy-tls-secret"
+                key: "tls.key"
+
+          {{ end }}
+          {{ if eq .Values.global.resource.requests.enable true }}
+          resources:
+{{ include "ibmnoiprod.comp.size.data" (list . "proxy" "resources") | indent 12 }}
+          {{ end }}
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: 8080
+            initialDelaySeconds: {{ .Values.proxy.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.proxy.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.proxy.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.proxy.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: {{ .Values.proxy.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.proxy.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.proxy.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.proxy.readiness.failureThreshold }}
+      {{- if .Values.global.image.secret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+

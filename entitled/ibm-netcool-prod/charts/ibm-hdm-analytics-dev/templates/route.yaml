@@ -1,0 +1,55 @@
+{{/*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/}}
+{{ if  (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+{{- $compName := "backend-ingress" -}}
+{{- include "sch.config.init" (list . "ibm-hdm-analytics-dev.sch.chart.config.values") -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+{{ $serviceCount := len .Values.ingresspaths }}
+{{ $global := . }}
+{{- range $i := until $serviceCount }}
+---
+{{ $serviceInfo := index $global.Values.ingresspaths $i  }}
+
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ $serviceName }}-{{ $i }}
+  namespace: {{ $global.Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list $global $compName) | indent 4 }}
+    origin: helm-ibm-hdm-analytics-dev
+  annotations:
+{{- include "sch.metadata.annotations.metering" (list $global $rootMetering) | indent 4 }}
+spec:
+  host: netcool.{{- $global.Release.Name }}.{{- $global.Values.global.cluster.fqdn }}
+{{ $internalServiceName :=  printf "%s.%s%s" "ibm-hdm-analytics-dev"  $serviceInfo.name  ".service.name"  }}
+  path: {{ $serviceInfo.path }}
+  port:
+    targetPort: {{ $serviceInfo.port }}
+  to:
+    kind: Service
+    name: {{ include $internalServiceName $global }}
+    weight: 100
+  tls:
+    termination: edge
+status:
+  ingress:
+  - routerName: default
+{{- end }}
+{{- end }}

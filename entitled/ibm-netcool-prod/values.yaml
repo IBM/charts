@@ -1,0 +1,380 @@
+######################################################################## #
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+
+#
+# This is where we can overwrite the values set in each individual charts.
+#
+
+global:
+
+  # This is the global license value that must be manually set to accept.
+  license: "not accepted"
+
+  cluster:
+    # Public name or IP the deployment cluster will be accessible from.
+    fqdn:
+
+  ingress:
+    port : 443
+    tlsSecret: "{{ .Release.Name }}-netcool-tls-secret"
+    # This value must be left to true. Other values are only valid in specific test environment.
+    prefixWithReleaseName: true
+
+  # While the some pods can run within Openshift's restricted SCC, if
+  # another SCC is applied to the pod via a service account that doesn't support
+  # the correct runAsUser type (i.e. MustRunAsNonRoot), arbitraryUids can be
+  # disabled. Otherwise, the default value (true) shouldn't need to be updated.
+  arbitraryUids: false
+
+  # Define where/who the images will be pulled from
+  image:
+    # This is the artifactory server to pull the docker images from.
+    repository: ""
+    # Secret used to access the docker repository above
+    secret: ""
+    # pullPolicy: IfNotPresent change to Always to make the latest is always picked up
+    pullPolicy: IfNotPresent
+    # Use image tags instead of digests
+    useTag: true
+    # Tag to use for configuration share utility image
+    sharedTag: 1.6.1-201
+    sharedDigest: sha256:9f568f395cc31990e466fc112622994ef9ad038ce2ee3a0f06c712d457f6212c
+    publicOperatorRepo: docker.io/ibmcom 
+  #environmentSize defines the size of deployment you want.
+  #size0 is current default and is intended for demo purposes only.
+  #size1 is recommended for production use.
+
+  environmentSize: "size0"
+
+  # The number of Elasticsearch replicas to be deployed
+  elasticsearch:
+    replicaCount: "environmentSizeDefault"
+
+  # The number of Elasticsearch replicas to be deployed
+  logstash:
+    replicaCount: "environmentSizeDefault"
+
+  # Number of Cassandra nodes to deploy
+  cassandraNodeReplicas: "environmentSizeDefault"
+
+  cassandra:
+    # Require cassandra none-default root userid and password login
+    superuserRole: true
+
+  rbac:
+    serviceAccountName: noi-service-account
+    create: true
+
+  # Enable sub-chart resource requests
+  resource:
+    requests:
+      enable: true
+
+  # global persistence settings
+  persistence:
+    enabled: false
+    useDynamicProvisioning: false
+    storageClassOption:
+      cassandradata: "local-storage-cassandra"
+      cassandrabak:  "local-storage-cassandra-bak"
+      zookeeperdata: "local-storage-zookeeper"
+      kafkadata:     "local-storage-kafka"
+      couchdbdata:   "local-storage-couchdb"
+      elasticdata:   "local-storage-elastic"
+    storageSize:
+      cassandradata: 50Gi
+      cassandrabak:  50Gi
+      zookeeperdata: 5Gi
+      kafkadata:     50Gi
+      couchdbdata:   5Gi
+      elasticdata:   75Gi
+
+  omnisecretname: "%s-omni-secret"
+
+  common:
+    eventanalytics:
+      tenantId: cfd95b7e-3bc7-4006-a4a8-a73a79c71255
+
+  # Control initial deployment of NOI applications
+  enableImpact: true
+
+  tls:
+    certificate:
+      # Will not use ICP certmanager to automatically generate TLS certificate secrets
+      useExistingSecret: false
+  users:
+    secretsCreatedPreInstall: false
+    randompasswords: true
+
+  antiAffinity:
+    # Enable chart anti-affinity e.g. schedule primary and backup objserv on different nodes
+    enabled: false
+
+  ldapservice:
+    # name of the service should not be changed.
+    name: ldapservice
+    verifypasswords : true
+    # Define how LDAP is working: ['proxy','standalone']
+    mode: standalone
+    internal:
+      ldapPort: 389
+      ldapSSLPort: 636
+      url: "ldap://localhost:389"
+      suffix: "dc=mycluster,dc=icp"
+      baseDN: dc=mycluster,dc=icp
+      bindDN: "cn=admin,dc=mycluster,dc=icp"
+
+  integrations:
+    asm:
+      # If true, signifies that ASM integration is to be enabled and activates the ASM integration
+      enabled: false
+
+      # The release name of Agile Service Manager.
+      releaseName: "asm"
+
+      # This should be set to the hostname of the ASM kafka service. If
+      # not set, this defaults to:
+      # {releaseName}-kafka
+      kafkaHostname: ""
+
+      # This should be set to the port of the ASM kafka service
+      kafkaPort: "9092"
+
+      # The topic in the ASM kafka cluster where ASM is publishing external
+      # status updates
+      kafkaExternalStatusTopic: "itsm.status.external.json"
+
+      # On premise properties
+      onPremSecureRemote:
+
+        # If true, indicates to use a secured connection to on prem services
+        # And do not attempt to connect to a cluster internal asm kafka and UI API services
+        # This will also result in the usage of external-asm secrets created by ASM on prem
+        # In order to use these secrets, the upgrade or install using the on prem remote configuration must
+        # be done after the scripts have been executed from the ASM on prem host.
+        enabled: false
+
+        # Hostname or IP address of secured kafka and UI API
+        remoteHost: ""
+
+        # The port to be used for the secured remote kafka service.
+        remotePort: "19093"
+
+        # The ui API port, which is set to 443 as a default.
+        uiApiPort: "443"
+  hybrid:
+    disabled: true
+    objectserver:
+      username: root
+      primary:
+         hostname: ""
+         port: 4100
+      backup:
+         hostname: ""
+         port: 4200
+      config:
+        # Determines when the EA automations run in. Can be one of none,preinstall;install
+        deployPhase: "install"
+        ssl:
+          virtualPairName: ""
+          rootCAName: ""
+    webgui:
+      url: ""
+    dash:
+      acceptSelfSigned: true
+      url: ""
+      username: "smadmin"
+  kafka:
+    clusterSize: "environmentSizeDefault"
+    clientEncryption: false
+    allowInsecure: true
+    clientUserSecret: "{{ .Release.Name }}-kafka-client-secret"
+  internalCaCertificate:
+    secretName: "noi-root-ca"
+
+  # Zookeeper global section
+  zookeeper:
+    # The number of Zookeeper replicas to be deployed
+    clusterSize: "environmentSizeDefault"
+    kafkaClientUserSecret: zk-kafka-client-secret
+
+db2ese:
+  pvc:
+    # specify the storageClassName you want to use
+    storageClassName: "local-storage-db2"
+
+    # Specify the name of the Existing Claim to be used by your application
+    # empty string means don't use an existClaim
+    existingClaimName: ""
+
+    # if your not using dynamic provisioning, you can use selectors to
+    # refine the binding process. You cannot specify a selector if you are using dynamic provisioning!
+    selector:
+      label: ""
+      value: ""
+
+    size: 5Gi
+  # Configure the memory and CPU Allocation for DB2
+########################################################################
+# Commenting this out as CPU requests  and limits mover to _resources.tpl.
+#  Leaving it here just in case we somehow still need it for now.
+########################################################################
+#  resources:
+#    # This is the minimum required
+#    requests:
+#      cpu: 500m
+#      # This is the minimum required
+#      memory: 6Gi
+#    limits:
+#      cpu: 1000m
+#      # This must be adjusted to 25% of the total amount of memory available on the biggest node. It could be more, but not less.
+#      # If you have a mixture of 32GB and 64GB nodes, make sure you set it to 16Gi, as this is 25% of the biggest node.
+#      memory: 8Gi
+
+ncoprimary:
+  pvc:
+    # specify the storageClassName you want to use
+    storageClassName: "local-storage-ncoprimary"
+
+    # Specify the name of the Existing Claim to be used by your application
+    # empty string means don't use an existClaim
+    existingClaimName: ""
+
+    # if your not using dynamic provisioning, you can use selectors to
+    # refine the binding process. You cannot specify a selector if your using dynamic provisioning!
+    selector:
+      label: ""
+      value: ""
+
+    size: 5Gi
+
+ncobackup:
+  pvc:
+    # specify the storageClassName you want to use
+    storageClassName: "local-storage-ncobackup"
+
+    # Specify the name of the Existing Claim to be used by your application
+    # empty string means don't use an existClaim
+    existingClaimName: ""
+
+    # if your not using dynamic provisioning, you can use selectors to
+    # refine the binding process. You cannot specify a selector if your using dynamic provisioning!
+    selector:
+      label: ""
+      value: ""
+
+    size: 5Gi
+
+nciserver:
+  pvc:
+    # specify the storageClassName you want to use
+    storageClassName: "local-storage-nciserver"
+
+    # if your not using dynamic provisioning, you can use selectors to
+    # refine the binding process. You cannot specify a selector if your using dynamic provisioning!
+    selector:
+      label: ""
+      value: ""
+
+    size: 5Gi
+    
+impactgui:
+  pvc:
+    # specify the storageClassName you want to use
+    storageClassName: "local-storage-impactgui"
+
+    # Specify the name of the Existing Claim to be used by your application
+    # empty string means don't use an existClaim
+    existingClaimName: ""
+
+    # if your not using dynamic provisioning, you can use selectors to
+    # refine the binding process. You cannot specify a selector if your using dynamic provisioning!
+    selector:
+      label: ""
+      value: ""
+
+    size: 5Gi
+
+openldap:
+  pvc:
+    # specify the storageClassName you want to use
+    storageClassName: "local-storage-openldap"
+
+    # Specify the name of the Existing Claim to be used by your application
+    # empty string means don't use an existClaim
+    existingClaimName: ""
+
+    # if your not using dynamic provisioning, you can use selectors to
+    # refine the binding process. You cannot specify a selector if your using dynamic provisioning!
+    selector:
+      label: ""
+      value: ""
+
+    size: 1Gi
+
+
+ibm-hdm-analytics-dev:
+  # Disable cuplicated component definition for couchdb
+  couchdb:
+    enabled: true
+  archivingservice:
+    eventTTL: 7862400
+  common:
+    topics:
+      # This topic must be enabled in order to utilise the ASM integration enrichment capabilities
+      asmMessages:
+        name: ea-asm-enriched-events
+        enabled: true
+    temporalGroupingDeployFirst: true
+    authentication:
+      scheme: cemusers
+  sch:
+    enabled: false
+
+ibm-hdm-common-ui:
+  dash:
+    consoleIntegration:
+      endpoint:
+
+ibm-ea-asm-normalizer:
+  joinWindowSize: 60
+  kafkaImage:
+    name: kafka
+    tag: 1.2.34-202006150509-amd64L-PPAN-BNYCMS
+
+ibm-ea-asm-mime:
+  enabled: true
+  probableCause:
+    enabled: true
+
+ibm-ea-mime-classification:
+  enabled: true
+  probableCause:
+    enabled: true
+
+ncodatalayer:
+  # Deploy OjectServer based datalayer.
+  enabled: true
+
+# CEM Operator (enabled via NOI operator)
+cemOperator:
+  enabled: false
+asmOperator:
+  enabled: false
+alertdetails:
+  enabled: true
+alerttriggerservice:
+  enabled: true
+alertactionservice:
+  enabled: true

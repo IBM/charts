@@ -1,0 +1,370 @@
+{{- /*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2020 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/ -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}-config
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+data:
+  incidents.conf: |2
+    input {
+        kafka {
+            bootstrap_servers => "${KAFKA_BROKERS}"
+            topics => ["incidents"]
+            sasl_jaas_config => "org.apache.kafka.common.security.plain.PlainLoginModule required username='${KAFKA_USER}' password='${KAFKA_PASSWORD}';"
+            #security_protocol => "SASL_SSL"
+            sasl_mechanism => "PLAIN"
+            codec => "json"
+            client_id => "logstash-incidents"
+            group_id => "logstash-incidents"
+        }
+    }
+    filter {
+        mutate {
+            remove_field => [ "rel_resources" ] # Delete rel_resources, as it can contain a lot of data which is not
+                                                # required here.
+            lowercase => [ "subscription" ]     # Subscription will be used in elasticsearch index name, which only allows
+                                                # lowercase characters. If subscription is case sensitive, a more
+                                                # a more sophisticated approach will be required for making it lowercase.
+        }
+
+        # The following filters will tag messages that are required for metrics aggregation
+        if [type] == "resource-created" {
+            mutate {
+                add_tag => [ "relevant", "incidentCreated" ]
+            }
+        }
+        if [type] == "resource-updated" and [prev_resource][priority] and [resource][priority] and [prev_resource][priority] != [resource][priority] {
+            mutate {
+                add_tag => [ "relevant", "priorityChanged" ]
+            }
+        }
+        if [type] == "resource-updated" and [prev_resource][incidentState] == "onHold" {
+            # timespan between prev_resource and resource is time that was spent on hold, no matter what the new state is
+            mutate {
+                add_tag => [ "relevant", "incidentWasHeld" ]
+            }
+        } 
+        if [type] == "resource-updated" and [prev_resource][incidentState] and [prev_resource][incidentState] != "inProgress" and [resource][incidentState] == "inProgress" {
+            # definition of "responded" is the first time an incident reaches "inProgress" state
+            mutate {
+                add_tag => [ "relevant", "incidentResponded" ]
+            }
+        } 
+        if [type] == "resource-updated" and [prev_resource][incidentState] and [prev_resource][incidentState] != "resolved" and [resource][incidentState] == "resolved" {
+            mutate {
+                add_tag => [ "relevant", "incidentResolved" ]
+            }
+        }
+        if [type] == "resource-updated" and [prev_resource][incidentState] and [prev_resource][incidentState] != "closed" and [resource][incidentState] == "closed" {
+            mutate {
+                add_tag => [ "relevant", "incidentClosed" ]
+            }
+        } 
+    
+        # drop all messages that are not relevant for metrics calculation
+        if "relevant" not in [tags] {
+            drop { }
+        } else {
+            mutate {
+                remove_tag => [ "relevant" ]
+            }
+        }
+    }
+    output {
+        stdout { }
+    }
+
+  ea-collatedactions.conf: |2
+    input{
+        kafka {
+            bootstrap_servers => "${KAFKA_BROKERS}"
+            topics => ["ea-actions"]
+            sasl_jaas_config => "org.apache.kafka.common.security.plain.PlainLoginModule required username='${KAFKA_USER}' password='${KAFKA_PASSWORD}';"
+            sasl_mechanism => "PLAIN"
+            codec => "json"
+            group_id => "ea-pattern-metrics"
+            auto_offset_reset => "earliest"
+            client_id => "ea-pattern-metrics"
+        }
+    }
+    filter {
+        fingerprint {
+            source => "[id]"
+            method => "MURMUR3"
+        }
+    }
+    output{
+        if [metadata][source] == "analytics.temporal-patterns" and [metricData]{
+            elasticsearch{
+                hosts => ["${ELASTICSEARCH_API}"]
+                index => "ea-pattern-metrics"
+                template_overwrite => true
+                template_name => "ea-pattern-metrics"
+                template => "/home/logstash/logstash/config/ea-pattern-metrics-mapping.json"
+            }
+        }
+    }
+
+  noi-events.conf: |2
+    input {
+        kafka {
+            bootstrap_servers => "${KAFKA_BROKERS}"
+            topics => ["noi-events"]
+            sasl_jaas_config => "org.apache.kafka.common.security.plain.PlainLoginModule required username='${KAFKA_USER}' password='${KAFKA_PASSWORD}';"
+            sasl_mechanism => "PLAIN"
+            codec => "json"
+            client_id => "logstash-noi-events"
+            group_id => "logstash-noi-events"
+        }
+    }
+    filter {
+        if ![event][instanceUuid] {
+            drop { }
+        } else if [event][instanceUuid] == "undefined:NaN" {
+            drop { }
+        }
+    }
+    output {
+        elasticsearch {
+            hosts => ["${ELASTICSEARCH_API}"]
+            index => "logstash-noi-events"
+            workers => 1
+            document_id => "%{[event][instanceUuid]}"
+            action => "update"
+            doc_as_upsert => true
+        }
+    }
+
+  noi-events-raw.conf: |2
+    input {
+        kafka {
+            bootstrap_servers => "${KAFKA_BROKERS}"
+            topics => ["noi-events"]
+            sasl_jaas_config => "org.apache.kafka.common.security.plain.PlainLoginModule required username='${KAFKA_USER}' password='${KAFKA_PASSWORD}';"
+            sasl_mechanism => "PLAIN"
+            codec => "json"
+            client_id => "logstash-noi-events-raw"
+            group_id => "logstash-noi-events-raw"
+        }
+    }
+    filter {
+        if ![event][instanceUuid] {
+            drop { }
+        } else if [event][instanceUuid] == "undefined:NaN" {
+            drop { }
+        } else if ![event][objectServer][Tally] {
+            drop { }
+        }
+    }
+    output {
+        elasticsearch {
+            hosts => ["${ELASTICSEARCH_API}"]
+            index => "logstash-noi-events-raw"
+            workers => 1
+            document_id => "%{[event][instanceUuid]}-%{[event][objectServer][Tally]}"
+            action => "update"
+            doc_as_upsert => true
+        }
+    }
+
+  event-reduction.conf: |2
+    input {
+        kafka {
+            bootstrap_servers => "${KAFKA_BROKERS}"
+            topics => ["noi-events"]
+            sasl_jaas_config => "org.apache.kafka.common.security.plain.PlainLoginModule required username='${KAFKA_USER}' password='${KAFKA_PASSWORD}';"
+            sasl_mechanism => "PLAIN"
+            codec => "json"
+            client_id => "logstash-event-reduction"
+            group_id => "logstash-event-reduction"
+        }
+    }
+    filter {
+        if ![event][instanceUuid] {
+            drop { }
+        } else if [event][instanceUuid] == "undefined:NaN" {
+            drop { }
+        } else if ![event][objectServer][Tally] {
+            drop { }
+        } else if ![event][lastOccurrence] {
+            drop { }
+        } else {
+            mutate { 
+                add_field => { 
+                    "id" => "%{[event][instanceUuid]}"
+                    "occurrence" => "%{[event][objectServer][Tally]}"
+                    "timestamp" => "%{[event][lastOccurrence]}"
+                }
+            }
+            if [event][objectServer][CEACorrelationKey] {
+                mutate {
+                    add_field => {
+                        "group" => "%{[event][objectServer][CEACorrelationKey]}"
+                    }
+                }
+            } else {
+                mutate {
+                    add_field => {
+                        "group" => ""
+                    }
+                }
+            }
+            mutate { 
+                remove_field => ["type", "@version", "@timestamp", "event"]  
+            }
+        }
+    }
+    output {
+
+        # add event occurrence
+        elasticsearch {
+            hosts => ["${ELASTICSEARCH_API}"]
+            index => "logstash-event-reduction"
+            workers => 1
+            document_id => "Occ-%{[id]}-%{[occurrence]}"
+            action => "update"
+            doc_as_upsert => true
+        }
+
+        if [group] == "" {
+            # add ungrouped event
+            elasticsearch {
+                hosts => ["${ELASTICSEARCH_API}"]
+                index => "logstash-event-reduction"
+                workers => 1
+                document_id => "Ung-%{[id]}"
+                action => "update"
+                scripted_upsert => true
+                script_type => "inline"
+                script_lang => "painless"
+                script => "
+
+                    if ('create'.equals(ctx.op)) {
+                        ctx._source['timestamp'] = params.event.timestamp;
+                        ctx._source['tenantid'] = params.event.tenantid;
+                        ctx._source['remaining_id'] = params.event.id;
+                    }
+                "
+            }
+        } else {
+            # add event group
+            elasticsearch {
+                hosts => ["${ELASTICSEARCH_API}"]
+                index => "logstash-event-reduction"
+                workers => 1
+                document_id => "Grp-%{[group]}"
+                action => "update"
+                scripted_upsert => true
+                script_type => "inline"
+                script_lang => "painless"
+                script => "
+
+                    if ('create'.equals(ctx.op)) {
+                        ctx._source['timestamp'] = params.event.timestamp;
+                        ctx._source['tenantid'] = params.event.tenantid;
+                        ctx._source['remaining_id'] = params.event.group;
+                    }
+                "
+            }
+
+            # remove ungrouped event (if present)
+            elasticsearch {
+                hosts => ["${ELASTICSEARCH_API}"]
+                index => "logstash-event-reduction"
+                workers => 1
+                document_id => "Ung-%{[id]}"
+                action => "delete"
+            }
+
+        }
+
+    }
+
+  pipelines.yml: |2
+    #- pipeline.id: incidents
+    #  path.config: "/home/logstash/logstash/config/incidents.conf"
+    - pipeline.id: ea-collatedactions
+      path.config: "/home/logstash/logstash/config/ea-collatedactions.conf"
+    - pipeline.id: noi-events
+      path.config: "/home/logstash/logstash/config/noi-events.conf"
+    - pipeline.id: event-reduction
+      path.config: "/home/logstash/logstash/config/event-reduction.conf"
+    #- pipeline.id: noi-events-raw
+    #  path.config: "/home/logstash/logstash/config/noi-events-raw.conf"
+
+  logstash.yml: |2
+    http.host: 0.0.0.0
+    http.port: 9600
+
+  ea-pattern-metrics-mapping.json: |2
+    {
+        "index_patterns": ["ea-pattern-metrics"],
+        "template": "ea-pattern-metrics",
+        "mappings": {
+            "doc": {
+                "_source": {
+                "enabled": true
+                },
+                "properties": {
+                    "metadata": {
+                        "properties": {
+                            "alertId": {
+                                "type": "keyword"
+                            },
+                            "groupId": {
+                                "type": "keyword"
+                            },
+                            "detailsId": {
+                                "type": "keyword"
+                            },
+                            "source": {
+                                "type": "keyword"
+                            }
+                        }
+                    },
+                    "metricData": {
+                        "properties": {
+                            "resourceFields": {
+                                "type": "keyword"
+                            },
+                            "resourceValues": {
+                                "type": "keyword"
+                            }
+                        }
+                    },
+                    "id": {
+                        "type": "keyword"
+                    },
+                    "policyTimestamp": {
+                        "type": "long"
+                    },
+                    "type": {
+                        "type": "keyword"
+                    },
+                    "policyId": {
+                        "type": "keyword"
+                    },
+                    "tenantId": {
+                        "type": "keyword"
+                    }
+                }
+            }
+        }
+    }

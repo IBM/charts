@@ -1,0 +1,67 @@
+{{- /*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2020 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/ -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-nciserver-test"
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+    app.kubernetes.io/name: "{{ .Release.Name }}-nciserver-test"
+    helm.sh/chart: "{{ .Release.Name }}-nciserver-test"
+    app.kubernetes.io/managed-by: "Tiller"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    release: "{{ .Release.Name }}"
+    test: {{ .Release.Name }}-nciserver-test
+spec:
+  containers:
+  - name: {{ .Release.Name }}-nciserver-test
+    image: {{ include "image.docker.repository" . -}}/{{- include "image.family" . -}}-{{ .Values.image.name }}-{{- include "image.edition" . -}}:{{ .Values.image.tag }}
+    env:
+    - name: IMPACT_ADMIN_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Release.Name }}-impact-secret
+          key: IMPACT_ADMIN_PASSWORD
+          optional: false
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: false
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 1001
+      capabilities:
+        drop:
+        - ALL
+        add: ["DAC_OVERRIDE","NET_BIND_SERVICE","NET_RAW"]
+    resources:
+{{ include "ibmnoiprod.comp.size.data" (list . "testPod" "resources") | indent 6 }}
+    command: ["/bin/sh"]
+    args: ["-c", "AESPWD=`$IMPACT_HOME/bin/nci_crypt $IMPACT_ADMIN_PASSWORD` && sed -i \"s/impact.nameserver.password=.*/impact.nameserver.password=$AESPWD/g\" $IMPACT_HOME/etc/nameserver.props && $IMPACT_HOME/bin/nci_get_primary http {{ .Release.Name }}-{{ .Values.subdomain }}.{{ .Release.Namespace }}.svc {{ .Values.impactcore.internal.nameserverPort }} NCICLUSTER | grep binding:.*:{{ .Values.impactcore.internal.rmiPort }}:NCI_. || (echo Unable to locate NCICLUSTER binding && exit 1)"]
+  affinity:
+    nodeAffinity:
+{{ include "noi.nodeAffinity.arch" . | indent 6 }}
+  restartPolicy: Never
+  {{- if .Values.global.image.secret }}
+  imagePullSecrets:
+    - name: {{ .Values.global.image.secret }}
+  {{- end }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}

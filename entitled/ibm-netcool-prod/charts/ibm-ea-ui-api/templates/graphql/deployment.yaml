@@ -1,0 +1,61 @@
+{{- include "sch.config.init" (list . "ibm-ea-ui-api.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.graphql.name -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $serviceName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+{{- if .Values.replicas }}
+  replicas: {{ .Values.replicas }}
+{{- else -}}
+  {{- if  eq .Values.global.environmentSize  "size0" }}
+  replicas: 1
+  {{- else if eq .Values.global.environmentSize "size1" }}
+  replicas: 2
+  {{- else }}
+  replicas: 1
+  {{- end -}}
+{{- end }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+    spec:
+      {{- if .Values.global.image.secret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      volumes:
+{{ include "ibm-ea-ui-api.integrations.volumes" . | indent 8 }}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - name: graphql
+        image: {{ include "ibm-ea-ui-api.image.url" (list . .Values.image) | quote }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        volumeMounts:
+{{ include "ibm-ea-ui-api.integrations.volumeMounts" . | indent 10 }}
+        env:
+{{ include "ibm-ea-ui-api.integrations.environmentVars" . | indent 10 }}
+        resources:
+{{ include "ibm-ea-ui-api.comp.size.data" (list . "ui" "resources") | indent 10 }}
+{{ include "ibm-ea-ui-api.graphql.probes" . | indent 8 }}
+{{ include "ibm-ea-ui-api.psp.securityContext" . | indent 8}}

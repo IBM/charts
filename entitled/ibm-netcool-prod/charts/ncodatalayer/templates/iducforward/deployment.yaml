@@ -1,0 +1,89 @@
+{{- /*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/ -}}
+{{- $compName := "iducforward" }}
+{{- include "sch.config.init" (list . "sch.chart.ncodatalayer.config.values") -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullName" (list . 63) }}-{{ .Values.ncodatalayer.name }}-irf
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+
+spec:
+  replicas: {{ .Values.replicaCount.iducforward }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+        appClass: ncodatalayer
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering ) | indent 8 }}
+    spec:
+      affinity:
+        nodeAffinity:
+{{ include "ncodatalayer.nodeAffinity.arch" . | indent 10 }}
+        {{- if eq .Values.global.antiAffinity.enabled true }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: appClass
+                  operator: In
+                  values:
+                  - ncodatalayer
+              topologyKey: "kubernetes.io/hostname"
+        {{- end }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secret }}
+      initContainers:
+{{ include "ncodatalayer.initcontainers.depwait" . | indent 6 }}
+{{ include "ncodatalayer.initcontainers.depwait.kafka" . | indent 6 }}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - name: {{ .Chart.Name }}
+        image: {{ include "image.docker.repository" . }}/{{ .Values.ncodatalayer.image.name }}{{ include "ncodatalayer.image.suffix" (list . .Values.ncodatalayer.image) }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+{{ include "container.security.context" . | indent 8 }}
+        ports:
+        - containerPort: {{ .Values.ncodatalayer.port }}
+          name: unsecure-port
+          protocol: TCP
+        - containerPort: {{ .Values.ncodatalayer.portSsl }}
+          name: secure-port
+          protocol: TCP
+        env:
+{{ include "common.application" . | indent 8 }}
+{{ include "ncodatalayer.iducforward" . | indent 8 }}
+{{ include "common.license" . | indent 8 }}
+{{ include "common.omnibus" . | indent 8 }}
+{{ include "common.kafka" . | indent 8 }}
+{{ include "common.defaults" . | indent 8 }}
+        {{- if eq .Values.global.resource.requests.enable true }}
+        resources:
+{{ include "ncodatalayer.comp.size.data" (list . "ncoprimary" "resources") | indent 10 }}
+        {{- end }}
+{{ include "ncodatalayer.probe.liveness" . | indent 8 }}
+{{ include "ncodatalayer.probe.readiness" . | indent 8 }}
+{{ include "deployment.security.context" . | indent 6 }}

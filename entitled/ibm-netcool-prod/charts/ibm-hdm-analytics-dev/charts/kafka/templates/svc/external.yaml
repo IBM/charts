@@ -1,0 +1,36 @@
+{{/*********************************************************** {COPYRIGHT-TOP} ****
+* Licensed Materials - Property of IBM
+*
+* (C) Copyright IBM Corporation 2019.  All rights reserved.
+*
+* The source code for this program is not published or otherwise
+* divested of its trade secrets, irrespective of what has been
+* deposited with the U.S. Copyright Office.
+********************************************************* {COPYRIGHT-END} ****/}}
+{{- if kindIs "slice" .Values.advertisedListeners -}}
+{{- include "sch.config.init" (list . "kafka.sch.chart.config.values") -}}
+{{- range $i := until (int (include "kafka.replicationFactor" . )) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ printf "%s-kafka-%d-ext" $.Release.Name $i }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list $ "") | indent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "sch.names.appName" (list $) | quote }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    statefulset.kubernetes.io/pod-name: {{ printf "%s-kafka-%d" $.Release.Name $i }}
+  type: NodePort
+  ports:
+  - name: external-kafka
+    port: 19092
+    protocol: TCP
+    targetPort: 19092
+  - name: external-kafka-secure
+    port: 19093
+    protocol: TCP
+    targetPort: 19093
+---
+{{- end -}}
+{{- end -}}

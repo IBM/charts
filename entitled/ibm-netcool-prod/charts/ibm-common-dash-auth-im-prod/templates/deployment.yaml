@@ -1,0 +1,63 @@
+
+{{- $compName := "dashauth" -}}
+{{- include "sch.config.init" (list . "common-dash-auth-im-repo.sch.chart.config.values") -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  replicas: {{ .Values.replicas }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}      
+    spec:
+      {{- if .Values.global.image.secret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      volumes:
+        - name: tls-keys
+          secret:
+            secretName: {{ include "sch.names.fullCompName" (list . "tls-secret") | quote }}
+            optional: true
+            items:
+            - key: tls.crt
+              path: asm-nginx.crt
+            - key: tls.key
+              path: asm-nginx.key
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+
+      containers:
+      - name: nginx
+        image: {{ include "common-dash-auth-im-repo.image.url" (list . .Values.image) | quote }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        volumeMounts:
+          - name: tls-keys
+            mountPath: /opt/ibm/netcool/asm/security/
+            readOnly: true
+        env:
+          - name: LICENSE
+            value: "{{ .Values.global.license }}"
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 100m
+          limits:
+            memory: 256Mi
+            cpu: 200m
+{{ include "common-dash-auth-im-repo.dashauth.probes" . | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.defaultSecurityContext) | indent 8 }}

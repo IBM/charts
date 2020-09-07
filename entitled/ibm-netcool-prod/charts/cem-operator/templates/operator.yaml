@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cem-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: cem-operator
+  template:
+    metadata:
+      annotations:
+        productName: "IBM Netcool Operations Insight"
+        productID: "4dba2b5a269740caae5fecdafe0568aa"
+        productVersion: "1.6.1"
+        productMetric: "MANAGED_VIRTUAL_SERVER"
+        operatorVersion: "1.0.0-20200619024639"
+      labels:
+        name: cem-operator
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName: noi-operator
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      containers:
+        - name: cem-operator
+          # Replace this with the built image name
+          image: {{ .Values.global.image.publicOperatorRepo }}/cem-operator@sha256:0edded23d98904a958273e4b8941378aad78444bfb6f3acffc56163852844be6
+          command:
+          - cem-operator
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: WATCH_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: "cem-operator"
+            - name: CHARTS_DIR
+              value: "ibm-cem"
+          resources:
+            limits:
+              cpu: 200m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 64Mi
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+      securityContext:
+        runAsNonRoot: true
