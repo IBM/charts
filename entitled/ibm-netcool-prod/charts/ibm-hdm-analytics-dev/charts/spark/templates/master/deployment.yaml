@@ -1,0 +1,79 @@
+{{- if .Values.master.enabled -}}
+{{- $compName := "master" -}}
+{{- include "sch.config.init" (list . "spark.sch.chart.config.values") -}}
+{{- $deploymentName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $deploymentName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.master.replicas }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      name: {{ $deploymentName }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+    spec:
+{{ include "ibmeaspark.spec.security.context" (list .)| indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      {{- if .Values.global.image.secret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secret }}
+      {{- end }}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - image: {{ include "image.docker.repository" . }}/{{ .Values.master.image.name }}{{ include "ibmeaspark.image.suffix" (list . .Values.master.image) }}
+        resources:
+{{ include "ibmeaspark.comp.size.data" (list . "sparkmaster" "resources") | indent 10 }}
+        name: spark-master
+        imagePullPolicy: {{ .Values.master.pullPolicy }}
+        ports:
+        - containerPort: 8080
+{{ include "ibmeaspark.container.security.context" (list .)| indent 8 }}
+        env:
+        - name: RUN_SPARK_MASTER
+          value: "true"
+        - name: RUN_SPARK_SLAVE
+          value: "false"
+        - name: CLUSTER_ME
+          value: "false"
+        - name: ZOOKEEPER_ID
+          value: "1"
+        - name: SPARK_MASTER_PORT
+          value: "7077"
+        - name: ZOOKEEPER_HOST
+          value: "sparkmaster"
+        - name: RUN_ZOOKEEPER
+          value: "true"
+        - name: LOG_LOCATIONS
+          value: "/var/log/zookeeper.log"
+        livenessProbe:
+          exec:
+            command:
+            - /usr/bin/liveness.sh
+          initialDelaySeconds: 60
+          periodSeconds: 60
+          timeoutSeconds: 30
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - /usr/bin/readiness.sh
+          initialDelaySeconds: 60
+          periodSeconds: 60
+          timeoutSeconds: 30
+          failureThreshold: 3
+{{ end }}

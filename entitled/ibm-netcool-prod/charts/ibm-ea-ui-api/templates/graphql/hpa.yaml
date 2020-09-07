@@ -1,0 +1,20 @@
+{{- include "sch.config.init" (list . "ibm-ea-ui-api.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.graphql.name -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $servicePort := .sch.chart.components.graphql.servicePort -}}
+{{- $hpaEnabled := (include "ibm-ea-ui-api.comp.size.data" (list . "hpa" "enabled")) -}}
+{{ if eq $hpaEnabled "true" }}
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $serviceName }}
+  {{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1beta2
+    kind: Deployment
+    name: {{ $serviceName }}
+  maxReplicas: 5
+  minReplicas: 1
+  targetCPUUtilizationPercentage: 100
+{{ end }}

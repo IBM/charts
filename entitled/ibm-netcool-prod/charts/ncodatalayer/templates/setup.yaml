@@ -1,0 +1,92 @@
+{{- /*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/ -}}
+{{ if (ne .Values.global.hybrid.objectserver.config.deployPhase "none") }}
+{{ if or (eq .Values.global.hybrid.objectserver.config.deployPhase "install") (eq .Values.global.hybrid.objectserver.config.deployPhase "preinstall")}}
+{{- $compName := "setup" }}
+{{- include "sch.config.init" (list . "sch.chart.ncodatalayer.config.values") -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullName" (list . 63) }}-{{ .Values.ncodatalayer.name }}-setup
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+        appClass: ncodatalayer-setup
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+    spec:
+      affinity:
+        nodeAffinity:
+{{ include "ncodatalayer.nodeAffinity.arch" . | indent 10 }}
+      restartPolicy: OnFailure
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secret }}
+      initContainers:
+{{ include "ncodatalayer.initcontainers.depwait" . | indent 6 }}
+{{- if not .Values.global.hybrid.disabled }}
+      - name: {{ .Chart.Name }}-setup-schema
+        image: {{ include "image.docker.repository" . }}/{{ .Values.ncodatalayer.image.name }}{{ include "ncodatalayer.image.suffix" (list . .Values.ncodatalayer.image) }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+{{ include "container.security.context" . | indent 8 }}
+        env:
+{{ include "common.application" . | indent 8 }}
+{{ include "ncodatalayer.standard" . | indent 8 }}
+{{ include "common.license" . | indent 8 }}
+{{ include "common.omnibus" . | indent 8 }}
+{{ include "common.kafka" . | indent 8 }}
+{{ include "common.defaults" . | indent 8 }}
+        resources:
+{{ include "ncodatalayer.comp.size.data" (list . "ncoprimary" "resources") | indent 10 }}
+        command:
+        - /bin/sh
+        - -c
+        - '/app/entrypoint.sh npm run setupdb:schema'
+{{ include "deployment.security.context" . | indent 6 }}
+{{- end }}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - name: {{ .Chart.Name }}-setup-automations
+        image: {{ include "image.docker.repository" . }}/{{ .Values.ncodatalayer.image.name }}{{ include "ncodatalayer.image.suffix" (list . .Values.ncodatalayer.image) }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+{{ include "container.security.context" . | indent 8 }}
+        env:
+{{ include "common.application" . | indent 8 }}
+{{ include "ncodatalayer.standard" . | indent 8 }}
+{{ include "common.license" . | indent 8 }}
+{{ include "common.omnibus" . | indent 8 }}
+{{ include "common.kafka" . | indent 8 }}
+{{ include "common.defaults" . | indent 8 }}
+        resources:
+{{ include "ncodatalayer.comp.size.data" (list . "ncoprimary" "resources") | indent 10 }}
+        command:
+        - /bin/sh
+        - -c
+        - '/app/entrypoint.sh npm run setupdb:triggers'
+{{ include "deployment.security.context" . | indent 6 }}
+{{ end }}
+{{ end }}

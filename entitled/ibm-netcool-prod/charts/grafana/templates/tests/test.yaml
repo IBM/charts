@@ -1,0 +1,63 @@
+{{/*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2020 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/}}
+
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "sch.names.fullName" (list .) }}-test"
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app: {{ include "sch.names.appName" (list .) }}-test
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+  supplementalGroups:
+  {{- range $group := .Values.global.persistence.supplementalGroups }}
+    - {{ $group -}}
+  {{ end }}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            {{- range $arch := .Values.arch }}
+              - {{ $arch -}}
+            {{ end }}
+  serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+  containers:
+    - name: "{{ include "sch.names.fullName" (list .) }}-test"
+      image: {{ include "grafana.getImageRepo" . | trimSuffix "/" }}/{{ .Values.image.name }}{{ include "image.suffix" (list . .Values.image) }}
+      command: ['/bin/sh']
+      args:  ['-c', 'curl -X GET "{{ include "sch.names.fullName" (list .) }}:{{ .Values.httpPort }}/api/health" | grep ok']
+      resources:
+{{ include "grafana.minimalPodResources" . | indent 8 }}
+      securityContext:
+{{ include "grafana.containerSecurityContext" (list . "") | indent 8 }}
+  restartPolicy: Never

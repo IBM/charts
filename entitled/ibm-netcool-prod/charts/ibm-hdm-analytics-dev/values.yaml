@@ -1,0 +1,389 @@
+# Default values for probe_cluster.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+#
+arch:
+  amd64: "3 - Most preferred"
+
+global:
+  authentication:
+    objectserver:
+      secretRelease: ''
+      secretTemplate: ''
+  common:
+    eventanalytics:
+      tenantId: cfd95b7e-3bc7-4006-a4a8-a73a79c71255
+  rbac:
+    serviceAccountName: noi-service-account
+  image:
+    repository: ""
+    secret: ""
+    useTag: true
+  integrations:
+    users:
+      releaseName:
+      namespace:
+      config:
+        userinfo: "http://{{ .releaseName }}-ibm-cem-cem-users.{{ .namespace }}.svc:6002/users/api/usermgmt/v1/userinfo"
+#environmentSize defines the size of deployment you want.
+#size0 is current default and is intended for demo purposes only.
+#size1 is recommended for development use.
+#Future work for production settings coming soon.
+  environmentSize: "size0"
+  persistence:
+    storageClassOption:
+      cassandradata: "local-storage-cassandra"
+      cassandrabak:  "local-storage-cassandra-bak"
+      zookeeperdata: "local-storage-zookeeper"
+      kafkadata:     "local-storage-kafka"
+      couchdbdata:   "local-storage-couchdb"
+    storageSize:
+      kafkadata: 5Gi
+      cassandradata: 10Gi
+      cassandrabak: 10Gi
+  cassandra:
+    superuserRole: true
+  #to accept license set paramater to: 'license: accept'
+  license: "not accepted"
+  kafka:
+    clientUserSecret: "{{ .Release.Name }}-kafka-client-secret"
+    allowInsecure: true
+    usePodIpForListeners: true
+    clientEncryption: false
+    allowInsecure: true
+  internalCaCertificate:
+    secretName: "noi-root-ca"
+  internalTLS:
+    enabled: false
+  isIcamDeployment: false
+  schLabelType: "prefixed"
+  # Enable sub-chart resource requests
+  resource:
+    requests:
+      enable: true
+
+  hybrid:
+    disabled: true
+    dash:
+      url:
+
+# External requirements
+cassandra:
+  enabled: true
+  global:
+    cassandraNodeReplicas: "environmentSizeDefault"
+
+kafka:
+  enabled: true
+  adminUserSecret: "{{ .Release.Name }}-kafka-admin-secret"
+  clusterSize: "environmentSizeDefault"
+  topics:
+    initialise: true
+
+zookeeper:
+  enabled: true
+  clusterSize: "environmentSizeDefault"
+
+# Redis dependency
+ibmRedis:
+  enabled: true
+  replicas: "environmentSizeDefault"
+  persistence:
+    enabled: false
+  auth:
+    authSecretName: "{{ .Release.Name }}-ibm-redis-authsecret"
+  serviceAccount:
+    create: false
+
+# ibm-sch dependency
+sch:
+  enabled: true
+
+# couchdb dependency
+couchdb:
+  enabled: true
+  clusterSize: "environmentSizeDefault"
+  port: 5984
+  scheme: http
+  secretName: couchdb-secret
+  autoClusterConfig:
+    enabled: "environmentSizeDefault"
+
+spark:
+  master:
+    enabled: true
+  slave:
+    enabled: true
+
+# Internal services
+inference:
+  enabled: true
+  serviceType: ClusterIP
+  pullPolicy: Always
+  port: 8080
+  image:
+    name: inference-service
+    tag: 3.0.161-20200616164826BST
+    digest: sha256:08d77371cd14192b64ae7d79e43cb2b207cb0232c5bc3d89f9287ebecc021352
+
+  expectedEventId: EventAnalyticsSelfMonitoring
+
+trainer:
+  enabled: true
+  serviceType: ClusterIP
+  pullPolicy: Always
+  port: 8080
+  image:
+    name: training-service
+    tag: 3.0.182-20200617160934BST
+    digest: sha256:2ebf43276a68545e94bfd0bc7a3f59a2a2b1b9bd71a9ea495a52b0e6130b051c
+
+  authentication:
+    cemusers:
+      releaseName:
+      namespace:
+
+archivingservice:
+  enabled: true
+  repFactor: 1
+  pullPolicy: Always
+  serviceType: ClusterIP
+  image:
+    name: archiving-service
+    tag: 3.0.33-20200616105631BST
+    digest: sha256:e963e01e9ea7095e7b9c06b2647a57ef36fe0fcdac8729d6b9f3e3f7eb5cfc10
+
+  logLevel: 30
+  eventTTL: 7862400
+
+ingestionservice:
+  enabled: true
+  repFactor: 1
+  pullPolicy: Always
+  serviceType: ClusterIP
+  image:
+    name: ingestion-service
+    tag: 3.0.30-20200616105631BST
+    digest: sha256:d4d7bb6be0a437b06075440e7afa40ae63c6eec436b613d090fd6e63a4f3035d
+
+  logLevel: 30
+  swagger:
+    enabled: false
+  payloadSizeLimit: 1048576
+
+aggregationdedupservice:
+  enabled: true
+  repFactor: 1
+  pullPolicy: Always
+  serviceType: ClusterIP
+  image:
+    name: aggregation-dedup-service
+    tag: 3.0.44-20200618151918BST
+    digest: sha256:b952fda56313319a64852512ee3a9369d4c310e5b93b6b0031306c67323bdb4f
+
+  logLevel: 30
+
+aggregationcollaterservice:
+  enabled: true
+  repFactor: 1
+  pullPolicy: Always
+  serviceType: ClusterIP
+  image:
+    name: aggregation-collater-java-service
+    tag: 3.0.0-20200616105631BST
+    digest: sha256:7bad31e8b03e81c8024874737e6688a686f27cc146a1d81bd53c619a54a3c6ba
+
+  logLevel: INFO
+  pollingInterval: 20
+  initialWindowInterval: 120
+  latenessThreshold: 10
+  quietPeriod: 1200
+  maxConnectedItems: 10000
+  savebackup: true
+
+aggregationnormalizerservice:
+  enabled: true
+  repFactor: 1
+  evtMgmtEndpoint:
+    targetUrl:
+    username: root
+  pullPolicy: Always
+  serviceType: ClusterIP
+  image:
+    name: aggregation-normalizer-service
+    tag: 3.0.39-20200616105632BST
+    digest: sha256:3bc8bfba62a4a3f9824e2b3da3c0e650755531c73f9042622061a84a96937679
+
+  logLevel: 30
+
+policyregistryservice:
+  enabled: true
+  repFactor: 1
+  pullPolicy: Always
+  serviceType: ClusterIP
+  image:
+    name: policy-registry-service
+    tag: 3.0.68-20200616160441BST
+    digest: sha256:f5be846094ec8548a8c7fb3189ca4803f3dd1a73e9cf323e39d26356de47a138
+
+
+  logLevel: 30
+  swagger:
+    enabled: false
+  payloadSizeLimit: 2097152
+
+eventsqueryservice:
+  enabled: true
+  repFactor: 1
+  pullPolicy: Always
+  serviceType: ClusterIP
+  image:
+    name: eventsquery-service
+    tag: 3.0.33-20200616105632BST
+    digest: sha256:103d6038c8c70f0e4652859a6c6400c7422375ba2a9e42e881a8d6795a004a0c
+
+  logLevel: 30
+  swagger:
+    enabled: false
+  payloadSizeLimit: 1048576
+
+servicemonitorservice:
+  enabled: true
+  repFactor: 1
+  pullPolicy: Always
+  serviceType: ClusterIP
+  image:
+    name: servicemonitor
+    tag: 3.0.28-20200616105631BST
+    digest: sha256:fdcb484e372c9f14c72eb503e5ea9032450fe2714b7fb8177c52f17d3aebef98
+
+  logLevel: 30
+  swagger:
+    enabled: false
+  services:
+  - ingestionservice
+  - archivingservice
+  - policyregistryservice
+  - eventsqueryservice
+  - inferenceservice
+  - trainer
+  - collater-aggregationservice
+  - dedup-aggregationservice
+  - normalizer-aggregationservice
+
+eventstooling:
+  # Scripts to install and train the system with sample data
+  image:
+    name: ea-events-tooling
+    tag: 4.0.11-20200616105630BST
+    digest: sha256:4a2f8c139e9d2cfc8328ba40d5b6a7aebe3a1e091762c1037ed86817e0084c89
+
+
+common:
+  seasonalityDeployFirst: true
+  temporalGroupingDeployFirst: true
+  restApi:
+    port: 5600
+    portSsl: 5601
+  topics:
+    events:
+      name: ea-events
+      enabled: true
+    eventactions:
+      name: ea-actions
+      enabled: true
+    collatedactions:
+      name: ea-collatedactions
+      enabled: true
+    metrics:
+      name: metric.json
+      enabled: false
+    baseline:
+      name: baseline.metric.json
+      enabled: false
+    baselinePersistence:
+      name: baseline.persistence.metric.json
+      enabled: false
+    asmMessages:
+      name: ea-asm-enriched-events
+      enabled: false
+
+
+  # These are the common definitions for the Cassandra keyspaces.
+  #
+  # NOTE: The default setting of zero for 'replicationFactor' means
+  # that there is no override and the replication factor shoud be
+  # deduced based on the cluster size. To override this default
+  # set the required replication factor to a value between 1-3 here.
+  keyspaces:
+    events:
+      name: ea_events
+      replicationFactor: 0
+    policies:
+      name: ea_policies
+      replicationFactor: 0
+  # Base URL settings for services outside of the event analytics deployment.
+  services:
+    uagUrl:
+
+    # The accessible URL to the dash authentication servlet will be dependent
+    # on whether the services are spun up in the same namespace or not.
+    # If in the same namespace, the service name of DASH/WAS can be used. If
+    # external or in a seperate namespace, then the external cluster hostname
+    # or IP along with the node port need to be specified. The node port will
+    # need to be determined from the service definition as this will be
+    # assigned at creation. Can be determined via following command.
+    #
+    #   PORT = kubectl get --namespace default -o jsonpath="{.spec.ports[0].nodePort}" services myhelmname-ibm-netcool-webgui
+    #
+    # Same Namespace: https://myhelmname-ibm-netcool-webgui:16311
+    # External: https://netcool.myhelmname.myclustername.mydomain.net:32484
+    #
+    # NOTE: The hostname and port of the DASH authentication source will be the
+    # default subscription/tenant id of all users authentication against the
+    # DASH authenticator, unless a specific setting is defined in authentication
+    # scheme section.
+    #
+    noiDashAuthUrl:  ""
+
+  # These are the common definitions for specifying to the API services which
+  # authentication scheme should be used to validate tenant requests to the
+  # APIs.
+  #
+  # The default for now is 'cemusers' in order to maintain the status quo for
+  # existing deployments. Available options are 'cemusers', 'noiusers' and
+  # 'statickey'.
+  authentication:
+  # Definitions required for cemusers. Ensure that services.uagUrl is set
+  # accordingly.
+  #  scheme: cemusers
+
+  # Definitions required for noiusers. Ensure that services.noiDashAuthUrl is
+  # set accordingly. If a specific tenant needs to be used in place of the
+  # derived default, define it in the tenantid memeber of the credentials
+  # section.
+    scheme: cemusers
+
+  # Definitions required for statickey. Ensure that credentials are set as
+  # required in the a secret named $RELEASE_NAME-statickey-secret. A static key authentication scheme
+  # has no tenantid definition, so this is set by the tenantid value and
+  # set where required.
+  #  scheme: statickey
+  #  credentials:
+  #    tenantid:
+ingresspaths:
+- name: policyregistryservice
+  path: /api/policies
+  port: 5600
+- name: ingestionservice
+  path: /api/ingestion
+  port: 5600
+- name: eventsqueryservice
+  path: /api/eventquery
+  port: 5600
+- name: servicemonitorservice
+  path: /api/monitor
+  port: 5600
+- name: inference
+  path: /api/inference/monitoring
+  port: 8080

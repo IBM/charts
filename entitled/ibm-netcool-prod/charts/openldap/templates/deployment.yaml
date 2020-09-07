@@ -1,0 +1,173 @@
+{{- /*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/ -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.fullName" (list . 63) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+
+spec:
+  replicas: {{ .Values.replicaCount }}
+  updateStrategy:
+    type: RollingUpdate
+  serviceName:  {{ .Release.Name }}-{{ .Values.global.ldapservice.name }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      volumes:
+        - name: {{ .Release.Name }}-ldap-proxy-slapd-replace
+          configMap:
+            name: {{ .Release.Name }}-ldap-proxy-config
+            items:
+            - key: ldap-proxy-slapd-replace
+              path: slapd.conf-replace
+        - name: {{ include "sch.names.persistentVolumeClaimName" (list . "pvc") }}
+        {{- if .Values.global.persistence.enabled }}
+          persistentVolumeClaim:
+          {{- if .Values.pvc.existingClaimName }}
+            claimName: {{ .Values.pvc.existingClaimName }}
+          {{- else }}
+            claimName: {{ include "sch.names.persistentVolumeClaimName" (list . "pvc") }}
+          {{- end }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+      containers:
+        - name: openldap
+          {{- if eq .Values.global.ldapservice.mode "proxy" }}
+          image: {{ include "image.docker.repository" . -}}/{{- include "image.family" . -}}-{{ .Values.image.proxy.name }}-{{- include "image.edition" . -}}{{ include "image.suffix" (list . .Values.image.proxy) }}
+          {{ else }}
+          image: {{ include "image.docker.repository" . -}}/{{- include "image.family" . -}}-{{ .Values.image.standalone.name }}-{{- include "image.edition" . -}}{{ include "image.suffix" (list . .Values.image.standalone) }}
+          {{ end -}}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: true
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+              add: ["NET_BIND_SERVICE","IPC_LOCK", "IPC_OWNER","DAC_OVERRIDE","FOWNER","FSETID","SETGID","SETUID","NET_BIND_SERVICE","NET_RAW","AUDIT_WRITE"]
+          volumeMounts:
+            {{- if .Values.global.persistence.enabled }}
+            - name: {{ include "sch.names.persistentVolumeClaimName" (list . "pvc") }}
+              mountPath: {{ .Values.openldap.env.ldapPath }}
+            {{- end }}
+            - name: {{ .Release.Name }}-ldap-proxy-slapd-replace
+              mountPath: /home/openldap/slapd.conf-replace
+              subPath: slapd.conf-replace
+          ports:
+            - containerPort: {{ .Values.global.ldapservice.internal.ldapPort }}
+            - containerPort: {{ .Values.global.ldapservice.internal.ldapSSLPort }}
+          env:
+            - name: LICENSE
+              value: "{{ .Values.global.license }}"
+            - name: LDAP_URL
+              value: "{{ .Values.global.ldapservice.internal.url }}"
+            - name: LDAP_SUFFIX
+              value: "{{ .Values.global.ldapservice.internal.suffix }}"
+            - name: LDAP_BIND_DN
+              value: "{{ .Values.global.ldapservice.internal.bindDN }}"  
+            - name: LDAP_BIND_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-ldap-secret
+                  key: LDAP_BIND_PASSWORD
+                  optional: false 
+            - name: ICP_ADMIN_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-icpadmin-secret
+                  key: ICP_ADMIN_PASSWORD
+                  optional: false   
+              
+            - name: IMPACT_ADMIN_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-impact-secret
+                  key: IMPACT_ADMIN_PASSWORD
+                  optional: false
+            - name: OMNIBUS_ROOT_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ printf .Values.global.omnisecretname .Release.Name }}
+                  key: OMNIBUS_ROOT_PASSWORD
+                  optional: false      
+          {{- if eq .Values.global.resource.requests.enable true }}
+          resources:
+{{ include "ibmnoiprod.comp.size.data" (list . "openldap" "resources") | indent 12 }}
+          {{- end }}
+          livenessProbe:
+            exec:
+              command:
+                - {{ .Values.openldap.liveness.command }}
+                - -x
+                - -h
+                - localhost
+                - -LLL
+                - -s
+                - base
+                - -b
+                - ""
+                - supportedSASLMechanisms
+            initialDelaySeconds: {{ .Values.openldap.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.openldap.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.openldap.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.openldap.liveness.failureThreshold }}
+          readinessProbe:
+            exec:
+              command:
+                - {{ .Values.openldap.readiness.command }}
+                - -x
+                - -h
+                - localhost
+                - -LLL
+                - -s
+                - base
+                - -b
+                - ""
+                - supportedSASLMechanisms
+            initialDelaySeconds: {{ .Values.openldap.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.openldap.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.openldap.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.openldap.readiness.failureThreshold }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      affinity:
+        nodeAffinity:
+{{ include "noi.nodeAffinity.arch" . | indent 10 }}
+      {{- if .Values.global.image.secret }}  
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secret }}
+      {{- end }}
+      securityContext:
+        fsGroup: 2001
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}

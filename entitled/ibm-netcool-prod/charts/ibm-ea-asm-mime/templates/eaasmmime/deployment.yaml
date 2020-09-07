@@ -1,0 +1,114 @@
+{{- include "sch.config.init" (list . "ibm-ea-asm-mime.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.eaasmmime.name -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+
+{{- $statefulSetName := include "sch.names.statefulSetName" (list .) -}}
+{{- $kkCaSecretDirTemplateName := include "sch.names.volumeClaimTemplateName" (list . "cacerts" $statefulSetName) -}}
+
+{{- if .Values.probableCause.enabled -}}
+{{- if .Values.enabled -}}
+{{- if .Values.global.integrations.asm.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $serviceName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+{{- if  eq .Values.global.environmentSize  "size0" }}
+  replicas: 1
+{{- else if eq .Values.global.environmentSize "size1" }}
+  replicas: 1
+{{- else }}
+  replicas: 1
+{{- end }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+    spec:
+      {{- if .Values.global.image.secret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      volumes:
+      - name: kafka-streams-tmp
+        emptyDir: {}
+      {{- if .Values.global.openshift }}
+      - name: {{ .Release.Name }}-inner-webgui
+        secret:
+          secretName: {{ .Release.Name }}-inner-webgui
+          items:
+          - key: tls.crt
+            path: trust-tls.crt
+          - key: tls.key
+            path: trust-tls.key
+      {{- end }}
+      {{- if .Values.global.integrations.asm.onPremSecureRemote.enabled }}
+      - name: secureconfig
+        emptyDir:
+          medium: "Memory"
+      - name: {{ $kkCaSecretDirTemplateName }}
+        secret:
+         secretName: external-asm-tls
+      {{- end }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      initContainers:
+      - name: "waitforkafka"
+        image: {{ include "ibm-ea-asm-mime.image.url" (list . .Values.image) | quote }}
+        command: ["sh", "-c", "i=1; until getent hosts ${KAFKA_HOST}; do echo waiting for kafka host ${KAFKA_HOST} iteration number $i; i=$((i+1)); sleep 2; done;"]
+        resources:
+{{ include "ibm-ea-asm-mime.comp.size.data" (list . "eaasmmime" "resources") | indent 10 }}
+{{ include "ibm-ea-asm-mime.psp.securityContext" . | indent 8}}
+{{ include "ibm-ea-asm-mime.eaasmmime.environment" . | indent 8 }}
+      - name: "waitforcassandra"
+        image: {{ include "ibm-ea-asm-mime.image.url" (list . .Values.image) | quote }}
+        command: ["sh", "-c", "i=1; until getent hosts ${CASSANDRA_HOST}; do echo waiting for cassandra host ${CASSANDRA_HOST} iteration number $i; i=$((i+1)); sleep 2; done;"]
+        resources:
+{{ include "ibm-ea-asm-mime.comp.size.data" (list . "eaasmmime" "resources") | indent 10 }}
+{{ include "ibm-ea-asm-mime.psp.securityContext" . | indent 8}}
+{{ include "ibm-ea-asm-mime.eaasmmime.environment" . | indent 8 }}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - name: "probablecause"
+        image: {{ include "ibm-ea-asm-mime.image.url" (list . .Values.image) | quote }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        volumeMounts:
+        - name: kafka-streams-tmp
+          mountPath: /tmp/kafka-streams
+        {{- if .Values.global.integrations.asm.onPremSecureRemote.enabled}}
+        - name: secureconfig
+          mountPath: /opt/secureconfig
+        - name: {{ $kkCaSecretDirTemplateName }}
+          mountPath: /opt/cacerts
+        {{- end }}
+        {{ if .Values.global.openshift }}
+        - name: {{ .Release.Name }}-inner-webgui
+          mountPath: /opt/cacerts/webgui
+        {{- end }}
+        ports:
+        - containerPort: 8080
+          name: unsecure-port
+          protocol: TCP
+        resources:
+{{ include "ibm-ea-asm-mime.comp.size.data" (list . "eaasmmime" "resources") | indent 10 }}
+{{ include "ibm-ea-asm-mime.eaasmmime.environment" . | indent 8 }}
+{{ include "ibm-ea-asm-mime.psp.securityContext" . | indent 8}}
+{{ include "ibm-ea-asm-mime.eaasmmime.probes" . | indent 8 }}
+{{- end -}}
+{{- end -}}
+{{- end -}}

@@ -1,0 +1,205 @@
+{{- include "sch.config.init" (list . "ibm-ea-asm-normalizer.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.mirrormaker.name -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+
+{{- $statefulSetName := include "sch.names.statefulSetName" (list .) -}}
+{{- $kkCaSecretDirTemplateName := include "sch.names.volumeClaimTemplateName" (list . "cacerts" $statefulSetName) -}}
+
+{{- $eaKafkaHost := include "ibm-ea-asm-normalizer.mirrormaker.eaKafkaHost" . -}}
+{{- $asmKafkaHost := include "ibm-ea-asm-normalizer.mirrormaker.asmKafkaHost" . -}}
+
+{{- /*
+  Only enable if ASM is enabled and ASM has a different kafka bus
+*/ -}}
+{{- if and .Values.global.integrations.asm.enabled (ne $eaKafkaHost $asmKafkaHost) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $serviceName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+{{- if  eq .Values.global.environmentSize  "size0" }}
+  replicas: 1
+{{- else if eq .Values.global.environmentSize "size1" }}
+  replicas: 2
+{{- else }}
+  replicas: 1
+{{- end }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+    spec:
+      {{- if .Values.global.image.secret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      {{- if or ( eq .Values.global.environmentSize  "size0" ) (.Values.global.integrations.asm.onPremSecureRemote.enabled) }}
+      volumes:
+      {{ end }}
+      {{- if  eq .Values.global.environmentSize  "size0" }}
+      - name: health
+        emptyDir:
+          medium: Memory
+      {{ end }}
+      {{- if .Values.global.integrations.asm.onPremSecureRemote.enabled }}
+      - name: secureconfig
+        emptyDir:
+          medium: "Memory"
+      - name: {{ $kkCaSecretDirTemplateName }}
+        secret:
+         secretName: external-asm-tls
+      {{- end }}
+      initContainers:
+      {{- if  eq .Values.global.environmentSize  "size0" }}
+      - name: getinitialbrokerip
+        image: {{ include "ibm-ea-asm-normalizer.image.url" (list . .Values.image) | quote }}
+        resources:
+{{ include "ibm-ea-asm-normalizer.comp.size.data" (list . "mirrormaker" "resources") | indent 10 }}
+{{ include "ibm-ea-asm-normalizer.psp.securityContext" . | indent 8}}
+{{ include "ibm-ea-asm-normalizer.mirrormaker.environment" . | indent 8 }}
+        command:
+          - "sh"
+          - "-c"
+          - "getent hosts ${KAFKA_OUT_HOST} | awk '{print $1}' > /health/noi-kafka-ip ; echo Resolved kafka brokers to be used in bootstrap.servers as $(cat /health/noi-kafka-ip)"
+        volumeMounts:
+          - mountPath: /health
+            name: health
+      {{- end }}
+      {{- if ( eq .Values.global.integrations.asm.onPremSecureRemote.enabled false ) }}
+      - name: waitforkafkain
+        image: {{ include "ibm-ea-asm-normalizer.image.url" (list . .Values.image) | quote }}
+        command:
+        - "sh"
+        - "-c"
+        - "i=1; until getent hosts ${ASM_KAFKA_IN_HOSTNAME}; do echo waiting for kafka $i; i=$((i+1)); sleep 2; done;"
+        resources:
+{{ include "ibm-ea-asm-normalizer.comp.size.data" (list . "mirrormaker" "resources") | indent 10 }}
+{{ include "ibm-ea-asm-normalizer.psp.securityContext" . | indent 8}}
+{{ include "ibm-ea-asm-normalizer.mirrormaker.environment" . | indent 8 }}
+      {{- end }}
+      - name: waitforkafkaout
+        image: {{ include "ibm-ea-asm-normalizer.image.url" (list . .Values.image) | quote }}
+        command:
+        - "sh"
+        - "-c"
+        - "i=1; until getent hosts ${KAFKA_OUT_HOST}; do echo waiting for kafka host ${KAFKA_OUT_HOST} $i; i=$((i+1)); sleep 2; done;"
+        resources:
+{{ include "ibm-ea-asm-normalizer.comp.size.data" (list . "mirrormaker" "resources") | indent 10 }}
+{{ include "ibm-ea-asm-normalizer.psp.securityContext" . | indent 8}}
+{{ include "ibm-ea-asm-normalizer.mirrormaker.environment" . | indent 8 }}
+      - name: createouttopic
+        image: {{ include "ibm-ea-asm-normalizer.image.url" (list . .Values.kafkaImage) | quote }}
+        # We copy the topic configuration from the ea-events topic
+        command:
+        - "sh"
+        - "-c"
+        - |
+           set -ex
+           {{- if .Values.global.integrations.asm.onPremSecureRemote.enabled }}
+           KAFKA_REST_URL_CMD="curl --insecure -u ${KAFKA_PROXY_CLIENT_USERNAME}:${KAFKA_PROXY_CLIENT_PASSWORD}  https://${ASM_KAFKA_IN_HOSTNAME}/1.0/kafkarest/topics/${KAFKA_TOPIC_NAME}" &&
+           echo "KAFKA_REST_URL_CMD curl --insecure -u ${KAFKA_PROXY_CLIENT_USERNAME}:xxxxx  https://${ASM_KAFKA_IN_HOSTNAME}/1.0/kafkarest/topics/${KAFKA_TOPIC_NAME}" &&
+           PARTITION_COUNT=`${KAFKA_REST_URL_CMD} | grep -c 'Partition:'` &&
+           REPLICA_FACTOR=`${KAFKA_REST_URL_CMD} | grep 'Partition:' | head -n 1 |cut -d ':' -f 5 |cut -d ' ' -f 2 ` &&
+           echo "create topic command: /opt/kafka/bin/kafka-topics.sh --create  --topic ${KAFKA_TOPIC_NAME} --zookeeper ${KAFKA_OUT_ZOOKEEPER_URL} --partitions $PARTITION_COUNT --replication-factor $REPLICA_FACTOR --if-not-exists" &&
+           {{- else }}
+            EA_EVENTS_DETAILS=$(KAFKA_OPTS="-Dlog4j.configuration=file:/opt/kafka/config/tools-log4j.properties" /opt/kafka/bin/kafka-topics.sh \
+              --describe \
+              --topic ${KAFKA_EVENTS_TOPIC_NAME} \
+              --zookeeper ${KAFKA_OUT_ZOOKEEPER_URL} | head -n 1)
+            PARTITION_COUNT=$(echo ${EA_EVENTS_DETAILS} | awk -F 'PartitionCount: ' '{print $2 FS ""}' | cut -f 1 -d ' ')
+            REPLICA_FACTOR=$(echo ${EA_EVENTS_DETAILS}  | awk -F 'ReplicationFactor: ' '{print $2 FS ""}' | cut -f 1 -d ' ')
+            {{- end }}
+            /opt/kafka/bin/kafka-topics.sh \
+              --create \
+              --topic ${KAFKA_TOPIC_NAME} \
+              --zookeeper ${KAFKA_OUT_ZOOKEEPER_URL} \
+              --partitions ${PARTITION_COUNT} \
+              --replication-factor ${REPLICA_FACTOR} \
+              --if-not-exists
+        resources:
+{{ include "ibm-ea-asm-normalizer.comp.size.data" (list . "mirrormaker" "resources") | indent 10 }}
+{{ include "ibm-ea-asm-normalizer.psp.securityContext" . | indent 8}}
+{{ include "ibm-ea-asm-normalizer.mirrormaker.environment" . | indent 8 }}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - name: mirrormaker
+        image: {{ include "ibm-ea-asm-normalizer.image.url" (list . .Values.kafkaImage) | quote }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        {{- if or ( eq .Values.global.environmentSize  "size0" ) (.Values.global.integrations.asm.onPremSecureRemote.enabled) }}
+        volumeMounts:
+        {{ end }}
+          {{- if  eq .Values.global.environmentSize  "size0" }}
+          - mountPath: /health
+            name: health
+          {{- end }}
+          {{- if .Values.global.integrations.asm.onPremSecureRemote.enabled}}
+          - name: secureconfig
+            mountPath: /opt/secureconfig
+          - name: {{ $kkCaSecretDirTemplateName }}
+            mountPath: /opt/cacerts
+          {{- end }}
+        livenessProbe:
+         exec:
+          command:
+          - "sh"
+          - "-c"
+          - >-
+            {{- if  eq .Values.global.environmentSize  "size0" }}
+            CURRENT_RESOLUTION=$(getent hosts ${KAFKA_OUT_HOST} | awk '{print $1}') ; INITIAL_RESOLUTION=$(cat /health/noi-kafka-ip) ; echo $(date): Current Resolution - $CURRENT_RESOLUTION ,  Cached Resolution  $INITIAL_RESOLUTION &&  if [ ${CURRENT_RESOLUTION} != ${INITIAL_RESOLUTION} ]; then echo restarting to flush sticky DNS resolutions && echo $CURRENT_RESOLUTION > /health/noi-kafka-ip && exit 1; else echo $(date) brokers probe passed && /opt/kafka/bin/kafka-topics.sh --list --zookeeper  ${KAFKA_OUT_ZOOKEEPER_URL};  fi
+            {{ else }}
+              /opt/kafka/bin/kafka-topics.sh --list --zookeeper  ${KAFKA_OUT_ZOOKEEPER_URL}
+            {{ end }}
+         initialDelaySeconds: 30
+         failureThreshold: 1
+         periodSeconds: 600
+         timeoutSeconds: 30
+        readinessProbe:
+         exec:
+          command:
+          - "sh"
+          - "-c"
+          - >-
+             echo "Executing readiness probe" &&
+             /opt/kafka/bin/kafka-topics.sh --list --zookeeper  ${KAFKA_OUT_ZOOKEEPER_URL}
+         initialDelaySeconds: 60
+         periodSeconds: 300
+         timeoutSeconds: 30
+        command:
+        - "sh"
+        - "-c"
+        - >-
+            echo "Secure Remote is set: to ${ASM_ON_PREMS_SECURE_REMOTE}" &&
+            {{- if .Values.global.integrations.asm.onPremSecureRemote.enabled   }}
+{{- include "ibm-ea-asm-normalizer.generate_kafka_ssl_helper" . | indent 12 -}}
+            {{- else }}
+            echo "bootstrap.servers=${KAFKA_IN_BOOTSTRAP_SERVERS}" > /tmp/consumer.config &&
+            echo "group.id=${KAFKA_GROUP_ID}" >> /tmp/consumer.config &&
+            echo "bootstrap.servers=${KAFKA_OUT_BOOTSTRAP_SERVERS}" > /tmp/producer.config &&
+            /opt/kafka/bin/kafka-mirror-maker.sh \
+              --consumer.config /tmp/consumer.config \
+              --producer.config /tmp/producer.config \
+              --abort.on.send.failure true \
+              --whitelist ${KAFKA_TOPIC_NAME}
+            {{- end }}
+        resources:
+{{ include "ibm-ea-asm-normalizer.comp.size.data" (list . "mirrormaker" "resources") | indent 10 }}
+{{ include "ibm-ea-asm-normalizer.mirrormaker.environment" . | indent 8 }}
+{{ include "ibm-ea-asm-normalizer.psp.securityContext" . | indent 8}}
+{{- end -}}

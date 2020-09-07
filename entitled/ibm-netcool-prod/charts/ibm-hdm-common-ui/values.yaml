@@ -1,0 +1,322 @@
+global:
+  license: not accepted
+  environmentSize: size0
+  common:
+    eventanalytics:
+      tenantId: cfd95b7e-3bc7-4006-a4a8-a73a79c71255
+  image:
+    repository: ''
+    secret: ''
+    pullPolicy: Always
+    useTag: true
+  cluster:
+    fqdn: ''
+  ingress:
+    domain: ''
+    prefixWithReleaseName: true
+    tlsSecret: ''
+    port: 443
+  hybrid:
+    disabled: true
+    trustedCAsConfigMapName: null
+    webgui:
+      url: null
+    impact:
+      url: null
+    dash:
+      url: null
+      username: null
+    authentication:
+      openid:
+        issuer: null
+        tokenEndpoint: null
+        authorizationEndpoint: null
+        userinfoEndpoint: null
+  integrations:
+    asm:
+      onPremSecureRemote:
+        enabled: false
+        remoteHost: null
+        uiApiPort: null
+    dashboarding:
+      releaseName: null
+      namespace: null
+      config:
+        internalUrl: http://{{ .releaseName }}-grafana.{{ .namespace }}.svc:3000
+    runbookRbs:
+      releaseName: null
+      namespace: null
+      config:
+        internalUrl: http://{{ .releaseName }}-ibm-cem-rba-rbs.{{ .namespace }}.svc:3005
+    cneaUiApi:
+      releaseName: null
+      namespace: null
+      config:
+        internalUrl: http://{{ .releaseName }}-ibm-ea-ui-api-graphql.{{ .namespace }}.svc:8080/graphql
+    incidentsUiApi:
+      releaseName: null
+      namespace: null
+      config:
+        internalUrl: http://{{ .releaseName }}-ibm-cem-event-analytics-ui.{{ .namespace }}.svc:3201
+    topologyUiApi:
+      releaseName: null
+      namespace: null
+      config:
+        internalUrl: |-
+          {{- if and .Values.global.integrations.asm.enabled .Values.global.integrations.asm.onPremSecureRemote.enabled -}}
+            {{- printf "https://%s:%s" .Values.global.asm.onPremSecureRemote.remoteHost .Values.global.asm.onPremSecureRemote.uiApiPort -}}
+          {{- else -}}
+            https://{{ default .releaseName .Values.global.integrations.asm.releaseName }}-ui-api.{{ .namespace }}.svc:3080
+          {{- end -}}
+        isSecure: |-
+          {{- if eq .Values.global.integrations.asm.onPremSecureRemote.enabled true -}}
+            true
+          {{- else -}}
+            false
+          {{- end -}}
+      certificates:
+        internalUrl: '{{ .releaseName }}-service-ca'
+    omnibusWebgui:
+      releaseName: null
+      namespace: null
+      config:
+        internalUrl: '{{ default (printf "https://%s-webgui.%s.svc:16311/ibm/console/webtop"
+          .releaseName .namespace) .Values.global.hybrid.webgui.url }}'
+        externalUrl: '{{ default (printf "%s/ibm/console/webtop" .ingressDomain) .Values.global.hybrid.webgui.url
+          }}'
+      certificates:
+        internalUrl: '{{ .releaseName }}-service-ca'
+    impact:
+      releaseName: null
+      namespace: null
+      config:
+        internalUrl: '{{ default (printf "https://%s-impactgui.%s.svc:17311/ibm/console"
+          .releaseName .namespace) .Values.global.hybrid.impact.url }}'
+        externalUrl: '{{ default (printf "%s/ibm/console" (.ingressDomain | replace
+          "netcool" "impact")) .Values.global.hybrid.impact.url }}'
+        enabled: |-
+          {{- if .Values.global.hybrid.disabled -}}
+            true
+          {{- else -}}
+            false
+          {{- end -}}
+    dash:
+      releaseName: null
+      namespace: null
+      config:
+        internalUrl: '{{ default (printf "https://%s-webgui.%s.svc:16311" .releaseName
+          .namespace) .Values.global.hybrid.dash.url }}'
+        externalUrl: '{{ default .ingressDomain .Values.global.hybrid.dash.url }}'
+        adminUsername: '{{ default "smadmin" .Values.global.hybrid.dash.username }}'
+      certificates:
+        internalUrl: '{{ .releaseName }}-service-ca'
+      secrets:
+        adminPassword:
+          template: '{{ .releaseName }}-was-secret'
+          key: WAS_PASSWORD
+          optional: 'true'
+    users:
+      releaseName: null
+      namespace: null
+      config:
+        internalUrl: http://{{ .releaseName }}-ibm-cem-cem-users.{{ .namespace }}.svc:6002
+        token: http://{{ .releaseName }}-ibm-cem-cem-users.{{ .namespace }}.svc:6002/users/api/authprovider/v1/token
+        userinfo: http://{{ .releaseName }}-ibm-cem-cem-users.{{ .namespace }}.svc:6002/users/api/usermgmt/v1/userinfo
+        userinfoTenant: http://{{ .releaseName }}-ibm-cem-cem-users.{{ .namespace }}.svc:6002/users/api/usermgmt/v1/tenants/{tenantId}/userinfo
+        droptoken: http://{{ .releaseName }}-ibm-cem-cem-users.{{ .namespace }}.svc:6002/users/api/authprovider/v1/droptoken
+        origintoken: http://{{ .releaseName }}-ibm-cem-cem-users.{{ .namespace }}.svc:6002/users/api/usermgmt/v1/origintoken
+        logout: '{{ .ingressDomain }}/users/api/authprovider/v1/logout'
+        authorization: '{{ .ingressDomain }}/users/api/authprovider/v1/authorize'
+      secrets:
+        clientId:
+          template: '{{ .releaseName }}-cem-cemusers-cred-secret'
+          key: clientid
+          optional: false
+        clientSecret:
+          template: '{{ .releaseName }}-cem-cemusers-cred-secret'
+          key: clientsecret
+          optional: false
+        jwtSignging:
+          template: '{{ .releaseName }}-rba-jwt-secret'
+          key: secret
+          optional: false
+    redis:
+      releaseName: null
+      namespace: null
+      config:
+        sentinals: '[{"host":"{{ .releaseName }}-ibm-redis","port":"26379"}]'
+        masterName: mymaster
+      secrets:
+        password:
+          template: '{{ .releaseName }}-ibm-redis-authsecret'
+          key: password
+    ui:
+      releaseName: null
+      namespace: null
+      config:
+        internalUrl: http://{{ .releaseName }}-ibm-hdm-common-ui-uiserver.{{ .namespace }}.svc:8080
+        internalUrlSecure: |-
+          {{- if .Values.global.hybrid.webgui.url -}}
+            {{ .ingressDomain }}
+          {{- else -}}
+            https://{{ .releaseName }}-ibm-hdm-common-ui-uiserver.{{ .namespace }}.svc:8443
+          {{- end -}}
+        externalUrl: '{{ .ingressDomain }}'
+        authenticationMode: openid-cem
+        clientConfiguration: services:hdm_noi:tenantid,services:hdm_noi_webgui:external_url,services:hdm_noi_dash:external_url,services:hdm_noi_impact:external_url,services:hdm_noi_impact:enabled,publicurl
+        defaultTenant: '{{ .Values.global.common.eventanalytics.tenantId }}'
+        productTitle: Netcool Operations Insight
+        tlsCertificatePath: /internal-tls-keys/tls.crt
+        tlsKeyPath: /internal-tls-keys/tls.key
+        tlsTrustPath: /ca-certs
+        port: '8080'
+        securePort: '8443'
+        license: '{{ .Values.global.license }}'
+        enableDashFederation: '{{ .Values.dash.consoleIntegration.enabled }}'
+        dashFederationIntegrationId: '{{ .Values.dash.consoleIntegration.integrationId
+          }}'
+        enabledConsoleIntegrations: com.ibm.hdm.hdmintegration.ui.ci.cloudanalytics,com.ibm.hdm.hdmintegration.ui.ci.alertmgmt
+        sessionProvider: redis
+        pageTitle: IBM Netcool Operations Insight
+      configMaps:
+        trustCAsDefault:
+          template: '{{ .releaseName }}-ibm-hdm-common-ui-trusted-cas'
+        trustCAsUser:
+          template: '{{ default (printf "%s-trusted-cas" .releaseName) .Values.global.hybrid.trustedCAsConfigMapName
+            }}'
+      secrets:
+        sessionSecret:
+          template: '{{ .releaseName }}-ibm-hdm-common-ui-session-secret'
+          key: session
+          optional: false
+        serverCertificate:
+          template: '{{ .releaseName }}-ibm-hdm-common-ui-tls-secret'
+          optional: false
+integrations:
+  dashboarding:
+    environment:
+      config:
+        internalUrl: SERVICES__HDM_NOI_DASHBOARDING__URL
+  runbookRbs:
+    environment:
+      config:
+        internalUrl:
+        - SERVICES__HDM_RBA_UIAPI__URL
+        - SERVICES__HDM_RBA_LEGACYUI__URL
+  topologyUiApi:
+    environment:
+      config:
+        internalUrl: SERVICES__HDM_ASM_UI_API__URL
+  cneaUiApi:
+    environment:
+      config:
+        internalUrl: SERVICES__HDM_EA_UIAPI__URL
+  incidentsUiApi:
+    environment:
+      config:
+        internalUrl: SERVICES__HDM_CEM_UIAPI__URL
+  omnibusWebgui:
+    environment:
+      config:
+        internalUrl: SERVICES__HDM_NOI_WEBGUI__URL
+        externalUrl: SERVICES__HDM_NOI_WEBGUI__EXTERNAL_URL
+  dash:
+    environment:
+      config:
+        internalUrl:
+        - SERVICES__HDM_NOI_DASH__URL
+        - DASHFEDERATION__CI__DASH_ENDPOINT
+        externalUrl: SERVICES__HDM_NOI_DASH__EXTERNAL_URL
+        adminUsername: DASHFEDERATION__CI__ADMIN_USERNAME
+      secrets:
+        adminPassword: DASHFEDERATION__CI__ADMIN_PASSWORD
+  impact:
+    environment:
+      config:
+        internalUrl: SERVICES__HDM_NOI_IMPACT__URL
+        externalUrl: SERVICES__HDM_NOI_IMPACT__EXTERNAL_URL
+        enabled: SERVICES__HDM_NOI_IMPACT__ENABLED
+  users:
+    environment:
+      config:
+        internalUrl:
+        - SERVICES__HDM_CEMUSERS__URL
+        - OPENID__ISSUER__ISSUER
+        token: OPENID__ISSUER__TOKEN_ENDPOINT
+        userinfo: OPENID__ISSUER__USERINFO_ENDPOINT
+        userinfoTenant: OPENID__ISSUER__USERINFO_TENANT_ENDPOINT
+        droptoken: OPENID__ISSUER__DROPTOKEN_ENDPOINT
+        origintoken: OPENID__ISSUER__ORIGINTOKEN_ENDPOINT
+        logout: OPENID__ISSUER__LOGOUT_ENDPOINT
+        authorization: OPENID__ISSUER__AUTHORIZATION_ENDPOINT
+      secrets:
+        clientId: OPENID__CLIENT_ID
+        clientSecret: OPENID__CLIENT_SECRET
+        jwtSignging: JWT__SIGNING_SECRET
+  redis:
+    config:
+      db: '0'
+    environment:
+      config:
+        sentinals: REDIS__SENTINELS
+        masterName: REDIS__MASTER
+        db: REDIS__DB
+      secrets:
+        password: REDIS__PASSWORD
+  ui:
+    directories:
+      configMaps:
+        trustCAsDefault: /ca-certs/default
+        trustCAsUser: /ca-certs/user
+      secrets:
+        serverCertificate: /internal-tls-keys
+    environment:
+      config:
+        internalUrlSecure: DASHFEDERATION__CI__API_ENDPOINT
+        externalUrl: PUBLICURL
+        authenticationMode: AUTHENTICATION_MODE
+        clientConfiguration: CLIENTCONFIGURATION
+        defaultTenant: SERVICES__HDM_NOI__TENANTID
+        productTitle: PRODUCT_TITLE
+        tlsCertificatePath: TLS__CERTIFICATE
+        tlsKeyPath: TLS__KEY
+        tlsTrustPath: CERTPATH
+        port: PORT
+        securePort: SECUREPORT
+        license: LICENSE
+        enableDashFederation: DASHFEDERATION__ENABLED
+        dashFederationIntegrationId: DASHFEDERATION__CI__INTEGRATION_ID
+        enabledConsoleIntegrations: DASHFEDERATION__CI__ENABLED_INTEGRATIONS
+        sessionProvider: SESSION__PROVIDER
+        pageTitle: PAGETITLE
+      secrets:
+        sessionSecret: SESSION__SECRET
+image:
+  repository: 
+  name: ui-content
+  tag: 4.0.959
+  digest: ''
+akora:
+  image:
+    name: node-server
+    tag: 2.4.28-20200609162416BST
+    digest: ''
+    repository: 
+dash:
+  consoleIntegration:
+    enabled: true
+    integrationId: com.ibm.hdm.cloudanalytics.ui.ci
+ingress:
+  prefix: netcool
+  path: ''
+replicas: null
+readiness:
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 10
+  failureThreshold: 10
+liveness:
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 10
+  failureThreshold: 10

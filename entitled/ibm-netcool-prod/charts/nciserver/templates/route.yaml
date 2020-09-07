@@ -1,0 +1,57 @@
+{{- /*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/ -}}
+{{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1")  }}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{ $nodeCount := (include "noi.nciservers.replicas" (list . .Values.replicaCount)) | int -}}
+{{ $global := . }}
+{{- range $i := until $nodeCount }}
+---
+{{ $externalHostname := printf "nci-%d.%s.%s" $i $global.Release.Name $global.Values.global.cluster.fqdn }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  annotations:
+    ingress.kubernetes.io/rewrite-target: /
+    ingress.kubernetes.io/proxy-body-size: "0"
+    ingress.kubernetes.io/proxy-read-timeout: "{{ $global.Values.ingress.proxyReadTimeout }}"
+    ingress.kubernetes.io/proxy-send-timeout: "{{ $global.Values.ingress.proxySendTimeout }}"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "{{ $global.Values.ingress.proxyReadTimeout }}"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "{{ $global.Values.ingress.proxySendTimeout }}"
+  labels:
+{{ include "sch.metadata.labels.standard" (list $global "") | indent 4 }}
+  name: {{ $global.Release.Name }}-nci-{{ $i }}
+spec:
+  host: {{ $externalHostname }}
+  port:
+    targetPort: {{ $global.Values.impactcore.internal.nameserverPort }}
+  subdomain: ""
+  tls:
+    insecureEdgeTerminationPolicy: Redirect
+    termination: edge
+  to:
+    kind: Service
+    name:  {{ $global.Release.Name }}-nci-{{ $i }}
+    weight: 100
+  wildcardPolicy: None
+status:
+  ingress:
+  - routerName: default
+
+{{ end -}}
+{{ end -}}
