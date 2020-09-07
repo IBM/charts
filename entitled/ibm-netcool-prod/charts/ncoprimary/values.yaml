@@ -1,0 +1,99 @@
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+
+global:
+  # Review and accept the license terms? ['accept','not accepted']
+  license: "not accepted"
+
+  omnisecretname: "%s-omni-secret"
+  # Enable sub-chart resource requests
+  resource:
+    requests:
+      enable: true
+  # Define where/who the images will be pulled from
+  image:
+    # This is the artifactory server to pull the docker images from
+    repository:
+    # Secret used to access the docker repository above
+    secret:  
+    # pullPolicy: IfNotPresent change to Always to make the latest is always picked up
+    pullPolicy: Always
+    # Use image tags instead of digests
+    useTag: true
+ 
+
+  antiAffinity:
+    # Enable chart anti-affinity e.g. schedule primary and backup objserv on different nodes
+    enabled: true
+
+  # global persistence settings
+  persistence:
+    enabled: true
+    useDynamicProvisioning: true
+
+  rbac:
+    create: true
+    serviceAccountName: noi-service-account
+
+replicaCount: 1
+image:
+  name: nco-objserv
+  tag: 1.6.1-201
+  digest: sha256:52a2a4ba00036bb9096256e3f0286627e5c70ceb4220975f89048544a9057d3e
+
+objserv:
+  name: AGG_P
+  internal:
+    tdsPort: 4100
+    iducPort: 4101
+  env:
+    propsPath: "/opt/IBM/tivoli/netcool/omnibus/etc"
+    dbPath: "/opt/IBM/tivoli/netcool/omnibus/db"
+    locale: "en_US.utf8"
+  liveness:
+    command: "/opt/IBM/tivoli/netcool/omnibus/bin/nco_ping"
+    initialDelaySeconds: 30
+    periodSeconds: 5
+    timeoutSeconds: 1
+    failureThreshold: 3
+  readiness:
+    command: "/readinessprobe.sh"
+    initialDelaySeconds: 40
+    periodSeconds: 20
+    timeoutSeconds: 10
+    failureThreshold: 1
+
+services:
+  objserv:
+    primary:
+      name: objserv-agg-primary
+
+pvc:
+  # specify the storageClassName you want to use
+  # if you don't specify a storageClassName it will use the default
+  storageClassName: ""
+
+  # Specify the name of the Existing Claim to be used by your application
+  # empty string means don't use an existClaim
+  existingClaimName: ""
+
+  # if your not using dynamic provisioning, you can use selectors to 
+  # refine the binding process. You cannot specify a selector if your using dynamic provisioning!
+  selector:
+    label: ""
+    value: ""
+
+  size: 5Gi
+

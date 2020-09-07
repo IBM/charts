@@ -1,0 +1,22 @@
+{{- include "sch.config.init" (list . "ibm-ea-asm-mime.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.eaasmmime.name -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $hpaEnabled := (include "ibm-ea-asm-mime.comp.size.data" (list . "hpa" "enabled")) -}}
+
+{{- if .Values.global.integrations.asm.enabled -}}
+{{ if eq $hpaEnabled "true" }}
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $serviceName }}
+  {{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1beta2
+    kind: Deployment
+    name: {{ $serviceName }}
+  maxReplicas: 5
+  minReplicas: 1
+  targetCPUUtilizationPercentage: 100
+{{ end }}
+{{ end }}

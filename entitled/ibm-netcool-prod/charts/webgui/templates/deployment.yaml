@@ -1,0 +1,447 @@
+{{- /*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/ -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+ name: {{ include "sch.names.fullName" (list . 63) }}
+ labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  updateStrategy:
+    type: RollingUpdate
+  serviceName: {{ include "sch.names.fullName" (list . 63) }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ include "image.docker.repository" . -}}/{{- include "image.family" . -}}-{{ .Values.image.name }}-{{- include "image.edition" . -}}{{ include "image.suffix" (list . .Values.image) }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: true
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+              add: ["DAC_OVERRIDE","FOWNER","FSETID","SETGID","SETUID","NET_BIND_SERVICE","NET_RAW","AUDIT_WRITE"]
+          volumeMounts:
+            - name: {{ .Release.Name }}-webgui-init-update
+              mountPath: /home/netcool/app/gui/omnibus_webgui/etc/server.init.update
+              subPath: server.init.update
+            - name: {{ .Release.Name }}-share-mount
+              mountPath: /share
+            {{ if .Values.trustCertificateSecret }}
+            - name: {{ .Release.Name }}-trust-certificate-mount
+              mountPath: /home/netcool/trust-certificates/noiui
+            {{ end }}
+            {{ if (.Capabilities.APIVersions.Has "security.openshift.io/v1")  }}
+            - name: {{ .Release.Name }}-inner-webgui
+              mountPath: /home/netcool/trust-certificates/internal
+            {{- end }}
+            - name: asm-application-yaml
+              mountPath: /home/netcool/app/gui/inasm/etc
+            - name: asm-security
+              mountPath: /home/netcool/app/gui/inasm/security
+          ports:
+            - containerPort: {{ .Values.webgui.internal.dashPort }}
+            - containerPort: {{ .Values.webgui.internal.wasPort }}
+          env:
+          - name: LICENSE
+            value: "{{ .Values.global.license }}"
+          - name: DB2_SERVICE_NAME
+            value: {{ .Release.Name }}-{{ .Values.services.db2ese.name }}
+          - name: NCO_AGGP_SERVICE_NAME
+            value: {{ .Release.Name }}-{{ .Values.services.objserv.primary.name }}
+          - name: NCO_AGGP_PORT_NUMBER
+            value: "{{ .Values.services.objserv.primary.port }}"
+          - name: NCO_AGGB_SERVICE_NAME
+            value: {{ .Release.Name }}-{{ .Values.services.objserv.backup.name }}
+          - name: NCO_AGGB_PORT_NUMBER
+            value: "{{ .Values.services.objserv.backup.port }}"
+          - name: WAS_CONSOLE_PUBLIC_URL
+            value: "was.{{ .Release.Name }}.{{ .Values.global.cluster.fqdn }}"
+          - name: OMNIBUS_ROOT_PWD
+            valueFrom:
+              secretKeyRef:
+                name: {{ printf .Values.global.omnisecretname .Release.Name }}
+                key: OMNIBUS_ROOT_PASSWORD
+                optional: false
+          - name: WEGGUI_SERVICE_NAME
+            value: {{ include "sch.names.fullName" (list . 63) }}
+          - name: ACTUAL_INGRESS_PORT
+            value: " {{- .Values.global.ingress.port }}"
+          - name: ACTUAL_FQDN
+            {{- if .Values.global.cluster.fqdn }}
+            value: {{- if eq .Values.global.ingress.prefixWithReleaseName  true }} {{ .Release.Name }}.{{ .Values.global.cluster.fqdn }}  {{- else }} {{ .Values.global.cluster.fqdn }} {{- end }}
+            {{- else }}
+            value: "FQDN"
+            {{- end }}
+          - name: IMPACT_ADMIN_SECRET_NAME
+            value: {{ .Release.Name }}-impact-secret
+          - name: IMPACT_ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-impact-secret
+                key: IMPACT_ADMIN_PASSWORD
+                optional: false
+          - name: IMPACT_GUI_URL
+            {{- if .Values.global.cluster.fqdn }}
+            {{- if eq .Values.global.ingress.port 443.0 }}
+            value: https://impact.{{ .Release.Name }}.{{ .Values.global.cluster.fqdn }}
+            {{- else }}
+            value: https://impact.{{ .Release.Name }}.{{ .Values.global.cluster.fqdn }}:{{ .Values.global.ingress.port }}
+            {{- end }}
+            {{- else }}
+            value: https://{{ .Release.Name }}-{{ .Values.services.impactgui.name }}:{{ .Values.services.impactgui.port }}
+            {{- end }}
+          - name: IMPACT_INTERNAL_REST_SERVICE_URL
+            value: https://{{ .Release.Name }}-{{ .Values.services.impactgui.name }}:{{ .Values.services.impactgui.port }}
+          - name: LDAP_SERVICE_NAME
+            value: {{ .Release.Name }}-{{ .Values.global.ldapservice.name }}
+          - name: IMPACT_GUI_SERVICE_NAME
+            value: {{ .Release.Name }}-{{ .Values.services.impactgui.name }}
+          - name: LDAP_SERVICE_PORT
+            value: "{{ .Values.global.ldapservice.internal.ldapPort }}"
+          - name: LDAP_BIND_DN
+            value: "{{ .Values.global.ldapservice.internal.bindDN }}"
+          - name: LDAP_BASE_DN
+            value: "{{ .Values.global.ldapservice.internal.baseDN }}"
+          - name: LDAP_BIND_PWD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-ldap-secret
+                key: LDAP_BIND_PASSWORD
+                optional: false
+          - name: SSO_DOMAIN
+            value: {{- if eq .Values.global.ingress.prefixWithReleaseName  true }} {{ .Release.Name }}.{{ .Values.global.cluster.fqdn }}  {{- else }} {{ .Values.global.cluster.fqdn }} {{- end }}
+          - name: WAS_SECRET_NAME
+            value: {{ .Release.Name }}-was-secret
+          - name: WAS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-was-secret
+                key: WAS_PASSWORD
+                optional: false
+          - name:  LDAP_VERIFY_PASSWORDS
+            value: "{{ .Values.global.ldapservice.verifypasswords }}"
+          - name: HELM_RELEASE
+            value: {{ .Release.Name }}
+          - name: WAS_OAUTH_CNEA_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-was-oauth-cnea-secrets
+                key: client-secret
+                optional: false
+          - name: WAS_OAUTH_CNEA_CLIENT_ID
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-was-oauth-cnea-secrets
+                key: client-id
+                optional: false
+          {{- if .Values.oauth2.trace }}
+          - name: OAUTH_DEBUG
+            value: "true"
+          {{- end }}
+          {{- if .Values.oauth2.debug.redirectUri }}
+          - name: OAUTH_DEBUG_REDIRECT_URI
+            value: "{{ .Values.oauth2.debug.redirectUri }}"
+          - name: OAUTH_DEBUG_CLIENT_ID
+            value: "{{ .Values.oauth2.debug.clientId }}"
+          - name: OAUTH_DEBUG_CLIENT_SECRET
+            value: "{{ .Values.oauth2.debug.clientSecret }}"
+          {{- end }}
+          - name: WAS_OAUTH_CNEA_REDIRECT_URL
+            {{- if .Values.oauth2.redirectUri }}
+            value: "{{ .Values.oauth2.redirectUri }}"
+            {{- else }}
+            {{- if eq .Values.global.ingress.prefixWithReleaseName true }}
+            {{- if eq .Values.global.ingress.port 443.0 }}
+            value: "https://netcool.{{ .Release.Name }}.{{ .Values.global.cluster.fqdn }}/users/api/authprovider/v1/was/return"
+            {{- else }}
+            value: "https://netcool.{{ .Release.Name }}.{{ .Values.global.cluster.fqdn }}:{{ .Values.global.ingress.port }}/users/api/authprovider/v1/was/return"
+            {{- end }}
+            {{- else }}
+            {{- if eq .Values.global.ingress.port 443.0 }}
+            value: "https://{{ .Values.global.cluster.fqdn }}/callback"
+            {{- else }}
+            value: "https://{{ .Values.global.cluster.fqdn }}:{{ .Values.global.ingress.port }}/callback"
+            {{- end }}
+            {{- end }}
+            {{- end }}
+          - name: ICPADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-icpadmin-secret
+                key: ICP_ADMIN_PASSWORD
+                optional: false             
+          - name: SUBSCRIPTION_ID
+            value: {{ .Values.global.common.eventanalytics.tenantId | quote }}
+          - name: WAS_LOGOUT_REDIRECT_URL
+            {{- if .Values.logout.redirectUrl }}
+            value: "{{ .Values.logout.redirectUrl }}"
+            {{- else }}
+            {{- if eq .Values.global.ingress.prefixWithReleaseName true }}
+            {{- if eq .Values.global.ingress.port 443.0 }}
+            value: "https://netcool.{{ .Release.Name }}.{{ .Values.global.cluster.fqdn }}/auth/logout?redirect=dashlogin"
+            {{- else }}
+            value: "https://netcool.{{ .Release.Name }}.{{ .Values.global.cluster.fqdn }}:{{ .Values.global.ingress.port }}/auth/logout?redirect=dashlogin"
+            {{- end }}
+            {{- else }}
+            {{- if eq .Values.global.ingress.port 443.0 }}
+            value: "https://{{ .Values.global.cluster.fqdn }}/auth/logout?redirect=dashlogin"
+            {{- else }}
+            value: "https://{{ .Values.global.cluster.fqdn }}:{{ .Values.global.ingress.port }}/auth/logout?redirect=dashlogin"
+            {{- end }}
+            {{- end }}
+            {{- end }}
+          {{- if eq .Values.global.resource.requests.enable true }}
+          resources:
+{{ include "ibmnoiprod.comp.size.data" (list . "webgui" "resources") | indent 12 }}
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /ibm/console
+              port: 16311
+              scheme: HTTPS
+            initialDelaySeconds: {{ .Values.webgui.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.webgui.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.webgui.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.webgui.readiness.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /ibm/console
+              port: 16311
+              scheme: HTTPS
+            initialDelaySeconds: {{ .Values.webgui.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.webgui.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.webgui.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.webgui.liveness.failureThreshold }}
+        - name: configuration-share
+          image: {{ include "image.docker.repository" . -}}/{{- include "image.family" . -}}-configuration-share-{{- include "image.edition" . -}}{{ include "config.share.image.suffix" . }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+              add: ["NET_BIND_SERVICE"]
+          volumeMounts:
+            - name: {{ .Release.Name }}-share-mount
+              mountPath: /share
+          ports:
+            - containerPort: 8000
+          resources:
+{{ include "ibmnoiprod.comp.size.data" (list . "configurationShare" "resources") | indent 12 }}
+          env:
+          - name: LICENSE
+            value: "{{ .Values.global.license }}"
+          - name: ICP_NOI_SHARED_SYNCFROM_SERVERS
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-configuration-share
+                key: webgui
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.webgui.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.webgui.readiness.periodSeconds }}
+            failureThreshold: {{ .Values.webgui.readiness.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8000
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.webgui.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.webgui.liveness.periodSeconds }}
+            failureThreshold: {{ .Values.webgui.liveness.failureThreshold }}
+      initContainers:
+        - name: wait4db2ese
+          image: {{ include "image.docker.repository" . -}}/{{- include "image.family" . -}}-configuration-share-{{- include "image.edition" . -}}{{ include "config.share.image.suffix" . }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          resources:
+{{ include "ibmnoiprod.comp.size.data" (list . "preinstall" "resources") | indent 12 }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+              add: ["NET_BIND_SERVICE"]
+          volumeMounts:
+            - name: {{ .Release.Name }}-share-mount
+              mountPath: /share
+          env:
+          - name: LICENSE
+            value: "{{ .Values.global.license}}"
+          - name: ICP_NOI_SHARED_SYNCFROM_SERVERS
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-configuration-share
+                key: webguistartup
+          - name:  ICP_NOI_SHARED_EXIT_WHEN_FOUND
+            value: "True"
+        - name: wait4ldap
+          image: {{ include "image.docker.repository" . -}}/{{- include "image.family" . -}}-configuration-share-{{- include "image.edition" . -}}{{ include "config.share.image.suffix" . }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          resources:
+{{ include "ibmnoiprod.comp.size.data" (list . "preinstall" "resources") | indent 12 }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+          env:
+          - name: HELM_RELEASE
+            value: {{ .Release.Name }}
+          command:
+            - "sh"
+            - "-c"
+            - |
+                RUNNING=FALSE;
+                LDAP_HOST=`env | grep LDAPSERVICE_SERVICE_HOST | cut -d '=' -f2`;
+                while [ $RUNNING = "FALSE" ];
+                do
+                  RUNNING=TRUE;
+                  echo waiting for $LDAP_HOST:389;
+                  curl --connect-timeout 10 $LDAP_HOST:389 2>&1 | grep "Empty reply from server" || RUNNING=FALSE;
+                done;
+        - name: wait4obj
+          image: {{ include "image.docker.repository" . -}}/{{- include "image.family" . -}}-configuration-share-{{- include "image.edition" . -}}{{ include "config.share.image.suffix" . }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          resources:
+{{ include "ibmnoiprod.comp.size.data" (list . "preinstall" "resources") | indent 12 }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+          env:
+          - name: HELM_RELEASE
+            value: {{ .Release.Name }}
+
+          command:
+            - "sh"
+            - "-c"
+            - |
+                RUNNING=FALSE;
+                while [ $RUNNING = "FALSE" ]
+                do
+                  RUNNING=TRUE;
+                  OBJ_HOST=`env | grep AGG_PRIMARY_SERVICE_HOST | cut -d '=' -f2`;
+                  echo waiting for $OBJ_HOST:4100;
+                  curl --connect-timeout 10 $OBJ_HOST:4100 2>&1 | grep "Empty reply from server" || RUNNING=FALSE;
+                  if [ "$RUNNING" = "FALSE" ]
+                  then
+                      RUNNING=TRUE;
+                      OBJ_HOST=`env | grep AGG_BACKUP_SERVICE_HOST | cut -d '=' -f2`;
+                      echo waiting for $OBJ_HOST:4100;
+                      curl --connect-timeout 10 $OBJ_HOST:4100 2>&1 | grep "Empty reply from server" || RUNNING=FALSE;
+                  fi
+                  sleep 30
+                done;
+      {{- if .Values.global.image.secret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secret }}
+      {{- end }}
+      securityContext:
+        fsGroup: 2001
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      affinity:
+        nodeAffinity:
+{{ include "noi.nodeAffinity.arch" . | indent 10 }}
+      volumes:
+        - name: {{ .Release.Name }}-share-mount
+          emptyDir: {}
+       {{ if .Values.trustCertificateSecret }}
+        - name: {{ .Release.Name }}-trust-certificate-mount
+          secret:
+            secretName: {{ printf .Values.trustCertificateSecret .Release.Name }}
+            items:
+            - key: tls.crt
+              path: trust-tls.crt
+        {{ end }}
+        - name: {{ .Release.Name }}-webgui-init-update
+          configMap:
+            name: {{ .Release.Name }}-webgui-init-config
+            items:
+            - key: server-init-update
+              path: server.init.update
+        - name: asm-application-yaml
+          configMap:
+            name: {{ .Release.Name }}-asm-ui-config
+        - name: asm-security
+          projected:
+            sources:
+            {{ if and .Values.global.integrations.asm.enabled .Values.global.integrations.asm.onPremSecureRemote.enabled }}
+            - secret:
+                name: external-asm-tls
+                optional: true
+            - secret:
+                name: external-asm-proxy-client
+                optional: true
+            {{ else }}
+            - secret:
+                name: {{ .Values.global.integrations.asm.releaseName }}-ca-secret
+                optional: true
+            - secret:
+                name: {{ .Values.global.integrations.asm.releaseName }}-asm-credentials
+                optional: true
+            {{ end }}
+{{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1")  }}
+        - name: {{ .Release.Name }}-inner-webgui
+          secret:
+            secretName: {{ .Release.Name }}-inner-webgui
+            items:
+            - key: tls.crt
+              path: trust-tls.crt
+            - key: tls.key
+              path: trust-tls.key
+{{- end }}

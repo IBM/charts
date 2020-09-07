@@ -1,0 +1,94 @@
+{{/*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/}}
+{{ if and (ne .Values.global.hybrid.objectserver.config.deployPhase "none") (ne .Values.global.noilayer.sourceid "default") }}
+{{- $compName := "eacleanupomnibus" -}}
+{{- include "sch.config.init" (list . "ea-noi-layer.sch.chart.config.values") -}}
+{{- $deploymentName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $deploymentName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    origin: helm-ea-noi
+  annotations:
+{{ "\"helm.sh/hook\": post-delete" | indent 4 }}
+{{ "\"helm.sh/hook-weight\": \"3\"" | indent 4 }}
+{{ "\"helm.sh/hook-delete-policy\": \"hook-succeeded\"" | indent 4 }}
+spec:
+  template:
+    metadata:
+      name: "{{.Release.Name}}"
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+    spec:
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secret }}
+{{ include "ea-noi-layer.spec.security.context" (list .)| indent 6 }}
+      affinity:
+        nodeAffinity:
+{{ include "ea-noi-layer.nodeAffinity.arch" . | indent 10 }}
+      restartPolicy: Never
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - name: unregisterwithtrainer
+        image:  {{ include "image.docker.repository" . }}/ea/{{ .Values.noiactionservice.image.name }}{{ include "ibmeanoilayer.image.suffix" (list . .Values.noiactionservice.image) }}
+        resources:
+{{ include "ibmeanoilayer.comp.size.data" (list . "noiactionservice" "resources") | indent 10 }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        volumeMounts:
+        - name: ca
+          mountPath: /ca
+          readOnly: true
+{{ include "ea-noi-layer.container.security.context" (list .)| indent 8 }}
+        command: ["/app/entrypoint.sh", "npm", "run", "jobunreg"]
+        env:
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eanoi.noiactionservice.application" . | indent 8 }}
+{{ include "eanoi.common.source" . | indent 8 }}
+{{ include "eanoi.common.defaults" . | indent 8 }}
+      - name: unregisternoilayer
+        image:  {{ include "image.docker.repository" . }}/ea/{{ .Values.noiactionservice.image.name }}{{ include "ibmeanoilayer.image.suffix" (list . .Values.noiactionservice.image) }}
+        resources:
+{{ include "ibmeanoilayer.comp.size.data" (list . "noiactionservice" "resources") | indent 10 }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        volumeMounts:
+        - name: ca
+          mountPath: /ca
+          readOnly: true
+{{ include "ea-noi-layer.container.security.context" (list .)| indent 8 }}
+        command: ["/app/entrypoint.sh", "npm", "run", "osunreg"]
+        env:
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eanoi.noiactionservice.application" . | indent 8 }}
+{{ include "eanoi.common.source" . | indent 8 }}
+{{ include "eanoi.common.defaults" . | indent 8 }}
+      volumes:
+      - name: ca
+        secret:
+          secretName: {{ .Values.global.authentication.objectserver.secretRelease | default .Release.Name }}{{ .Values.global.authentication.objectserver.certificateTemplate | default "-omni-certificate-secret" }}
+          items:
+          - key: ROOTCA
+            path: rootca 
+          - key: INTERMEDIATECA
+            path: intermediatepath
+{{ end }}

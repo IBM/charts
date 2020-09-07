@@ -1,0 +1,112 @@
+{{- if .Values.global.integrations.asm.enabled -}}
+{{- if .Values.artifactManagementJob.enabled -}}
+{{- $compName :=  "-register-cnea-mgmt-artifact" -}}
+{{- $asmTopologyUriBase := "%s-topology:8080" -}}
+{{- $cloudCredentialSetTemplate := "%s-asm-credentials" }}
+{{- $asmCredentialSecret := ( printf $cloudCredentialSetTemplate .Values.global.integrations.asm.releaseName ) -}}
+{{- $onPremAsmCredentialSecret := "external-asm-proxy-client" -}}
+{{- $onPremTlsSecret := "external-asm-tls" }}
+{{- $crtsName := "crts" }}
+{{- $onPremTlsCertKey := "asm-ca.crt" }}
+{{- $reqRoute := "/1.0/topology/mgmt_artifacts" -}}
+{{- $mgmtArtifactData := `'{ "keyIndexName": "CNEA_INTEGRATION", "name": "CNEA_INTEGRATION", "entityTypes": [ "CNEA_INTEGRATION" ] }'` }}
+{{- $headers := ` --header 'Content-Type: application/json'  --header "X-TenantID: ${ASM_SYSTEM_TENANT_ID}" --header 'Provider: cnea' -u ${TOPOLOGY_USERNAME}:${TOPOLOGY_PASSWORD}` -}}
+{{- include "sch.config.init" (list . "ibm-ea-asm-normalizer.sch.chart.config.values") -}}
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-register-cnea-mgmt-artifact
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  concurrencyPolicy: Forbid
+  schedule: {{ .Values.artifactManagementJob.cronSchedule | quote }}
+  suspend: false
+  jobTemplate:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+    spec:
+      template:
+        spec:
+          hostNetwork: false
+          hostPID: false
+          hostIPC: false
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+          {{- if .Values.global.image.pullSecret }}
+          imagePullSecrets:
+          - name: {{ .Values.global.image.pullSecret }}
+          {{- end }}
+          {{- if .Values.global.integrations.asm.onPremSecureRemote.enabled }}
+          volumes:
+            - name: {{ $crtsName | quote }}
+              projected:
+                sources:
+                - secret:
+                    name: {{ $onPremTlsSecret | quote }}
+                    optional: false
+                    items:
+                    - key: {{ $onPremTlsCertKey | quote }}
+                      path: {{ $onPremTlsCertKey | quote }}
+          {{- end }}
+          serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+          containers:
+          - image: {{ include "ibm-ea-asm-normalizer.image.url" (list . .Values.kafkaImage) | quote }}
+            name: {{ .Release.Name }}-register-normalizer-management-artifact
+{{ include "ibm-ea-asm-normalizer.psp.securityContext" . | indent 12 }}
+            command:
+            - "sh"
+            - "-c"
+            - |
+              echo "$(date)  INFO: Sending payload: {{ $mgmtArtifactData }}"
+              curl -i -L --post303 -X POST {{ $headers }} -d {{ $mgmtArtifactData }} \
+                {{- if .Values.global.integrations.asm.onPremSecureRemote.enabled }}
+                  --cacert /{{ $crtsName }}/{{ $onPremTlsCertKey }} \
+                  {{ ( printf "https://%s:%s%s" .Values.global.integrations.asm.onPremSecureRemote.remoteHost .Values.global.integrations.asm.onPremSecureRemote.proxyPort $reqRoute ) }}
+                {{ else }}
+                  {{ printf "https://%s%s" ( printf $asmTopologyUriBase .Values.global.integrations.asm.releaseName ) $reqRoute }}  --insecure
+                {{ end }}
+            {{- if .Values.global.integrations.asm.onPremSecureRemote.enabled }}
+            volumeMounts:
+              - name: {{ $crtsName | quote }}
+                mountPath: /{{ $crtsName }}
+                readOnly: true
+            {{- end }}
+            resources:
+{{ include "ibm-ea-asm-normalizer.comp.size.data" (list . "jobs" "resources") | indent 14 }}
+            env:
+            - name: TOPOLOGY_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.global.integrations.asm.onPremSecureRemote.enabled }}
+                  name: {{ $onPremAsmCredentialSecret | quote }} 
+                  {{- else }}
+                  name: {{ $asmCredentialSecret | quote }} 
+                  {{- end }} 
+                  key: username
+            - name: TOPOLOGY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.global.integrations.asm.onPremSecureRemote.enabled }}
+                  name: {{ $onPremAsmCredentialSecret | quote }} 
+                  {{- else }}
+                  name: {{ $asmCredentialSecret | quote }} 
+                  {{- end }} 
+                  key: password
+            - name: ASM_SYSTEM_TENANT_ID
+              value: {{ .Values.global.common.eventanalytics.tenantId }}
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                    - "amd64"
+{{ end }}
+{{ end }}

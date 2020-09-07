@@ -1,0 +1,61 @@
+{{- /*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/ -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-asm-ui-config
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+data:
+  application.yml: |-
+{{ if and .Values.global.integrations.asm.enabled .Values.global.integrations.asm.onPremSecureRemote.enabled }}
+    proxyServicePort: {{ .Values.global.integrations.asm.onPremSecureRemote.uiApiPort }}
+    proxyServiceHost: {{ .Values.global.integrations.asm.onPremSecureRemote.remoteHost }}
+{{ else }}
+    namespace: {{ .Release.Namespace }}
+    proxyServiceHost: {{ .Release.Name }}-asm-ui-api.{{ .Release.Namespace }}.svc
+    proxyServicePort: 3080
+{{ end }}
+    proxyServiceTenantId: {{ .Values.asm.tenantId }}
+    proxyServiceRootPath: /1.0/
+    proxyServiceTimeout: 30
+    proxyServiceUsername: file:///home/netcool/app/gui/inasm/security/username
+    proxyServicePassword: file:///home/netcool/app/gui/inasm/security/password
+    passwordEncryption: false
+    logDirectory: /logs/inasm
+    logLevel: INFO
+    logFilename: inasm.%g.log
+    logMaxSize: 10
+    logCount: 5
+    traceLevel: CONFIG
+    traceFilename: inasm.%g.trace
+    traceMaxSize: 10
+    traceCount: 5
+{{- if and .Values.global.integrations.asm.enabled .Values.global.integrations.asm.onPremSecureRemote.enabled }}
+    sslTrustStorePath: /home/netcool/asm-keys/trustStore.jks
+    sslTrustStorePassword: file:///home/netcool/asm-keys/trustStorePassword
+    sslTrustStoreType: JKS
+{{- else if and ( semverCompare ">1.11.0" .Capabilities.KubeVersion.GitVersion) ( .Capabilities.APIVersions.Has "route.openshift.io/v1" ) }}
+    sslTrustStorePath: /home/netcool/app/jazz/profile/config/cells/JazzSMNode01Cell/nodes/JazzSMNode01/trust.p12
+    sslTrustStorePassword: WebAS
+    sslTrustStoreType: PKCS12
+{{- else }}
+    sslTrustStorePath: /home/netcool/asm-keys/trustStore.jks
+    sslTrustStorePassword: file:///home/netcool/asm-keys/trustStorePassword
+    sslTrustStoreType: JKS
+{{- end }}

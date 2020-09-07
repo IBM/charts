@@ -1,0 +1,47 @@
+{{/*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/}}
+{{- if .Values.ingestionservice.enabled -}}
+{{- include "sch.config.init" (list . "ibm-hdm-analytics-dev.sch.chart.config.values") -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+{{- $serviceName := include "ibm-hdm-analytics-dev.ingestionservice.service.name" . -}}
+{{- $compName := include "ibm-hdm-analytics-dev.ingestionservice.component.name" . -}}
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $serviceName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    origin: helm-ibm-hdm-analytics-dev
+  annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 4 }}
+spec:
+  selector:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  type: {{ .Values.ingestionservice.serviceType }}
+  ports:
+   - name: unsecure-port
+     protocol: TCP
+     port: {{ .Values.common.restApi.port }}
+     targetPort: {{ .Values.common.restApi.port }}
+   - name: ssl-port
+     protocol: TCP
+     port: {{ .Values.common.restApi.portSsl }}
+     targetPort: {{ .Values.common.restApi.portSsl }}
+{{ end }}

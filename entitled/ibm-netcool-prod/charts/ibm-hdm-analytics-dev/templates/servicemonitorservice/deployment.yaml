@@ -1,0 +1,81 @@
+{{/*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/}}
+{{- if .Values.servicemonitorservice.enabled -}}
+{{- include "sch.config.init" (list . "ibm-hdm-analytics-dev.sch.chart.config.values") -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+{{- $deploymentName := include "ibm-hdm-analytics-dev.servicemonitorservice.deployment.name" . -}}
+{{- $compName := include "ibm-hdm-analytics-dev.servicemonitorservice.component.name" . -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $deploymentName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    origin: helm-ibm-hdm-analytics-dev
+spec:
+{{- if  eq .Values.global.environmentSize  "size0" }}
+  replicas: 1
+{{- else if eq .Values.global.environmentSize "size1" }}
+  replicas: 1
+{{- else }}
+  replicas: {{ .Values.servicemonitorservice.repFactor }}
+{{- end }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  template: 
+    metadata:
+      name: {{ $deploymentName }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+        origin: helm-ibm-hdm-analytics-dev
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+    spec:
+{{ include "ibmeaprod.spec.security.context" (list .)| indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secret }}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - image:  {{ include "image.docker.repository" . }}/{{ .Values.servicemonitorservice.image.name }}{{ include "eventanalytics.image.suffix" (list . .Values.servicemonitorservice.image) }}
+{{- if eq .Values.global.resource.requests.enable true }}
+        resources:
+{{ include "ibmeaprod.comp.size.data" (list . "servicemonitorservice" "resources") | indent 10 }}
+{{- end }}
+        name: {{ $deploymentName }}
+        imagePullPolicy: {{ .Values.servicemonitorservice.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.common.restApi.port }}
+          name: unsecure-port
+          protocol: TCP
+        - containerPort: {{ .Values.common.restApi.portSsl }}
+          name: ssl-port
+          protocol: TCP
+{{ include "eventanalytics.probe.tcpsocket.all" . | indent 8 }}
+{{ include "ibmeaprod.container.security.context" (list .)| indent 8 }}
+        env:
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eventanalytics.common.license" . | indent 8 }}
+{{ include "eventanalytics.easervicemonitorservice.application" . | indent 8 }}
+{{ include "eventanalytics.common.authentication" . | indent 8 }}
+{{ include "eventanalytics.common.defaults" . | indent 8 }}
+{{ end }}

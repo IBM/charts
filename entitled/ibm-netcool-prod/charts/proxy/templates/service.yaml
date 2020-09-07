@@ -1,0 +1,40 @@
+{{/*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+apiVersion: v1
+kind: Service
+metadata:
+{{ if (.Capabilities.APIVersions.Has "security.openshift.io/v1")  }}
+  annotations:
+    service.alpha.openshift.io/serving-cert-secret-name: {{ .Release.Name }}-proxy-tls-secret
+{{- end }}
+
+  name: {{ include "sch.names.fullName" (list . 63) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "sch.names.appName" (list .) }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  type: NodePort
+  ports:
+    - name: aggp-proxy-port
+      protocol: TCP
+      port: {{ .Values.proxy.ports.internal.aggp }}
+    - name: aggb-proxy-port
+      protocol: TCP
+      port: {{ .Values.proxy.ports.internal.aggb }}

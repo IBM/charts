@@ -1,0 +1,29 @@
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1")  }}
+{{- include "sch.config.init" (list . "common-dash-auth-im-repo.sch.chart.config.values") -}}
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ include "sch.names.fullCompName" (list .) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+  annotations:
+{{- include "sch.metadata.annotations.nginx.ingress" (list . .sch.chart.nginx.ingress) | indent 4 }}
+spec:
+  tls:
+  - hosts:
+    - {{ include "common-dash-auth-im-repo.ingress.host" . | quote }}
+    {{ if .Values.global.ingress.tlsSecret }}
+    secretName: {{ tpl .Values.global.ingress.tlsSecret . }}
+    {{ else }}
+    secretName: {{ include "sch.names.fullCompName" (list . "tls-ingress") | quote }}
+    {{ end }}
+
+  rules:
+  - http:
+      paths:
+      - backend:
+          serviceName: {{ include "sch.names.fullCompName" (list . "dashauth") | quote }}
+          servicePort: 8443
+        path: {{ .Values.ingress.path }}
+    host: {{ include "common-dash-auth-im-repo.ingress.host" . }}
+{{ end }}

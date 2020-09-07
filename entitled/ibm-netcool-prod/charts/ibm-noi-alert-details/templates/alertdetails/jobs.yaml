@@ -1,0 +1,55 @@
+{{- include "sch.config.init" (list . "ibm-noi-alert-details.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.setup.name -}}
+{{- $jobName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $jobName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    metadata:
+      name: {{ $jobName }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+    spec:
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+{{ include "ibm-noi-alert-details.spec.securityContext" . | indent 6}}
+      restartPolicy: Never
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secret }}
+      initContainers:
+      - name: waitforcassandra
+        image:  {{ include "ibm-noi-alert-details.image.url" (list . .Values.image) | quote }}
+        command:
+          - /bin/sh
+          - -c
+          - '/app/entrypoint.sh npm run checkdbconn'
+{{ include "ibm-noi-alert-details.psp.securityContext" . | indent 8}}
+        resources:
+{{ include "ibm-noi-alert-details.comp.size.data" (list . "alertdetails" "resources") | indent 10 }}
+{{ include "ibm-noi-alert-details.alertdetails.environment" . | indent 8 }}
+      restartPolicy: Never
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - name: setupdb-alert-details
+        image:  {{ include "ibm-noi-alert-details.image.url" (list . .Values.image) | quote }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        command:
+          - /bin/sh
+          - -c
+          - '/app/entrypoint.sh npm run setup'
+        resources:
+{{ include "ibm-noi-alert-details.comp.size.data" (list . "alertdetails" "resources") | indent 10 }}
+{{ include "ibm-noi-alert-details.alertdetails.environment" . | indent 8 }}
+{{ include "ibm-noi-alert-details.psp.securityContext" . | indent 8}}

@@ -1,0 +1,134 @@
+{{/*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/}}
+{{- if .Values.trainer.enabled -}}
+{{- include "sch.config.init" (list . "ibm-hdm-analytics-dev.sch.chart.config.values") -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+{{- $serviceName := include "ibm-hdm-analytics-dev.trainer.service.name" . -}}
+{{- $policyregistryServiceDeploymentName := include "ibm-hdm-analytics-dev.policyregistryservice.deployment.name" . -}}
+{{- $deploymentName := include "ibm-hdm-analytics-dev.trainer.deployment.name" . -}}
+{{- $compName := include "ibm-hdm-analytics-dev.trainer.component.name" . -}}
+{{- $globalIntegrations := .Values.global.integrations -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $deploymentName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    origin: helm-ibm-hdm-analytics-dev
+spec:
+  strategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 100%
+    type: RollingUpdate
+{{- if  eq .Values.global.environmentSize  "size0" }}
+  replicas: 1
+{{- else if eq .Values.global.environmentSize "size1" }}
+  replicas: 1
+{{- else }}
+  replicas: {{ .Values.trainer.replicas }}
+{{- end }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      name: {{ $deploymentName }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+        origin: helm-ibm-hdm-analytics-dev
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+    spec:
+{{ include "ibmeaprod.commonubi.spec.security.context" (list .)| indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secret }}
+      initContainers:
+      - name: waitforsparkmaster
+        image:  {{ include "image.docker.repository" . }}/{{ .Values.trainer.image.name }}{{ include "eventanalytics.image.suffix" (list . .Values.trainer.image) }}
+        command: ["sh", "-c", "i=1; until getent hosts {{ .Release.Name }}-spark-master; do echo waiting for SPARK MASTER $i; i=$((i+1)); sleep 2; done;"]
+{{ include "ibmeaprod.commonubi.container.security.context" (list .)| indent 8 }}
+{{- if eq .Values.global.resource.requests.enable true }}
+        resources:
+{{ include "ibmeaprod.comp.size.data" (list . "trainer" "resources") | indent 10 }}
+{{- end }}
+        env:
+{{ include "eventanalytics.common.license" . | indent 8 }}
+      - name: waitforsparkslave
+        image:  {{ include "image.docker.repository" . }}/{{ .Values.trainer.image.name }}{{ include "eventanalytics.image.suffix" (list . .Values.trainer.image) }}
+        command: ["sh", "-c", "i=1; until getent hosts {{ .Release.Name }}-spark-slave; do echo waiting for a SPARK SLAVE $i; i=$((i+1)); sleep 2; done;"]
+{{ include "ibmeaprod.commonubi.container.security.context" (list .)| indent 8 }}
+{{- if eq .Values.global.resource.requests.enable true }}
+        resources:
+{{ include "ibmeaprod.comp.size.data" (list . "trainer" "resources") | indent 10 }}
+{{- end }}
+        env:
+{{ include "eventanalytics.common.license" . | indent 8 }}
+      - name: waitforcouchdb
+        image:  {{ include "image.docker.repository" . }}/{{ .Values.trainer.image.name }}{{ include "eventanalytics.image.suffix" (list . .Values.trainer.image) }}
+        command: ["sh", "-c", "i=1; until getent hosts {{ .Release.Name }}-couchdb; do echo waiting for COUCH DB $i; i=$((i+1)); sleep 2; done;"]
+{{ include "ibmeaprod.commonubi.container.security.context" (list .)| indent 8 }}
+{{- if eq .Values.global.resource.requests.enable true }}
+        resources:
+{{ include "ibmeaprod.comp.size.data" (list . "trainer" "resources") | indent 10 }}
+{{- end }}
+        env:
+{{ include "eventanalytics.common.license" . | indent 8 }}
+      - name: waitforregisteredsparkworker
+        image:  {{ include "image.docker.repository" . }}/{{ .Values.trainer.image.name }}{{ include "eventanalytics.image.suffix" (list . .Values.trainer.image) }}
+        command: ["sh", "-c", "i=1; until [ $(curl {{ .Release.Name }}-spark-master:8080 | grep 'Alive Workers' | awk -F'</strong> ' '{print $2}' | awk -F'</' '{print $1}') -gt '0' ]; do echo waiting for REGISTERED SPARK WORKER attempt $i; i=$((i+1)); sleep 2; done;"]
+{{ include "ibmeaprod.commonubi.container.security.context" (list .)| indent 8 }}
+{{- if eq .Values.global.resource.requests.enable true }}
+        resources:
+{{ include "ibmeaprod.comp.size.data" (list . "trainer" "resources") | indent 10 }}
+{{- end }}
+        env:
+{{ include "eventanalytics.common.license" . | indent 8 }}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - image:  {{ include "image.docker.repository" . }}/{{ .Values.trainer.image.name }}{{ include "eventanalytics.image.suffix" (list . .Values.trainer.image) }}
+{{- if eq .Values.global.resource.requests.enable true }}
+        resources:
+{{ include "ibmeaprod.comp.size.data" (list . "trainer" "resources") | indent 10 }}
+{{- end }}
+        name: trainer
+        imagePullPolicy: {{ .Values.trainer.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.trainer.port }}
+          name: unsecure-port
+          protocol: TCP
+{{ $args := dict "path" "/1.0/training/servicemonitor" }}
+{{ include "eventanalytics.probe.smonitor.all" $args | indent 8 }}
+{{ include "ibmeaprod.commonubi.container.security.context" (list .)| indent 8 }}
+        env:
+{{ include "eventanalytics.common.license" . | indent 8 }}
+{{ include "eventanalytics.common.couchdb" . | indent 8 }}
+{{ include "eventanalytics.common.cassandra" . | indent 8 }}
+{{ include "eventanalytics.common.cassandra.events" . | indent 8 }}
+{{ include "eventanalytics.trainerservice.application" . | indent 8 }}
+{{ include "eventanalytics.common.dropwizard" . | indent 8 }}
+{{ include "ibm-hdm-analytics-dev.trainer.getCemusersUrl" (list . "AUTH_CEMUSERS_USERINFO_ENDPOINT" $globalIntegrations.users.releaseName $globalIntegrations.users.namespace $globalIntegrations.users.config.userinfo) | indent 8}}
+        - name: TRAINER_HOST
+          value: {{ $serviceName }}
+        - name: REGISTRY_HOST
+          value: {{ $policyregistryServiceDeploymentName }}
+
+{{ end }}

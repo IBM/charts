@@ -1,0 +1,166 @@
+{{- /*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/ -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.fullName" (list . 63) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+
+spec:
+  replicas: {{ .Values.replicaCount }}
+  updateStrategy:
+    type: RollingUpdate
+  serviceName: {{ .Release.Name }}-db2ese-service
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}      
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ include "image.docker.repository" . -}}/{{- include "image.family" . -}}-{{ .Values.image.name }}-{{- include "image.edition" . -}}{{ include "image.suffix" (list . .Values.image) }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: true
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+              add: ["NET_BIND_SERVICE","IPC_LOCK", "IPC_OWNER", "IPC_OWNER", "SYS_NICE","DAC_OVERRIDE","FOWNER","FSETID","SETGID","SETUID","NET_RAW","AUDIT_WRITE"]
+          volumeMounts:
+            {{- if .Values.global.persistence.enabled }}
+            - name: {{ include "sch.names.persistentVolumeClaimName" (list . "pvc") }}
+              mountPath: /space/db2/db2inst1/db2inst1
+            {{- end }}
+            - name: {{ .Release.Name }}-share-mount
+              mountPath: /share
+          ports:
+            - containerPort: {{ .Values.db2ese.internal.port }}
+          env:
+          - name: LICENSE
+            value: "{{ .Values.global.license }}"
+          resources:
+          {{- if eq .Values.global.resource.requests.enable true }}
+{{ include "ibmnoiprod.comp.size.data" (list . "db2ese" "resources") | indent 12 }}
+          {{- end }}
+          livenessProbe:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - "DB2INSTANCE=db2inst1 ./opt/ibm/db2/V11.1/bin/db2gcf -s"
+            initialDelaySeconds: {{ .Values.db2ese.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.db2ese.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.db2ese.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.db2ese.liveness.failureThreshold }}
+          readinessProbe:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - "DB2INSTANCE=db2inst1 ./opt/ibm/db2/V11.1/bin/db2gcf -s"
+            initialDelaySeconds: {{ .Values.db2ese.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.db2ese.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.db2ese.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.db2ese.readiness.failureThreshold }}
+        - name: configuration-share
+          image: {{ include "image.docker.repository" . -}}/{{- include "image.family" . -}}-configuration-share-{{- include "image.edition" . -}}{{ include "config.share.image.suffix" . }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: true
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+              add: ["NET_BIND_SERVICE"]
+          volumeMounts:
+             - name: {{ .Release.Name }}-share-mount
+               mountPath: /share
+             {{- if .Values.global.persistence.enabled }}
+             - name: {{ include "sch.names.persistentVolumeClaimName" (list . "pvc") }}
+               mountPath: /space
+             {{- end }}
+          ports:
+            - containerPort: 8000
+          env:
+          - name: ICP_NOI_SHARED_SHARE_FOLDER
+            value: /share
+          - name: ICP_NOI_SHARED_CHMOD_DIR
+            value: /space
+          resources:
+{{ include "ibmnoiprod.comp.size.data" (list . "configurationShare" "resources") | indent 12 }} 
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.db2ese.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.db2ese.readiness.periodSeconds }}
+            failureThreshold: {{ .Values.db2ese.readiness.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8000
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.db2ese.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.db2ese.liveness.periodSeconds }}
+            failureThreshold: {{ .Values.db2ese.liveness.failureThreshold }}
+            
+      affinity:
+        nodeAffinity:
+{{ include "noi.nodeAffinity.arch" . | indent 10 }}
+      volumes:
+        - name: {{ include "sch.names.persistentVolumeClaimName" (list . "pvc") }}
+        {{- if .Values.global.persistence.enabled }}
+          persistentVolumeClaim:
+          {{- if .Values.pvc.existingClaimName }}
+            claimName: {{ .Values.pvc.existingClaimName }}
+          {{- else }}
+            claimName: {{ include "sch.names.persistentVolumeClaimName" (list . "pvc") }}
+          {{- end }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: {{ .Release.Name }}-share-mount
+          emptyDir: {}
+      {{- if .Values.global.image.secret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secret }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 2001
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}

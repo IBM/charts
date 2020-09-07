@@ -1,0 +1,199 @@
+{{- $compName := "verifysecrets" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{.Release.Name}}-verifysecrets"
+  labels:
+    app.kubernetes.io/name: "openldap-test"
+    helm.sh/chart: "openldap"
+    app.kubernetes.io/managed-by: "Tiller"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    release: "{{ .Release.Name }}"
+  annotations:
+    # This is what defines this resource as a hook. Without this line, the
+    # job is considered part of the release.
+    "helm.sh/hook": pre-install,pre-upgrade
+    # order of hooks  Created after service account and secret creation roles
+    "helm.sh/hook-weight": "3"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  template:
+    metadata:
+      name: "{{.Release.Name}}"
+      labels:
+        app.kubernetes.io/name: "openldap-test"
+        helm.sh/chart: "openldap"
+        app.kubernetes.io/managed-by: "Tiller"
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        release: "{{ .Release.Name }}"
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: pre-install-job
+          image: "{{ include "image.docker.repository" . -}}/{{- include "image.family" . -}}-configuration-share-{{- include "image.edition" . -}}{{ include "config.share.image.suffix" . }}"
+          command: [ "bash" , "-c" , "/usr/bin/commonscripts/createsecrets.sh"]
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL 
+          resources:
+{{ include "ibmnoiprod.comp.size.data" (list . "preinstall" "resources") | indent 12 }}
+          env:
+            - name: GENERATE_RAND_PWD
+              value: "{{ .Values.global.users.randompasswords }}"
+            - name: COUCHDB_SECRET_NAME
+              value: {{ .Release.Name }}-couchdb-secret
+            - name: COUCHDB_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-couchdb-secret
+                  key: password
+                  optional: true  
+            - name: IBM_REDIS_SECRET_NAME
+              value: {{ .Release.Name }}-ibm-redis-authsecret
+            - name: IBM_REDIS_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-ibm-redis-authsecret
+                  key: password
+                  optional: true                    
+            - name: IBM_CASSANDRA_SECRET_NAME
+              value: {{ .Release.Name }}-cassandra-auth-secret
+            - name: IBM_CASSANDRA_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-cassandra-auth-secret
+                  key: password
+                  optional: true
+            - name: IBM_KAFKA_CLIENT_SECRET_NAME
+              value: {{ .Release.Name }}-kafka-client-secret
+            - name: IBM_KAFKA_CLIENT_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-kafka-client-secret
+                  key: password
+                  optional: true  
+            - name: IBM_KAFKA_ADMIN_SECRET_NAME
+              value: {{ .Release.Name }}-kafka-admin-secret
+            - name: IBM_KAFKA_ADMIN_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-kafka-admin-secret
+                  key: password
+                  optional: true  
+            - name: IBM_ZOOKEEPER_KAFKA_CLIENT_USER_SECRET_NAME
+              value: {{ .Release.Name }}-zk-kafka-client-secret
+            - name: IBM_ZOOKEEPER_KAFKA_CLIENT_USER_PWD
+              valueFrom:
+                secretKeyRef: 
+                  name: {{ .Release.Name }}-zk-kafka-client-secret
+                  key: password
+                  optional: true
+            - name: LDAP_SECRET_NAME
+              value: {{ .Release.Name }}-ldap-secret     
+            - name: LDAP_BIND_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-ldap-secret
+                  key: LDAP_BIND_PASSWORD
+                  optional: true    
+            - name: ASM_CRED_SECRET_NAME
+              value: {{ .Release.Name }}-asm-credentials     
+            - name: ASM_CRED_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-asm-credentials
+                  key: password
+                  optional: true       
+            - name: ICP_ADMIN_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-icpadmin-secret
+                  key: ICP_ADMIN_PASSWORD
+                  optional: true   
+            - name: ICP_ADMIN_SECRET_NAME
+              value: {{ .Release.Name }}-icpadmin-secret
+            - name: COMMONADMIN_SECRET_NAME
+              value: {{ .Release.Name }}-systemauth-secret
+            - name: COMMON_ADMIN_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-systemauth-secret
+                  key: password
+                  optional: true 
+            - name: SESSION_SECRET_NAME
+              value: {{ .Release.Name }}-ibm-hdm-common-ui-session-secret      
+            - name: COMMON_SESSION_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-ibm-hdm-common-ui-session-secret
+                  key: session
+                  optional: true   
+            - name: IMPACT_ADMIN_SECRET_NAME
+              value: {{ .Release.Name }}-impact-secret     
+            - name: IMPACT_ADMIN_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-impact-secret
+                  key: IMPACT_ADMIN_PASSWORD
+                  optional: true
+            - name: WAS_SECRET_NAME
+              value: {{ .Release.Name }}-was-secret
+            - name: WAS_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-was-secret
+                  key: WAS_PASSWORD
+                  optional: true
+            - name: OMNI_SECRET_NAME
+              value: {{ printf .Values.global.omnisecretname .Release.Name }}
+            - name: OMNIBUS_ROOT_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ printf .Values.global.omnisecretname .Release.Name }}
+                  key: OMNIBUS_ROOT_PASSWORD
+                  optional: true   
+            - name: WAS_OAUTH_CNEA_SECRET_NAME
+              value: {{ .Release.Name }}-was-oauth-cnea-secrets
+            - name: WAS_OAUTH_CNEA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-was-oauth-cnea-secrets
+                  key: client-secret
+                  optional: true
+            - name: NOIOMNIBUS_CERTIFICATE_SECRET_NAME
+              value: {{ .Release.Name }}-omni-certificate-secret
+            - name: NOIOMNIBUS_OS_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-omni-certificate-secret
+                  key: PASSWORD
+                  optional: true
+            - name: MIME_SECRET_NAME
+              value: {{ .Release.Name }}-mime-api-secret
+            - name: MIME_BASIC_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: api_password
+                  name: {{ .Release.Name }}-mime-api-secret
+                  optional: true
+      affinity:
+        nodeAffinity:
+{{ include "noi.nodeAffinity.arch" . | indent 10 }}
+      {{- if .Values.global.image.secret }}  
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secret }}
+      {{- end }}
+      securityContext:
+        fsGroup: 2001
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}

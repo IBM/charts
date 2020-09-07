@@ -1,0 +1,110 @@
+{{/*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/}}
+{{- if .Values.aggregationcollaterservice.enabled -}}
+{{- include "sch.config.init" (list . "ibm-hdm-analytics-dev.sch.chart.config.values") -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+{{- $deploymentName := include "ibm-hdm-analytics-dev.aggregationcollaterservice.deployment.name" . -}}
+{{- $compName := include "ibm-hdm-analytics-dev.aggregationcollaterservice.component.name" . -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $deploymentName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    origin: helm-ibm-hdm-analytics-dev
+spec:
+  strategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 100%
+    type: RollingUpdate
+{{- if  eq .Values.global.environmentSize  "size0" }}
+  replicas: 1
+{{- else if eq .Values.global.environmentSize "size1" }}
+  replicas: 1
+{{- else }}
+  replicas: {{ .Values.aggregationcollaterservice.repFactor }}
+{{- end }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      name: {{ $deploymentName }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+        origin: helm-ibm-hdm-analytics-dev
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+    spec:
+{{ include "ibmeaprod.commonubi.spec.security.context" (list .)| indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secret }}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      initContainers:
+      - name: waitforredis
+        image: {{ include "image.docker.repository" . }}/{{ .Values.aggregationcollaterservice.image.name }}{{ include "eventanalytics.image.suffix" (list . .Values.aggregationcollaterservice.image) }}
+        command: ["sh", "-c", "i=1;until getent hosts {{ .Release.Name }}-ibm-redis; do echo waiting for redis $i;i=$((i+1)); sleep 2; done;"]
+{{ include "ibmeaprod.commonubi.container.security.context" (list .)| indent 8 }}
+        env:
+{{ include "eventanalytics.common.license" . | indent 8 }}
+{{- if eq .Values.global.resource.requests.enable true }}
+# TODO: please review resources.
+        resources:
+{{ include "ibmeaprod.comp.size.data" (list . "aggregationcollater" "resources") | indent 10 }}
+{{- end }}
+      - name: waitforkafka
+        image:  {{ include "image.docker.repository" . }}/{{ .Values.aggregationcollaterservice.image.name }}{{ include "eventanalytics.image.suffix" (list . .Values.aggregationcollaterservice.image) }}
+        command: ["sh", "-c", "i=1; until getent hosts {{ .Release.Name }}-kafka; do echo waiting for kafka $i; i=$((i+1)); sleep 2; done;"]
+{{ include "ibmeaprod.commonubi.container.security.context" (list .)| indent 8 }}
+        env:
+{{ include "eventanalytics.common.license" . | indent 8 }}
+{{- if eq .Values.global.resource.requests.enable true }}
+# TODO: please review resources.
+        resources:
+{{ include "ibmeaprod.comp.size.data" (list . "aggregationcollater" "resources") | indent 10 }}
+{{- end }}
+      containers:
+      - name: {{ $deploymentName }}
+        image:  {{ include "image.docker.repository" . }}/{{ .Values.aggregationcollaterservice.image.name }}{{ include "eventanalytics.image.suffix" (list . .Values.aggregationcollaterservice.image) }}
+{{- if eq .Values.global.resource.requests.enable true }}
+        resources:
+{{ include "ibmeaprod.comp.size.data" (list . "aggregationcollater" "resources") | indent 10 }}
+{{- end }}
+        imagePullPolicy: {{ .Values.aggregationcollaterservice.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.common.restApi.port }}
+          name: unsecure-port
+          protocol: TCP
+{{ $args := dict "path" "/metrics" }} 
+{{ include "eventanalytics.probe.smonitor.all" $args | indent 8 }}
+{{ include "ibmeaprod.commonubi.container.security.context" (list .)| indent 8 }}
+        env:
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eventanalytics.common.license" . | indent 8 }}
+{{ include "eventanalytics.aggregationcollaterservice.application" . | indent 8 }}
+{{ include "eventanalytics.common.couchdb" . | indent 8 }}
+{{ include "eventanalytics.common.kafka" . | indent 8 }}
+{{ include "eventanalytics.common.redis" . | indent 8 }}
+{{ include "eventanalytics.common.defaults" . | indent 8 }}
+{{ end }}

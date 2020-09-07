@@ -1,0 +1,182 @@
+{{/*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/}}
+{{ if (ne .Values.global.hybrid.objectserver.config.deployPhase "none") }}
+{{ if or (eq .Values.global.hybrid.objectserver.config.deployPhase "install") (eq .Values.global.hybrid.objectserver.config.deployPhase "preinstall")}}
+{{- $compName := "easetupomnibus" -}}
+{{- include "sch.config.init" (list . "ea-noi-layer.sch.chart.config.values") -}}
+{{- $deploymentName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $deploymentName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    origin: helm-ea-noi
+  annotations:
+{{ if and ( not .Values.global.hybrid.disabled ) (eq .Values.global.hybrid.objectserver.config.deployPhase "preinstall") -}}
+{{ "\"helm.sh/hook\": pre-install,pre-upgrade" | indent 4 }}
+{{ "\"helm.sh/hook-weight\": \"3\"" | indent 4 }}
+{{ end -}}
+{{ "\"helm.sh/hook-delete-policy\": \"hook-succeeded\"" | indent 4 }}
+spec:
+  template:
+    metadata:
+      name: "{{.Release.Name}}"
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+    spec:
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secret }}
+{{ include "ea-noi-layer.spec.security.context" (list .)| indent 6 }}
+      affinity:
+        nodeAffinity:
+{{ include "ea-noi-layer.nodeAffinity.arch" . | indent 10 }}
+      restartPolicy: Never
+      initContainers:
+      - name: waitforaggp
+        volumeMounts:
+        - name: ca
+          mountPath: /ca
+          readOnly: true
+        image: {{ include "image.docker.repository" . }}/{{ .Values.noieagateway.image.name }}{{ include "ibmeanoilayer.image.suffix" (list . .Values.noieagateway.image) }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+{{ include "ibmeanoilayer.comp.size.data" (list . "initContainer" "resources") | indent 10 }}
+        command: ["sh", "-c", "i=1; export OMNIHOME=/home/netcool/IBM/core/omnibus; /home/netcool/setup_interfaces ${NCO_AGGP_SERVICE_NAME} ${NCO_AGGP_PORT_NUMBER}; until ${OMNIHOME}/bin/nco_ping ${NCO_VIRTUAL_PAIR_NAME}; do echo waiting for primary object server $i; i=$((i+1)); sleep 2; done;"]
+        env:
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eanoi.noieagateway.application" . | indent 8 }}
+{{ include "eanoi.common.defaults" . | indent 8 }}
+{{ include "ea-noi-layer.container.security.context" (list .)| indent 8 }}
+      - name: waitforaggb
+        volumeMounts:
+        - name: ca
+          mountPath: /ca
+          readOnly: true
+        image: {{ include "image.docker.repository" . }}/{{ .Values.noieagateway.image.name }}{{ include "ibmeanoilayer.image.suffix" (list . .Values.noieagateway.image) }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+{{ include "ibmeanoilayer.comp.size.data" (list . "initContainer" "resources") | indent 10 }}
+{{ include "ea-noi-layer.container.security.context" (list .)| indent 8 }}
+        command: ["sh", "-c", "i=1; export OMNIHOME=/home/netcool/IBM/core/omnibus; /home/netcool/setup_interfaces ${NCO_AGGB_SERVICE_NAME} ${NCO_AGGB_PORT_NUMBER}; until ${OMNIHOME}/bin/nco_ping ${NCO_VIRTUAL_PAIR_NAME} ; do echo waiting for backup object server $i; i=$((i+1)); sleep 2; done;"]
+        env:
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eanoi.noieagateway.application" . | indent 8 }}
+{{ include "eanoi.common.defaults" . | indent 8 }}
+{{ include "ea-noi-layer.container.security.context" (list .)| indent 8 }}
+{{- if .Values.global.hybrid.disabled }}
+      - name: sleep
+        image: {{ include "image.docker.repository" . }}/{{ .Values.noieagateway.image.name }}{{ include "ibmeanoilayer.image.suffix" (list . .Values.noieagateway.image) }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+{{ include "ibmeanoilayer.comp.size.data" (list . "initContainer" "resources") | indent 10 }}
+        command: ["sh", "-c", "sleep 120"]
+        env:
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eanoi.noieagateway.application" . | indent 8 }}
+{{ include "eanoi.common.defaults" . | indent 8 }}
+{{ include "ea-noi-layer.container.security.context" (list .)| indent 8 }}
+{{- end }}
+{{- if not .Values.global.hybrid.disabled }}
+      - name: setupnoischema
+        volumeMounts:
+        - name: ca
+          mountPath: /ca
+          readOnly: true
+        image: {{ include "image.docker.repository" . }}/{{ .Values.noiactionservice.image.name }}{{ include "ibmeanoilayer.image.suffix" (list . .Values.noiactionservice.image) }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+{{ include "ibmeanoilayer.comp.size.data" (list . "initContainer" "resources") | indent 10 }}
+        command: ["/app/entrypoint.sh", "npm", "run", "setup:schema"]
+        env:
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eanoi.noiactionservice.application" . | indent 8 }}
+{{ include "eanoi.common.defaults" . | indent 8 }}
+{{ include "ea-noi-layer.container.security.context" (list .)| indent 8 }}
+{{- end }}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - name: setupnoiautomations
+        volumeMounts:
+        - name: ca
+          mountPath: /ca
+          readOnly: true
+        image: {{ include "image.docker.repository" . }}/{{ .Values.noiactionservice.image.name }}{{ include "ibmeanoilayer.image.suffix" (list . .Values.noiactionservice.image) }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+{{ include "ibmeanoilayer.comp.size.data" (list . "initContainer" "resources") | indent 10 }}
+        command: ["/app/entrypoint.sh", "npm", "run", "setup"]
+        env:
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eanoi.noiactionservice.application" . | indent 8 }}
+{{ include "eanoi.common.defaults" . | indent 8 }}
+{{ include "ea-noi-layer.container.security.context" (list .)| indent 8 }}
+      - name: registernoilayer
+        image:  {{ include "image.docker.repository" . }}/{{ .Values.noiactionservice.image.name }}{{ include "ibmeanoilayer.image.suffix" (list . .Values.noiactionservice.image) }}
+        resources:
+{{ include "ibmeanoilayer.comp.size.data" (list . "noiactionservice" "resources") | indent 10 }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        volumeMounts:
+        - name: ca
+          mountPath: /ca
+          readOnly: true
+{{ include "ea-noi-layer.container.security.context" (list .)| indent 8 }}
+        command: ["/app/entrypoint.sh", "npm", "run", "osreg"]
+        env:
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eanoi.noiactionservice.application" . | indent 8 }}
+{{ include "eanoi.common.source" . | indent 8 }}
+{{ include "eanoi.common.defaults" . | indent 8 }}
+{{- if ne .Values.global.noilayer.sourceid "default" }}
+      - name: registerwithtrainer
+        image:  {{ include "image.docker.repository" . }}/{{ .Values.noiactionservice.image.name }}{{ include "ibmeanoilayer.image.suffix" (list . .Values.noiactionservice.image) }}
+        resources:
+{{ include "ibmeanoilayer.comp.size.data" (list . "noiactionservice" "resources") | indent 10 }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        volumeMounts:
+        - name: ca
+          mountPath: /ca
+          readOnly: true
+{{ include "ea-noi-layer.container.security.context" (list .)| indent 8 }}
+        command: ["/app/entrypoint.sh", "npm", "run", "jobreg"]
+        env:
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eanoi.noiactionservice.application" . | indent 8 }}
+{{ include "eanoi.common.source" . | indent 8 }}
+{{ include "eanoi.common.defaults" . | indent 8 }}
+{{- end }}
+      volumes:
+      - name: ca
+        secret:
+          secretName: {{ .Values.global.authentication.objectserver.secretRelease | default .Release.Name }}{{ .Values.global.authentication.objectserver.certificateTemplate | default "-omni-certificate-secret" }}
+          items:
+          - key: ROOTCA
+            path: rootca 
+          - key: INTERMEDIATECA
+            path: intermediatepath
+{{ end }}  
+{{ end }}

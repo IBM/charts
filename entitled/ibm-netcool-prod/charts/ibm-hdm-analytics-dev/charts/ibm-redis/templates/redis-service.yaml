@@ -1,0 +1,41 @@
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018, 2019. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "redis.sch.chart.config.values") -}}
+{{- $fullName := include "sch.names.fullCompName" (list . "") -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullName }}{{ if (eq "true" (include "ibmRedis.upgradeFromV1" .)) }}-server{{ end }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+  annotations:
+  {{- if .Values.serviceAnnotations }}
+{{ toYaml .Values.serviceAnnotations | indent 4 }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: server
+    port: {{ .Values.redis.port }}
+    protocol: TCP
+    targetPort: redis
+  - name: sentinel
+    port: {{ .Values.sentinel.port }}
+    protocol: TCP
+    targetPort: sentinel
+  selector:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+    component: "ibm-redis-server"
+{{- if (eq "true" (include "ibmRedis.upgradeFromV1" .)) }}
+    component: "server"
+{{- end }}
