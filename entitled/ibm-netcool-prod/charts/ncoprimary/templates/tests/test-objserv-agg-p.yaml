@@ -1,0 +1,65 @@
+{{- /*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/ -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-test-objserv-agg-p
+  annotations:
+    "helm.sh/hook": test-success
+
+  labels:
+    app.kubernetes.io/name: "{{ .Release.Name }}-test-objserv-agg-p"
+    helm.sh/chart: "{{ .Release.Name }}-test-objserv-agg-p"
+    app.kubernetes.io/managed-by: "Tiller"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    release: "{{ .Release.Name }}"
+    test: {{ .Release.Name }}-test-objserv-agg-p
+spec:
+  containers:
+  - name: {{ .Release.Name }}-test-objserv-agg-p
+    image: {{ include "image.docker.repository" . -}}/{{- include "image.family" . -}}-{{ .Values.image.name }}-{{- include "image.edition" . -}}:{{ .Values.image.tag }}
+    resources:
+{{ include "ibmnoiprod.comp.size.data" (list . "testPod" "resources") | indent 6 }} 
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: false
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 1001
+      capabilities:
+        drop:
+        - ALL
+        add: ["NET_BIND_SERVICE"]
+    command: ["/bin/sh"]
+    args: ["-c", "echo '[AGG_P] { Primary: {{ .Release.Name }}-objserv-agg-primary 4100 }' > /opt/IBM/tivoli/netcool/etc/omni.dat; /opt/IBM/tivoli/netcool/bin/nco_igen; cat /opt/IBM/tivoli/netcool/etc/interfaces.linux2x86; /opt/IBM/tivoli/netcool/omnibus/bin/nco_ping AGG_P"]
+
+  affinity:
+    nodeAffinity:
+{{ include "noi.nodeAffinity.arch" . | indent 6 }}
+
+  restartPolicy: Never
+  {{- if .Values.global.image.secret }}  
+  imagePullSecrets:
+    - name: {{ .Values.global.image.secret }}
+  {{- end }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+

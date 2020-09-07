@@ -1,0 +1,35 @@
+{{- if .Values.master.enabled -}}
+{{- $compName := "master" -}}
+{{- include "sch.config.init" (list . "spark.sch.chart.config.values") -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $serviceName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 4 }}
+spec:
+  selector:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  type: {{ .Values.master.serviceType }} 
+  ports:
+   - name: ui
+     protocol: TCP
+     port: 8080
+     targetPort: 8080
+   - name: spark
+     protocol: TCP
+     port: 7077
+     targetPort: 7077
+   - name: rest
+     protocol: TCP
+     port: 6066
+     targetPort: 6066
+
+{{ end }}

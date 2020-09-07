@@ -1,0 +1,299 @@
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018, 2019. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "redis.sch.chart.config.values") -}}
+{{- $statefulSetName := include "sch.names.fullCompName" (list . "server") -}}
+{{- $configMapName := include "sch.names.fullCompName" (list . "configmap") -}}
+{{- $probesName := include "sch.names.fullCompName" (list . "probes") -}}
+{{- $fullName := include "sch.names.fullCompName" (list . "") -}}
+{{- if .Capabilities.APIVersions.Has "apps/v1" }}
+apiVersion: apps/v1
+{{- else if .Capabilities.APIVersions.Has "apps/v1beta2" }}
+apiVersion: apps/v1beta2
+{{- else -}}
+apiVersion: apps/v1beta1
+{{- end }}
+kind: StatefulSet
+metadata:
+  name: {{ $statefulSetName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $statefulSetName) | indent 4 }}
+    component: "ibm-redis-server"
+{{- if (eq "true" (include "ibmRedis.upgradeFromV1" .)) }}
+    component: "server"
+{{- end }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
+      component: "ibm-redis-server"
+{{- if (eq "true" (include "ibmRedis.upgradeFromV1" .)) }}
+      component: "server"
+{{- end }}
+  serviceName: {{ $fullName }}{{ if (eq "true" (include "ibmRedis.upgradeFromV1" .)) }}-server{{ end }}
+  replicas: {{ include "ibmRedis.replicationFactor" . }}
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/init-config: {{ include (print $.Template.BasePath "/redis-configmap.yaml") . | sha256sum }}
+        checksum/probe-config: {{ include (print $.Template.BasePath "/redis-healthchecks.yaml") . | sha256sum }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+        component: "ibm-redis-server"
+{{- if (eq "true" (include "ibmRedis.upgradeFromV1" .)) }}
+        component: "server"
+{{- end }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+{{- if or (not (.Capabilities.APIVersions.Has "security.openshift.io/v1")) (eq .Release.Namespace "kube-system") (ne (toString .Values.global.arbitraryUids) "true") }}
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+{{- end }}
+        supplementalGroups:
+        {{- range $group := .Values.global.persistence.supplementalGroups }}
+        - {{ $group -}}
+        {{ end }}
+      affinity:
+{{ include "ibmRedis.affinityRedis" . | indent 8 }}
+{{- if ne .Values.global.image.secret "" }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secret }}
+{{- end }}
+      initContainers:
+{{- if eq .Values.global.privileged true }}
+      - name: set-volume-permissions
+        image: "{{ include "redis.images.redis" . }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ["sh", "-c", "chown -R 1000:1000 /data"]
+        resources:
+{{ include "ibmRedis.comp.size.data" (list . "server" "resources") | indent 10 }}
+        securityContext:
+          runAsNonRoot: true
+{{- if or (not (.Capabilities.APIVersions.Has "security.openshift.io/v1")) (eq .Release.Namespace "kube-system") (ne (toString .Values.global.arbitraryUids) "true") }}
+          runAsUser: 1001
+          runAsGroup: 1001
+{{- end }}
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: data
+          mountPath: /data
+{{- end }}
+      - name: config-init
+        image: {{ include "redis.images.redis" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        resources:
+{{ include "ibmRedis.comp.size.data" (list . "server" "resources") | indent 10 }}
+        command:
+        - sh
+        args:
+        - /readonly-config/init.sh
+{{- if .Values.auth.enabled }}
+        env:
+        - name: AUTH
+          valueFrom:
+            secretKeyRef:
+{{- if not (include "ibmRedis.authSecretName" .) }}
+              name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.authsecret) | quote }}
+{{- else }}
+              name: {{ include "ibmRedis.authSecretName" . }}
+{{- end }}
+              key: password
+{{- end }}
+        securityContext:
+          runAsNonRoot: true
+{{- if or (not (.Capabilities.APIVersions.Has "security.openshift.io/v1")) (eq .Release.Namespace "kube-system") (ne (toString .Values.global.arbitraryUids) "true") }}
+          runAsUser: 1001
+          runAsGroup: 1001
+{{- end }}
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: config
+          mountPath: /readonly-config
+          readOnly: true
+        - name: data
+          mountPath: /data
+      containers:
+      - name: redis
+        image: {{ include "redis.images.redis" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - redis-server
+        args:
+        - /data/conf/redis.conf
+{{- if .Values.auth.enabled }}
+        env:
+        - name: AUTH
+          valueFrom:
+            secretKeyRef:
+{{- if not (include "ibmRedis.authSecretName" .) }}
+              name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.authsecret) | quote }}
+{{- else }}
+              name: {{ include "ibmRedis.authSecretName" . }}
+{{- end }}
+              key: password
+{{- end }}
+        livenessProbe:
+          exec:
+            command: [ "sh", "/probes/readiness.sh", "{{ .Values.redis.port }}"]
+          initialDelaySeconds: 15
+          periodSeconds: 5
+        readinessProbe:
+          exec:
+            command: ["sh", "/probes/readiness.sh", "{{ .Values.redis.port }}"]
+          initialDelaySeconds: 15
+          periodSeconds: 5
+        resources:
+{{ include "ibmRedis.comp.size.data" (list . "server" "resources") | indent 10 }}
+        ports:
+        - name: redis
+          containerPort: {{ .Values.redis.port }}
+        securityContext:
+          runAsNonRoot: true
+{{- if or (not (.Capabilities.APIVersions.Has "security.openshift.io/v1")) (eq .Release.Namespace "kube-system") (ne (toString .Values.global.arbitraryUids) "true") }}
+          runAsUser: 1001
+          runAsGroup: 1001
+{{- end }}
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /data
+          name: data
+        - mountPath: /probes
+          name: probes
+      - name: sentinel
+        image: {{ include "redis.images.redis" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+          - redis-sentinel
+        args:
+          - /data/conf/sentinel.conf
+{{- if .Values.auth.enabled }}
+        env:
+        - name: AUTH
+          valueFrom:
+            secretKeyRef:
+{{- if not (include "ibmRedis.authSecretName" .) }}
+              name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.authsecret) | quote }}
+{{- else }}
+              name: {{ include "ibmRedis.authSecretName" . }}
+{{- end }}
+              key: password
+{{- end }}
+        livenessProbe:
+          exec:
+            command: [ "sh", "/probes/readiness.sh", "{{ .Values.sentinel.port }}"]
+          initialDelaySeconds: 15
+          periodSeconds: 5
+        readinessProbe:
+          exec:
+            command: ["sh", "/probes/readiness.sh", "{{ .Values.sentinel.port }}"]
+          initialDelaySeconds: 15
+          periodSeconds: 5
+        resources:
+{{ include "ibmRedis.comp.size.data" (list . "sentinel" "resources") | indent 10 }}
+        ports:
+          - name: sentinel
+            containerPort: {{ .Values.sentinel.port }}
+        securityContext:
+          runAsNonRoot: true
+{{- if or (not (.Capabilities.APIVersions.Has "security.openshift.io/v1")) (eq .Release.Namespace "kube-system") (ne (toString .Values.global.arbitraryUids) "true") }}
+          runAsUser: 1001
+          runAsGroup: 1001
+{{- end }}
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /data
+          name: data
+        - mountPath: /probes
+          name: probes
+      serviceAccountName: {{ include "ibmRedis.getServiceAccountName" . }}
+      volumes:
+      - name: config
+        configMap:
+          name: {{ $configMapName }}
+      - name: probes
+        configMap:
+          name: {{ $probesName }}
+{{- if eq (include "ibmRedis.persistenceEnabled" .) "true" }}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ .Values.dataPVC.name | quote }}
+        labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 10 }}
+      spec:
+        accessModes:
+        - {{ .Values.persistence.accessMode | quote }}
+        {{ if .Values.persistence.storageClassName }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}
+  {{- if .Values.global.persistence.useDynamicProvisioning }}
+        storageClassName: {{ default nil .Values.persistence.storageClassName | quote }}
+  {{- else }}
+        storageClassName: {{ default "" .Values.persistence.storageClassName | quote }}
+  {{- end }}
+        {{ else if eq .Values.global.persistence.storageClassOption.redisdata "default" }}
+  {{- if .Values.global.persistence.useDynamicProvisioning }}
+        storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+  {{- else }}
+        storageClassName: {{ default "" .Values.global.persistence.storageClassName | quote }}
+  {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.global.persistence.storageSize.redisdata }}
+        {{ else }}
+  {{- if .Values.global.persistence.useDynamicProvisioning }}
+        storageClassName: {{ default nil .Values.global.persistence.storageClassOption.redisdata | quote }}
+  {{- else }}
+        storageClassName: {{ default "" .Values.global.persistence.storageClassOption.redisdata | quote }}
+  {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.global.persistence.storageSize.redisdata }}
+        {{ end }}
+    {{- if .Values.dataPVC.selector.label }}
+        # use selectors in the binding process
+        selector:
+          matchExpressions:
+            - {key: {{ .Values.dataPVC.selector.label }}, operator: In, values: [{{ .Values.dataPVC.selector.value }}]}
+    {{- end }}
+{{ else }}
+      - name: data
+        emptyDir: {}
+{{ end }}

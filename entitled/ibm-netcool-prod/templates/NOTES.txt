@@ -1,0 +1,85 @@
+This deployment of Netcool Operation Insight is now complete. You can now
+access the following services:
+Identify the public IP of the cluster:
+  export NODE_IP=<Public IP of the ICp cluster>
+
+{{ if .Values.global.hybrid.disabled -}}
+WebGUI:
+  Update your hosts file( On the machine you are running your Browser) or your DNS settings with this mapping
+  $NODE_IP netcool.{{- .Release.Name -}}.{{- .Values.global.cluster.fqdn }}
+
+  firefox https://netcool.{{- .Release.Name -}}.{{- .Values.global.cluster.fqdn -}}:{{- .Values.global.ingress.port -}}/ibm/console
+
+  Default credentials are: icpadmin/password you can get from the secret {{-  printf " %s" .Release.Name -}}-icpadmin-secret using the following
+  kubectl get secret {{-  printf " %s" .Release.Name -}}-icpadmin-secret -o json -n {{-  printf " %s"  .Release.Namespace -}} | grep ICP_ADMIN_PASSWORD  | cut -d : -f2 | cut -d '"' -f2 | base64 -d;echo
+
+WAS Console:
+  Update your hosts file( On the machine you are running your Browser) or your DNS settings with this mapping
+  $NODE_IP was.{{- .Release.Name -}}.{{- .Values.global.cluster.fqdn }}
+
+  firefox https://was.{{- .Release.Name -}}.{{- .Values.global.cluster.fqdn -}}:{{- .Values.global.ingress.port -}}/ibm/console
+
+  Default credentials are: smadmin/password you can get from the secret {{-  printf " %s"   .Release.Name -}}-was-secret using the following
+  kubectl get secret {{-  printf " %s"  .Release.Name -}}-was-secret -o json -n {{-  printf " %s"  .Release.Namespace -}} | grep WAS_PASSWORD | cut -d : -f2 | cut -d '"' -f2 | base64 -d;echo
+
+{{ if eq .Values.global.enableImpact true -}}
+Impact GUI:
+  Update your hosts file( On the machine you are running your Browser) or your DNS settings with this mapping
+  $NODE_IP impact.{{- .Release.Name -}}.{{- .Values.global.cluster.fqdn }}
+
+  firefox https://impact.{{- .Release.Name -}}.{{- .Values.global.cluster.fqdn -}}:{{- .Values.global.ingress.port -}}/ibm/console
+
+  Credentials are: impactadmin/password you can get from the secret {{-  printf " %s"  .Release.Name -}}-impact-secret using the following
+  kubectl get secret {{-  printf " %s"  .Release.Name -}}-impact-secret -o json -n {{-  printf " %s"  .Release.Namespace -}} | grep IMPACT_ADMIN_PASSWORD | cut -d : -f2 | cut -d '"' -f2 | base64 -d;echo
+
+Impact Servers:
+  Update your hosts file( On the machine you are running your Browser) or your DNS settings with this mapping
+  $NODE_IP nci-0.{{- .Release.Name -}}.{{- .Values.global.cluster.fqdn }}
+
+  firefox https://nci-0.{{- .Release.Name -}}.{{- .Values.global.cluster.fqdn -}}:{{- .Values.global.ingress.port -}}/nameserver/services
+
+  Default credentials are: impactadmin//password you can get from the secret {{-  printf " %s"  .Release.Name -}}-impact-secret using the following
+  kubectl get secret {{-  printf " %s"  .Release.Name -}}-impact-secret -o json -n {{-  printf " %s"  .Release.Namespace -}} | grep IMPACT_ADMIN_PASSWORD | cut -d : -f2 | cut -d '"' -f2 | base64 -d;echo
+
+{{ end -}}
+{{ end -}}
+AIOPS:
+  Update your hosts file( On the machine you are running your Browser) or your DNS settings with this mapping
+  $NODE_IP netcool.{{- .Release.Name -}}.{{- .Values.global.cluster.fqdn }}
+
+  firefox https://netcool.{{- .Release.Name -}}.{{- .Values.global.cluster.fqdn -}}:{{- .Values.global.ingress.port -}}/
+{{ if .Values.global.hybrid.disabled -}}
+
+  Default credentials are: icpadmin/password you can get from the secret {{-  printf " %s" .Release.Name -}}-icpadmin-secret using the following
+  kubectl get secret {{-  printf " %s" .Release.Name -}}-icpadmin-secret -o json -n {{-  printf " %s"  .Release.Namespace -}} | grep ICP_ADMIN_PASSWORD  | cut -d : -f2 | cut -d '"' -f2 | base64 -d;echo
+
+{{ end -}}
+
+
+
+{{ if index .Values "ibm-hdm-analytics-dev" "eventstooling" -}}
+Sample Data:
+  To create a job that installs and trains the analytics system with sample data, run the following commands:
+
+  kubectl run ingesnoi3 -i --restart=Never --env=LICENSE={{ .Values.global.license }}  --namespace {{-  printf " %s"  .Release.Namespace -}} \
+        --env=CONTAINER_IMAGE={{ include "image.docker.repository" . }}/{{index .Values "ibm-hdm-analytics-dev" "eventstooling" "image" "name"}}:{{ index .Values "ibm-hdm-analytics-dev" "eventstooling" "image" "tag" }} \
+        {{- if  .Values.global.image.secret }}
+        --overrides='{ "apiVersion": "v1", "spec": { "imagePullSecrets": [{"name": "{{ .Values.global.image.secret }}"}] } }' \
+        {{- end }}
+        --image={{ include "image.docker.repository" . }}/{{index .Values "ibm-hdm-analytics-dev" "eventstooling" "image" "name"}}:{{ index .Values "ibm-hdm-analytics-dev" "eventstooling" "image" "tag" }} \
+        loadSampleData.sh -- -r {{ .Release.Name }}  -t {{ .Values.global.common.eventanalytics.tenantId }} \
+        -a {{ .Values.global.rbac.serviceAccountName }}  {{ if  .Values.global.image.secret }} -s {{ .Values.global.image.secret }} {{ end}} \
+{{- if ( not .Values.global.hybrid.disabled ) }}
+        -o "{{ .Values.global.hybrid.objectserver.primary.hostname }}" -p "{{ .Values.global.hybrid.objectserver.primary.port }}" \
+{{- end }}
+        -j > loadSampleData.yaml
+
+  kubectl create -f loadSampleData.yaml -n {{-  printf " %s"  .Release.Namespace }}
+
+  If the default service account does not have access to the image repository, uncomment the image pull secrets
+  section in the loadSampleData.yaml file and set {{ .Values.global.image.secret }}  as the imagePullSecrets.name
+  value before running the kubectl create command.
+
+  To see how the sample events have been grouped, connect your browser to WebGUI, choose 'Event Viewer' from
+  the 'Incidents' menu, and change the view from 'Default' to 'Example_IBM_CloudAnalytics'.
+{{ end }}

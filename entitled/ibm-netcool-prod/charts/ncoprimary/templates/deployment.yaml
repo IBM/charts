@@ -1,0 +1,172 @@
+{{- /*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/ -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.fullName" (list . 63) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+
+spec:
+  updateStrategy:
+    type: RollingUpdate
+  serviceName: {{ .Release.Name }}-{{ .Values.services.objserv.primary.name }}
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+        appClass: objserv
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      affinity:
+        nodeAffinity:
+{{ include "noi.nodeAffinity.arch" . | indent 10 }}
+        {{- if eq .Values.global.antiAffinity.enabled true }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: appClass
+                operator: In
+                values:
+                - objserv
+            topologyKey: "kubernetes.io/hostname"
+        {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ include "image.docker.repository" . -}}/{{- include "image.family" . -}}-{{ .Values.image.name }}-{{- include "image.edition" . -}}{{ include "image.suffix" (list . .Values.image) }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+              add: ["NET_BIND_SERVICE","NET_RAW"]
+          volumeMounts:
+            {{- if .Values.global.persistence.enabled }}
+            - name: {{ include "sch.names.persistentVolumeClaimName" (list . "pvc") }}
+              mountPath: {{ .Values.objserv.env.dbPath }}
+            {{- end }}
+            - name: {{ .Release.Name }}-agg-p-props-append
+              mountPath: {{ .Values.objserv.env.propsPath }}/{{ .Values.objserv.name }}.props-append
+              subPath: {{ .Values.objserv.name }}.props-append
+            - name: {{ .Release.Name }}-agg-p-sql-extensions
+              mountPath: {{ .Values.objserv.env.propsPath }}/{{ .Values.objserv.name }}-extensions.sql
+              subPath: {{ .Values.objserv.name }}-extensions.sql
+          ports:
+            - containerPort: {{ .Values.objserv.internal.tdsPort }}
+            - containerPort: {{ .Values.objserv.internal.iducPort }}
+          env:
+          - name: LICENSE
+            value: "{{ .Values.global.license }}"
+          - name: NCO_IDUC_LISTENING_HOSTNAME
+            value: "{{ .Release.Name }}-{{ .Values.services.objserv.primary.name }}-nodeport"
+          - name: NCO_IDUC_LISTENING_SERVICE_NAME
+            value: "primary-iduc-port"
+          - name: OMNIBUS_OS_NAME
+            value: "{{ .Values.objserv.name }}"
+          - name: OMNI_SECRET_NAME
+            value: {{ printf .Values.global.omnisecretname .Release.Name }}
+          - name: OMNIBUS_ROOT_PWD
+            valueFrom:
+              secretKeyRef:
+                name: {{ printf .Values.global.omnisecretname .Release.Name }}
+                key: OMNIBUS_ROOT_PASSWORD
+                optional: false
+          - name: LDAP_SERVICE_NAME
+            value: {{ .Release.Name }}-{{ .Values.global.ldapservice.name }}
+          - name: LDAP_BIND_DN
+            value: "{{ .Values.global.ldapservice.internal.bindDN }}"
+          - name: LDAP_BASE_DN
+            value: "{{ .Values.global.ldapservice.internal.baseDN }}"
+          - name: LDAP_BIND_PWD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-ldap-secret
+                key: LDAP_BIND_PASSWORD
+                optional: false
+          - name: LC_ALL
+            value: "{{ .Values.objserv.env.locale }}"
+          - name: APP_VERSION
+            value: {{ .Chart.AppVersion }}
+          {{- if eq .Values.global.resource.requests.enable true }}
+          resources:
+{{ include "ibmnoiprod.comp.size.data" (list . "ncoprimary" "resources") | indent 12 }}
+          {{- end }}
+          livenessProbe:
+            exec:
+              command:
+              - {{ .Values.objserv.liveness.command }}
+              - {{ .Values.objserv.name }}
+            initialDelaySeconds: {{ .Values.objserv.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.objserv.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.objserv.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.objserv.liveness.failureThreshold }}
+          readinessProbe:
+            exec:
+              command:
+              - {{ .Values.objserv.readiness.command }}
+              - {{ .Values.objserv.name }}
+            initialDelaySeconds: {{ .Values.objserv.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.objserv.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.objserv.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.objserv.readiness.failureThreshold }}
+      volumes:
+        - name: {{ include "sch.names.persistentVolumeClaimName" (list . "pvc") }}
+        {{- if .Values.global.persistence.enabled }}
+          persistentVolumeClaim:
+          {{- if .Values.pvc.existingClaimName }}
+            claimName: {{ .Values.pvc.existingClaimName }}
+          {{- else }}
+            claimName: {{ include "sch.names.persistentVolumeClaimName" (list . "pvc") }}
+          {{- end }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: {{ .Release.Name }}-agg-p-props-append
+          configMap:
+            name: {{ .Release.Name }}-{{ .Values.services.objserv.primary.name }}-config
+            items:
+            - key: agg-p-props-append
+              path: {{ .Values.objserv.name }}.props-append
+        - name: {{ .Release.Name }}-agg-p-sql-extensions
+          configMap:
+            name: {{ .Release.Name }}-{{ .Values.services.objserv.primary.name }}-config
+            items:
+            - key: agg-p-sql-extensions
+              path: {{ .Values.objserv.name }}-extensions.sql
+      {{- if .Values.global.image.secret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secret }}
+      {{- end }}
+      securityContext:
+        fsGroup: 2001 
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}

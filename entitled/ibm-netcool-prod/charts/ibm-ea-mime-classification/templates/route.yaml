@@ -1,0 +1,64 @@
+{{/*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2020 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/}}
+
+{{- $compName :=  .sch.chart.components.eaasmmimecls.name -}}
+{{- include "sch.config.init" (list . "ibm-ea-mime-classification.sch.chart.config.values") -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+
+{{ $global := . }}
+
+{{- if .Values.probableCause.enabled -}}
+{{- if .Values.enabled -}}
+{{- if .Values.global.integrations.asm.enabled -}}
+
+{{ $serviceCount := len .Values.servicespaths }}
+
+{{- range $i := until $serviceCount }}
+---
+{{ $serviceInfo := index $global.Values.servicespaths $i  }}
+
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ $serviceName }}-{{ $i }}
+  namespace: {{ $global.Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list $global $compName) | indent 4 }}
+    origin: helm-ibm-hdm-analytics-dev
+  annotations:
+{{- include "sch.metadata.annotations.metering" (list $global $rootMetering) | indent 4 }}
+spec:
+  host: netcool.{{- $global.Release.Name }}.{{- $global.Values.global.cluster.fqdn }}
+  path: {{ $serviceInfo.path }}
+  port:
+    targetPort: {{ $serviceInfo.port }}
+  to:
+    kind: Service
+    name: {{ $serviceName }}
+    weight: 100
+  tls:
+    termination: edge
+status:
+  ingress:
+  - routerName: default
+
+{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}

@@ -1,0 +1,82 @@
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "redis.sch.chart.config.values") -}}
+{{- if and (eq .Values.auth.enabled true) (not (include "ibmRedis.authSecretName" .)) -}}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.credsCleanup) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsCleanup) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-delete"
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.credsCleanup) | quote }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsCleanup) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+{{- if or (not (.Capabilities.APIVersions.Has "security.openshift.io/v1")) (eq .Release.Namespace "kube-system") (ne (toString .Values.global.arbitraryUids) "true") }}
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+{{- end }}
+      affinity:
+{{ include "ibmRedis.affinityRedis" . | indent 8 }}
+      serviceAccountName: {{ include "ibmRedis.getServiceAccountName" . }}
+{{- if ne .Values.global.image.secret "" }}
+      imagePullSecrets:
+      - name:  {{ .Values.global.image.secret }}
+{{- end }}
+      containers:
+      - name: cleanup
+        image:  "{{ include "redis.images.creds" . }}"
+        imagePullPolicy: {{.Values.creds.image.pullPolicy}}
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 10m
+          limits:
+            memory: 256Mi
+            cpu: 50m
+        securityContext:
+          runAsNonRoot: true
+{{- if or (not (.Capabilities.APIVersions.Has "security.openshift.io/v1")) (eq .Release.Namespace "kube-system") (ne (toString .Values.global.arbitraryUids) "true") }}
+          runAsUser: 1001
+          runAsGroup: 1001
+{{- end }}
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+{{- if (not (include "ibmRedis.authSecretName" .)) }}
+          echo "=>>>Deleting {{ include "sch.names.fullCompName" (list . .sch.chart.components.authsecret) }} ..." && kubectl delete secret {{ include "sch.names.fullCompName" (list . .sch.chart.components.authsecret) }} -n {{ .Release.Namespace }}
+{{- end }}
+      restartPolicy: Never
+{{ end }}

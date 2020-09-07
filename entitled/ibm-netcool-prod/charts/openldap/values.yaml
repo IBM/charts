@@ -1,0 +1,96 @@
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+
+global:
+  # Review and accept the license terms? ['accept','not accepted']
+  license: "not accepted"
+  omnisecretname: "%s-omni-secret"
+  
+  # Enable sub-chart resource requests
+  resource:
+    requests:
+      enable: true
+  # Define where/who the images will be pulled from
+  image:
+    # This is the artifactory server to pull the docker images from
+    repository:
+    # Secret used to access the docker repository above
+    secret:   
+    # pullPolicy: IfNotPresent change to Always to make the latest is always picked up
+    pullPolicy: Always
+    # Use image tags instead of digests
+    useTag: true
+
+  ldapservice:
+    name: ldapservice
+    # Define how LDAP is working: ['proxy','standalone']
+    mode: standalone
+    internal:
+      ldapPort: 389
+      ldapSSLPort: 636
+      url: ""
+      suffix: "dc=mycluster,dc=icp"
+      baseDN: dc=mycluster,dc=icp
+      bindDN: "cn=admin,dc=mycluster,dc=icp"
+  rbac:
+    serviceAccountName: noi-service-account
+
+replicaCount: 1
+
+image:
+  # We have two images: standalone (server) or proxy
+  standalone:
+    name: openldap
+    tag: 1.6.1-201
+    digest: sha256:6f09642f3dd8c7d0171f4ebf60cb851c66a262a76b220d01dc49c288ebf765a9
+  proxy:
+    name: ldap-proxy
+    tag: 1.6.1-201
+    digest: sha256:94f9b1e96b7ff071d40590c67d47e9e0093a6a0ccf732169273c7dd14e681a2b
+
+terminationGracePeriodSeconds: 10
+
+openldap:
+  env:
+    ldapPath: /space
+  liveness:
+    command: "/usr/local/bin/ldapsearch"
+    initialDelaySeconds: 60
+    periodSeconds: 60
+    timeoutSeconds: 1
+    failureThreshold: 3
+  readiness:
+    command: "/usr/local/bin/ldapsearch"
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 1
+    failureThreshold: 1
+
+pvc:
+  # specify the storageClassName you want to use
+  # if you don't specify a storageClassName it will use the default
+  storageClassName: ""
+
+  # Specify the name of the Existing Claim to be used by your application
+  # empty string means don't use an existClaim
+  existingClaimName: ""
+
+  # if your not using dynamic provisioning, you can use selectors to 
+  # refine the binding process. You cannot specify a selector if your using dynamic provisioning!
+  selector:
+    label: ""
+    value: ""
+
+  size: 1Gi

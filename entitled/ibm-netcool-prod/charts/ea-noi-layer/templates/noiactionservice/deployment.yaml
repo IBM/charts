@@ -1,0 +1,108 @@
+{{/*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/}}
+{{- if .Values.noiactionservice.enabled -}}
+{{- $compName := "eanoiactionservice" -}}
+{{- include "sch.config.init" (list . "ea-noi-layer.sch.chart.config.values") -}}
+{{- $deploymentName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $deploymentName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    origin: helm-ea-noi
+spec:
+{{- if  eq .Values.global.environmentSize  "size0" }}
+  replicas: 1
+{{- else if eq .Values.global.environmentSize "size1" }}
+  replicas: 1
+{{- else }}
+  replicas: {{ .Values.noiactionservice.repFactor }}
+{{- end }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      name: {{ $deploymentName }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+        origin: helm-ea-noi
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+    spec:
+{{ include "ea-noi-layer.spec.security.context" (list .)| indent 6 }}
+      affinity:
+        nodeAffinity:
+{{ include "ea-noi-layer.nodeAffinity.arch" . | indent 10 }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secret }}
+      volumes:
+      - name: ca
+        secret:
+          secretName: {{ .Values.global.authentication.objectserver.secretRelease | default .Release.Name }}{{ .Values.global.authentication.objectserver.certificateTemplate | default "-omni-certificate-secret" }}
+          items:
+          - key: ROOTCA
+            path: rootca 
+          - key: INTERMEDIATECA
+            path: intermediatepath
+      initContainers:
+      - name: waitforobjserv
+        volumeMounts:
+        - name: ca
+          mountPath: /ca
+          readOnly: true
+        image: {{ include "image.docker.repository" . }}/{{ .Values.noieagateway.image.name }}{{ include "ibmeanoilayer.image.suffix" (list . .Values.noieagateway.image) }}
+        resources:
+{{ include "ibmeanoilayer.comp.size.data" (list . "initContainer" "resources") | indent 10 }}
+        command: ["sh", "-c", "i=1; export OMNIHOME=/home/netcool/IBM/core/omnibus; /home/netcool/setup_interfaces ${NCO_AGGP_SERVICE_NAME} ${NCO_AGGP_PORT_NUMBER} ${NCO_AGGB_SERVICE_NAME} ${NCO_AGGB_PORT_NUMBER} ; until ${OMNIHOME}/bin/nco_ping ${NCO_VIRTUAL_PAIR_NAME}; do echo waiting for primary object server $i; i=$((i+1)); sleep 2; done;"]
+        env:
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eanoi.noieagateway.application" . | indent 8 }}
+{{ include "eanoi.common.defaults" . | indent 8 }}
+{{ include "ea-noi-layer.container.security.context" (list .)| indent 8 }}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - name: {{ $deploymentName }}
+        image:  {{ include "image.docker.repository" . }}/{{ .Values.noiactionservice.image.name }}{{ include "ibmeanoilayer.image.suffix" (list . .Values.noiactionservice.image) }}
+        resources:
+{{ include "ibmeanoilayer.comp.size.data" (list . "noiactionservice" "resources") | indent 10 }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        volumeMounts:
+        - name: ca
+          mountPath: /ca
+          readOnly: true
+        ports:
+        - containerPort: {{ .Values.noiactionservice.port }}
+          name: unsecure-port
+          protocol: TCP
+        - containerPort: {{ .Values.noiactionservice.portSsl }}
+          name: ssl-port
+          protocol: TCP
+{{ include "eventanalytics.probe.smonitor.all" . | indent 8 }}
+{{ include "ea-noi-layer.container.security.context" (list .)| indent 8 }}
+        env:
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eanoi.noiactionservice.application" . | indent 8 }}
+{{ include "eanoi.common.source" . | indent 8 }}
+{{ include "eanoi.common.defaults" . | indent 8 }}
+{{- end -}}

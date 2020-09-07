@@ -1,0 +1,134 @@
+{{- include "sch.config.init" (list . "ibm-ea-asm-normalizer.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.normalizerstreams.name -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+
+{{- if .Values.global.integrations.asm.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $serviceName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+{{- if  eq .Values.global.environmentSize  "size0" }}
+  replicas: 1
+{{- else if eq .Values.global.environmentSize "size1" }}
+  replicas: 2
+{{- else }}
+  replicas: 1
+{{- end }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+    spec:
+      {{- if .Values.global.image.secret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      volumes:
+      - name: kafka-streams-tmp
+        emptyDir: {}
+      {{ if  eq .Values.global.environmentSize  "size0" }}
+      - name: health
+        emptyDir:
+          medium: Memory
+      {{- end }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      initContainers:
+      - name: waitforkafka
+        image: {{ include "ibm-ea-asm-normalizer.image.url" (list . .Values.image) | quote }}
+        command: ["sh", "-c", "i=1; until getent hosts ${KAFKA_HOST}; do echo waiting for kafka $i; i=$((i+1)); sleep 2; done;"]
+        resources:
+{{ include "ibm-ea-asm-normalizer.comp.size.data" (list . "normalizerstreams" "resources") | indent 10 }}        
+{{ include "ibm-ea-asm-normalizer.psp.securityContext" . | indent 8}}
+{{ include "ibm-ea-asm-normalizer.normalizerstreams.environment" . | indent 8 }}
+        {{- if  eq .Values.global.environmentSize  "size0" }}
+      - name: getinitialbrokerip
+        image: {{ include "ibm-ea-asm-normalizer.image.url" (list . .Values.image) | quote }}
+        resources:
+{{ include "ibm-ea-asm-normalizer.comp.size.data" (list . "normalizerstreams" "resources") | indent 10 }}
+{{ include "ibm-ea-asm-normalizer.psp.securityContext" . | indent 8}}
+{{ include "ibm-ea-asm-normalizer.normalizerstreams.environment" . | indent 8 }}
+        command:
+          - "sh"
+          - "-c"
+          - "getent hosts ${KAFKA_HOST} | awk '{print $1}' > /health/noi-kafka-ip ; echo Resolved kafka brokers to be used in bootstrap.servers as $(cat /health/noi-kafka-ip)"
+        volumeMounts:
+          - mountPath: /health
+            name: health
+        {{- end }}
+      - name: waitforinputtopicstatus
+        image: {{ include "ibm-ea-asm-normalizer.image.url" (list . .Values.kafkaImage) | quote }}
+        command: ["sh", "-c", "i=1; until /opt/kafka/bin/kafka-topics.sh --list --zookeeper  ${ZOOKEEPER_URL} | grep ${KAFKA_ASM_STATUS_TOPIC_NAME}; do echo $(date): waiting for input topic $KAFKA_ASM_STATUS_TOPIC_NAME $i - Check ASM is connected to kafka; i=$((i+1)); sleep 30; done;"]
+        resources:
+{{ include "ibm-ea-asm-normalizer.comp.size.data" (list . "normalizerstreams" "resources") | indent 10 }}        
+{{ include "ibm-ea-asm-normalizer.psp.securityContext" . | indent 8}}
+{{ include "ibm-ea-asm-normalizer.normalizerstreams.environment" . | indent 8 }}
+      - name: waitforinputtopicevents
+        image: {{ include "ibm-ea-asm-normalizer.image.url" (list . .Values.kafkaImage) | quote }}
+        command: ["sh", "-c", "i=1; until /opt/kafka/bin/kafka-topics.sh --list --zookeeper  ${ZOOKEEPER_URL} | grep ${KAFKA_EVENTS_TOPIC_NAME}; do echo $(date): waiting for input topic $KAFKA_EVENTS_TOPIC_NAME $i - Check the inference service can connect to kafka; i=$((i+1)); sleep 30; done;"]
+        resources:
+{{ include "ibm-ea-asm-normalizer.comp.size.data" (list . "normalizerstreams" "resources") | indent 10 }}        
+{{ include "ibm-ea-asm-normalizer.psp.securityContext" . | indent 8}}
+{{ include "ibm-ea-asm-normalizer.normalizerstreams.environment" . | indent 8 }}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - name: normalizer
+        image: {{ include "ibm-ea-asm-normalizer.image.url" (list . .Values.image) | quote }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        volumeMounts:
+        - name: kafka-streams-tmp
+          mountPath: /tmp/kafka-streams
+          {{ if  eq .Values.global.environmentSize  "size0" }}
+        - name: health
+          mountPath: /health
+          {{ end }}
+        ports:
+        - containerPort: 8080
+          name: unsecure-port
+          protocol: TCP
+        livenessProbe:
+         exec:
+          command:
+          - "sh"
+          - "-c"
+          - >-
+            {{- if  eq .Values.global.environmentSize  "size0" }}
+            CURRENT_RESOLUTION=$(getent hosts ${KAFKA_HOST} | awk '{print $1}') ; INITIAL_RESOLUTION=$(cat /health/noi-kafka-ip) ; echo $(date): Current Resolution - $CURRENT_RESOLUTION ,  Cached Resolution  $INITIAL_RESOLUTION &&  if [ ${CURRENT_RESOLUTION} != ${INITIAL_RESOLUTION} ]; then echo restarting to flush sticky DNS resolutions && echo $CURRENT_RESOLUTION > /health/noi-kafka-ip && exit 1; else echo $(date) liveliness probe passed;  fi
+            {{ else }}
+             ls /opt/app/asm-normalizer-service*
+            {{ end }}
+         initialDelaySeconds: 1
+         failureThreshold: 1
+         timeoutSeconds: 30
+         periodSeconds: 50
+        readinessProbe:
+         exec:
+          command:
+          - "sh"
+          - "-c"
+          - >-
+             echo "Executing command for readiness props..." &&
+             ls /opt/app/asm-normalizer-service*
+         initialDelaySeconds: 1
+         periodSeconds: 2
+        resources:
+{{ include "ibm-ea-asm-normalizer.comp.size.data" (list . "normalizerstreams" "resources") | indent 10 }}
+{{ include "ibm-ea-asm-normalizer.normalizerstreams.environment" . | indent 8 }}
+{{ include "ibm-ea-asm-normalizer.psp.securityContext" . | indent 8}}
+{{- end -}}

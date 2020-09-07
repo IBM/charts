@@ -1,0 +1,46 @@
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1")  }}
+{{- if not .Values.global.tls.certificate.useExistingSecret -}}
+{{- /*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/ -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+
+{{-  $externalHostname := printf "%s.%s.%s" "netcool"  .Release.Name  .Values.global.cluster.fqdn }}
+
+apiVersion: certmanager.k8s.io/v1alpha1
+kind: Certificate
+metadata:
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+  name: {{ .Release.Name }}-netcool-tls-certificate
+spec:
+{{- if eq .Values.global.ingress.prefixWithReleaseName  true }}
+  commonName: {{ $externalHostname }}
+{{- else }}
+  commonName:  {{ .Values.global.cluster.fqdn }}
+{{ end }}
+  dnsNames:
+  {{- if eq .Values.global.ingress.prefixWithReleaseName  true }}
+  - {{ $externalHostname }}
+{{- else }}
+  - {{ .Values.global.cluster.fqdn }}
+{{ end }}
+  issuerRef:
+    kind: ClusterIssuer
+    name: icp-ca-issuer
+  secretName: {{ .Release.Name }}-netcool-tls-secret
+{{- end -}}
+{{- end -}}
