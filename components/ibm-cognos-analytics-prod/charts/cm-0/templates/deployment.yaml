@@ -1,4 +1,4 @@
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ template "name" . }}
@@ -6,6 +6,10 @@ metadata:
     {{- include "cognos-analytics.labels" . | indent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  progressDeadlineSeconds: {{ .Values.global.deployment.progressDeadlineSeconds }}
+  selector:
+    matchLabels:
+      {{- include "cognos-analytics.matchlabels" . | indent 6 }}
   strategy:
 {{ toYaml .Values.strategy | indent 4 }}
   template:
@@ -16,7 +20,7 @@ spec:
         checksum/filebeat-config-map: {{ include (print $.Template.BasePath "/filebeat-configmap.yaml") . | sha256sum }}
         {{- include "metering.annotations" . | indent 8 }}
     spec:
-{{ toYaml .Values.global.pod.hostOptinons | indent 6 }}
+{{ toYaml .Values.global.pod.hostOptions | indent 6 }}
 
       {{- if .Values.serviceAccountName }}
       serviceAccountName: {{ .Values.serviceAccountName }}
@@ -27,12 +31,13 @@ spec:
       affinity:
       {{- include "deploymentNodeAffinity" . | indent 6 }}
 
-      {{- if .Values.imagePullSecrets }}
+     {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
-{{ toYaml .Values.imagePullSecrets | indent 8 }}
-      {{- end }}
+        - name: {{ toYaml .Values.global.imagePullSecrets }}
+     {{- end }}
       securityContext:
             {{- include "podSecurityContext" . | indent 8 }}
+
       initContainers:
         - name: wait-for-cs
           {{ include "imageBaseSpec" . }}
@@ -47,21 +52,50 @@ spec:
           {{ include "imageSpec" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
-            - name: CS_USERNAME
-              value: db2inst1
+            {{- if .Values.global.cs.databaseExternal }}
+            - name: CS_DB_PROVIDER
+              value: {{ .Values.global.cs.databaseProvider | quote }}
+            - name: CS_SERVICE_NAME
+              value: {{ .Values.global.cs.databaseHost | quote }}
+            - name: CS_SERVICE_PORT
+              value: {{ .Values.global.cs.databasePort | quote }}
+            - name: CS_DATABASE
+              value: {{ .Values.global.cs.databaseName | quote }}
+            - name: CS_TLS_ENABLED
+              value: {{ .Values.global.cs.databaseTlsEnabled | quote }}
+            - name: CS_ORACLE_SPECIFIER
+              value: {{ .Values.global.cs.databaseOracleNet8 | quote }}
+            - name: CS_CERT_ALIAS
+              value: {{ .Values.global.cs.databaseCertAlias | quote }}
+            {{- else }}
+            - name: CS_TLS_ENABLED
+              value: "false"
+            - name: CS_SERVICE_PORT
+              value: "50000"
+            {{- end }}
             - name: AUTH_ANON
               value: {{ .Values.cm.anonymous | quote }}
             - name: ICP4DATA
               value: {{ .Values.global.icp4Data | quote }}
+            - name: SUBJECT_ALTERNATIVE_NAMES
+              value: {{ .Values.global.sanDNSName | quote }}
             {{- if .Values.global.icp4Data }}
             - name: ICP4DATA_CERT_URI
-              value: {{ .Values.global.icp4DataJWTCert | quote }}
+              value: {{ printf "%s.%s%s" .Values.global.icp4DataJWTCertHost .Values.global.zenControlPlaneNamespace  .Values.global.icp4DataJWTCertPath | quote }}
+            {{- end }}
+            - name: TLS_ENABLED
+              value: {{ .Values.global.tls.enabled | quote }}
+            {{- if not .Values.global.tls.enabled }}
+            - name: REGISTRY_VALUE_DATASET
+              value: "http://ds:9301"
             {{- end }}
             - name: INITIAL_ADMIN_CAMID
 {{ include "jwt.camid" . | indent 14 }}
           ports:
             - containerPort: {{ .Values.service.internalPort }}
               name: dispatcher-port
+            - containerPort: {{ .Values.serviceLog.internalPort }}
+              name: logserver-port
           livenessProbe:
             tcpSocket:
               port: dispatcher-port
@@ -69,7 +103,11 @@ spec:
             periodSeconds: 60
           readinessProbe:
             exec:
-              command: [ 'sh', '-c', 'curl -s -o /dev/null -w "%{http_code}" http://localhost:${CM_0_SERVICE_PORT}/bi/ | grep 200 || exit 1' ]
+              command: {{ if .Values.global.tls.enabled -}}
+                [ 'sh', '-c', 'curl -s -o /dev/null -w "%{http_code}" --insecure https://${HOSTNAME}:${CM_0_SERVICE_PORT}/bi/ | grep 200 || exit 1' ]
+                       {{- else -}}
+                [ 'sh', '-c', 'curl -s -o /dev/null -w "%{http_code}" http://${HOSTNAME}:${CM_0_SERVICE_PORT}/bi/ | grep 200 || exit 1' ]
+                       {{- end }}
             initialDelaySeconds: 240
             periodSeconds: 60
             timeoutSeconds: 10
@@ -77,7 +115,7 @@ spec:
             - name: logs-volume
               mountPath: /home/ibmuser/cognos/analytics/logs
             - name: secret-volume
-              mountPath: /creds/db2
+              mountPath: /creds/cs
               readOnly: true
             - name: configuration-data-volume
               mountPath: /home/ibmuser/cognos/analytics/configuration/data
@@ -88,6 +126,18 @@ spec:
             - name: artifacts-volume
               mountPath: /data/deployment
               subPath: artifacts-data/deployment/files
+            - name: artifacts-volume
+              mountPath: /home/ibmuser/cognos/analytics/drivers
+              subPath: artifacts-data/drivers/jdbc
+              readOnly: true
+            - name: artifact-config-data-volume
+              mountPath: /config
+              subPath: config-data
+              readOnly: true
+            - name: artifacts-volume
+              mountPath: /home/ibmuser/cscerts
+              subPath: artifacts-data/certificate/files
+              readOnly: true
           resources:
 {{ toYaml .Values.cm.resources | indent 12 }}
           securityContext:
@@ -120,6 +170,13 @@ spec:
       {{- if .Values.global.pvc.artifacts.enabled }}
         persistentVolumeClaim:
           claimName: {{ template "artifacts-pvc.name" . }}-pvc
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      - name: artifact-config-data-volume
+      {{- if .Values.global.pvc.artifacts.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ template "artifacts-config-data-pvc.name" . }}-pvc
       {{- else }}
         emptyDir: {}
       {{- end }}

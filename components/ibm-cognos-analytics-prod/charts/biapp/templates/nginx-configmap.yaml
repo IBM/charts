@@ -71,15 +71,18 @@ data:
     # SSL Settings
     ##
 
-    ssl_protocols TLSv1 TLSv1.1 TLSv1.2; # Dropping SSLv3, ref: POODLE
+    ssl_protocols TLSv1.2; # Dropping SSLv3, ref: POODLE
     ssl_prefer_server_ciphers on;
+    ssl_session_timeout 10m;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+    ssl_session_cache   shared:SSL:1m;
 
     ##
     # Logging Settings
     ##
 {{- $valid := list "main" "custom" "nocookies" }}
 {{- if not (has .Values.global.http.logformat.formatName $valid) }}
-    access_log /dev/stdout nocookies;
+    access_log /var/nginx-data/access_log nocookies;
 {{- else }}
     access_log /dev/stdout {{ .Values.global.http.logformat.formatName }};
 {{- end }}
@@ -101,15 +104,28 @@ data:
     # Virtual Host Configs
     ##
     server {
+  {{- if .Values.global.tls.enabled }}
+      listen 9301 ssl;
+  {{- if .Values.global.nginxProxyIPV6 }}
+      listen [::]:9301 ssl;
+  {{- end }}
+  {{- else }}
       listen 9301;
+  {{- if .Values.global.nginxProxyIPV6 }}
       listen [::]:9301;
-      server_name biapp;
+  {{- end }}
+  {{- end }}
+      server_name _;
       underscores_in_headers on;
       chunked_transfer_encoding on;
-
+      keepalive_timeout 70;
+  {{- if .Values.global.tls.enabled }}
+      ssl_certificate       {{ .Values.global.tls.secretCertPath }}
+      ssl_certificate_key   {{ .Values.global.tls.secretKeyPath }}
+  {{- end }}
       location /nginx-health {
         access_log off;
-        return 200 "healthy\n";
+        return 200 "OK\n";
         # because default content-type is application/octet-stream,
         # browser will offer to "save the file"...
         # the next line allows you to see it in the browser so you can test
@@ -118,8 +134,16 @@ data:
 
       location / {
         proxy_set_header   X-Forwarded-For $remote_addr;
-        proxy_set_header   Host $http_host;
+        proxy_set_header   Host "ds";
+  {{- if .Values.global.tls.enabled }}
+        proxy_pass         "https://ds:9301";
+        proxy_ssl_certificate       {{ .Values.global.tls.secretCertPath }}
+        proxy_ssl_certificate_key   {{ .Values.global.tls.secretKeyPath }}
+        proxy_ssl_trusted_certificate {{ .Values.global.tls.cognosCAPath }}
+        proxy_ssl_protocols TLSv1.2;
+  {{- else }}
         proxy_pass         "http://ds:9301";
+  {{- end }}
         proxy_http_version 1.1;
         proxy_read_timeout     300;
         proxy_connect_timeout  300;
@@ -130,5 +154,55 @@ data:
 
     }
 
+    server {
+  {{- if .Values.global.tls.enabled }}
+      listen 5031 ssl;
+  {{- if .Values.global.nginxProxyIPV6 }}
+      listen [::]:5031 ssl;
+  {{- end }}
+  {{- else }}
+      listen 5031;
+  {{- if .Values.global.nginxProxyIPV6 }}
+      listen [::]:5031;
+  {{- end }}
+  {{- end }}
+      server_name _;
+      underscores_in_headers on;
+      chunked_transfer_encoding on;
+      keepalive_timeout 70;
+  {{- if .Values.global.tls.enabled }}
+      ssl_certificate       {{ .Values.global.tls.secretCertPath }}
+      ssl_certificate_key   {{ .Values.global.tls.secretKeyPath }}
+  {{- end }}
+
+      location /noop {
+        return 200 "OK\n";
+        # because default content-type is application/octet-stream,
+        # browser will offer to "save the file"...
+        # the next line allows you to see it in the browser so you can test
+        add_header Content-Type text/plain;
+      }
+
+      location / {
+        proxy_set_header   X-Forwarded-For $remote_addr;
+        proxy_set_header   Host "rs";
+  {{- if .Values.global.tls.enabled }}
+        proxy_pass         "https://rs:5031";
+        proxy_ssl_certificate       {{ .Values.global.tls.secretCertPath }}
+        proxy_ssl_certificate_key   {{ .Values.global.tls.secretKeyPath }}
+        proxy_ssl_trusted_certificate {{ .Values.global.tls.cognosCAPath }}
+        proxy_ssl_protocols TLSv1.2;
+  {{- else }}
+        proxy_pass         "http://rs:5031";
+  {{- end }}
+        proxy_http_version 1.1;
+        proxy_read_timeout     300;
+        proxy_connect_timeout  300;
+        # Remove the Connection header if the client sends it,
+        # it could be "close" to close a keepalive connection
+        proxy_set_header Connection "";
+      }
+
+    }
     }
 

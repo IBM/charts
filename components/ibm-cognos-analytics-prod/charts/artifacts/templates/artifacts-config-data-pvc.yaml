@@ -1,0 +1,29 @@
+{{- if .Values.global.pvc.artifacts.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ template "artifacts-config-data-pvc.name" . }}-pvc
+  labels:
+    {{- include "cognos-analytics.labels" . | indent 4 }}
+spec:
+  {{- if eq .Values.artifactsPvc.pvProvisioning "NoStorageClass" }}
+  # disable dynamic provisioning (static provision)
+  storageClassName: ""
+  {{- if .Values.artifactsPvc.selector.label }}
+  # use selectors in the binding processl
+  selector:
+    matchExpressions:
+      - {key: {{ .Values.artifactsPvc.selector.label }}, operator: In, values: [{{ .Values.artifactsPvc.selector.value }}]}
+  {{- end }}
+  {{- else if eq .Values.artifactsPvc.pvProvisioning "DefaultStorageClass" }}
+  # dynamic provsioning using default provisioner. Don't specify storageClassName
+  {{- else if eq .Values.artifactsPvc.pvProvisioning "NamedStorageClass" }}
+  # dynamic provsioning using named storage class.
+  storageClassName: {{.Values.artifactsPvc.storageClassName | quote}}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{.Values.artifactsPvc.size}}
+  accessModes:
+    - {{.Values.artifactsPvc.accessModes}}
+{{- end -}}

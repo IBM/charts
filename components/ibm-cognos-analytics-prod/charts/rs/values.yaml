@@ -5,11 +5,8 @@ replicaCount: 1
 image:
   repository: /ca-endor-k8s/
   name: rsvp
-  tag: 1.6.4
+  tag: 1.7.3
   pullPolicy: IfNotPresent
-
-imagePullSecrets:
-  - name: artifactorypullsecret
 
 service:
   name: port-5031-8080-rs
@@ -27,24 +24,21 @@ serviceBackend:
   externalPort: 5031
   internalPort: 5031
 ingress:
-  enabled: true
+  enabled: false
   # Used to create an Ingress record.
   hosts:
-#    - cognos.ibm.com
+    #    - cognos.ibm.com
     - rs
   annotations:
-#    kubernetes.io/ingress.class: haproxy
-#    ingress.kubernetes.io/rewrite-target: /
+    #    kubernetes.io/ingress.class: haproxy
+    #    ingress.kubernetes.io/rewrite-target: /
     kubernetes.io/ingress.class: canginx
     nginx.ingress.kubernetes.io/affinity: "cookie"
     nginx.ingress.kubernetes.io/session-cookie-name: "rsingresscookie"
     nginx.ingress.kubernetes.io/session-cookie-path: "/"
 
   tls:
-    # Secrets must be manually created in the namespace.
-    # - secretName: chart-example-tls
-    #   hosts:
-    #     - chart-example.local
+  # Secrets must be manually created in the namespace.
 route:
   enabled: false
   # Used to create an Ingress record.
@@ -57,6 +51,11 @@ route:
     # - secretName: chart-example-tls
     #   hosts:
     #     - chart-example.local
+    terminatation: edge
+    key: |-
+      {{ include (print .Values.global.tls.secretKeyPath) . }}
+    certificate: |-
+      {{ include (print .Values.global.tls.chainedCMCertPath) . }}
 strategy:
   rollingUpdate:
     maxSurge: 25%
@@ -72,11 +71,11 @@ rs:
     # resources, such as Minikube. If you do want to specify resources, uncomment the following
     # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
     limits:
-      cpu: 2
-      memory: 4Gi
+      cpu: "2"
+      memory: "4Gi"
     requests:
-      cpu: 1
-      memory: 1Gi
+      cpu: "1"
+      memory: "1Gi"
   hpa:
     enabled: true
     minReplicas: 1

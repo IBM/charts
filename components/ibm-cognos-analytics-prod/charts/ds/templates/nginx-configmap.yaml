@@ -71,8 +71,12 @@ data:
     # SSL Settings
     ##
 
-    ssl_protocols TLSv1 TLSv1.1 TLSv1.2; # Dropping SSLv3, ref: POODLE
+    ssl_protocols TLSv1.2; # Dropping SSLv3, ref: POODLE
     ssl_prefer_server_ciphers on;
+    ssl_session_timeout 10m;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+    ssl_session_cache   shared:SSL:1m;
+
 
     ##
     # Logging Settings
@@ -101,12 +105,26 @@ data:
     # Virtual Host Configs
     ##
     server {
+  {{- if .Values.global.tls.enabled }}
+      listen 9300 ssl;
+  {{- if .Values.global.nginxProxyIPV6 }}
+      listen [::]:9300 ssl;
+  {{- end }}
+  {{- else }}
       listen 9300;
+  {{- if .Values.global.nginxProxyIPV6 }}
       listen [::]:9300;
+  {{- end }}
+  {{- end }}
       server_name ds;
       underscores_in_headers on;
       chunked_transfer_encoding on;
-
+      keepalive_timeout 70;
+  {{- if .Values.global.tls.enabled }}
+      ssl_certificate       {{ .Values.global.tls.secretCertPath }}
+      ssl_certificate_key   {{ .Values.global.tls.secretKeyPath }}
+      ssl_trusted_certificate {{ .Values.global.tls.cognosCAPath }}
+  {{- end }}
       location /nginx-health {
         access_log off;
         return 200 "healthy\n";
@@ -118,8 +136,16 @@ data:
 
       location / {
         proxy_set_header   X-Forwarded-For $remote_addr;
-        proxy_set_header   Host $http_host;
+        proxy_set_header   Host biapp;
+  {{- if .Values.global.tls.enabled }}
+        proxy_pass         "https://biapp:9300";
+        proxy_ssl_certificate       {{ .Values.global.tls.secretCertPath }}
+        proxy_ssl_certificate_key   {{ .Values.global.tls.secretKeyPath }}
+        proxy_ssl_trusted_certificate {{ .Values.global.tls.cognosCAPath }}
+        proxy_ssl_protocols TLSv1.2;
+  {{- else }}
         proxy_pass         "http://biapp:9300";
+  {{- end }}
         proxy_http_version 1.1;
         proxy_read_timeout     300;
         proxy_connect_timeout  300;
@@ -131,6 +157,8 @@ data:
 
     }
 
+    # legacy java audit logging sends to localhost:9362, so forward to biapp log server.
+    # legacy c++ audit logging sends to cm-0:9362 because cm-0 is sharing ipfclientconfig.xml
     stream {
 
     log_format proxy '$remote_addr [$time_local] '
@@ -145,7 +173,9 @@ data:
 
     server {
         listen 9362;
+  {{- if .Values.global.nginxProxyIPV6 }}
         listen [::]:9362;
+  {{- end }}
         proxy_pass log_server;
     }
     }
