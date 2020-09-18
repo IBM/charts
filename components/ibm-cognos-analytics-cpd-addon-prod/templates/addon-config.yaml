@@ -37,25 +37,10 @@ data:
         "vendor": "IBM",
         "versions": {
           "{{- .Chart.Version }}": {
+            "helm_location":{
+                  "chart_path": []
+             },
             "description": "IBM Cognos Analytics addon in IBM Cloud Private for Data",
-            "helm_location": {
-              "chart_path": [
-                {{- $rname := .Release.Name -}}
-                {{- $sname := .Values.serviceNameRoute -}}
-                {{- $local := dict "first" true -}}
-                {{- $scheme := "https" -}}
-                {{- $port := "8443" -}}
-                {{- if not .Values.global.tls.enabled -}}
-                {{- $scheme := "http" -}}
-                {{- $port := "8080" -}}
-                {{- end -}}
-                {{- range .Files.Lines "packages.txt" }}
-                {{- if not $local.first -}},{{- end }}
-                {{ printf "%s://%s-%s:%s/charts/cognos-analytics-service/%s" $scheme $rname $sname $port .  | quote }}
-                {{- $_ := set $local "first" false -}}
-                {{- end }}
-              ]
-            },
             "state": "installed",
             "details": {
             }
@@ -65,25 +50,6 @@ data:
     }
   nginx.conf: |
     underscores_in_headers on;
-
-    location ~ ^/cognosanalytics/artifacts/(.*)$ {
-                  error_log  /dev/stdout notice;
-                  access_log /dev/stdout;
-                  rewrite_log on;
-                  access_by_lua_file /nginx_data/checkjwt.lua;
-                  proxy_http_version 1.1;
-                  proxy_set_header Host $host;
-                  {{- if .Values.global.tls.enabled }}
-                  proxy_pass https://artifacts.{{ .Release.Namespace }}.svc.cluster.local:3000/$1$is_args$args;
-                  {{- else -}}
-                  proxy_pass http://artifacts.{{ .Release.Namespace }}.svc.cluster.local:3000/$1$is_args$args;
-                  {{- end }}
-                  proxy_read_timeout     300s;
-                  proxy_send_timeout     300s;
-                  proxy_connect_timeout  300s;
-                  client_body_buffer_size     3m;
-                  client_max_body_size 15m;
-    }
 
     location ~ ^/cognosanalytics/bi/(.*)$ {
         error_log  /dev/stdout notice;
