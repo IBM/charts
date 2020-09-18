@@ -80,12 +80,10 @@ disktype: "ssd"
 cpu:  "intel"
 */}}
 {{- define "additionalNodeAffinity" }}
-        {{- range $key, $val := .additionalNodeAffn }}
-        {{- if and $key $val }}
-        - key: {{ $key }}
+        {{- range .additionalNodeAffn }}
+        - key: {{ .key }}
           operator: In
           values:
-          - {{ $val }}
-        {{- end }}
+          - {{ .value }}
         {{- end }}
 {{- end }}

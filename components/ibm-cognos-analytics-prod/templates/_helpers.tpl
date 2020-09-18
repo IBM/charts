@@ -5,8 +5,8 @@ Expand the name of the chart.
 {{- define "name" -}}
 {{ if .Values.global.icp4Data }}
 {{- $name := default .Chart.Name .Values.nameOverride -}}
-{{- $instanceid := default 97000079.0 .Values.zenServiceInstanceId -}}
-{{- printf "ca%.0f-%s" $instanceid $name | trunc 48 | trimSuffix "-" -}}
+{{- $instanceid := default 9700000000079 .Values.global.zenServiceInstanceId -}}
+{{- printf "ca%s-%s" ($instanceid | int64 | toString) $name | trunc 48 | trimSuffix "-" -}}
 {{ else }}
 {{- default .Chart.Name .Values.nameOverride | trunc 48 | trimSuffix "-" -}}
 {{ end }}
@@ -19,8 +19,8 @@ We truncate at 48 chars because some Kubernetes name fields are limited to this 
 */}}
 {{- define "role-name" -}}
 {{ if .Values.global.icp4Data }}
-{{- $instanceid := default 97000079.0 .Values.zenServiceInstanceId -}}
-{{- printf "ca%.0f-%s" $instanceid "role" | trunc 48 | trimSuffix "-" -}}
+{{- $instanceid := default 9700000000079 .Values.global.zenServiceInstanceId -}}
+{{- printf "ca%s-%s" ($instanceid | int64 | toString) "role" | trunc 48 | trimSuffix "-" -}}
 {{ else }}
 {{- printf "%s-%s" .Release.Name "role" | trunc 48 | trimSuffix "-" -}}
 {{ end }}
@@ -34,8 +34,8 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 {{- define "fullname" -}}
 {{- $name := default .Chart.Name .Values.nameOverride -}}
 {{ if .Values.global.icp4Data }}
-{{- $instanceid := default 97000079.0 .Values.zenServiceInstanceId -}}
-{{- printf "ca%.0f-%s" $instanceid $name | trunc 48 | trimSuffix "-" -}}
+{{- $instanceid := default 9700000000079 .Values.global.zenServiceInstanceId -}}
+{{- printf "ca%s-%s" ($instanceid | int64 | toString) $name | trunc 48 | trimSuffix "-" -}}
 {{ else }}
 {{- printf "%s-%s" .Release.Name $name | trunc 48 | trimSuffix "-" -}}
 {{ end }}
@@ -54,8 +54,8 @@ Expand the name of the chart.
 {{- define "cognos.analytics.name" -}}
 {{ if .Values.global.icp4Data }}
 {{- $name := default .Chart.Name .Values.nameOverride -}}
-{{- $instanceid := default 97000079.0 .Values.zenServiceInstanceId -}}
-{{- printf "ca%.0f-%s" $instanceid $name | trunc 48 | trimSuffix "-" -}}
+{{- $instanceid := default 9700000000079 .Values.global.zenServiceInstanceId -}}
+{{- printf "ca%s-%s" ($instanceid | int64 | toString) $name | trunc 48 | trimSuffix "-" -}}
 {{ else }}
 {{- default .Chart.Name .Values.nameOverride | trunc 48 | trimSuffix "-" -}}
 {{ end }}
@@ -68,8 +68,8 @@ We truncate at 24 chars because some Kubernetes name fields are limited to this 
 {{- define "cognos.analytics.fullname" -}}
 {{- $name := default .Chart.Name .Values.nameOverride -}}
 {{ if .Values.global.icp4Data }}
-{{- $instanceid := default 97000079.0 .Values.zenServiceInstanceId -}}
-{{- printf "ca%.0f-%s" $instanceid $name | trunc 48 | trimSuffix "-" -}}
+{{- $instanceid := default 9700000000079 .Values.global.zenServiceInstanceId -}}
+{{- printf "ca%s-%s" ($instanceid | int64 | toString) $name | trunc 48 | trimSuffix "-" -}}
 {{ else }}
 {{- printf "%s-%s" .Release.Name $name | trunc 48 | trimSuffix "-" -}}
 {{ end }}
@@ -83,20 +83,67 @@ app: {{ template "name" . }}
 chart: {{ .Chart.Name }}
 release: {{ .Release.Name }}
 heritage: {{ .Release.Service }}
+{{ if .Values.global.icp4Data }}
+{{- $instanceid := default 9700000000079 .Values.global.zenServiceInstanceId -}}
+{{- printf "icpdsupport/serviceInstanceId: '%s'" ($instanceid | int64 | toString) -}}
+{{ end }}
 {{- end -}}
 
 {{/*
-Create the artifacts-pvc name. This pvc is shared by all charts. 
+Create a standard set of selector matchlabels to be used by all objects
+*/}}
+{{- define "cognos-analytics.matchlabels" }}
+app: {{ template "name" . }}
+chart: {{ .Chart.Name }}
+release: {{ .Release.Name }}
+heritage: {{ .Release.Service }}
+{{ if .Values.global.icp4Data }}
+{{- $instanceid := default 9700000000079 .Values.global.zenServiceInstanceId -}}
+{{- printf "icpdsupport/serviceInstanceId: '%s'" ($instanceid | int64 | toString) -}}
+{{ end }}
+{{- end -}}
+
+{{/*
+Create the artifacts-pvc name. This pvc is shared by all charts.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 */}}
 {{- define "artifacts-pvc.name" -}}
 {{ if .Values.global.icp4Data }}
-{{- $instanceid := default 97000079.0 .Values.zenServiceInstanceId -}}
-{{- printf "ca%.0f-%s" $instanceid "artifacts" | trunc 48 | trimSuffix "-" -}}
+{{- $instanceid := default 9700000000079 .Values.global.zenServiceInstanceId -}}
+{{- printf "ca%s-%s" ($instanceid | int64 | toString) "artifacts" | trunc 48 | trimSuffix "-" -}}
 {{ else }}
 {{- printf "%s-%s" .Release.Name "artifacts" | trunc 48 | trimSuffix "-" -}}
 {{ end }}
 {{- end -}}
+
+
+{{/*
+Create the artifacts-config-data-pvc name. This pvc is shared by CM chart for configuration such as LDAP settings.
+We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
+*/}}
+{{- define "artifacts-config-data-pvc.name" -}}
+{{ if .Values.global.icp4Data }}
+{{- $instanceid := default 9700000000079 .Values.global.zenServiceInstanceId -}}
+{{- printf "ca%s-%s" ($instanceid | int64 | toString) "artifacts-config-data" | trunc 48 | trimSuffix "-" -}}
+{{ else }}
+{{- printf "%s-%s" .Release.Name "artifacts-config-data" | trunc 48 | trimSuffix "-" -}}
+{{ end }}
+{{- end -}}
+
+{{/*
+Create the artifacts-config-pvc name. This pvc is only used by Artifact service to persists its data.
+We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
+*/}}
+{{- define "artifacts-config-pvc.name" -}}
+{{ if .Values.global.icp4Data }}
+{{- $instanceid := default 9700000000079 .Values.global.zenServiceInstanceId -}}
+{{- printf "ca%s-%s" ($instanceid | int64 | toString) "artifacts-config" | trunc 48 | trimSuffix "-" -}}
+{{ else }}
+{{- printf "%s-%s" .Release.Name "artifacts-config" | trunc 48 | trimSuffix "-" -}}
+{{ end }}
+{{- end -}}
+
+
 
 {{/*
 Create the configuration-overrides-pvc name. This pvc is shared by all charts.
@@ -104,8 +151,8 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 */}}
 {{- define "configuration-overrides-pvc.name" -}}
 {{ if .Values.global.icp4Data }}
-{{- $instanceid := default 97000079.0 .Values.zenServiceInstanceId -}}
-{{- printf "ca%.0f-%s" $instanceid "config-overrides" | trunc 48 | trimSuffix "-" -}}
+{{- $instanceid := default 9700000000079 .Values.global.zenServiceInstanceId -}}
+{{- printf "ca%s-%s" ($instanceid | int64 | toString) "config-overrides" | trunc 48 | trimSuffix "-" -}}
 {{ else }}
 {{- printf "%s-%s" .Release.Name "config-overrides" | trunc 48 | trimSuffix "-" -}}
 {{ end }}
@@ -117,8 +164,8 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 */}}
 {{- define "configuration-data-pvc.name" -}}
 {{ if .Values.global.icp4Data }}
-{{- $instanceid := default 97000079.0 .Values.zenServiceInstanceId -}}
-{{- printf "ca%.0f-%s" $instanceid "config-data" | trunc 48 | trimSuffix "-" -}}
+{{- $instanceid := default 9700000000079 .Values.global.zenServiceInstanceId -}}
+{{- printf "ca%s-%s" ($instanceid | int64 | toString) "config-data" | trunc 48 | trimSuffix "-" -}}
 {{ else }}
 {{- printf "%s-%s" .Release.Name "config-data" | trunc 48 | trimSuffix "-" -}}
 {{ end }}
@@ -130,8 +177,8 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 */}}
 {{- define "gateway-ingress.path" -}}
 {{ if .Values.global.icp4Data }}
-{{- $instanceid := default 97000079.0 .Values.zenServiceInstanceId -}}
-{{- printf "ca%.0f-%s" $instanceid "gateway" | trunc 48 | trimSuffix "-" -}}
+{{- $instanceid := default 9700000000079 .Values.global.zenServiceInstanceId -}}
+{{- printf "ca%s-%s" ($instanceid | int64 | toString) "gateway" | trunc 48 | trimSuffix "-" -}}
 {{ else }}
 {{- printf "%s-%s" .Release.Name "gateway" | trunc 48 | trimSuffix "-" -}}
 {{ end }}
@@ -142,8 +189,8 @@ Define the content store secrets name used by all charts that need it.
 */}}
 {{- define "cs-secrets-name" -}}
 {{ if .Values.global.icp4Data }}
-{{- $instanceid := default 97000079.0 .Values.zenServiceInstanceId -}}
-{{- printf "ca%.0f-%s" $instanceid "cs-creds" | trunc 48 | trimSuffix "-" -}}
+{{- $instanceid := default 9700000000079 .Values.global.zenServiceInstanceId -}}
+{{- printf "ca%s-%s" ($instanceid | int64 | toString) "cs-creds" | trunc 48 | trimSuffix "-" -}}
 {{ else }}
 {{- printf "%s-%s" .Release.Name "cs-creds" | trunc 48 | trimSuffix "-" -}}
 {{ end }}
@@ -293,17 +340,17 @@ uncomment this section for PPA charts, can be removed in github.com charts
 {{/*
 Helper template to define pod annotations for metering
 */}}
-{{- define "metering.annotations" -}}
-  {{- if .Values.global.icp4Data }}
-productID: ICP4D-addon-{{ .Values.global.metering.productID }}
-productName: {{ .Values.global.metering.productName }}
-productVersion: {{ .Values.global.metering.productVersion }}
-  {{- else }}
-productID: {{ .Values.global.metering.productID }}
-productName: {{ .Values.global.metering.productName }}
-productVersion: {{ .Values.global.metering.productVersion }}
-  {{ end }}
-{{- end -}}
+{{- define "metering.annotations" }}
+productName: "IBM Cloud Pak for Data Cognos Analytics Advanced"
+productID: ed38a4bc92be42e98a3d1dcdfad529e0
+productVersion: 11.1.7
+productMetric: "VIRTUAL_PROCESSOR_CORE"
+productChargedContainers: All
+productCloudpakRatio: "1:1"
+cloudpakName: "IBM Cloud Pak for Data"
+cloudpakId: eb9998dcc5d24e3eb5b6fb488f750fe2
+cloudpakVersion: "3.0.1"
+{{ end }}
 
 {{/*
 Create a CAMID.
@@ -321,7 +368,9 @@ Create an image spec
 */}}
 {{- define "imageSpec" -}}
   {{- if .Values.global.icp4Data -}}
-image: {{ .Values.docker_registry_prefix }}/{{ .Values.image.name }}:{{ .Values.image.tag }}{{ .Values.global.branchTag }}
+image: {{ .Values.global.docker_registry_prefix }}/{{ .Values.image.name }}:{{ .Values.image.tag }}{{ .Values.global.branchTag }}
+  {{- else if .Values.global.repositoryValueOff -}}
+image: {{ .Values.global.image.registry }}/{{ .Values.image.name }}:{{ .Values.image.tag }}{{ .Values.global.branchTag }}
   {{- else -}}
 image: {{ .Values.global.image.registry }}{{ .Values.image.repository }}{{ .Values.image.name }}:{{ .Values.image.tag }}{{ .Values.global.branchTag }}
   {{- end -}}
@@ -332,7 +381,9 @@ Create an image filebeat spec
 */}}
 {{- define "imageFilebeatSpec" -}}
   {{- if .Values.global.icp4Data -}}
-image: {{ .Values.docker_registry_prefix }}/{{ .Values.global.filebeat.image.name }}:{{ .Values.global.filebeat.image.tag }}
+image: {{ .Values.global.docker_registry_prefix }}/{{ .Values.global.filebeat.image.name }}:{{ .Values.global.filebeat.image.tag }}
+  {{- else if .Values.global.repositoryValueOff -}}
+image: {{ .Values.global.filebeat.image.registry }}/{{ .Values.global.filebeat.image.name }}:{{ .Values.global.filebeat.image.tag }}
   {{- else -}}
 image: {{ .Values.global.filebeat.image.registry }}{{ .Values.global.filebeat.image.repository }}{{ .Values.global.filebeat.image.name }}:{{ .Values.global.filebeat.image.tag }}
   {{- end -}}
@@ -343,8 +394,24 @@ Create an image base spec
 */}}
 {{- define "imageBaseSpec" -}}
   {{- if .Values.global.icp4Data -}}
-image: {{ .Values.docker_registry_prefix }}/{{ .Values.global.base.image.name }}:{{ .Values.global.base.image.tag }}{{ .Values.global.branchTag }}
+image: {{ .Values.global.docker_registry_prefix }}/{{ .Values.global.base.image.name }}:{{ .Values.global.base.image.tag }}{{ .Values.global.branchTag }}
+  {{- else if .Values.global.repositoryValueOff -}}
+image: {{ .Values.global.image.registry }}/{{ .Values.global.base.image.name }}:{{ .Values.global.base.image.tag }}{{ .Values.global.branchTag }}
   {{- else -}}
 image: {{ .Values.global.image.registry }}{{ .Values.global.base.image.repository }}{{ .Values.global.base.image.name }}:{{ .Values.global.base.image.tag }}{{ .Values.global.branchTag }}
   {{- end -}}
 {{- end -}}
+
+{{/*
+Create an image base java spec
+*/}}
+{{- define "imageJavaSpec" -}}
+  {{- if .Values.global.icp4Data -}}
+image: {{ .Values.global.docker_registry_prefix }}/{{ .Values.global.java.image.name }}:{{ .Values.global.java.image.tag }}{{ .Values.global.branchTag }}
+  {{- else if .Values.global.repositoryValueOff -}}
+image: {{ .Values.global.image.registry }}/{{ .Values.global.java.image.name }}:{{ .Values.global.java.image.tag }}{{ .Values.global.branchTag }}
+  {{- else -}}
+image: {{ .Values.global.image.registry }}{{ .Values.global.java.image.repository }}{{ .Values.global.java.image.name }}:{{ .Values.global.java.image.tag }}{{ .Values.global.branchTag }}
+  {{- end -}}
+{{- end -}}
+

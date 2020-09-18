@@ -1,0 +1,122 @@
+{{- if .Values.global.cs.databaseExternal -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "name" . }}
+  labels:
+  {{- include "cognos-analytics.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  progressDeadlineSeconds: {{ .Values.global.deployment.progressDeadlineSeconds }}
+  selector:
+    matchLabels:
+      {{- include "cognos-analytics.matchlabels" . | indent 6 }}
+  strategy:
+  {{ toYaml .Values.strategy | indent 4 }}
+  template:
+    metadata:
+      labels:
+      {{- include "cognos-analytics.labels" . | indent 8 }}
+      annotations:
+    {{- include "metering.annotations" . | indent 8 }}
+    spec:
+{{ toYaml .Values.global.pod.hostOptions | indent 6 }}
+
+      affinity:
+      {{- include "deploymentNodeAffinity" . | indent 6 }}
+
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ toYaml .Values.global.imagePullSecrets }}
+      {{- end }}
+      securityContext:
+{{- include "podSecurityContext" . | indent 8 }}
+      initContainers:
+       - name: wait-for-artifacts
+         {{ include "imageJavaSpec" . }}
+         imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+         # copy the script from readonly volume (config map) to write volume and execute
+         command: [ 'sh', '-c', 'cp /scripts-readonly/wait-for-artifacts.sh /scripts; cd /scripts; chmod +x wait-for-artifacts.sh; ./wait-for-artifacts.sh' ]
+         resources:
+{{ toYaml .Values.global.java.image.resources | indent 12 }}
+         securityContext:
+{{ toYaml .Values.global.container.ibmuser.securityContext | indent 12 }}
+
+        # config-map allows read-only volume. The pattern we are following here is to copy content (wait-for-artifacts.sh ) from read-only volume
+        # and copy into a write volume (empty-dir) to execute.
+         volumeMounts:
+         - name: wait-for-artifacts-script
+           mountPath: /scripts-readonly
+         - name: script-volume
+           mountPath: /scripts
+      containers:
+       - name: {{ .Chart.Name }}
+         {{ include "imageJavaSpec" . }}
+         imagePullPolicy: {{ .Values.image.pullPolicy }}
+         env:
+          - name: CS_DB_PROVIDER
+            value: {{ .Values.global.cs.databaseProvider | quote }}
+          - name: CS_SERVICE_NAME
+            value: {{ .Values.global.cs.databaseHost | quote }}
+          - name: CS_SERVICE_PORT
+            value: {{ .Values.global.cs.databasePort | quote }}
+          - name: CS_DATABASE
+            value: {{ .Values.global.cs.databaseName | quote }}
+          - name: CS_TLS_ENABLED
+            value: {{ .Values.global.cs.databaseTlsEnabled | quote }}
+          - name: CS_ORACLE_SPECIFIER
+            value: {{ .Values.global.cs.databaseOracleNet8 | quote }}
+          - name: CS_CERT_ALIAS
+            value: {{ .Values.global.cs.databaseCertAlias | quote }}
+          - name: CONNECTION_WAIT_TIME_IN_SECONDS
+            value: "600"
+          - name: MAX_CONNECTION_TRIES
+            value: "-1"
+         readinessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - "ps aux | grep 'java' || exit 1"
+          initialDelaySeconds: 30
+         livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - "ps aux | grep 'java' || exit 1"
+          initialDelaySeconds: 40
+         volumeMounts:
+          - name: artifacts-volume
+            mountPath: /home/ibmuser/cognos/analytics/drivers
+            subPath: artifacts-data/drivers/jdbc
+            readOnly: true
+          - name: artifacts-volume
+            mountPath: /home/ibmuser/cscerts
+            subPath: artifacts-data/certificate/files
+            readOnly: true
+          - name: secret-volume
+            mountPath: /creds/cs
+         resources:
+{{ toYaml .Values.global.java.image.resources | indent 12 }}
+         securityContext:
+{{ toYaml .Values.global.container.ibmuser.securityContext | indent 12 }}
+      hostname: {{ .Chart.Name }}
+      volumes:
+      - name: secret-volume
+        secret:
+          secretName: {{ template "cs-secrets-name" . }}
+      - name: artifacts-volume
+        {{- if .Values.global.pvc.artifacts.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ template "artifacts-pvc.name" . }}-pvc
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      - name: wait-for-artifacts-script
+        configMap:
+          name: {{ template "fullname" . }}-wait-for-artifacts-config
+      - name: script-volume
+        emptyDir: {}
+{{- end -}}

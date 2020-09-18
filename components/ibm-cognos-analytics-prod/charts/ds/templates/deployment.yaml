@@ -1,4 +1,4 @@
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ template "name" . }}
@@ -6,6 +6,10 @@ metadata:
     {{- include "cognos-analytics.labels" . | indent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  progressDeadlineSeconds: {{ .Values.global.deployment.progressDeadlineSeconds }}
+  selector:
+    matchLabels:
+      {{- include "cognos-analytics.matchlabels" . | indent 6 }}
   strategy:
 {{ toYaml .Values.strategy | indent 4 }}
   template:
@@ -17,7 +21,7 @@ spec:
         checksum/filebeat-config-map: {{ include (print $.Template.BasePath "/filebeat-configmap.yaml") . | sha256sum }}
         {{- include "metering.annotations" . | indent 8 }}
     spec:
-{{ toYaml .Values.global.pod.hostOptinons | indent 6 }}
+{{ toYaml .Values.global.pod.hostOptions | indent 6 }}
 
       {{- if .Values.serviceAccountName }}
       serviceAccountName: {{ .Values.serviceAccountName }}
@@ -28,9 +32,9 @@ spec:
       affinity:
       {{- include "deploymentNodeAffinity" . | indent 6 }}
 
-      {{- if .Values.imagePullSecrets }}
+      {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
-{{ toYaml .Values.imagePullSecrets | indent 8 }}
+        - name: {{ toYaml .Values.global.imagePullSecrets }}
       {{- end }}
       securityContext:
             {{- include "podSecurityContext" . | indent 8 }}
@@ -48,8 +52,14 @@ spec:
           {{ include "imageSpec" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
-            - name: CS_PASSWORD
-              value: ""
+            - name: TLS_ENABLED
+              value: {{ .Values.global.tls.enabled | quote }}
+            - name: SUBJECT_ALTERNATIVE_NAMES
+              value: {{ .Values.global.sanDNSName | quote }}
+            {{- if not .Values.global.tls.enabled }}
+            - name: REGISTRY_VALUE_DATASET
+              value: "http://ds:9301"
+            {{- end }}
           ports:
             - containerPort: {{ .Values.service.internalPort }}
           volumeMounts:
@@ -61,14 +71,19 @@ spec:
             - name: configuration-overrides-volume
               mountPath: /home/ibmuser/analytics-overrides
               subPath: analytics-overrides
-            - name: jdbc-driver-volume
-              mountPath: /data/drivers
-              subPath: artifacts-data/drivers/jdbc
             - name: nginx-proxy-config
               mountPath: /home/ibmuser/nginx.conf
               subPath: nginx.conf
             - name: nginx-data-volume
               mountPath: /var/nginx-data
+            - name: artifacts-volume
+              mountPath: /home/ibmuser/cognos/analytics/drivers
+              subPath: artifacts-data/drivers/jdbc
+              readOnly: true
+            - name: artifacts-volume
+              mountPath: /home/ibmuser/cscerts
+              subPath: artifacts-data/certificate/files
+              readOnly: true
           livenessProbe:
             tcpSocket:
               port: {{ .Values.service.externalPort }}
@@ -112,7 +127,7 @@ spec:
       {{- else }}
         emptyDir: {}
       {{- end }}
-      - name: jdbc-driver-volume
+      - name: artifacts-volume
       {{- if .Values.global.pvc.artifacts.enabled }}
         persistentVolumeClaim:
           claimName: {{ template "artifacts-pvc.name" . }}-pvc

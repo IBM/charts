@@ -1,4 +1,4 @@
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ template "name" . }}
@@ -6,6 +6,10 @@ metadata:
     {{- include "cognos-analytics.labels" . | indent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  progressDeadlineSeconds: {{ .Values.global.deployment.progressDeadlineSeconds }}
+  selector:
+    matchLabels:
+      {{- include "cognos-analytics.matchlabels" . | indent 6 }}
   strategy:
 {{ toYaml .Values.strategy | indent 4 }}
   template:
@@ -17,7 +21,7 @@ spec:
         checksum/filebeat-config-map: {{ include (print $.Template.BasePath "/filebeat-configmap.yaml") . | sha256sum }}
         {{- include "metering.annotations" . | indent 8 }}
     spec:
-{{ toYaml .Values.global.pod.hostOptinons | indent 6 }}
+{{ toYaml .Values.global.pod.hostOptions | indent 6 }}
 
       {{- if .Values.serviceAccountName }}
       serviceAccountName: {{ .Values.serviceAccountName }}
@@ -28,10 +32,10 @@ spec:
       affinity:
       {{- include "deploymentNodeAffinity" . | indent 6 }}
 
-      {{- if .Values.imagePullSecrets }}
+     {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
-{{ toYaml .Values.imagePullSecrets | indent 8 }}
-      {{- end }}
+         - name: {{ toYaml .Values.global.imagePullSecrets }}
+     {{- end }}
       securityContext:
             {{- include "podSecurityContext" . | indent 8 }}
       initContainers:
@@ -57,8 +61,45 @@ spec:
             - containerPort: {{ .Values.serviceCompute.internalPort }}
               name: compute-port
           env:
-            - name: CS_USERNAME
-              value: db2inst1
+            {{- if .Values.global.cs.databaseExternal }}
+            - name: CS_DB_PROVIDER
+              value: {{ .Values.global.cs.databaseProvider | quote }}
+            - name: CS_SERVICE_NAME
+              value: {{ .Values.global.cs.databaseHost | quote }}
+            - name: CS_SERVICE_PORT
+              value: {{ .Values.global.cs.databasePort | quote }}
+            - name: CS_DATABASE
+              value: {{ .Values.global.cs.databaseName | quote }}
+            - name: CS_TLS_ENABLED
+              value: {{ .Values.global.cs.databaseTlsEnabled | quote }}
+            - name: CS_ORACLE_SPECIFIER
+              value: {{ .Values.global.cs.databaseOracleNet8 | quote }}
+            - name: CS_CERT_ALIAS
+              value: {{ .Values.global.cs.databaseCertAlias | quote }}
+            {{- else }}
+            - name: CS_TLS_ENABLED
+              value: "false"
+            - name: CS_SERVICE_PORT
+              value: "50000"
+            {{- end }}
+            - name: ICP4DATA
+              value: {{ .Values.global.icp4Data | quote }}
+            - name: SUBJECT_ALTERNATIVE_NAMES
+              value: {{ .Values.global.sanDNSName | quote }}
+            - name: TLS_ENABLED
+              value: {{ .Values.global.tls.enabled | quote }}
+            {{- if not .Values.global.tls.enabled }}
+            - name: REGISTRY_VALUE_DATASET
+              value: "http://ds:9301"
+            - name: REGISTRY_VALUE_FLIPPER
+              value: "http://cm-0:9300"
+            - name: REGISTRY_VALUE_CONFIG
+              value: "http://cm-0:9300"
+            - name: REGISTRY_VALUE_GLUG
+              value: "http://cm-0:9300"
+            - name: REGISTRY_VALUE_ARTIFACT
+              value: "http://artifacts:3000"
+            {{- end }}
           livenessProbe:
             tcpSocket:
               port: dispatcher-port
@@ -66,14 +107,18 @@ spec:
             periodSeconds: 60
           readinessProbe:
             exec:
-              command: [ 'sh', '-c', 'curl -s -o /dev/null -w "%{http_code}" http://localhost:${BISRVR_SERVICE_PORT}/bi/ | grep 200 || exit 1' ]
+              command: {{ if .Values.global.tls.enabled -}}
+                         [ 'sh', '-c', 'curl -s -o /dev/null -w "%{http_code}" --insecure https://localhost:${BISRVR_SERVICE_PORT}/bi/ | grep 200 || exit 1' ]
+                       {{- else -}}
+                         [ 'sh', '-c', 'curl -s -o /dev/null -w "%{http_code}" http://localhost:${BISRVR_SERVICE_PORT}/bi/ | grep 200 || exit 1' ]
+                       {{- end }}
             initialDelaySeconds: 360
             periodSeconds: 60
           volumeMounts:
             - name: logs-volume
               mountPath: /home/ibmuser/cognos/analytics/logs
             - name: secret-volume
-              mountPath: /creds/db2
+              mountPath: /creds/cs
               readOnly: true
             - name: configuration-overrides-volume
               mountPath: /home/ibmuser/analytics-overrides
@@ -86,6 +131,14 @@ spec:
               subPath: nginx.conf
             - name: nginx-data-volume
               mountPath: /var/nginx-data
+            - name: artifacts-volume
+              mountPath: /home/ibmuser/cognos/analytics/drivers
+              subPath: artifacts-data/drivers/jdbc
+              readOnly: true
+            - name: artifacts-volume
+              mountPath: /home/ibmuser/cscerts
+              subPath: artifacts-data/certificate/files
+              readOnly: true
           resources:
 {{ toYaml .Values.biapp.resources | indent 12 }}
           securityContext:
@@ -116,6 +169,13 @@ spec:
       {{- if .Values.global.pvc.artifacts.enabled }}
         persistentVolumeClaim:
           claimName: {{ template "configuration-overrides-pvc.name" . }}-pvc
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      - name: artifacts-volume
+      {{- if .Values.global.pvc.artifacts.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ template "artifacts-pvc.name" . }}-pvc
       {{- else }}
         emptyDir: {}
       {{- end }}

@@ -1,4 +1,5 @@
-apiVersion: extensions/v1beta1
+{{- if not .Values.global.cs.databaseExternal -}}
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ template "name" . }}
@@ -6,19 +7,25 @@ metadata:
     {{- include "cognos-analytics.labels" . | indent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  progressDeadlineSeconds: {{ .Values.global.deployment.progressDeadlineSeconds }}
+  selector:
+    matchLabels:
+      {{- include "cognos-analytics.matchlabels" . | indent 6 }}
   strategy:
 {{ toYaml .Values.strategy | indent 4 }}
   template:
     metadata:
       labels:
+        component: "db2"
+        type: "engine"
         {{- include "cognos-analytics.labels" . | indent 8 }}
       annotations:
         checksum/cs-secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
-        checksum/db2-entrypoint-config-map: {{ include (print $.Template.BasePath "/db2-entrypoint-configmap.yaml") . | sha256sum }}
         {{- include "metering.annotations" . | indent 8 }}
     spec:
-{{ toYaml .Values.global.pod.hostOptinons | indent 6 }}
-
+      hostIPC: true
+      hostNetwork: false
+      hostPID: false
       {{- if .Values.cs.serviceAccountName }}
       serviceAccountName: {{ .Values.cs.serviceAccountName }}
       {{- else }}
@@ -26,14 +33,61 @@ spec:
       {{- end }}
 
       affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: "kubernetes.io/hostname"
+              labelSelector:
+                matchLabels:
+                  component: "db2"
+            - topologyKey: "kubernetes.io/hostname"
+              labelSelector:
+                matchLabels:
+                  type: "engine"
       {{- include "deploymentNodeAffinity" . | indent 6 }}
       {{- include "additionalNodeAffinity" ( .Values.cs ) | indent 6 }}
-      {{- if .Values.imagePullSecrets }}
+      {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
-{{ toYaml .Values.imagePullSecrets | indent 8 }}
+{{ toYaml .Values.global.imagePullSecrets | indent 8 }}
       {{- end }}
       securityContext:
 {{ toYaml .Values.global.pod.db2user.securityContext | indent 12 }}
+      initContainers:
+        - name: init-db2
+          {{ include "imageSpec" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ['sh','-c','/var/db2_setup/lib/set_kernel_params.sh']
+          volumeMounts:
+          - name: proc
+            mountPath: /host/proc
+            readOnly:  false
+          - name: sys
+            mountPath: /host/proc/sys
+            readOnly: false
+          securityContext:
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - SYS_RESOURCE
+                - IPC_OWNER
+                - SYS_NICE
+                - SETGID
+                - SETUID
+                - DAC_OVERRIDE
+                - CHOWN
+                - FSETID
+                - FOWNER
+                - SETFCAP
+                - SETPCAP
+                - NET_BIND_SERVICE
+                - SYS_CHROOT
+                - KILL
+                - AUDIT_WRITE
+                - MKNOD
+                - NET_RAW
+            allowPrivilegeEscalation: true
+            privileged: true
+            readOnlyRootFilesystem: false
 
       containers:
         - name: {{ .Chart.Name }}
@@ -42,74 +96,103 @@ spec:
           env:
             - name: LICENSE
               value: accept
-            - name: GL_USEGLU
-              value: "1"
-            - name: DB_LOCALE
-              value: en_us.utf8
+            - name: DB2PORT
+              value: "50000"
+            - name: DB2SSLPORT
+              value: "51000"
+            - name: DB2INSTANCE
+              value: db2inst1
             - name: DB2INST1_PASSWORD
-              value: ""
-            - name: COGNOS_PASSWORD
-              value: ""
-            - name: KEYSTORE_CHANGE_PASSWORD
-              value: "{{ .Values.keystore_change_password }}"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "cs-secrets-name" . }}
+                  key: content_store_password
             - name: KEY_STORE_DEFAULT_PASSWORD
-              value: "{{ .Values.key_store_default_password }}"
-            - name: KEYSTORE_OLD_PASSWORD
-              value: ""
-            - name: KEYSTORE_BACKUP_NEW_PASSWORD
-              value: "{{ .Values.keystore_backup_new_password }}"
-            - name: KEYSTORE_VERIFY_NEW_PASSWORD
-              value: "{{ .Values.keystore_verify_new_password }}"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "cs-secrets-name" . }}
+                  key: cognos_password
           ports:
             - containerPort: {{ .Values.service.internalPort }}
-          command: ["sh", "-c", "/home/db2inst1/cs-startup.sh"]
           readinessProbe:
             exec:
               command:
               - sh
               - -c
-              - /bin/waca/db2run.sh '/home/db2inst1/sqllib/bin/db2gcf -s'
+              - su - $DB2INSTANCE  -c '/database/config/$DB2INSTANCE/sqllib/bin/db2gcf -s && test -f /database/data/db2inst1/create-dbs-completed'
             initialDelaySeconds: 340
             periodSeconds: 30
             failureThreshold: 15
-            timeoutSeconds: 10
+            timeoutSeconds: 20
           livenessProbe:
             exec:
               command:
               - sh
               - -c
-              - /bin/waca/db2run.sh '/home/db2inst1/sqllib/adm/db2pd -alldbs'
+              - su - $DB2INSTANCE  -c '/database/config/$DB2INSTANCE/sqllib/bin/db2gcf -s'
             initialDelaySeconds: 400
             periodSeconds: 30
             failureThreshold: 50
-            timeoutSeconds: 10
+            timeoutSeconds: 20
           securityContext:
             capabilities:
               drop:
                 - ALL
-              add: ["SYS_RESOURCE", "IPC_OWNER", "SYS_NICE", "SETGID", "SETUID", "DAC_OVERRIDE"]
+              add:
+                - SYS_RESOURCE
+                - IPC_OWNER
+                - SYS_NICE
+                - SETGID
+                - SETUID
+                - DAC_OVERRIDE
+                - CHOWN
+                - FSETID
+                - FOWNER
+                - SETFCAP
+                - SETPCAP
+                - NET_BIND_SERVICE
+                - SYS_CHROOT
+                - KILL
+                - AUDIT_WRITE
+                - MKNOD
+                - NET_RAW
             allowPrivilegeEscalation: true
-            privileged: false
+            privileged: true
             readOnlyRootFilesystem: false
           volumeMounts:
+            - name: artifacts-volume
+              mountPath: /artifacts-data
+              subPath: artifacts-data
             - name: secret-volume
-              mountPath: /creds/db2
-            - name: db2-entrypoint
-              mountPath: /home/db2inst1/cs-startup.sh
-              subPath: cs-startup.sh
+              mountPath: /creds/cs
             - name: datadir
-              mountPath: "/data"
+              mountPath: /database
+            - mountPath: /sys/fs/cgroup
+              name: cgvol
+              readOnly: true
           resources:
 {{ toYaml .Values.cs.resources | indent 12 }}
       hostname: db2server1
       volumes:
+      - name: cgvol
+        hostPath:
+          path: /sys/fs/cgroup
+      - name: sys
+        hostPath:
+          path: /proc/sys
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: artifacts-volume
+      {{- if .Values.global.pvc.artifacts.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ template "artifacts-pvc.name" . }}-pvc
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
       - name: secret-volume
         secret:
           secretName: {{ template "cs-secrets-name" . }}
-      - name: db2-entrypoint
-        configMap:
-          name: {{ template "fullname" . }}-entrypoint-config-map
-          defaultMode: 0755
       - name: datadir
 {{- if .Values.csPvc.enabled }}
         persistentVolumeClaim:
@@ -121,3 +204,4 @@ spec:
       nodeSelector:
 {{ toYaml .Values.nodeSelector | indent 8 }}
     {{- end }}
+{{- end -}}

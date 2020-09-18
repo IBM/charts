@@ -1,4 +1,4 @@
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ template "name" . }}
@@ -7,6 +7,10 @@ metadata:
     {{- include "cognos-analytics.labels" . | indent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  progressDeadlineSeconds: {{ .Values.global.deployment.progressDeadlineSeconds }}
+  selector:
+    matchLabels:
+      {{- include "cognos-analytics.matchlabels" . | indent 6 }}
   strategy:
 {{ toYaml .Values.strategy | indent 4 }}
   template:
@@ -18,7 +22,7 @@ spec:
         checksum/filebeat-config-map: {{ include (print $.Template.BasePath "/filebeat-configmap.yaml") . | sha256sum }}
         {{- include "metering.annotations" . | indent 8 }}
     spec:
-{{ toYaml .Values.global.pod.hostOptinons | indent 6 }}
+{{ toYaml .Values.global.pod.hostOptions | indent 6 }}
 
       {{- if .Values.serviceAccountName }}
       serviceAccountName: {{ .Values.serviceAccountName }}
@@ -29,10 +33,10 @@ spec:
       affinity:
       {{- include "deploymentNodeAffinity" . | indent 6 }}
 
-      {{- if .Values.imagePullSecrets }}
+    {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
-{{ toYaml .Values.imagePullSecrets | indent 8 }}
-      {{- end }}
+        - name: {{ toYaml .Values.global.imagePullSecrets }}
+    {{- end }}
       securityContext:
             {{- include "podSecurityContext" . | indent 8 }}
       initContainers:
@@ -51,8 +55,10 @@ spec:
           {{ include "imageSpec" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
-            - name: CS_PASSWORD
-              value: ""
+            - name: TLS_ENABLED
+              value: {{ .Values.global.tls.enabled | quote }}
+            - name: SUBJECT_ALTERNATIVE_NAMES
+              value: {{ .Values.global.sanDNSName | quote }}
           ports:
             - containerPort: {{ .Values.serviceBackend.internalPort }}
           readinessProbe:
