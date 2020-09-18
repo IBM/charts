@@ -71,17 +71,20 @@ data:
     # SSL Settings
     ##
 
-    ssl_protocols TLSv1 TLSv1.1 TLSv1.2; # Dropping SSLv3, ref: POODLE
+    ssl_protocols TLSv1.2; # Dropping SSLv3, ref: POODLE
     ssl_prefer_server_ciphers on;
+    ssl_session_timeout 10m;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+    ssl_session_cache   shared:SSL:1m;
 
     ##
     # Logging Settings
     ##
 {{- $valid := list "main" "custom" "nocookies" }}
 {{- if not (has .Values.global.http.logformat.formatName $valid) }}
-    access_log /dev/stdout nocookies;
+    access_log /var/nginx-data/access_log nocookies;
 {{- else }}
-    access_log /dev/stdout {{ .Values.global.http.logformat.formatName }};
+    access_log /var/nginx-data/access_log {{ .Values.global.http.logformat.formatName }};
 {{- end }}
 
     ##
@@ -101,15 +104,27 @@ data:
     # Virtual Host Configs
     ##
     server {
+  {{- if .Values.global.tls.enabled }}
+      listen 9300 ssl;
+  {{- if .Values.global.nginxProxyIPV6 }}
+      listen [::]:9300 ssl;
+  {{- end }}
+  {{- else }}
       listen 9300;
+  {{- if .Values.global.nginxProxyIPV6 }}
       listen [::]:9300;
-      server_name rs;
+  {{- end }}
+  {{- end }}
+      server_name _;
       underscores_in_headers on;
       chunked_transfer_encoding on;
-
-      location /nginx-health {
-        access_log off;
-        return 200 "healthy\n";
+      keepalive_timeout 70;
+  {{- if .Values.global.tls.enabled }}
+      ssl_certificate       {{ .Values.global.tls.secretCertPath }}
+      ssl_certificate_key   {{ .Values.global.tls.secretKeyPath }}
+  {{- end }}
+      location /noop {
+        return 200 "OK\n";
         # because default content-type is application/octet-stream,
         # browser will offer to "save the file"...
         # the next line allows you to see it in the browser so you can test
@@ -118,8 +133,16 @@ data:
 
       location / {
         proxy_set_header   X-Forwarded-For $remote_addr;
-        proxy_set_header   Host $http_host;
+        proxy_set_header   Host "biapp";
+  {{- if .Values.global.tls.enabled }}
+        proxy_pass         "https://biapp:9300";
+        proxy_ssl_certificate       {{ .Values.global.tls.secretCertPath }}
+        proxy_ssl_certificate_key   {{ .Values.global.tls.secretKeyPath }}
+        proxy_ssl_trusted_certificate {{ .Values.global.tls.cognosCAPath }}
+        proxy_ssl_protocols TLSv1.2;
+  {{- else }}
         proxy_pass         "http://biapp:9300";
+  {{- end }}
         proxy_http_version 1.1;
         proxy_read_timeout     300;
         proxy_connect_timeout  300;
@@ -128,9 +151,10 @@ data:
         proxy_set_header Connection "";
       }
     }
-
     }
 
+    # legacy java audit logging sends to localhost:9362, so forward to biapp log server.
+    # legacy c++ audit logging sends to cm-0:9362 because cm-0 is sharing ipfclientconfig.xml
     stream {
 
     log_format proxy '$remote_addr [$time_local] '
@@ -145,7 +169,9 @@ data:
 
     server {
         listen 9362;
+  {{- if .Values.global.nginxProxyIPV6 }}
         listen [::]:9362;
+  {{- end }}
         proxy_pass log_server;
     }
     }
