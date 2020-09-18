@@ -1,4 +1,4 @@
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: "{{ .Chart.Name }}-deployment"
@@ -6,6 +6,10 @@ metadata:
     chart: '{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}'
 spec:
   replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: "{{ .Chart.Name }}-selector"
+      release: {{ .Release.Name }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -26,7 +30,7 @@ spec:
 {{ toYaml . | indent 8 }}
     {{- end }}
 {{ if .Values.icp4Data }}
-      serviceAccountName: cpd-viewer-sa
+      serviceAccountName: cpd-editor-sa
 {{ else }}
       serviceAccountName: {{  .Chart.Name }}-service-account
       {{- if .Values.imagePullSecrets }}
@@ -57,6 +61,8 @@ spec:
         volumeMounts:
         - name: internal-tls
           mountPath: /etc/internal-tls
+        - name: ca-charts
+          mountPath: /ca-instances
         resources:
 {{ toYaml .Values.image.resources | indent 12 }}
         securityContext:
@@ -79,6 +85,9 @@ spec:
             value: {{ .Values.global.tls.secretKeyPath | quote }}
         command: [ "/app/run-dev" ]
       volumes:
+      - name: ca-charts
+        persistentVolumeClaim:
+          claimName: {{ template "addon-pvc.name" . }}-pvc
       - name: internal-tls
         secret:
           defaultMode: 420
