@@ -29,7 +29,37 @@ oc create secret docker-registry entitledregistry-secret --docker-username=cp --
 
 3. The agent must have an UrbanCode Deploy server or relay to connect to.
 
-4. A PersistentVolume that will hold the conf directory for the UrbanCode Deploy agent is required.  If your cluster supports dynamic volume provisioning you will not need to create a PersistentVolume (PV) or PersistentVolumeClaim (PVC) before installing this chart.  If your cluster does not support dynamic volume provisioning, you will need to either ensure a PV is available or you will need to create one before installing this chart.  You can optionally create the PVC to bind it to a specific PV, or you can let the chart create a PVC and bind to any available PV that meets the required size and storage class.  Sample YAML to create the PV and PVC are provided below.
+4. Secret - A Kubernetes Secret object must be created to store the password for all keystores used by the product.  The password is retrieved during Helm chart installation.  The secret can be named 'HelmReleaseName-secrets' where 'HelmReleaseName' is the release name you give when installing this Helm chart or you can create a secret with any name and pass the name as the Helm Chart parameter value 'secret.name'.
+
+* Through the oc/kubectl CLI, create a Secret object in the target namespace.
+    Generate the base64 encoded value for the password for all keystores used by the product.
+
+```
+echo -n 'MyKeystorePassword' | base64
+TXlLZXlzdG9yZVBhc3N3b3Jk
+```
+
+Create a file named secret.yaml with the following contents, using your Helm Relese name and base64 encoded values.
+
+```
+apiVersion: v1
+kind: Secret
+metadata:
+  name: MyRelease-secrets
+type: Opaque
+data:
+  keystorepassword: TXlLZXlzdG9yZVBhc3N3b3Jk
+```
+
+Create the Secret using oc apply
+
+```
+oc apply -f ./secret.yaml
+```
+
+Delete or shred the secret.yaml file.
+
+5. A PersistentVolume that will hold the conf directory for the UrbanCode Deploy agent is required.  If your cluster supports dynamic volume provisioning you will not need to create a PersistentVolume (PV) or PersistentVolumeClaim (PVC) before installing this chart.  If your cluster does not support dynamic volume provisioning, you will need to either ensure a PV is available or you will need to create one before installing this chart.  You can optionally create the PVC to bind it to a specific PV, or you can let the chart create a PVC and bind to any available PV that meets the required size and storage class.  Sample YAML to create the PV and PVC are provided below.
 
 ```
 apiVersion: v1

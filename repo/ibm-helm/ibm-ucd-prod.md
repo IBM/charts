@@ -29,16 +29,18 @@ oc create secret docker-registry entitledregistry-secret --docker-username=cp --
 
 3. Database - UrbanCode Deploy requires a database.  The database may be running in your cluster or outside of your cluster.  This database  must be configured as described in [Installing the server database](https://www.ibm.com/support/knowledgecenter/SS4GSP_7.0.5/com.ibm.udeploy.install.doc/topics/DBinstall.html) before installing this Helm chart.  The database parameters used to connect to the database are required properties of this Helm chart.  The Apache Derby database type is not supported when running the UrbanCode Deploy server in a Kubernetes cluster.
 
-4. Secret - A Kubernetes Secret object must be created to store the initial UCD administrator password and the password used to access the database mentioned above.  These passwords are retrieved during Helm chart installation.  The secret can be named 'HelmReleaseName-secrets' where 'HelmReleaseName' is the release name you give when installing this Helm chart or you can create a secret with any name and pass the name as the Helm Chart parameter value 'secret.name'.
+4. Secret - A Kubernetes Secret object must be created to store the initial UCD administrator password, the password used to access the database mentioned above, and the password for all keystores used by the product.  These passwords are retrieved during Helm chart installation.  The secret can be named 'HelmReleaseName-secrets' where 'HelmReleaseName' is the release name you give when installing this Helm chart or you can create a secret with any name and pass the name as the Helm Chart parameter value 'secret.name'.
 
 * Through the oc/kubectl CLI, create a Secret object in the target namespace.
-    Generate the base64 encoded values for the initial UCD admin password and database passwords.
+    Generate the base64 encoded values for the initial UCD admin password, database password, and the password for all keystores used by the product.
 
 ```
 echo -n 'admin' | base64
 YWRtaW4=
 echo -n 'MyDbpassword' | base64
 TXlEYnBhc3N3b3Jk
+echo -n 'MyKeystorePassword' | base64
+TXlLZXlzdG9yZVBhc3N3b3Jk
 ```
 
 Create a file named secret.yaml with the following contents, using your Helm Relese name and base64 encoded values.
@@ -52,6 +54,7 @@ type: Opaque
 data:
   initpassword: YWRtaW4=
   dbpassword: TXlEYnBhc3N3b3Jk
+  keystorepassword: TXlLZXlzdG9yZVBhc3N3b3Jk
 ```
 
 Create the Secret using oc apply
