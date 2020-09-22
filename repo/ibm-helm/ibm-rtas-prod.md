@@ -19,18 +19,17 @@ IBM Rational Test Automation Server provides the home for capabilities that prev
 * This chart deploys a single instance of IBM Rational Test Automation Server
 
 ## Prerequisites
-
 Kubernetes cluster:
 
 
-* [RedHat OpenShift Container Platform](https://docs.openshift.com/container-platform/4.2/release_notes/ocp-4-2-release-notes.html) v4.2 or later [Kubernetes v1.14]
-* [Dynamic Volume Provisioning](https://docs.openshift.com/container-platform/4.2/storage/dynamic-provisioning.html) or manually created Persistent Volumes of an appropriate size already available.
-* [Jaeger Operator](https://docs.openshift.com/container-platform/4.2/service_mesh/service_mesh_install/installing-ossm.html#ossm-operator-install-jaeger_installing-ossm) (Recommended) If tests should contribute trace information and Jaeger based reports are required.
-* [RedHat Service Mesh](https://docs.openshift.com/container-platform/4.2/service_mesh/servicemesh-release-notes.html) v1.1 or later (Optional) If additional service virtualization features are required.
+* [RedHat OpenShift Container Platform](https://docs.openshift.com/container-platform/4.3/release_notes/ocp-4-3-release-notes.html) v4.3 or later
+* [Dynamic Volume Provisioning](https://docs.openshift.com/container-platform/4.3/storage/dynamic-provisioning.html) or manually created Persistent Volumes of an appropriate size already available.
+* [Jaeger Operator](https://docs.openshift.com/container-platform/4.3/service_mesh/service_mesh_install/installing-ossm.html#ossm-operator-install-jaeger_installing-ossm) (Recommended) If tests should contribute trace information and Jaeger based reports are required.
+* [RedHat Service Mesh](https://docs.openshift.com/container-platform/4.3/service_mesh/servicemesh-release-notes.html) v1.1 or later (Optional) If additional service virtualization features are required.
 
 Installed locally:
-* [oc cli](https://docs.openshift.com/container-platform/4.2/cli_reference/openshift_cli/getting-started-cli.html)
-* [helm cli](https://access.redhat.com/documentation/en-us/openshift_container_platform/4.4/html/cli_tools/helm-cli) v3.1.3 or later.
+* [oc cli](https://docs.openshift.com/container-platform/4.3/cli_reference/openshift_cli/getting-started-cli.html)
+* [helm cli](https://access.redhat.com/documentation/en-us/openshift_container_platform/4.4/html/cli_tools/helm-cli) v3.2.4 or later.
 
 To install the product you need to be able to login to the OpenShift cluster with sufficient privileges:
 ```console
@@ -47,9 +46,7 @@ The product requires, in addition to resources required by the cluster, a minimu
 Depending on workload considerably more resources could be required.
 
 ### Storage
-
 The default storage class will be used. The storage class must support ReadWriteMany (RWX) so that executions can be performed on all nodes.
-
 
 
 The default configuration creates claims that dynamically provision the below persistent volumes.
@@ -96,19 +93,19 @@ Add the Entitlement Registry to Helm
 
 
 ```console
-helm repo add entitled https://raw.githubusercontent.com/IBM/charts/master/repo/entitled
+helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm
 ```
-To pull images used by the product, you require an API key. This can be obtained from: https://cloud.ibm.com
+To pull images used by the product, you require an entitlement key. This can be obtained from: https://myibm.ibm.com/products-services/containerlibrary
 ```console
 oc create secret docker-registry cp.icr.io \
   -n test-system \
   --docker-server=cp.icr.io \
-  --docker-username=iamapikey \
-  --docker-password={api-key} \
+  --docker-username=cp \
+  --docker-password={entitlement-key} \
   --docker-email=not-required@test
 ```
 
-If you are migrating data from a previous release refer to the [additional steps](#migration).
+If you are migrating data from a release prior to 10.1, refer to the [additional steps](#migration).
 
 Helm may then be used to install the product. Note: substitute `{my-rtas}` for a Helm [release name](https://helm.sh/docs/intro/using_helm/#three-big-concepts).
 
@@ -117,7 +114,8 @@ Less recently patched versions of OpenShift can give errors, for example: `Valid
 
 ```console
 helm repo update
-helm pull --untar entitled/ibm-rtas-prod
+helm pull --untar ibm-helm/ibm-rtas-prod
+
 # update the runAsUser and fsGroup to match scc policy
 sed -i -e "s/runAsUser: 1001/runAsUser: $(oc get project test-system -oyaml \
   | sed -r -n 's# *openshift.io/sa.scc.uid-range: *([0-9]*)/.*#\1#p')/g;
@@ -142,24 +140,26 @@ rm -fr ibm-rtas-prod
 ## Migration
 When migrating from versions prior to v10.1, before running _helm install_ it is necessary to restore data from a backup file taken from the earlier version.
 
-
 ```console
-curl -Lo import-prek8s-backup.yaml \
-  https://raw.githubusercontent.com/IBM/charts/master/entitled/ibm-rtas-prod/files/import-prek8s-backup.yaml
+helm repo update
+helm pull --untar ibm-helm/ibm-rtas-prod
 
 sed -i 's/{{ \.Release\.Name }}/{my-rtas}/g' ibm-rtas-prod/files/import-prek8s-backup.yaml
 
 # update the runAsUser to match scc policy
 sed -i -e "s/1001/$(oc get project test-system -oyaml \
-  | sed -r -n 's# *openshift.io/sa.scc.uid-range: *([0-9]*)/.*#\1#p')/g" import-prek8s-backup.yaml
+  | sed -r -n 's# *openshift.io/sa.scc.uid-range: *([0-9]*)/.*#\1#p')/g" ibm-rtas-prod/files/import-prek8s-backup.yaml
 
-oc apply -f import-prek8s-backup.yaml -n test-system
+oc apply -f ibm-rtas-prod/files/import-prek8s-backup.yaml -n test-system
 ```
 Then follow the instructions found in the log:
 ```console
 oc logs import-prek8s-backup -n test-system
 ```
-
+Then tidy up the chart in the current directory
+```console
+rm -fr ibm-rtas-prod
+```
 ## Security Considerations
 ### Dynamic workload
 
@@ -190,6 +190,34 @@ If the cluster IS NOT shared and the product MAY virtualize any service running 
   --set execution.istio.enabled=true \
   --set execution.istio.clusterRoleBinding.create=true \
 ```
+### Namesapces for virtualization
+To enable service virtualization via Istio of services that are either:
+* Not part of the local service mesh
+* Headless services
+* Services without backend workloads
+
+A set of Istio enabled namespaces must be provided where messages sent to these services will be intercepted. Where services are not referenced by fully qualified domain name this set is also used to identify services where messages can be intercepted when received. These can be configured during install with this Helm parameter:
+```console
+  --set execution.istio.namespaces='{namespaceA,namespaceB}' \
+```
+or alternatively using array index notation
+```console
+  --set execution.istio.namespaces[0]=namespaceA \
+  --set execution.istio.namespaces[1]=namespaceB \
+```
+The virtualization namespaces can be updated after installation using the command
+```console
+oc edit cm {my-rtas}-execution -n test-system
+```
+Then edit the configMap to include the namespaces
+```yaml
+...
+  istio.yml: |+
+    virtualization:
+      namespaces:
+      - namespaceA
+      - namespaceB
+```
 ## Configuration
 
 
@@ -198,15 +226,16 @@ The defaults shown are not appropriate on OpenShift clusters. The `values-opensh
 
 | Parameter                                        | Description | Default |
 |--------------------------------------------------|-------------|---------|
+| `global.ibmRtasRegistryPullSecret`                      | The name of the secret used to pull images from the Entitlement Registry | REQUIRED |
 | `global.ibmRtasIngressDomain`                 | The web address to expose the product on. For example `192.168.0.100.nip.io` | REQUIRED |
+| `global.ibmRtasLicensingId`                   | The cloud license id where license entitlement may be checked. For example `A1B2C3D4E5F6` | REQUIRED |
 | `global.ibmRtasPasswordAutoGenSeed`           | The seed used to generate all other passwords | REQUIRED |
-| `global.ibmRtasRegistryPullSecret`            | The name of the secret used to pull images from the Entitlement Registry | REQUIRED |
-| `global.jaegerAgent.enabled`                     | Controls whether execution engines may choose to write traces to Jaeger | true |
-| `global.jaegerAgent.internalHostName`            | The name of the service that execution engines write traces to | jaeger-agent.istio-system |
-| `global.jaegerDashboard.enabled`                 | Controls whether results contain a link to Jaeger traces | true |
-| `global.jaegerDashboard.externalURL`             | The base URL for where traces may be opened in a browser | https://tracing.{{ .Values.global.ibmRtasIngressDomain }}/jaeger |
+| `global.jaegerAgent.enabled`                     | Controls whether execution engines may choose to write traces to Jaeger | false |
+| `global.jaegerAgent.internalHostName`            | The name of the service that execution engines write traces to | '' |
+| `global.jaegerDashboard.enabled`                 | Controls whether results contain a link to Jaeger traces | false |
+| `global.jaegerDashboard.externalURL`             | The base URL for where traces may be opened in a browser | '' |
 | `global.prometheusDashboard.enabled`             | Controls whether resource monitoring can query the internal prometheus instance | true |
-| `global.prometheusDashboard.internalURL`         | The URL for where the internal prometheus instance can be found | http://prometheus.istio-system:9090 |
+| `global.prometheusDashboard.internalURL`         | The URL for where the internal prometheus instance can be found | http://{{ .Release.Name }}-prometheus-server |
 | `global.rationalLicenseKeyServer`                | Where floating licenses may be fetched to run high load performance tests. For example `@ip-address` | '' |
 | `license`                                        | Confirmation that the EULA has been accepted. For example `accept` | not_accepted |
 | `postgresql.`..                                  | Gateway storage options. See [chart](https://github.com/bitnami/charts/blob/master/bitnami/postgresql) | |
@@ -220,6 +249,7 @@ The defaults shown are not appropriate on OpenShift clusters. The `values-opensh
 | `execution.istio.enabled`                        | Enable service virtualization via Istio | false |
 | `execution.istio.clusterRole.create`             | If Istio is enabled, create [role](charts/execution/templates/clusterrole-istio.yaml) to virtualize services via Istio | true |
 | `execution.istio.clusterRoleBinding.create`      | If Istio is enabled, create [binding](charts/execution/templates/clusterrolebinding-istio.yaml) to virtualize services to all namespaces | false |
+| `execution.istio.namespaces`                     | The set of namespaces that are considered for service virtualization | |
 | `execution.intercepts.clusterRole.create`        | Create [role](charts/execution/templates/clusterrole-intercepts.yaml) to enable NodePort address resolution when exposing virtual services | true |
 | `execution.intercepts.clusterRoleBinding.create` | Create [binding](charts/execution/templates/clusterrolebinding-intercepts.yaml) to enable NodePort address resolution when exposing virtual services | true |
 | `execution.postgresql.`..                        | Execution service storage options. See [chart](https://github.com/bitnami/charts/blob/master/bitnami/postgresql) | |
@@ -228,7 +258,6 @@ The defaults shown are not appropriate on OpenShift clusters. The `values-opensh
 | `execution.resources.requests.memory`            | Execution service requested memory usage | 400Mi |
 | `execution.role.create`                          | Create a default role used to run test assets | true |
 | `execution.roleBinding.create`                   | Bind the default role used to run test assets to the execution service account | true |
-| `execution.userlibs.persistence.accessModes[0]`  | Mode required to enable all the execution containers to access third party libraries, needs to be `ReadWriteMany` if you are using a multi-node cluster | ReadWriteOnce |
 | `execution.userlibs.persistence.size`            | Space for third party libraries used to run test assets | 5Gi |
 | `execution.userlibs.resources.limits.memory`     | Userlibs MAX memory usage | 64Mi |
 | `execution.userlibs.resources.requests.cpu`      | Userlibs requested cpu usage | 0m |
