@@ -65,7 +65,7 @@ spec:
 
 Example setup scripts to create the Persistent Volume and Persistent Volume Claim are included in the Helm chart under pak_extensions/pre-install/persistentStorageAdministration directory.
 
-5. Secret - A Kubernetes Secret object must be created to store the CodeStation authentication token.  The authentication token is retrieved during Helm chart installation.  By default, the chart will look for a secret named 'HelmReleaseName-secrets' where 'HelmReleaseName' is the release name you give when installing this Helm chart.  You can also create a secret with a different name and specify it in the Values.secret.name field
+5. Secret - A Kubernetes Secret object must be created to store the CodeStation authentication token and the password for all keystores used by the product.  The authentication token and keystore password are retrieved during Helm chart installation.  By default, the chart will look for a secret named 'HelmReleaseName-secrets' where 'HelmReleaseName' is the release name you give when installing this Helm chart.  You can also create a secret with a different name and specify it in the Values.secret.name field
 
 * Through the kubectl CLI, create a Secret object in the target namespace.
     Generate the base64 encoded value for the CodeStation authentication token.
@@ -73,6 +73,8 @@ Example setup scripts to create the Persistent Volume and Persistent Volume Clai
 ```
 echo -n 255b21b7-ca48-4f2e-95c0-048fdbff4197 | base64
 MjU1YjIxYjctY2E0OC00ZjJlLTk1YzAtMDQ4ZmRiZmY0MTk3
+echo -n 'MyKeystorePassword' | base64
+TXlLZXlzdG9yZVBhc3N3b3Jk
 ```
 
 Create a file named secret.yaml with the following contents, using your Helm Relese name and base64 encoded values.
@@ -85,6 +87,7 @@ metadata:
 type: Opaque
 data:
   cspassword: MjU1YjIxYjctY2E0OC00ZjJlLTk1YzAtMDQ4ZmRiZmY0MTk3
+  keystorepassword: TXlLZXlzdG9yZVBhc3N3b3Jk
 ```
 
 Create the Secret using kubectl apply
