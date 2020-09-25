@@ -83,17 +83,6 @@ https://zen-core-svc.{{ .Values.global.zenControlPlaneNamespace }}.svc:3443
 https://ibm-nginx-svc.{{ .Values.global.zenControlPlaneNamespace }}.{{ .Values.global.clusterDomain }}:443
 {{- end -}}
 {{/* ######################################## ZEN CORE API ENDPOINT TEMPLATE ################## */}}
-
-{{/* ################## MODEL TRAINER PVC NAME ################## */}}
-{{- define "zeno.modelTrainerTempLogVolumeName" -}}
-{{ include "sch.names.persistentVolumeClaimName" (list . "temp-log-pvc") }}
-{{- end -}}
-
-{{- define "zeno.modelTrainerTempEventVolumeName" -}}
-{{ include "sch.names.persistentVolumeClaimName" (list . "temp-event-pvc") }}
-{{- end -}}
-{{/* ################## MODEL TRAINER PVC NAME ################## */}}
-
 {{/* ######################################## POD ANTI-AFFINITY ################################## */}}
 {{- define "zeno.podAntiAffinity" -}}
   {{- $params := . }}
@@ -194,6 +183,21 @@ imagePullSecrets:
 - mountPath: /ca-truststore.jks
   name: aiops-truststore-volume
   subPath: flink-tls-ca-truststore.jks
+{{- end -}}
+
+{{- define "zeno.curatorConfigMapName" -}}
+{{ .Release.Name }}-{{ .Values.global.product.schName }}-curator-config
+{{- end -}}
+
+{{- define "zeno.curatorConfigVolume" -}}
+- name: curator-config
+  configMap:
+    name: {{ include "zeno.curatorConfigMapName" . }}
+{{- end -}}
+
+{{- define "zeno.curatorConfigVolumeMount" -}}
+- name: curator-config
+  mountPath: /etc/config
 {{- end -}}
 
 {{- define "zeno.globalConfigMapName" -}}
@@ -566,10 +570,6 @@ readinessProbe:
 
 {{- define "zeno.initContainerReadiness.controller" -}}
 {{ include "zeno.initContainerReadiness" (dict "root" . "service" .sch.chart.components.controller "endpoint" "ready") }}
-{{- end }}
-
-{{- define "zeno.initContainerReadiness.qualityEvaluation" -}}
-{{ include "zeno.initContainerReadiness" (dict "root" . "service" .sch.chart.components.qualityEvaluation "endpoint" "ready") }}
 {{- end }}
 
 {{/* ################################### FLINK INIT CONTAINER ######################################## */}}

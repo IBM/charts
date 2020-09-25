@@ -127,7 +127,99 @@ data:
                       "replicas": 1
                   }
               }
-          }
+          },
+      "topics": {
+        "logs-none": {
+          "retention_ms": 1800000,
+          "segment_bytes": 1073741824,
+          "max_message_bytes": 1048588,
+          "isolated": true,
+          "is_external_input": true
+        },
+        "logs-logdna": {
+          "retention_ms": 1800000,
+          "segment_bytes": 1073741824,
+          "max_message_bytes": 1048588,
+          "isolated": true,
+          "is_external_input": true
+        },
+        "alerts-noi": {
+          "retention_ms": 1800000,
+          "segment_bytes": 1073741824,
+          "max_message_bytes": 1048588,
+          "isolated": true,
+          "is_external_input": true
+        },
+        "logs-humio": {
+          "retention_ms": 1800000,
+          "segment_bytes": 1073741824,
+          "max_message_bytes": 1048588,
+          "isolated": true,
+          "is_external_input": true
+        },
+        "alerts-none": {
+          "retention_ms": 1800000,
+          "segment_bytes": 1073741824,
+          "max_message_bytes": 1048588,
+          "isolated": true,
+          "is_external_input": true
+        },
+        "alerts-pagerduty": {
+          "retention_ms": 1800000,
+          "segment_bytes": 1073741824,
+          "max_message_bytes": 1048588,
+          "isolated": true,
+          "is_external_input": true
+        },
+        "windowed-logs": {
+          "partitions": 1,
+          "retention_ms": 1800000,
+          "segment_bytes": 1073741824,
+          "max_message_bytes": 1048588,
+          "isolated": false,
+          "is_external_input": false
+        },
+        "normalized-alerts": {
+          "partitions": 1,
+          "retention_ms": 1800000,
+          "segment_bytes": 1073741824,
+          "max_message_bytes": 1048588,
+          "isolated": false,
+          "is_external_input": false
+        },
+        "connections": {
+          "partitions": 1,
+          "retention_ms": 1800000,
+          "segment_bytes": 1073741824,
+          "max_message_bytes": 1048588,
+          "isolated": false,
+          "is_external_input": false
+        },
+        "derived-stories": {
+          "partitions": 1,
+          "retention_ms": 1800000,
+          "segment_bytes": 1073741824,
+          "max_message_bytes": 1048588,
+          "isolated": false,
+          "is_external_input": false
+        },
+        "raw-user-actions": {
+          "partitions": 1,
+          "retention_ms": 1800000,
+          "segment_bytes": 1073741824,
+          "max_message_bytes": 1048588,
+          "isolated": false,
+          "is_external_input": false
+        },
+        "raw-user-messages": {
+          "partitions": 1,
+          "retention_ms": 1800000,
+          "segment_bytes": 1073741824,
+          "max_message_bytes": 1048588,
+          "isolated": false,
+          "is_external_input": false
+        }
+        }
       },
       "event_streams_configuration": {
           {{- if .Values.global.kafka.strimzi.enabled }}
@@ -201,3 +293,123 @@ data:
           }
       }
     }
+  zeno_config.yaml: |-
+    environment:
+      metadata:
+        production: true
+        no_ssl: false
+    
+    configuration:
+      service:
+        storage:
+          elasticsearch:
+            ElasticSearchDataSource:
+              params:
+                db_config:
+                  dns: {{ include "zeno.elasticsearchServiceTemplate" . }}
+                  port: {{ .Values.elasticsearch.httpsPort }}
+                  pool_size: 10
+                  ca_certs: /etc/ssl/certs/elasticsearch-cert.pem
+                  username: username
+                use_ssl: true
+                use_auth: true
+                verify_certs: true
+        
+        streaming:
+          kafka:
+            {{- if .Values.global.kafka.strimzi.enabled }}
+            sasl_mechanism: SCRAM-SHA-512
+            bootstrap_servers: {{ include "zeno.strimziBrokers" . | quote }}
+            security_protocol: SASL_SSL
+            {{- else }}
+            sasl_mechanism: {{ .Values.global.kafka.sasl.mechanisms }}
+            bootstrap_servers: {{- join "," .Values.global.kafka.bootstrap.servers -}}
+            security_protocol: {{ .Values.global.kafka.security.protocol }}
+            {{- end }}
+
+            stream_planes:
+              ingest:
+                logs:
+                  raw_topic: raw-logs
+                  topic: normalized-logs
+                metrics:
+                  raw_topic: raw-metrics
+                  topic: normalized-metrics
+                k8s_configs:
+                  raw_topic: raw-k8s-configs
+                  topic: normalized-k8s-configs
+                alerts:
+                  raw_topic: raw-alerts
+                  topic: normalized-alerts
+                incidents:
+                  raw_topic: raw-incidents
+                  topic: normalized-incidents
+              preprocessing:
+                logs:
+                  topic: windowed-logs
+                metrics:
+                  topic: windowed-metrics
+              templatizer:
+                topic: derived-templates-logs
+              correlation:
+                topic: derived-correlation
+              forecast:
+                topic: derived-forecasts-metrics
+              orchestration:
+                topic: orchestration
+              anomaly:
+                logs:
+                  topic: normalized-alerts
+                metrics:
+                  topic: insight-anomalies-metrics
+              output:
+                story:
+                  topic: derived-stories
+                anomaly:
+                  topic: derived-correlated-anomalies
+            client:
+              api_version_request: {{ .Values.global.kafka.api.version.request }}
+              broker_version_fallback: 0.10.2.1
+              sasl_username: {{ include "zeno.kafkaUsername" . | quote }}
+              ssl_ca_location: {{ .Values.global.kafka.sasl.ca.location }}
+              log_connection_close: {{ .Values.global.kafka.log.connection.close }}
+            producer:
+              api_version_request: {{ .Values.global.kafka.api.version.request }}
+              broker_version_fallback: 0.10.2.1
+              sasl_username: {{ include "zeno.kafkaUsername" . | quote }}
+              ssl_ca_location: {{ .Values.global.kafka.sasl.ca.location }}
+              log_connection_close: {{ .Values.global.kafka.log.connection.close }}
+              {{- if .Values.global.kafka.strimzi.enabled }}
+              sasl_mechanism: SCRAM-SHA-512
+              bootstrap_servers: {{ include "zeno.strimziBrokers" . | quote }}
+              security_protocol: SASL_SSL
+              {{- else }}
+              sasl_mechanism: {{ .Values.global.kafka.sasl.mechanisms }}
+              bootstrap_servers: {{- join "," .Values.global.kafka.bootstrap.servers -}}
+              security_protocol: {{ .Values.global.kafka.security.protocol }}
+              {{- end }}
+            consumer:
+              api_version_request: {{ .Values.global.kafka.api.version.request }}
+              broker_version_fallback: 0.10.2.1
+              sasl_username: {{ include "zeno.kafkaUsername" . | quote }}
+              ssl_ca_location: {{ .Values.global.kafka.sasl.ca.location }}
+              log_connection_close: {{ .Values.global.kafka.log.connection.close }}
+              {{- if .Values.global.kafka.strimzi.enabled }}
+              sasl_mechanism: SCRAM-SHA-512
+              bootstrap_servers: {{ include "zeno.strimziBrokers" . | quote }}
+              security_protocol: SASL_SSL
+              {{- else }}
+              sasl_mechanism: {{ .Values.global.kafka.sasl.mechanisms }}
+              bootstrap_servers: {{- join "," .Values.global.kafka.bootstrap.servers -}}
+              security_protocol: {{ .Values.global.kafka.security.protocol }}
+              {{- end }}
+      utility:
+        logging:
+          logging_level: info
+          logging_type:
+            MidnightLogger:
+              backupCount: 30
+              class: MidnightLogger
+              factory: MidnightLogFactory
+          logging_path: ./result
+

@@ -26,7 +26,6 @@ AIOps
 * `persistence-*` : Pods for managing the persistence of relational data.
 * `similar-incidents-service-*` : Pods for identifying similar incidents, as well as extracting the next best actions.
 * `topology-*` : Pods for defining a topology, and for interacting with the NetCool ASM product.
-* `qes-*` : Pods for the quality evaluation service.
 ​
 Sub-Charts
 * `ibm-dlaas-*` : Pods for the model training orchestration.
@@ -73,7 +72,6 @@ AIOps
 * `log-anomaly-detector` : Service for detecting anomalies in logs.
 * `mock-server` : Service for simulating connections, when running DVTs.
 * `persistence` : Service for managing the persistence of relational data.
-* `qes` : Service for the quality evaluation service.
 * `similar-incidents-service` : Service for identifying similar incidents, as well as extracting the next best actions.
 * `topology` : Service for defining a topology, and for interacting with the NetCool ASM product.
 

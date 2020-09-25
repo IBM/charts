@@ -1,11 +1,14 @@
-Latest: v1.0.0
+Latest: v2.0.0
 
 ### What's new...
 
-1.0.0: 
+2.0.0: 
 
-  This General Availability release enables you to sift through your monitoring data to provide real-time insight into IT incidents, and help your team quickly diagnose and resolve mission-critical issues.
-
+  - Add new routes in the service instance config map
+  - Add a new cron job for cleaning elastic indices
+  - Remove Watson Gateway subchart
+  - Remove Quality Evaluation service
+  
 ### Fixes
 
 None
@@ -26,4 +29,5 @@ See [README.md](./README.md)
 
 | Chart | Date              | Kubernetes Version Required | Breaking Changes | Details |
 | ----- | ----------------- | --------------------------- | ---------------- | ------- |
+| 2.0.0 | Sept 2020  | >=1.16                       | None             | Add new routes in the service instance config map. Add a new cron job for cleaning elastic indices. Remove Watson Gateway subchart. Remove Quality Evaluation service | 
 | 1.0.0 | June 2020  | >=1.16                       | None             | Initial Release |
