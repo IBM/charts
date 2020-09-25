@@ -1,4 +1,33 @@
 {{- define "cassandra.sizeData" -}}
+{{- $root := (index . 0) -}}
+{{- if  $root.Values.global.shareCassandra -}}
+size0:
+  replicas: 1
+  cassandraHeapSize: "2G"
+  cassandraHeapNewSize: "512M"
+  cassandraConcurrentCompactors: 2
+  cassandraMemtableFlushWriters: 2
+  resources:
+    requests:
+      memory: "6Gi"
+      cpu: "1"
+    limits:
+      memory: "6Gi"
+      cpu: "4"
+size1:
+  replicas: 3
+  cassandraHeapSize: "8G"
+  cassandraHeapNewSize: "2G"
+  cassandraConcurrentCompactors: 4
+  cassandraMemtableFlushWriters: 2
+  resources:
+    requests:
+      memory: "16Gi"
+      cpu: "4"
+    limits:
+      memory: "16Gi"
+      cpu: "6"  
+{{- else -}}
 size0:
   replicas: 1
   cassandraHeapSize: "2G"
@@ -25,6 +54,7 @@ size1:
     limits:
       memory: "6Gi"
       cpu: "4"
+{{- end -}}
 {{- end -}}
 {{- define "cassandra.comp.size.data" -}}
 {{- $root := (index . 0) -}}

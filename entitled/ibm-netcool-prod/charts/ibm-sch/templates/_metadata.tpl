@@ -36,6 +36,13 @@ app.kubernetes.io/instance. To use these new values, set the sch.chart.labelType
 to `"prefixed"` in _sch-chart-config.yaml. This will use the new label names as
 well as the old release label for backward compatibility reasons.
 
+Note: The value being used from Helm for the heritage or app.kubernetes.io/managed-by
+parameter is different between Helm 2 and Helm 3. If you use this standard labels
+function in `spec.selector.matchLabels`, this will prevent your chart from upgrading.
+The recommended workaround is to specify the old value as a parameter in the dictionary
+and the function will override it in the chart. The value passed in the parameter should
+be able to be toggled by the end user via values.yaml.
+
 __Values Used__
 
 
@@ -58,6 +65,9 @@ or
 or
   labels:
 {{ include "sch.metadata.labels.standard" (list . $compName (dict "labelA" "Avalue" "labelB" "Bvalue")) | indent 4 }} # with component label and additional labels
+or
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "heritage" .Values.heritage )) | indent 4 }} # override heritage label with user-defined value (see note above)
 ```
 */ -}}
 {{- /*
@@ -70,7 +80,17 @@ or
   {{- if eq $labelType "non-prefixed" -}}
 app: {{ include "sch.names.appName" (list $top)  | quote}}
 chart: {{ $top.Chart.Name | quote }}
+{{- /* Allow for overriding the heritage parameter */ -}}
+  {{- if (gt (len $params) 2) }}
+    {{- $moreLabels := (index $params 2) -}}
+    {{- if hasKey $moreLabels "heritage" }}
+heritage: {{ $moreLabels.heritage | quote }}    
+    {{- else }}
 heritage: {{ $top.Release.Service | quote }}
+    {{- end }}
+  {{- else }}
+heritage: {{ $top.Release.Service | quote }}
+  {{- end }}
 release: {{ $top.Release.Name | quote }}
   {{- if $compName }}
 component: {{ $compName | quote }}
@@ -78,7 +98,17 @@ component: {{ $compName | quote }}
   {{- else -}}
 app.kubernetes.io/name: {{ include "sch.names.appName" (list $top)  | quote}}
 helm.sh/chart: {{ $top.Chart.Name | quote }}
+{{- /* Allow for overriding the app.kubernetes.io/managed-by parameter */ -}}
+  {{- if (gt (len $params) 2) }}
+    {{- $moreLabels := (index $params 2) -}}
+    {{- if hasKey $moreLabels "app.kubernetes.io/managed-by" }}
+app.kubernetes.io/managed-by: {{ index $moreLabels "app.kubernetes.io/managed-by" | quote }}
+    {{- else }}
 app.kubernetes.io/managed-by: {{ $top.Release.Service | quote }}
+    {{- end }}
+  {{- else }}
+app.kubernetes.io/managed-by: {{ $top.Release.Service | quote }}
+  {{- end }}
 app.kubernetes.io/instance: {{ $top.Release.Name | quote }}
 release: {{ $top.Release.Name | quote }}
   {{- if $compName }}
@@ -88,7 +118,9 @@ app.kubernetes.io/component: {{ $compName | quote }}
   {{- if (gt (len $params) 2) -}}
     {{- $moreLabels := (index $params 2) -}}
     {{- range $k, $v := $moreLabels }}
+      {{- if or (and (eq $labelType "non-prefixed") (not (eq $k "heritage"))) (and (not (eq $labelType "non-prefixed")) (not (eq $k "app.kubernetes.io/managed-by")))}}
 {{ $k }}: {{ $v | quote }}
+      {{- end -}}
     {{- end -}}
   {{- end -}}
 {{- end -}}

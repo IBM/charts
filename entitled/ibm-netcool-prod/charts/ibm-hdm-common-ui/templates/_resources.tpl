@@ -4,6 +4,8 @@ hpa:
     enabled: false
   size1:
     enabled: false
+  sizeA:
+    enabled: false
 ui:
   size0:
     nodeHeapSizeMB: 256
@@ -23,7 +25,16 @@ ui:
       limits:
         memory: "800Mi"
         cpu: "1.0"
-initContainer: 
+  sizeA:
+    nodeHeapSizeMB: 256
+    resources:
+      requests:
+        memory: "350Mi"
+        cpu: "0.1"
+      limits:
+        memory: "450Mi"
+        cpu: "0.5"
+initContainer:
   size0:
     resources:
       limits:
@@ -33,6 +44,14 @@ initContainer:
         memory: 512Mi
         cpu: 50m
   size1:
+    resources:
+      limits:
+        memory: 512Mi
+        cpu: 300m
+      requests:
+        memory: 512Mi
+        cpu: 50m
+  sizeA:
     resources:
       limits:
         memory: 512Mi

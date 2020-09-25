@@ -50,6 +50,8 @@
   value: {{ .Values.topics.eaevents.name | quote }}
 - name: ACTIONS_TOPIC
   value: {{ .Values.topics.actions.name | quote }}
+- name: STATS_TOPIC
+  value: {{ .Values.topics.stats.name | quote }}
 - name: KAFKA_URL
   value: {{ $kafkaRelease }}-kafka:9092
 - name: KAFKA_CONSUMER_THREADS

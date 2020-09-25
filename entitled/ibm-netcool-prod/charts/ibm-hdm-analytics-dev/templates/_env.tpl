@@ -79,17 +79,17 @@
 - name: INFERENCE_XMS
   value: '512M'
 - name: INFERENCE_XMX
-  value: '1G'
+  value: '768M'
 {{- else if eq .Values.global.environmentSize "size1" }}
 - name: INFERENCE_XMS
   value: '1G'
 - name: INFERENCE_XMX
-  value: '2G'
+  value: '1536M'
 {{- else }}
 - name: INFERENCE_XMS
   value: '512M'
 - name: INFERENCE_XMX
-  value: '1G'
+  value: '768M'
 {{ end }}
 - name: LOGGING_LEVEL
   value: "INFO"
@@ -323,6 +323,8 @@
 - name: PAYLOAD_SIZE_LIMIT
   value: {{ (int .Values.policyregistryservice.payloadSizeLimit) | quote }}
 {{ end }}
+- name: CASSANDRA_CONSISTENCY_READ
+  value: "localOne"
 {{- end -}}
 
 {{- define "eventanalytics.eaeventsqueryservice.application" -}}
@@ -607,7 +609,11 @@
 - name: EVENTPREPROCESSOR_URL
   value: 'https://dummyUrl'
 - name: INCIDENTPROCESSOR_URL
-  value: 'https://dummyUrl'
+{{- if .Values.common.services.incidentProcessorUrl }}
+  value: "{{ .Values.common.services.incidentProcessorUrl }}"
+{{- else }}
+  value: "http://{{ .Release.Name }}-ibm-cem-incidentprocessor.{{ .Release.Namespace }}.svc:6006"
+{{- end }}  
 - name: NORMALIZER_URL
   value: 'https://dummyUrl'
 - name: INTEGRATIONCONTROLLER_URL
@@ -772,7 +778,11 @@
   value: "{{ .Release.Name }}-ea-noi-layer-eanoiactionservice:5600/api/actions/v1/actions"
 {{- end }}
 - name: EVT_MGMT_ENDPOINT_USERNAME
+{{- if eq .Values.global.hybrid.disabled true }}
   value: {{ .Values.aggregationnormalizerservice.evtMgmtEndpoint.username | quote }}
+{{- else }}
+  value: {{ .Values.global.hybrid.objectserver.username | quote }}
+{{- end }}
 - name: EVT_MGMT_ENDPOINT_PASSWORD
   valueFrom:
     secretKeyRef:

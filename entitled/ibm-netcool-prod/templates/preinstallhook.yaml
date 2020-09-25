@@ -1,15 +1,13 @@
 {{- $compName := "verifysecrets" -}}
 {{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: "{{.Release.Name}}-verifysecrets"
   labels:
-    app.kubernetes.io/name: "openldap-test"
-    helm.sh/chart: "openldap"
-    app.kubernetes.io/managed-by: "Tiller"
-    app.kubernetes.io/instance: "{{ .Release.Name }}"
-    release: "{{ .Release.Name }}"
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
   annotations:
     # This is what defines this resource as a hook. Without this line, the
     # job is considered part of the release.
@@ -20,13 +18,11 @@ metadata:
 spec:
   template:
     metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering "" "" nil) | indent 8 }}
       name: "{{.Release.Name}}"
       labels:
-        app.kubernetes.io/name: "openldap-test"
-        helm.sh/chart: "openldap"
-        app.kubernetes.io/managed-by: "Tiller"
-        app.kubernetes.io/instance: "{{ .Release.Name }}"
-        release: "{{ .Release.Name }}"
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
     spec:
       restartPolicy: Never
       containers:
@@ -104,14 +100,6 @@ spec:
                   name: {{ .Release.Name }}-ldap-secret
                   key: LDAP_BIND_PASSWORD
                   optional: true    
-            - name: ASM_CRED_SECRET_NAME
-              value: {{ .Release.Name }}-asm-credentials     
-            - name: ASM_CRED_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Release.Name }}-asm-credentials
-                  key: password
-                  optional: true       
             - name: ICP_ADMIN_PWD
               valueFrom:
                 secretKeyRef:
@@ -183,7 +171,19 @@ spec:
                 secretKeyRef:
                   key: api_password
                   name: {{ .Release.Name }}-mime-api-secret
+                  optional: true     
+            - name: ASM_CA_SECRET_NAME
+              value: {{ .Release.Name }}-topology-ca-secret
+            - name: ASM_CA_CERT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-topology-ca-secret
+                  key: asm-ca.crt
                   optional: true
+            - name: TRUSTED_CAS_CONFIGMAP
+              value: {{ default (printf "%s-trusted-cas" .Release.Name) .Values.global.hybrid.trustedCAsConfigMapName | quote }} 
+            - name: RELEASE
+              value: {{ .Release.Name }}
       affinity:
         nodeAffinity:
 {{ include "noi.nodeAffinity.arch" . | indent 10 }}

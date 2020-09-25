@@ -28,7 +28,6 @@ data:
             bootstrap_servers => "${KAFKA_BROKERS}"
             topics => ["incidents"]
             sasl_jaas_config => "org.apache.kafka.common.security.plain.PlainLoginModule required username='${KAFKA_USER}' password='${KAFKA_PASSWORD}';"
-            #security_protocol => "SASL_SSL"
             sasl_mechanism => "PLAIN"
             codec => "json"
             client_id => "logstash-incidents"
@@ -39,44 +38,43 @@ data:
         mutate {
             remove_field => [ "rel_resources" ] # Delete rel_resources, as it can contain a lot of data which is not
                                                 # required here.
-            lowercase => [ "subscription" ]     # Subscription will be used in elasticsearch index name, which only allows
-                                                # lowercase characters. If subscription is case sensitive, a more
-                                                # a more sophisticated approach will be required for making it lowercase.
         }
-
         # The following filters will tag messages that are required for metrics aggregation
         if [type] == "resource-created" {
             mutate {
                 add_tag => [ "relevant", "incidentCreated" ]
             }
         }
-        if [type] == "resource-updated" and [prev_resource][priority] and [resource][priority] and [prev_resource][priority] != [resource][priority] {
-            mutate {
-                add_tag => [ "relevant", "priorityChanged" ]
-            }
-        }
-        if [type] == "resource-updated" and [prev_resource][incidentState] == "onHold" {
+
+        if [type] == "resource-updated" and [resource][incidentState] != "onHold" {
             # timespan between prev_resource and resource is time that was spent on hold, no matter what the new state is
             mutate {
-                add_tag => [ "relevant", "incidentWasHeld" ]
+                add_tag => [ "relevant", "incidentMayHaveBeenHeld" ]
             }
-        } 
-        if [type] == "resource-updated" and [prev_resource][incidentState] and [prev_resource][incidentState] != "inProgress" and [resource][incidentState] == "inProgress" {
+        }
+
+        if [type]  == "resource-updated" and [resource][incidentState] == "onHold" {
+            mutate {
+                add_tag => [ "relevant", "incidentOnHold" ]
+            }
+        }
+
+        if [type] == "resource-updated" and [resource][incidentState] == "inProgress" {
             # definition of "responded" is the first time an incident reaches "inProgress" state
             mutate {
                 add_tag => [ "relevant", "incidentResponded" ]
             }
         } 
-        if [type] == "resource-updated" and [prev_resource][incidentState] and [prev_resource][incidentState] != "resolved" and [resource][incidentState] == "resolved" {
+        if [type] == "resource-updated" and [resource][incidentState] == "resolved" {
             mutate {
                 add_tag => [ "relevant", "incidentResolved" ]
             }
         }
-        if [type] == "resource-updated" and [prev_resource][incidentState] and [prev_resource][incidentState] != "closed" and [resource][incidentState] == "closed" {
+        if [type] == "resource-updated" and [resource][incidentState] == "closed" {
             mutate {
                 add_tag => [ "relevant", "incidentClosed" ]
             }
-        } 
+        }
     
         # drop all messages that are not relevant for metrics calculation
         if "relevant" not in [tags] {
@@ -88,7 +86,84 @@ data:
         }
     }
     output {
-        stdout { }
+        elasticsearch {
+            hosts => ["${ELASTICSEARCH_API}"]
+            index => "logstash-incidents"
+            workers => 1
+            document_id => "%{uuid}"
+            action => "update"
+            scripted_upsert => true
+            script_type => "inline" # could be set to "indexed" later if the script is already present on elasticsearch - may improve performance
+            script_lang => "painless"
+            script => "
+                // Parse lastChanged, which is the timestamp of the incident update described by this message
+                ZonedDateTime epochTime = ZonedDateTime.of(1970, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC);
+                long lastChanged;
+                if (params.event.resource.lastChanged instanceof java.lang.Long) {
+                    lastChanged = params.event.resource.lastChanged;
+                } else {
+                    // This means that params.event.resource.lastChanged must be a String
+                    lastChanged = epochTime.until(ZonedDateTime.parse(params.event.resource.lastChanged), ChronoUnit.MILLIS);
+                }
+                // If this is a create operation (as opposed to an update operation) write metrics fundamentals
+                if ('create'.equals(ctx.op)) {
+                    ctx._source['subscription'] = params.event.subscription;
+                    ctx._source['uuid'] = params.event.uuid;
+                    ctx._source['state'] = 'open';
+                    ctx._source['timeOnHold'] = 0;
+                    // The start time of a hold--defaults to zero when the incident is not on hold
+                    ctx._source['holdStartTime'] = 0;
+                    // determine if pararms.event.resource.createdTime is a long with epoch milliseconds or a string, & turn it into a long if it is a string
+                    if (params.event.resource.createdTime instanceof java.lang.Long) {
+                        ctx._source['createTime'] =  params.event.resource.createdTime;
+                    } else {
+                        // This means that params.event.resource.createdTime must be a String
+                        ctx._source['createTime'] = epochTime.until(ZonedDateTime.parse(params.event.resource.createdTime), ChronoUnit.MILLIS);
+                    }
+                }
+                // only set priority if there is no priority yet, or the stored priority is less recent than the incoming priority
+                if (!(ctx._source.containsKey('priorityTime') && lastChanged < ctx._source['priorityTime'])) {
+                    ctx._source['priority'] = params.event.resource.priority;
+                    ctx._source['priorityTime'] = lastChanged;
+                }
+                // for incidentMayHaveBeenHeld messages increase the stored timeOnHold by the time range covered in this message if the incident
+                // was previously on hold, but now is not (also ensure that negative times due to race conditions are never stored)
+                if (params.event.tags.contains('incidentMayHaveBeenHeld') && ctx._source['holdStartTime'] != 0 && (lastChanged - ctx._source['holdStartTime']) > 0) {
+                    ctx._source['timeOnHold'] += lastChanged - ctx._source['holdStartTime'];
+                    // ChronoUnit.MILLIS.between(epochTime.plus(ctx._source['holdStartTime'], ChronoUnit.MILLIS), lastChanged);
+                    ctx._source['holdStartTime'] = 0;
+                }
+                // For incidentOnHold messages, mark the time when the incident was first put on hold
+                if (params.event.tags.contains('incidentOnHold') && ctx._source['holdStartTime'] == 0) {
+                    ctx._source['holdStartTime'] = lastChanged;
+                }
+                // for incidentResponded messages set the timeToRespond metric if required
+                if (params.event.tags.contains('incidentResponded')) {
+                    // only set timeToRespond if there is no timeToRespond yet or the stored respondTime is later than the incoming respondTime
+                    // (which can be caused by kafka messages not arriving in same order as they were sent)
+                    if (!(ctx._source.containsKey('respondTime') && lastChanged > ctx._source['respondTime'])) {
+                        ctx._source['respondTime'] = lastChanged;
+                        ctx._source['timeToRespond'] = lastChanged - ctx._source['createTime'];
+                        // ctx._source['timeToRespond'] = ChronoUnit.MILLIS.between(ZonedDateTime.parse(ctx._source['createTime']), lastChanged);
+                    }
+                }
+                // For incidentResolved messages, set the timeToResolve metric if required
+                if (params.event.tags.contains('incidentResolved')) {
+                    // only set timeToResolve if there is no timeToResolve yet or the stored resolveTime is less recent than the incoming resolveTime
+                    // (could theoretically be caused by reopened incidents)
+                    if (!(ctx._source.containsKey('resolveTime') && !(lastChanged > ctx._source['resolveTime']))) {
+
+                        ctx._source['resolveTime'] = lastChanged;
+                        ctx._source['timeToResolve'] = lastChanged - ctx._source['createTime'];
+                        // ctx._source['timeToResolve'] = ChronoUnit.MILLIS.between(ZonedDateTime.parse(ctx._source['createTime']), lastChanged);
+                    }
+                }
+                // For incidentClosed messages set the state to 'closed'
+                if (params.event.tags.contains('incidentClosed')) {
+                    ctx._source['state'] = 'closed';
+                }
+            "
+        }
     }
 
   ea-collatedactions.conf: |2
@@ -114,7 +189,7 @@ data:
         if [metadata][source] == "analytics.temporal-patterns" and [metricData]{
             elasticsearch{
                 hosts => ["${ELASTICSEARCH_API}"]
-                index => "ea-pattern-metrics"
+                index => "ea-pattern-metrics-%{+dd.MM.YYYY}"
                 template_overwrite => true
                 template_name => "ea-pattern-metrics"
                 template => "/home/logstash/logstash/config/ea-pattern-metrics-mapping.json"
@@ -140,45 +215,26 @@ data:
         } else if [event][instanceUuid] == "undefined:NaN" {
             drop { }
         }
+        mutate {
+            rename => { "event" => "renamed_event" }
+        }
+        mutate {
+            add_field => { "[event][objectServer]" => "%{[renamed_event][objectServer]}" }
+        }
+        mutate {
+            remove_field => [ "renamed_event" ]
+        }
+        json {
+            source => "[event][objectServer]"
+            target => "[event][objectServer]"
+        }
     }
     output {
         elasticsearch {
             hosts => ["${ELASTICSEARCH_API}"]
             index => "logstash-noi-events"
             workers => 1
-            document_id => "%{[event][instanceUuid]}"
-            action => "update"
-            doc_as_upsert => true
-        }
-    }
-
-  noi-events-raw.conf: |2
-    input {
-        kafka {
-            bootstrap_servers => "${KAFKA_BROKERS}"
-            topics => ["noi-events"]
-            sasl_jaas_config => "org.apache.kafka.common.security.plain.PlainLoginModule required username='${KAFKA_USER}' password='${KAFKA_PASSWORD}';"
-            sasl_mechanism => "PLAIN"
-            codec => "json"
-            client_id => "logstash-noi-events-raw"
-            group_id => "logstash-noi-events-raw"
-        }
-    }
-    filter {
-        if ![event][instanceUuid] {
-            drop { }
-        } else if [event][instanceUuid] == "undefined:NaN" {
-            drop { }
-        } else if ![event][objectServer][Tally] {
-            drop { }
-        }
-    }
-    output {
-        elasticsearch {
-            hosts => ["${ELASTICSEARCH_API}"]
-            index => "logstash-noi-events-raw"
-            workers => 1
-            document_id => "%{[event][instanceUuid]}-%{[event][objectServer][Tally]}"
+            document_id => "%{[event][objectServer][InstanceUuid]}"
             action => "update"
             doc_as_upsert => true
         }
@@ -297,17 +353,75 @@ data:
 
     }
 
+  rba-statistics.conf: |2
+    input {
+        kafka {
+            bootstrap_servers => "${KAFKA_BROKERS}"
+            topics => ["rba-statistics"]
+            sasl_jaas_config => "org.apache.kafka.common.security.plain.PlainLoginModule required username='${KAFKA_USER}' password='${KAFKA_PASSWORD}';"
+            sasl_mechanism => "PLAIN"
+            codec => "json"
+            client_id => "logstash-rba-statistics"
+            group_id => "logstash-rba-statistics"
+        }
+    }
+    filter {
+        if [subscription] != "cfd95b7e-3bc7-4006-a4a8-a73a79c71255" {
+            drop { }
+        }
+    }
+    output {
+        elasticsearch {
+            hosts => ["${ELASTICSEARCH_API}"]
+            index => "logstash-rba-statistics"
+            workers => 1
+            document_id => "%{[statisticsTimestamp]}"
+            action => "create"
+        }
+    }
+
+  rba-execution-records.conf: |2
+    input {
+        kafka {
+            bootstrap_servers => "${KAFKA_BROKERS}"
+            topics => ["rba-execution-records"]
+            sasl_jaas_config => "org.apache.kafka.common.security.plain.PlainLoginModule required username='${KAFKA_USER}' password='${KAFKA_PASSWORD}';"
+            sasl_mechanism => "PLAIN"
+            codec => "json"
+            client_id => "logstash-rba-execution-records"
+            group_id => "logstash-rba-execution-records"
+        }
+    }
+    filter {
+        if [subscription] != "cfd95b7e-3bc7-4006-a4a8-a73a79c71255" {
+            drop { }
+        }
+    }
+    output {
+        elasticsearch {
+            hosts => ["${ELASTICSEARCH_API}"]
+            index => "logstash-rba-execution-records"
+            workers => 1
+            document_id => "%{[id]}"
+            action => "update"
+            doc_as_upsert => true
+        }
+    }
+
   pipelines.yml: |2
-    #- pipeline.id: incidents
-    #  path.config: "/home/logstash/logstash/config/incidents.conf"
+    - pipeline.id: incidents
+      path.config: "/home/logstash/logstash/config/incidents.conf"
     - pipeline.id: ea-collatedactions
       path.config: "/home/logstash/logstash/config/ea-collatedactions.conf"
     - pipeline.id: noi-events
       path.config: "/home/logstash/logstash/config/noi-events.conf"
     - pipeline.id: event-reduction
       path.config: "/home/logstash/logstash/config/event-reduction.conf"
-    #- pipeline.id: noi-events-raw
-    #  path.config: "/home/logstash/logstash/config/noi-events-raw.conf"
+    - pipeline.id: rba-statistics
+      path.config: "/home/logstash/logstash/config/rba-statistics.conf"
+    - pipeline.id: rba-execution-records
+      path.config: "/home/logstash/logstash/config/rba-execution-records.conf"
+
 
   logstash.yml: |2
     http.host: 0.0.0.0
@@ -315,7 +429,7 @@ data:
 
   ea-pattern-metrics-mapping.json: |2
     {
-        "index_patterns": ["ea-pattern-metrics"],
+        "index_patterns": ["ea-pattern-metrics*"],
         "template": "ea-pattern-metrics",
         "mappings": {
             "doc": {

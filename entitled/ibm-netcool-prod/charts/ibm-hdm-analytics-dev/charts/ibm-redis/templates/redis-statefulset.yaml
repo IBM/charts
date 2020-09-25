@@ -14,6 +14,8 @@
 {{- $configMapName := include "sch.names.fullCompName" (list . "configmap") -}}
 {{- $probesName := include "sch.names.fullCompName" (list . "probes") -}}
 {{- $fullName := include "sch.names.fullCompName" (list . "") -}}
+{{- $rootData := fromYaml (include "root.data" .) }}
+{{- $rootMetering := $rootData.metering -}}
 {{- if .Capabilities.APIVersions.Has "apps/v1" }}
 apiVersion: apps/v1
 {{- else if .Capabilities.APIVersions.Has "apps/v1beta2" }}
@@ -25,18 +27,20 @@ kind: StatefulSet
 metadata:
   name: {{ $statefulSetName }}
   labels:
-{{ include "sch.metadata.labels.standard" (list . $statefulSetName) | indent 4 }}
-    component: "ibm-redis-server"
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
 {{- if (eq "true" (include "ibmRedis.upgradeFromV1" .)) }}
     component: "server"
+{{- else }}
+    component: "ibm-redis-server"
 {{- end }}
 spec:
   selector:
     matchLabels:
 {{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
-      component: "ibm-redis-server"
 {{- if (eq "true" (include "ibmRedis.upgradeFromV1" .)) }}
       component: "server"
+{{- else }}
+      component: "ibm-redis-server"
 {{- end }}
   serviceName: {{ $fullName }}{{ if (eq "true" (include "ibmRedis.upgradeFromV1" .)) }}-server{{ end }}
   replicas: {{ include "ibmRedis.replicationFactor" . }}
@@ -48,12 +52,13 @@ spec:
       annotations:
         checksum/init-config: {{ include (print $.Template.BasePath "/redis-configmap.yaml") . | sha256sum }}
         checksum/probe-config: {{ include (print $.Template.BasePath "/redis-healthchecks.yaml") . | sha256sum }}
-{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering "" "" nil) | indent 8 }}
       labels:
 {{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
-        component: "ibm-redis-server"
 {{- if (eq "true" (include "ibmRedis.upgradeFromV1" .)) }}
         component: "server"
+{{- else }}
+        component: "ibm-redis-server"
 {{- end }}
     spec:
       hostNetwork: false
@@ -111,6 +116,8 @@ spec:
         - /readonly-config/init.sh
 {{- if .Values.auth.enabled }}
         env:
+        - name: LICENSE
+          value: {{ .Values.global.license | quote }}
         - name: AUTH
           valueFrom:
             secretKeyRef:
@@ -162,7 +169,7 @@ spec:
         livenessProbe:
           exec:
             command: [ "sh", "/probes/readiness.sh", "{{ .Values.redis.port }}"]
-          initialDelaySeconds: 15
+          initialDelaySeconds: 25
           periodSeconds: 5
         readinessProbe:
           exec:
@@ -213,7 +220,7 @@ spec:
         livenessProbe:
           exec:
             command: [ "sh", "/probes/readiness.sh", "{{ .Values.sentinel.port }}"]
-          initialDelaySeconds: 15
+          initialDelaySeconds: 25
           periodSeconds: 5
         readinessProbe:
           exec:
