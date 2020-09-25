@@ -30,3 +30,56 @@ data:
         "metadata": {}
       }
     }
+  nginx.conf: |
+    location /aiops/ibm-aiops---{{.Values.global.zenServiceInstanceDisplayName}}/instances/{{ .Values.global.zenServiceInstanceId | int64 }}/api/ {
+      if ($request_method ~* "(GET|POST)") {
+        add_header "Access-Control-Allow-Origin"  *;
+      }
+      # Preflighted requests
+      if ($request_method = OPTIONS ) {
+        add_header "Access-Control-Allow-Origin"  *;
+        add_header "Access-Control-Allow-Methods" "GET, POST, PUT, DELETE, OPTIONS, HEAD";
+        add_header "Access-Control-Allow-Headers" "Origin, Accept, Content-Type, Content-Length, Authorization, User-Agent";
+        return 200;
+      }
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      proxy_pass https://ibm-aiops---{{.Values.global.zenServiceInstanceDisplayName}}-aio-chatops-slack-integrator.{{.Release.Namespace}}:8000/;
+    }
+
+    location /aiops/addon/aiops-{{ .Values.global.zenServiceInstanceId | int64 }}/ {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      if ($request_method ~* "(GET|POST)") {
+        add_header "Access-Control-Allow-Origin"  *;
+      }
+      # Preflighted requests
+      if ($request_method = OPTIONS ) {
+        add_header "Access-Control-Allow-Origin"  *;
+        add_header "Access-Control-Allow-Methods" "GET, POST, PUT, DELETE, OPTIONS, HEAD";
+        return 200;
+      }
+      proxy_http_version 1.1;
+      proxy_set_header  Upgrade $http_upgrade;
+      proxy_set_header  Connection "upgrade";
+      
+      proxy_pass https://ibm-aiops---{{.Values.global.zenServiceInstanceDisplayName}}-aio-addon.{{.Release.Namespace}}:8000/;
+    }
+
+    location /aiops/ibm-aiops---{{.Values.global.zenServiceInstanceDisplayName}}-internal/instances/ {
+      internal;
+      if ($request_method ~* "(GET|POST)") {
+        add_header "Access-Control-Allow-Origin"  *;
+      }
+      # Preflighted requests
+      if ($request_method = OPTIONS ) {
+        add_header "Access-Control-Allow-Origin"  *;
+        add_header "Access-Control-Allow-Methods" "GET, POST, PUT, DELETE, OPTIONS, HEAD";
+        return 200;
+      }
+      proxy_http_version 1.1;
+      proxy_set_header  Upgrade $http_upgrade;
+      proxy_set_header  Connection "upgrade";
+      proxy_pass https://ibm-aiops---{{.Values.global.zenServiceInstanceDisplayName}}-aio-controller.{{.Release.Namespace}}:8000/;
+    }

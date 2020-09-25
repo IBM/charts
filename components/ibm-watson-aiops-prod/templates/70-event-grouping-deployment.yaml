@@ -45,12 +45,10 @@ spec:
         ports:
         - containerPort: 8443
           name: http
-{{ include "zeno.livenessProbeTemplate" . | indent 8 }}
+{{ include "zeno.livenessProbeTemplate" (dict "livePeriod" 20 "liveTimeout" 20 ) | indent 8 }}
         envFrom:
         - configMapRef:
             name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.componentUrls) }}
-        - configMapRef:
-            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.kafka) }}
         - configMapRef:
             name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.tls) }}
         env:
@@ -61,6 +59,10 @@ spec:
           value: event_grouping_aiokafka_consumer
         - name: KAFKA_PRODUCER_CLIENT_ID
           value: event_grouping_aiokafka_producer
+        - name: TOPOLOGY_ENABLED
+          value: {{ .Values.eventGrouping.topologyEnabled | quote }}
+        - name: LOCALIZATION_ENABLED
+          value: {{ .Values.eventGrouping.localizationEnabled | quote }}
         - name: MINIO_ENDPOINT_URL
           value: {{ include .Values.global.minio.endpointTpl . | quote }}
         - name: MINIO_AWS_ACCESS_KEY_ID
@@ -81,11 +83,15 @@ spec:
           value: /etc/ssl/certs/minio-cert.pem
         volumeMounts:
 {{ include "zeno.tlsVolumeMounts" . | indent 8 }}
+{{ include "zeno.globalConfigVolumeMount" . | indent 8 }}
+{{ include "zeno.secretConfigVolumeMount" . | indent 8 }}
 {{ include "zeno.kafkaConfigVolumeMount" . | indent 8 }}
         - name: {{ $minioTlsVolumeName }}
           mountPath: /etc/ssl/certs/minio-cert.pem
       volumes:
 {{ include "zeno.tlsVolume" . | indent 6 }}
+{{ include "zeno.globalConfigVolume" . | indent 6 }}
+{{ include "zeno.secretConfigVolume" . | indent 6 }}
 {{ include "zeno.kafkaConfigVolume" . | indent 6 }}
       - name: {{ $minioTlsVolumeName }}
         secret:
