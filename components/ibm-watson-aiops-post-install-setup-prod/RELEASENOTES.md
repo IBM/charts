@@ -1,10 +1,10 @@
-Latest: v1.0.0
+Latest: v2.0.0
 
 ### What's new...
 
-1.0.0:
+2.0.0:
 
-  This chart supports ibm-watson-aiops-prod 1.0.1, specifically it provisions the service instance once the main chart completes installation.
+  This chart supports ibm-watson-aiops-prod 2.0.0, specifically it provisions the service instance once the main chart completes installation.
 
 ### Fixes
 
@@ -26,4 +26,5 @@ See [README.md](./README.md)
 
 | Chart | Date              | Kubernetes Version Required | Breaking Changes | Details |
 | ----- | ----------------- | --------------------------- | ---------------- | ------- |
+| 2.0.0 | Sept 2020  | >=1.16                       | None             |  |
 | 1.0.0 | June 2020  | >=1.16                       | None             | Initial Release |

@@ -6,6 +6,7 @@ metadata:
   name: {{ include "sch.names.fullCompName" (list . $name) }}
   annotations:
 {{ include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | trim | indent 4 }}
+    "helm.sh/hook-weight": "-1"
     "helm.sh/hook": test-success
   labels:
 {{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 4 }}
@@ -23,7 +24,6 @@ spec:
 {{ include "zeno.initContainerReadiness.topology" . | indent 2 }}
 {{ include "zeno.initContainerReadiness.chatopsOrchestrator" . | indent 2 }}
 {{ include "zeno.initContainerReadiness.alertLocalization" . | indent 2 }}
-{{ include "zeno.initContainerReadiness.qualityEvaluation" . | indent 2 }}
 {{ include "zeno.initContainerReadiness.eventGrouping" . | indent 2 }}
   containers:
   - name: {{ $name | quote }}
@@ -40,9 +40,15 @@ spec:
         name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.tls) }}
     - secretRef:
         name: {{ include .Values.mockServer.authSecret.nameTpl . }}
+    - configMapRef:
+        name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.modelTrainConsole) }}
+    - configMapRef:
+        name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.elasticsearch) }}
     env:
 {{ include "zeno.kafkaEnvSecrets" . | indent 4 }}
     - name: cluster
+      value: {{ .Values.global.clusterDomain }}
+    - name: cluster_name
       value: {{ .Values.global.clusterDomain }}
     - name: keywords
       value: "DVT"
@@ -58,12 +64,47 @@ spec:
       value: {{ include "zeno.strimziBrokers" . | quote}}
     - name: MOCK_SERVER_USERNAME
       value: {{ .Values.mockServer.mockASMUsername }}
+{{ include "zeno.elasticsearchEnvSecrets" . | indent 4 }}
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          key: accesskey
+          name: {{ include "zeno.minioAccessSecretNameTemplate" . }}
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          key: secretkey
+          name: {{ include "zeno.minioAccessSecretNameTemplate" . }}
+    - name: AWS_CA_BUNDLE
+      value: /.minio/tls.cacrt
+    - name: ES_CACERT_RAW
+      valueFrom:
+        secretKeyRef:
+          key: ca.pem
+          name: {{ include "zeno.elasticsearchTlsSecretNameTemplate" . }}
+    - name: CP4D_URL
+      value: {{ include "zeno.cpdNginxEndpointTemplate" . }}
+    - name: CP4D_ADMIN_USER
+      value: {{ .Values.cpd.auth.user }}
+    - name: CP4D_ADMIN_PASS
+      value: {{ .Values.cpd.auth.accessKey }}
+    - name: CP4D_NAMESPACE
+      value: {{ .Values.global.tetheredNamespace }}
     volumeMounts:
 {{ include "zeno.tlsVolumeMounts" . | indent 4 }}
 {{ include "zeno.kafkaConfigVolumeMount" . | indent 4 }}
     - name: output-dir
       mountPath: /output_dir
+    - mountPath: /.minio
+      name: minio-tls-secret
   volumes:
+  - name: minio-tls-secret
+    secret:
+      defaultMode: 420
+      items:
+      - key: tls.cacrt
+        path: tls.cacrt
+      secretName: {{ include "zeno.tlsSecretNameTemplate" . }}
 {{ include "zeno.tlsVolume" . | indent 2 }}
 {{ include "zeno.kafkaConfigVolume" . | indent 2 }}
   - name: output-dir

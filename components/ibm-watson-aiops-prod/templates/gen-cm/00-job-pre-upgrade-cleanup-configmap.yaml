@@ -1,30 +1,28 @@
 {{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
-{{- $compName := "cm-cleanup" -}}
+{{- $compName := "cm-pre-upgrade-addon-cleanup" -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ .Release.Namespace }}-watson-aiops-post-cpd-install-delete
+  name: cm-pre-upgrade-addon-cleanup
   namespace: {{ .Values.global.zenControlPlaneNamespace }}
   labels:
 {{ include "sch.metadata.labels.standard" (list . $compName ) | trim | indent 4 }}
   annotations:
-    "helm.sh/hook": "pre-delete"
+    "helm.sh/hook": "pre-upgrade"
     "helm.sh/hook-weight": "1"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
-  backoffLimit: 1
-  activeDeadlineSeconds: 60
   template:
     metadata:
       labels:
 {{ include "sch.metadata.labels.standard" (list . $compName) | trim | indent 8 }}
-      name: cm-cleanup
+      name: cm-pre-upgrade-addon-cleanup
     spec:
       serviceAccountName: {{ .Values.global.existingServiceAccount }}
 {{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim | indent 6 }}
       restartPolicy: Never
       containers:
-      - name: cm-cleanup
+      - name: cm-pre-upgrade-addon-cleanup
         image: {{ include "zeno.imageName" (dict "root" . "service" .Values.creds) }}
         resources:
 {{ toYaml .Values.creds.resources | trim | indent 10 }}
@@ -33,9 +31,9 @@ spec:
         - "/bin/bash"
         - -c
         - |
-          kubectl delete -n {{ .Values.global.zenControlPlaneNamespace }} --ignore-not-found=true configmap {{ .Values.cpd.connections.extensions.instanceConfigMapName }}
-          kubectl delete -n {{ .Values.global.zenControlPlaneNamespace }} --ignore-not-found=true configmap {{ .Values.cpd.connections.extensions.appGroupConfigMapName }}
-          kubectl delete -n {{ .Values.global.zenControlPlaneNamespace }} --ignore-not-found=true configmap {{ .Values.cpd.connections.extensions.appConfigMapName }}
+          kubectl delete -n {{ .Values.global.zenControlPlaneNamespace }} --ignore-not-found=true configmap {{ .Release.Name }}-wcn-aiops-gw-cm
+
+          kubectl delete -n {{ .Values.global.zenControlPlaneNamespace }} --ignore-not-found=true configmap aiops
 
       affinity:
 {{ include "zeno.nodeAffinity" . | trim | indent 8 }}

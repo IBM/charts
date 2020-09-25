@@ -16,7 +16,6 @@ sch:
       persistence: "persistence"
       similarIncidents: "similar-incidents-service"
       topology: "topology"
-      qualityEvaluation: "qes"
       controller: {{ .Values.global.controller.name | quote }}
     config:
       tls: "tls"
@@ -26,6 +25,9 @@ sch:
       globalConfigMap: "global-config"
       zenoEngineConfigMap: "zeno-engine-config"
       modelTrainConsole: "model-train-console-config"
+      curatorConfigMap: "curator-config"
+    cronjobs:
+      curatorJob: "curator-job"
     tests:
       coreTests: "core-tests"
       mockServer: "mock-server"
@@ -35,9 +37,9 @@ sch:
       productVersion: "{{ .Values.global.product.version }}"
       productMetric: "VIRTUAL_PROCESSOR_CORE"
       productChargedContainers: "All"
-      productCloudpakRatio: ""
-      cloudpakName: "IBM Cloud Pak for Data"
-      cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+      productCloudpakRatio: "1:100"
+      cloudpakName: "IBM Watson AIOps for IBM Cloud Pak for Data"
+      cloudpakId: "d41251cb161c412180d0e11c5f73ef00"
       cloudpakVersion: "3.0.1"
     podSecurityContext:
       securityContext:
