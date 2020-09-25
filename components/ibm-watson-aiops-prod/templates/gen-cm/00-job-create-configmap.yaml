@@ -1,0 +1,78 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $compName := "cm-create" -}}
+{{- $configName :=  .Values.cpd.addon.configMapName -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Namespace }}-watson-aiops-prod-create
+  namespace: {{ .Values.global.zenControlPlaneNamespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName ) | trim | indent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | trim | indent 8 }}
+      name: cm-create
+    spec:
+      serviceAccountName: {{ .Values.global.existingServiceAccount }}
+{{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim | indent 6 }}
+      restartPolicy: OnFailure
+      containers:
+      - name: cm-create
+        image: {{ include "zeno.imageName" (dict "root" . "service" .Values.creds) }}
+        resources:
+{{ toYaml .Values.creds.resources | trim | indent 10 }}
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | trim | indent 8 }}
+        command:
+        - "/bin/bash"
+        - -ecx
+        - |
+          retval=0 && kubectl -n {{ .Values.global.zenControlPlaneNamespace }} get configmap {{ .Values.cpd.addon.configMapName }} || retval=$?
+          if [[ $retval != 0 ]]; then
+            cat <<EOF | kubectl create -n {{ .Values.global.zenControlPlaneNamespace }} -f -
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: {{ $configName | quote }}
+              namespace: "{{ .Values.global.zenControlPlaneNamespace }}"
+              labels:
+                icpdata_addon: "true"
+{{ include "sch.metadata.labels.standard" (list . $configName) | trim | indent 16 }}
+            data:
+              add-ons.json: |
+                {
+                  "aiops": {
+                    "access_management_enable": true,
+                    "details": {
+                      "service_provider_url": "self",
+                      "accessManagementURL": "#/accessManagement",
+                      "serviceDetailsURL": "#/details",
+                      "disable_provisioning": true,
+                      "consoleURL": "/aiops/addon"
+                    },
+                    "extensions": {
+                      "access_management": {
+                          "roles": [
+                             "User"
+                          ]
+                       },
+                       "details": {
+                          "tokens_enabled": true
+                       }
+                    },
+                    "max_instances": "",
+                    "vendor": "IBM",
+                    "versions": {
+                      "1.0.0": {
+                        "state": "installed",
+                        "details": {}
+                      }
+                    }
+                  }
+                }
+          EOF
+          fi
+
+      affinity:
+{{ include "zeno.nodeAffinity" . | trim | indent 8 }}

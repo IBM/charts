@@ -1,0 +1,38 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $name :=  .sch.chart.cronjobs.curatorJob -}}
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $name) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | indent 4 }}
+spec:
+  schedule: "@hourly"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+{{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim | indent 10 }}
+          containers:
+          - name: {{ $name | quote }}
+            image: {{ include "zeno.imageName" (dict "root" . "service" .Values.elasticsearchCurator) }}
+            resources:
+{{ toYaml .Values.creds.resources | trim | indent 14 }}
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | trim | indent 12 }}
+            command: [ "bin/bash", "-c"]
+            args: ["/curator/run_curator.sh"]
+            volumeMounts:
+{{ include "zeno.curatorConfigVolumeMount" . | indent 14 }}
+{{ include "zeno.globalConfigVolumeMount" . | indent 14 }}
+{{ include "zeno.secretConfigVolumeMount" . | indent 14 }}
+{{ include "zeno.elasticsearchConfigVolumeMount" . | indent 14 }}
+          volumes:
+{{ include "zeno.curatorConfigVolume" . | indent 12 }}
+{{ include "zeno.globalConfigVolume" . | indent 12 }}
+{{ include "zeno.elasticsearchConfigVolume" . | indent 12 }}
+            - name: zeno-secrets
+              secret:
+                secretName: {{ include "zeno.elasticsearchAccessSecretNameTemplate" . }}
+          restartPolicy: OnFailure
+          affinity:
+{{ include "zeno.nodeAffinity" . | trim | indent 12 }}

@@ -1,0 +1,32 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $compName := "test-resources-cleanup" -}}
+{{- $mockDeployName :=  .sch.chart.tests.mockServer -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "sch.names.fullCompName" (list . $compName) }}"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | trim | indent 4 }}
+  annotations:
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook": test-success
+spec:
+  restartPolicy: Never
+{{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim | indent 2 }}
+  affinity:
+{{ include "zeno.nodeAffinity" . | trim | indent 4 }}
+  serviceAccountName: {{ .Values.tether.sa }}
+{{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim | indent 2 }}
+  containers:
+  - name: cleanup
+    image: {{ include "zeno.imageName" (dict "root" . "service" .Values.creds) }}
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | trim | indent 4 }}
+    resources:
+{{ toYaml .Values.creds.resources | trim | indent 6 }}
+    command:
+      - "/bin/sh"
+      - "-c"
+      - |
+        set -ex
+        # kubectl delete -n {{ .Release.Namespace }} --ignore-not-found=true deployment {{ include "sch.names.fullCompName" (list . $mockDeployName) }}
+

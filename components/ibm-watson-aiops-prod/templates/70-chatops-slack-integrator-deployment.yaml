@@ -8,7 +8,7 @@ metadata:
 {{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 4 }}
 {{ include "zeno.meteringLabels" (dict "root" . "name" $name) | indent 4 }}
 spec:
-  replicas: 3
+  replicas: 1
   revisionHistoryLimit: 25
   selector:
     matchLabels:
@@ -38,10 +38,15 @@ spec:
 {{ include "zeno.livenessProbeTemplate" . | indent 8 }}
         envFrom:
         - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.kafka) }}
+        - configMapRef:
             name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.componentUrls) }}
         - configMapRef:
             name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.tls) }}
         env:
+{{ include "zeno.kafkaEnvSecrets" . | indent 8 }}
+        - name: KAFKA_CONSUMER_CLIENT_ID
+          value: chatops-integrator_kafkajs_consumer
         - name: SLACK_WELCOME_COMMAND_NAME
           value: {{ .Values.chatopsSlackIntegrator.slackWelcomeCommandName }}
 {{- if ne .Values.chatopsSlackIntegrator.slackSecretName "" }}
@@ -65,5 +70,7 @@ spec:
 {{- end }}
         volumeMounts:
 {{ include "zeno.tlsVolumeMounts" . | indent 8 }}
+{{ include "zeno.kafkaConfigVolumeMount" . | indent 8 }}
       volumes:
 {{ include "zeno.tlsVolume" . | indent 6 }}
+{{ include "zeno.kafkaConfigVolume" . | indent 6 }}
