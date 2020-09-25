@@ -1,9 +1,8 @@
-# What's new in Chart Version 1.2.15
-* Added Helm 3 support
-* Updated the secret generation tool's container image
+# What's new in Chart Version 1.2.17
+* Added helper to inject cp namespace into entitled registry image path
 
 # Fixes
-* Fixed issues ibm-sch was having with Helm 3
+* None
 
 # Prerequisites
 * Kubernetes version 1.9 or greater
@@ -17,6 +16,8 @@
 # Version History
 | Chart  | Date     | Kubernetes Required | Details |
 |--------|----------|---------------------|---------|
+| 1.2.17 | 03/24/20 | >=1.9.0 | Added helper to inject cp namespace into entitled registry image path |
+| 1.2.16 | 02/20/20 | >=1.9.0 | Allow overriding standard label to avoid Helm 2 to Helm 3 upgrade issue, allow overriding secret creating Helm hook |
 | 1.2.15 | 01/10/20 | >=1.9.0 | Added Helm 3 support and updated the secret generation tool's container image |
 | 1.2.14 | 10/08/19 | >=1.9.0 | Added subject alternative names to secret gen tool and updated metering annotations for license advisor |
 | 1.2.13 | 09/17/19 | >=1.9.0 | Cleaned up secret generation image parameters |

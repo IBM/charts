@@ -14,11 +14,39 @@
 {{- define "ncodatalayer.initcontainers.depwait" -}}
 - name: waitforagg
   image: {{ .Values.global.image.repository }}/{{ .Values.ncodatalayer.image.name }}{{ include "ncodatalayer.image.suffix" (list . .Values.ncodatalayer.image) }}
+  volumeMounts:
+  - name: ca
+    mountPath: /ca
+    readOnly: true
 {{ include "container.security.context" . | indent 2 }}  
   command:
   - /bin/sh
   - -c
   - '/app/entrypoint.sh npm run ping'
+  env:
+{{ include "common.application" . | indent 2 }}
+{{ include "common.license" . | indent 2 }}
+{{ include "common.omnibus" . | indent 2 }}
+{{ include "common.kafka" . | indent 2 }}
+{{ include "common.defaults" . | indent 2 }}
+{{- if eq .Values.global.resource.requests.enable true }}
+  resources:
+{{ include "ncodatalayer.comp.size.data" (list . "ncoprimary" "resources") | indent 4 }}
+{{- end }}
+{{- end -}}
+
+{{- define "ncodatalayer.initcontainers.osschemaupgrade" -}}
+- name: osschemaupgrade
+  image: {{ .Values.global.image.repository }}/{{ .Values.ncodatalayer.image.name }}{{ include "ncodatalayer.image.suffix" (list . .Values.ncodatalayer.image) }}
+  volumeMounts:
+  - name: ca
+    mountPath: /ca
+    readOnly: true
+{{ include "container.security.context" . | indent 2 }}  
+  command:
+  - /bin/sh
+  - -c
+  - '/app/entrypoint.sh npm run upgradedb'
   env:
 {{ include "common.application" . | indent 2 }}
 {{ include "common.license" . | indent 2 }}
@@ -85,7 +113,14 @@ Default URLs based on release name
     {{- $backupObjectServerPort := int .Values.global.hybrid.objectserver.backup.port -}}
     {{- printf "'{\"primary\":{\"hostname\":\"%s\",\"port\":%d},\"backup\":{\"hostname\":\"%s\",\"port\":%d}}'" .Values.global.hybrid.objectserver.primary.hostname  $primaryObjectServerPort .Values.global.hybrid.objectserver.backup.hostname $backupObjectServerPort -}}
   {{- end }}
+{{- end -}}
 
+{{- define "ncodatalayer.os.username" -}}
+  {{- if eq .Values.global.hybrid.disabled true }}
+    {{- printf "%s" .Values.global.integrations.objectServer.username -}}
+  {{- else }}
+    {{- printf "%s" .Values.global.hybrid.objectserver.username -}}
+  {{- end }}
 {{- end -}}
 
 {{- define "ncodatalayer.os.secret" -}}

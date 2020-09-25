@@ -1,0 +1,68 @@
+{{/*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2020 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/}}
+{{- if .Values.global.ingress.api.enabled }}
+{{- $compName :=  .sch.chart.components.eaasmmimecls.name -}}
+{{- include "sch.config.init" (list . "ibm-ea-mime-classification.sch.chart.config.values") -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+{{- $externalHostname := printf "netcool.%s.%s" .Release.Name .Values.global.cluster.fqdn -}}
+
+{{ $global := . }}
+
+{{- if .Values.probableCause.enabled -}}
+{{- if .Values.enabled -}}
+{{- if .Values.global.integrations.asm.enabled -}}
+
+---
+{{- if $global.Capabilities.APIVersions.Has "networking.k8s.io/v1beta1" }}
+apiVersion: networking.k8s.io/v1beta1
+{{- else }}
+apiVersion: extensions/v1beta1
+{{- end }}
+kind: Ingress
+metadata:
+  name: {{ $serviceName }}
+  namespace: {{ $global.Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list $global $compName) | indent 4 }}
+    origin: helm-ibm-hdm-analytics-dev
+  annotations:
+{{- include "sch.metadata.annotations.metering" (list $global $rootMetering) | indent 4 }}
+    kubernetes.io/ingress.class: '{{ $global.Values.global.ingress.api.class }}'
+spec:
+  rules:
+  - http:
+      paths:
+{{- range $i := until (len .Values.servicespaths) }}
+{{- $serviceInfo := index $global.Values.servicespaths $i  }}
+      - path: {{ $serviceInfo.path }}
+        backend:
+          serviceName: {{ $serviceName }}
+          servicePort: {{ $serviceInfo.port }}
+{{- end }}
+{{- if ne .Values.global.ingress.tlsSecret "" }}
+    host: {{ $externalHostname }}
+  tls:
+  - hosts:
+    - {{ $externalHostname }}
+    secretName: {{ tpl .Values.global.ingress.tlsSecret . }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

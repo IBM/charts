@@ -1,27 +1,25 @@
 {{ if .Values.global.rbac.create }}
 {{- if not .Values.global.users.secretsCreatedPreInstall -}}
 {{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
 metadata:
-  name: {{ .Release.Name }}-secrets-role
+  name: "{{ .Release.Name }}-preinstall-rolebinding"
   labels:
 {{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
   annotations:
     # This is what defines this resource as a hook. Without this line, the
     # job is considered part of the release.
-    "helm.sh/hook": pre-install
     # order of hooks 
-    "helm.sh/hook-weight": "1"
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "2" 
     "helm.sh/hook-delete-policy": "hook-succeeded,hook-failed"
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - get
-  - list
-  - create
-{{ end }}
-{{ end }}
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.global.rbac.serviceAccountName }}
+roleRef:
+  kind: Role
+  name: {{ .Release.Name }}-preinstall-role
+  apiGroup: rbac.authorization.k8s.io
+{{ end -}}  
+{{ end -}}

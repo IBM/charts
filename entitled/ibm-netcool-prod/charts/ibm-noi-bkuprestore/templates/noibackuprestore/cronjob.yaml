@@ -1,0 +1,69 @@
+{{- if eq .Values.global.backupRestore.enableAnalyticsBackups true -}}
+{{- include "sch.config.init" (list . "ibm-noi-bkuprestore.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.noibackuprestore.name -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{ $serviceName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  schedule: {{ .Values.noibackuprestore.schedule | quote }}
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering "" "" nil) | indent 12 }}
+        spec:
+          hostIPC: false
+          hostNetwork: false
+          hostPID: false
+          securityContext:
+            fsGroup: 2001
+          volumes:
+            {{- if .Values.noibackuprestore.backupDestination.secretName }}
+            - name: privatekeys
+              secret:
+                secretName: {{ .Values.noibackuprestore.backupDestination.secretName }}
+                items:
+                - key: privatekey
+                  path: privatekey
+            {{- end }}
+            - name: noibackups
+            {{- if .Values.noibackuprestore.claimName }}
+              persistentVolumeClaim:
+                claimName: {{ .Values.noibackuprestore.claimName }}
+            {{- else }}
+              emptyDir: {}
+            {{- end }}
+          {{- if .Values.global.image.secret }}
+          imagePullSecrets:
+          - name: {{ .Values.global.image.secret }}
+          {{- end }}
+          serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+          containers:
+          - name: {{ .Chart.Name }}
+            image: {{ include "image.docker.repository" . }}/{{ .Values.noibackuprestore.image.name }}{{ include "ibm-noi-bkuprestore.image.suffix" (list . .Values.noibackuprestore.image) }}
+            imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+            volumeMounts:
+            {{- if .Values.noibackuprestore.backupDestination.secretName }}
+            - name: privatekeys
+              mountPath: /privatekeys
+              readOnly: true
+            {{- end }}
+            - name: noibackups
+              mountPath: /noibackups
+
+{{ include "ibm-noi-bkuprestore.noibackuprestore.environment" . | indent 12 }}
+            resources:
+{{ include "ibm-noi-bkuprestore.comp.size.data" (list . "template" "resources") | indent 14 }}
+{{ include "ibm-noi-bkuprestore.psp.securityContext" . | indent 12 }}
+          affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 12 }}
+          restartPolicy: OnFailure
+{{- end -}}

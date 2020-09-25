@@ -28,13 +28,13 @@ There are two ways to include ibm-sch with your chart:
   dependencies:
   - name: ibm-sch
     repository: "@sch" ## where sch is based on [NAME] from the cmd: helm repo add [flags] [NAME] [URL]
-    version: "^1.2.15"
+    version: "^1.2.17"
     alias: sch
   ```
   
     Explanation of parameters:
     - Set the alias to `sch` to guarantee that all functions will work successfully.
-    - Set the version to `^1.2.15` to download the latest `1.x.x` version of ibm-sch.
+    - Set the version to `^1.2.17` to download the latest `1.x.x` version of ibm-sch.
 
 2. Download the source and copy it into your charts directory
 
@@ -53,7 +53,7 @@ Entry in subchart requirements.yaml:
 dependencies:
 - name: ibm-sch
   repository: "@sch" ## where sch is based on [NAME] from the cmd: helm repo add [flags] [NAME] [URL]
-  version: "^1.2.15"
+  version: "^1.2.17"
   alias: sch
   condition: global.sch.enabled
 ```
@@ -72,7 +72,7 @@ Entry in parent chart's requirements.yaml:
 dependencies:
 - name: ibm-sch
   repository: "@sch" ## where sch is based on [NAME] from the cmd: helm repo add [flags] [NAME] [URL]
-  version: "^1.2.15"
+  version: "^1.2.17"
   alias: sch
 ```
 
@@ -364,6 +364,32 @@ __Usage:__
   
   name: {{ include "sch.names.persistentVolumeClaimName" (list . $pvcName) }}
 ```
+
+#### entitledRegistryImage
+`"sch.names.entitledRegistryImage"` is a shared helper to aid with path manipulation when installing from Entitled Registry vs local docker registry to ensure done consistently across all images and change changed in one place when restriction for hierarchy in image path is removed.
+
+Image paths starting with "cp.icr.io" or "cp.stg.icr.io" passed to the function will be updated to add a "cp/" folder between the entitled registry path and the image name. For example,
+
+cp.icr.io/mq:1.0.0 would be updated to cp.icr.io/cp/mq:1.0.0  or
+cp.stg.icr.io/mq:1.0.0 would be updated to cp.stg.icr.io/cp/mq:1.0.0
+
+__Uses:__
+- None
+
+__Parameters input as a list of values:__
+- the image repository to update (if necessary)
+
+__Usage:__
+```
+spec:
+  template:
+    spec:
+      containers:
+        - name: {{ include "sch.names.fullCompName" (list . "content-server") }}
+          image: {{ include "sch.names.entitledRegistryImage" (list . $.Values.image.repository) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+```
+
 ### Metadata
 
 #### Labels
@@ -372,6 +398,8 @@ __Usage:__
 Note: Kubernetes has updated their standard label names. They are now app.kubernetes.io/name, helm.sh/chart, app.kubernetes.io/managed-by, and app.kubernetes.io/instance. To use these new values, set the sch.chart.labelType to `prefixed` in `_sch-chart-config.yaml`. This will use the new label names as well as the old release label for backward compatibility reasons.
 
 Note: To avoid upgrade issues related to Kubernetes selectors, only use the new labels if this is a new major version of your chart.
+
+Note: The value being used from Helm for the heritage or app.kubernetes.io/managed-by parameter is different between Helm 2 and Helm 3. If you use this standard labels function in `spec.selector.matchLabels`, this will prevent your chart from upgrading. The recommended workaround is to specify the old value as a parameter in the dictionary and the function will override it in the chart. The value passed in the parameter should be able to be toggled by the end user via values.yaml.
 
 __Config Values Used:__
 - `.sch.chart.appName`
@@ -404,6 +432,9 @@ or
 or
   labels:
 {{ include "sch.metadata.labels.standard" (list . $compName (dict "labelA" "Avalue" "labelB" "Bvalue")) | indent 4 }} # with component label and additional labels
+or
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "heritage" .Values.heritage )) | indent 4 }} # override heritage label with user-defined value (see note above)
 ```
 
 #### Metering Annotations
@@ -413,10 +444,11 @@ Licensing parameters include:
 
 - **productMetric:** the install-based metric (PROCESSOR_VALUE_UNIT, VIRTUAL_PROCESSOR_CORE, RESOURCE_VALUE_UNIT, etc.)
 - **productChargedContainers:** which containers are affected ("All", "", or a list of container names)
-- **productFlexpointBundle:** the Flexpoint Bundle that this license belongs to (optional)
-- **productSlmLocation:** the path to the SLM folder in the container (optional)
+- **productFlexpointBundle:** the Flexpoint Bundle that this license belongs to (optional, deprecated)
 
 Note: When passing licensing values to the `sch.metadata.annotations.metering` declaration, values for all parameters must be specified. Use `""` and `nil` for values that are not set. If all licensing parameters are not specified when calling `sch.metadata.annotations.metering`, then no licensing parameters will be included in the output.
+
+Note: The flexpoint bundle capability is no longer a part of license service. The parameter needs to stay in ibm-sch as a parameter for backward compatibility reasons, but the annotation will not be picked up by license service.
 
 __Config Values Used:__
 - passed as argument
@@ -425,9 +457,8 @@ __Parameters input as an list of values:__
 - the root context (required)
 - config values map of annotations (required)
 - the product metric name (optional)
-- the Flexpoint bundle name (optional)
+- the Flexpoint bundle name (optional, deprecated)
 - the list of affected containers (optional)
-- the list of paths to SLM folders in each container (optional)
 
 __Usage:__
 example chart config values for metering values only (no licensing)
@@ -462,17 +493,15 @@ sch:
       productVersion: "1.0.0.0"
       productMetric: "PROCESSOR_VALUE_UNIT"
       productChargedContainers: "All"
-      productFlexpointBundle: "IBM Flexbundle One"
-      productSlmLocation: "container1$/opt/ibm/product/slmtags;container2$/var/slmtags"
 {{- end -}}
 ```
 used in template as follows:
 ```
       annotations:
-{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering .Values.ilmt.productMetric .Values.ilmt.productFlexpointBundle (list "container1" "container2" ) (list "container1$/path/to/slm" "container2$/path/to/slm")) | indent 8 }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering .Values.ilmt.productMetric "" (list "container1" "container2" )) | indent 8 }}
 or
       annotations:
-{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil nil) | indent 8 }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
 ```
 
 #### Ingress Annotations

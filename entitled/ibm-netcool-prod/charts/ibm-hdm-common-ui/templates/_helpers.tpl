@@ -69,3 +69,13 @@ securityContext:
     drop:
       - ALL
 {{- end -}}
+
+{{- /*
+Generates init container command to generate secrets
+*/ -}}
+{{- define "ibm-hdm-common-ui.createSecrets" -}}
+- /server/lib/bin/createSecrets.js
+  {{ if eq .Values.integrations.ui.config.authenticationMode "watson-provider" }}
+- --generateAdditionalSecrets=watson
+  {{ end }}
+{{- end -}}

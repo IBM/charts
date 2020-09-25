@@ -1,8 +1,8 @@
 # Release Notes
 
-## What's new in Chart Version 2.3.1
+## What's new in Chart Version 2.3.3
 
-Resolve security vulnerabilities contained within the opencontent-redis-5 image
+Added vmstat, pkill, and top tooling opencontent-redis-5 image
 
 ## Fixes
 
@@ -24,6 +24,8 @@ None
 
 | Chart | Date | Kubernetes Version Required | Breaking Changes | Details |
 | ----- | ---- | --------------------------- | ---------------- | ------- |
+| 2.3.3 | September 02, 2020 | >= 1.11 | None | Added vmstat, pkill, and top tooling using procps-ng package on opencontent-redis-5 image |
+| 2.3.2 | August 26, 2020 | >= 1.11 | None | Resolve security vulnerabilities contained within the opencontent-redis-5 image |
 | 2.3.1 | June 01, 2020 | >= 1.11 | None | Resolve security vulnerabilities contained within the opencontent-redis-5 image |
 | 2.3.0 | May 21, 2020 | >= 1.11 | None | Support helm v3 and enable digests |
 | 2.2.4 | May 11, 2020 | >= 1.11 | None | Introduce global variables for upgrade and secret overrides |

@@ -16,9 +16,9 @@
 */}}
 
 {{ define "objectserver.username" -}}
-    {{- if  .Values.objectserver.username -}}
+    {{- if eq .Values.global.hybrid.disabled true -}}
         {{- .Values.objectserver.username -}}
-    {{- else if not .Values.global.hybrid.disabled -}}
+    {{- else if  .Values.objectserver.username -}}
         {{- .Values.global.hybrid.objectserver.username -}}
     {{- else -}}
         root

@@ -31,6 +31,7 @@ Full documentation on deploying the ibm-netcool-prod chart can be found in the [
 
 | Chart | Date       | Kubernetes Required | Breaking Changes     | Details                          |
 | ----- | ---------- | ------------------- | -------------------- | -------------------------------- |
+| 2.1.5 | Sep, 2020  | >=1.11.0            | -                    | NOI 1.6.2, Openshift 4.4, 4.5 support |
 | 2.1.4 | Jun, 2020  | >=1.11.0            | -                    | NOI 1.6.1, Openshift 4.3/4.4 support|
 | 2.1.3 | Mar, 2020  | >=1.11.0            | -                    | NOI 1.6.0.3, Openshift 4.3 support|
 | 2.1.2 | Jan, 2020  | >=1.11.0            | -                    | NOI 1.6.0.2, Hybrid mode & Openshift 4.2 support|
@@ -38,3 +39,10 @@ Full documentation on deploying the ibm-netcool-prod chart can be found in the [
 | 2.1.0 | Jun, 2019  | >=1.11.0            | -                    | NOI 1.6.0, OpenShift support & Cloud based Event Analytics |
 | 2.0.0 | Feb, 2019  | >=1.11.1            | labels & statefulset | NOI 1.5.0.1 & minimal scalability |
 | 1.0.0 | Sept, 2018 | >=1.10              | -                    | Initial release of NOI chart |
+
+----
+### Build details
+
+- Build Number: master-242
+- Git Commit: 29a7b63
+

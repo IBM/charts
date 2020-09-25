@@ -38,7 +38,7 @@ spec:
 {{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
         appClass: ncodatalayer-setup
       annotations:
-{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering "" "" nil) | indent 8 }}
     spec:
       affinity:
         nodeAffinity:
@@ -52,6 +52,10 @@ spec:
       - name: {{ .Chart.Name }}-setup-schema
         image: {{ include "image.docker.repository" . }}/{{ .Values.ncodatalayer.image.name }}{{ include "ncodatalayer.image.suffix" (list . .Values.ncodatalayer.image) }}
         imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        volumeMounts:
+        - name: ca
+          mountPath: /ca
+          readOnly: true
 {{ include "container.security.context" . | indent 8 }}
         env:
 {{ include "common.application" . | indent 8 }}
@@ -73,6 +77,10 @@ spec:
       - name: {{ .Chart.Name }}-setup-automations
         image: {{ include "image.docker.repository" . }}/{{ .Values.ncodatalayer.image.name }}{{ include "ncodatalayer.image.suffix" (list . .Values.ncodatalayer.image) }}
         imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        volumeMounts:
+        - name: ca
+          mountPath: /ca
+          readOnly: true
 {{ include "container.security.context" . | indent 8 }}
         env:
 {{ include "common.application" . | indent 8 }}
@@ -88,5 +96,14 @@ spec:
         - -c
         - '/app/entrypoint.sh npm run setupdb:triggers'
 {{ include "deployment.security.context" . | indent 6 }}
+      volumes:
+      - name: ca
+        secret:
+          secretName: {{ .Values.global.authentication.objectserver.secretRelease | default .Release.Name }}{{ .Values.global.authentication.objectserver.certificateTemplate | default "-omni-certificate-secret" }}
+          items:
+          - key: ROOTCA
+            path: rootca
+          - key: INTERMEDIATECA
+            path: intermediatepath
 {{ end }}
 {{ end }}

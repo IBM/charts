@@ -16,7 +16,7 @@
 ########################################################################
 */}}
 
-{{- define "eventanalytics.probe.smonitor.readiness" -}}
+{{- define "ea-noi-layer.probe.smonitor.readiness" -}}
 readinessProbe:
   httpGet:
     port: unsecure-port
@@ -32,7 +32,7 @@ readinessProbe:
   failureThreshold: 3
 {{- end -}}
 
-{{- define "eventanalytics.probe.smonitor.liveness" -}}
+{{- define "ea-noi-layer.probe.smonitor.liveness" -}}
 livenessProbe:
   httpGet:
     port: unsecure-port
@@ -42,13 +42,13 @@ livenessProbe:
     path: /servicemonitor
 {{ end }}
   timeoutSeconds: 60
-  initialDelaySeconds: 60
+  initialDelaySeconds: 70
   periodSeconds: 60
   successThreshold: 1
   failureThreshold: 3
 {{- end -}}
 
-{{- define "eventanalytics.probe.tcpsocket.readiness" -}}
+{{- define "ea-noi-layer.probe.tcpsocket.readiness" -}}
 readinessProbe:
   tcpSocket:
     port: unsecure-port
@@ -59,23 +59,23 @@ readinessProbe:
   failureThreshold: 3
 {{- end -}}
 
-{{- define "eventanalytics.probe.tcpsocket.liveness" -}}
+{{- define "ea-noi-layer.probe.tcpsocket.liveness" -}}
 livenessProbe:
   tcpSocket:
     port: unsecure-port
   timeoutSeconds: 60
-  initialDelaySeconds: 60
+  initialDelaySeconds: 70
   periodSeconds: 60
   successThreshold: 1
   failureThreshold: 3
 {{- end -}}
 
-{{- define "eventanalytics.probe.smonitor.all" -}}
-{{ include "eventanalytics.probe.smonitor.liveness" . }}
-{{ include "eventanalytics.probe.smonitor.readiness" . }}
+{{- define "ea-noi-layer.probe.smonitor.all" -}}
+{{ include "ea-noi-layer.probe.smonitor.liveness" . }}
+{{ include "ea-noi-layer.probe.smonitor.readiness" . }}
 {{- end -}}
 
-{{- define "eventanalytics.probe.tcpsocket.all" -}}
-{{ include "eventanalytics.probe.tcpsocket.liveness" . }}
-{{ include "eventanalytics.probe.tcpsocket.readiness" . }}
+{{- define "ea-noi-layer.probe.tcpsocket.all" -}}
+{{ include "ea-noi-layer.probe.tcpsocket.liveness" . }}
+{{ include "ea-noi-layer.probe.tcpsocket.readiness" . }}
 {{- end -}}

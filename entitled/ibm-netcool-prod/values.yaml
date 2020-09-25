@@ -25,11 +25,31 @@ global:
     # Public name or IP the deployment cluster will be accessible from.
     fqdn:
 
+  # ServiceContinuity for DR
+  serviceContinuity:
+    isBackupDeployment: false
+    continuousAnalyticsCorrelation: true
+
+  # Backup and Restore
+  backupRestore:
+    enableAnalyticsBackups: true
+
   ingress:
     port : 443
     tlsSecret: "{{ .Release.Name }}-netcool-tls-secret"
     # This value must be left to true. Other values are only valid in specific test environment.
     prefixWithReleaseName: true
+    api:
+      # Ingress must be from: https://kubernetes.github.io/ingress-nginx/
+      # Set to true if you need/want an ingress definition.
+      # This will disable routes on OpenShift
+      enabled: false
+      # This is the ingress prefix that has been set with
+      # the  --annotations-prefix argument when configuring Ingress
+      prefix: 'nginx.ingress.kubernetes.io'
+      # This is the ingress class that has been set with
+      # the --ingress-class argument when configuring Ingress
+      class: 'nginx'
 
   # While the some pods can run within Openshift's restricted SCC, if
   # another SCC is applied to the pod via a service account that doesn't support
@@ -48,9 +68,9 @@ global:
     # Use image tags instead of digests
     useTag: true
     # Tag to use for configuration share utility image
-    sharedTag: 1.6.1-201
-    sharedDigest: sha256:9f568f395cc31990e466fc112622994ef9ad038ce2ee3a0f06c712d457f6212c
-    publicOperatorRepo: docker.io/ibmcom 
+    sharedTag: 1.6.2-239
+    sharedDigest: sha256:f0adf3f9d8267cc7e4b3295d5cb58ba916a0ceab09aa133aad0129e07f6215dd
+    publicOperatorRepo: docker.io/ibmcom
   #environmentSize defines the size of deployment you want.
   #size0 is current default and is intended for demo purposes only.
   #size1 is recommended for production use.
@@ -134,8 +154,14 @@ global:
       suffix: "dc=mycluster,dc=icp"
       baseDN: dc=mycluster,dc=icp
       bindDN: "cn=admin,dc=mycluster,dc=icp"
-
+      userFilter: "uid=%s,ou=users"
+      groupFilter: "cn=%s,ou=groups"
+      serverType: "CUSTOM"
   integrations:
+    # Humio integrations (right click launch search capabilities for event list and topology)
+    humio:
+      url: ""
+      repository: ""
     asm:
       # If true, signifies that ASM integration is to be enabled and activates the ASM integration
       enabled: false
@@ -288,7 +314,7 @@ nciserver:
       value: ""
 
     size: 5Gi
-    
+
 impactgui:
   pvc:
     # specify the storageClassName you want to use
@@ -351,7 +377,7 @@ ibm-ea-asm-normalizer:
   joinWindowSize: 60
   kafkaImage:
     name: kafka
-    tag: 1.2.34-202006150509-amd64L-PPAN-BNYCMS
+    tag: 1.3.7-202009111233L-TKAI-BRJC5E
 
 ibm-ea-asm-mime:
   enabled: true
@@ -378,3 +404,7 @@ alerttriggerservice:
   enabled: true
 alertactionservice:
   enabled: true
+
+healthcron:
+  schedule:  1 * * * *
+  timeoutSeconds: 86400
