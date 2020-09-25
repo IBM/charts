@@ -35,7 +35,7 @@ spec:
       labels:
 {{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
       annotations:
-{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
     spec:
       containers:
         - name: {{ .Chart.Name }}
@@ -61,14 +61,16 @@ spec:
             - name: {{ .Release.Name }}-trust-certificate-mount
               mountPath: /home/netcool/trust-certificates/noiui
             {{ end }}
-            {{ if (.Capabilities.APIVersions.Has "security.openshift.io/v1")  }}
             - name: {{ .Release.Name }}-inner-webgui
               mountPath: /home/netcool/trust-certificates/internal
-            {{- end }}
             - name: asm-application-yaml
               mountPath: /home/netcool/app/gui/inasm/etc
             - name: asm-security
               mountPath: /home/netcool/app/gui/inasm/security
+            {{- if and (hasKey .Values.global "hybrid" ) (hasKey .Values.global.hybrid "trustedCAsConfigMapName" ) (ne (toString .Values.global.hybrid.trustedCAsConfigMapName) "" ) }}
+            - name: {{ .Values.global.hybrid.trustedCAsConfigMapName }}-volume
+              mountPath: /home/netcool/trust-certificates/users
+            {{- end }}
           ports:
             - containerPort: {{ .Values.webgui.internal.dashPort }}
             - containerPort: {{ .Values.webgui.internal.wasPort }}
@@ -139,6 +141,15 @@ spec:
                 name: {{ .Release.Name }}-ldap-secret
                 key: LDAP_BIND_PASSWORD
                 optional: false
+          - name: LDAP_USERFILTER
+            value: {{ .Values.global.ldapservice.internal.userFilter }}
+
+          - name: LDAP_GROUPFILTER
+            value: {{ .Values.global.ldapservice.internal.groupFilter }}
+          - name: LDAP_SERVERTYPE
+            value: {{ .Values.global.ldapservice.internal.serverType }}
+
+
           - name: SSO_DOMAIN
             value: {{- if eq .Values.global.ingress.prefixWithReleaseName  true }} {{ .Release.Name }}.{{ .Values.global.cluster.fqdn }}  {{- else }} {{ .Values.global.cluster.fqdn }} {{- end }}
           - name: WAS_SECRET_NAME
@@ -151,6 +162,14 @@ spec:
                 optional: false
           - name:  LDAP_VERIFY_PASSWORDS
             value: "{{ .Values.global.ldapservice.verifypasswords }}"
+          {{ if .Values.global.integrations.humio.url }}
+          - name:  HUMIO_BASE_URL
+            value: "{{ .Values.global.integrations.humio.url }}"
+          {{ end }}
+          {{ if .Values.global.integrations.humio.repository }}
+          - name:  HUMIO_REPOSITORY
+            value: "{{ .Values.global.integrations.humio.repository }}"
+          {{ end }}
           - name: HELM_RELEASE
             value: {{ .Release.Name }}
           - name: WAS_OAUTH_CNEA_CLIENT_SECRET
@@ -200,7 +219,7 @@ spec:
               secretKeyRef:
                 name: {{ .Release.Name }}-icpadmin-secret
                 key: ICP_ADMIN_PASSWORD
-                optional: false             
+                optional: false
           - name: SUBSCRIPTION_ID
             value: {{ .Values.global.common.eventanalytics.tenantId | quote }}
           - name: WAS_LOGOUT_REDIRECT_URL
@@ -400,7 +419,14 @@ spec:
       volumes:
         - name: {{ .Release.Name }}-share-mount
           emptyDir: {}
-       {{ if .Values.trustCertificateSecret }}
+        {{- if and (hasKey .Values.global "hybrid" ) (hasKey .Values.global.hybrid "trustedCAsConfigMapName" ) (ne (toString .Values.global.hybrid.trustedCAsConfigMapName) "") }}
+        - name: {{ .Values.global.hybrid.trustedCAsConfigMapName }}-volume
+          configMap:
+            defaultMode: 420
+            name: {{ .Values.global.hybrid.trustedCAsConfigMapName }}
+            optional: true
+        {{- end }}
+        {{ if .Values.trustCertificateSecret }}
         - name: {{ .Release.Name }}-trust-certificate-mount
           secret:
             secretName: {{ printf .Values.trustCertificateSecret .Release.Name }}
@@ -435,7 +461,6 @@ spec:
                 name: {{ .Values.global.integrations.asm.releaseName }}-asm-credentials
                 optional: true
             {{ end }}
-{{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1")  }}
         - name: {{ .Release.Name }}-inner-webgui
           secret:
             secretName: {{ .Release.Name }}-inner-webgui
@@ -444,4 +469,3 @@ spec:
               path: trust-tls.crt
             - key: tls.key
               path: trust-tls.key
-{{- end }}

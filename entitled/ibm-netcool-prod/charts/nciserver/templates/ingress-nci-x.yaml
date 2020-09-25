@@ -1,4 +1,3 @@
-{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1")  }}
 ########################################################################
 #
 # Licensed Materials - Property of IBM
@@ -17,23 +16,25 @@
 {{ $nodeCount := (include "noi.nciservers.replicas" (list . .Values.replicaCount)) | int -}}
 {{ $global := . }}
 {{- range $i := until $nodeCount }}
+{{- if $global.Values.global.ingress.api.enabled }}
 ---
 {{ $externalHostname := printf "nci-%d.%s.%s" $i $global.Release.Name $global.Values.global.cluster.fqdn }}
-apiVersion: extensions/v1beta1
+{{- if $global.Capabilities.APIVersions.Has "networking.k8s.io/v1beta1" }}
+apiVersion: networking.k8s.io/v1beta1    
+{{- else }}
+apiVersion: extensions/v1beta1           
+{{- end }}
+
 kind: Ingress
 metadata:
   name: {{ $global.Release.Name }}-nci-{{ $i }}
   labels:
 {{ include "sch.metadata.labels.standard" (list $global "") | indent 4 }}
   annotations:
-    ingress.kubernetes.io/rewrite-target: /
-    ingress.kubernetes.io/proxy-body-size: "0"
-    ingress.kubernetes.io/proxy-read-timeout: "{{ $global.Values.ingress.proxyReadTimeout }}"
-    ingress.kubernetes.io/proxy-send-timeout: "{{ $global.Values.ingress.proxySendTimeout }}"
-    nginx.ingress.kubernetes.io/rewrite-target: /
-    nginx.ingress.kubernetes.io/proxy-body-size: "0"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "{{ $global.Values.ingress.proxyReadTimeout }}"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "{{ $global.Values.ingress.proxySendTimeout }}"
+    kubernetes.io/ingress.class: '{{ $global.Values.global.ingress.api.class }}'
+    {{ $global.Values.global.ingress.api.prefix }}/proxy-body-size: '0'
+    {{ $global.Values.global.ingress.api.prefix }}/proxy-read-timeout: '{{ $global.Values.ingress.proxyReadTimeout }}'
+    {{ $global.Values.global.ingress.api.prefix }}/proxy-send-timeout: '{{ $global.Values.ingress.proxySendTimeout }}'
 spec:
   tls:
   - secretName: {{ $global.Release.Name }}-nci-{{ $i }}-tls-secret

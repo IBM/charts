@@ -21,7 +21,7 @@ alertactionservice:
     resources:
       limits:
         memory: 4000Mi
-        cpu: 1000m
+        cpu: 500m
       requests:
         memory: 1000Mi
         cpu: 200m

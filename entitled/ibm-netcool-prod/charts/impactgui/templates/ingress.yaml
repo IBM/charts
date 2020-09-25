@@ -12,28 +12,27 @@
 # restricted by GSA ADP Schedule Contract with IBM Corp.
 #
 ########################################################################
-{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1")  }}
+{{- if .Values.global.ingress.api.enabled }}
 {{- include "sch.config.init" (list . "sch.chart.config.values") -}}
 {{-  $externalHostname := printf "%s.%s.%s" "impact" .Release.Name .Values.global.cluster.fqdn }}
-apiVersion: extensions/v1beta1
+{{- if .Capabilities.APIVersions.Has "networking.k8s.io/v1beta1" }}
+apiVersion: networking.k8s.io/v1beta1    
+{{- else }}
+apiVersion: extensions/v1beta1           
+{{- end }}
+
 kind: Ingress
 metadata:
   name: {{ include "sch.names.fullName" (list .) }}
   labels:
 {{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
   annotations:
-    ingress.kubernetes.io/rewrite-target: /
-    ingress.kubernetes.io/proxy-body-size: "0"
-    ingress.kubernetes.io/secure-backends: "true"
-    ingress.kubernetes.io/proxy-read-timeout: "{{ .Values.ingress.proxyReadTimeout }}"
-    ingress.kubernetes.io/proxy-send-timeout: "{{ .Values.ingress.proxySendTimeout }}"
-    nginx.ingress.kubernetes.io/rewrite-target: /
-    nginx.ingress.kubernetes.io/proxy-body-size: "0"
-    nginx.ingress.kubernetes.io/secure-backends: "true"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "{{ .Values.ingress.proxyReadTimeout }}"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "{{ .Values.ingress.proxySendTimeout }}"
-    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
-    ingress.kubernetes.io/backend-protocol: "HTTPS"
+    kubernetes.io/ingress.class: '{{ .Values.global.ingress.api.class }}'
+    {{ .Values.global.ingress.api.prefix }}/proxy-body-size: '0'
+    {{ .Values.global.ingress.api.prefix }}/affinity: 'cookie'
+    {{ .Values.global.ingress.api.prefix }}/backend-protocol: 'HTTPS'
+    {{ .Values.global.ingress.api.prefix }}/proxy-read-timeout: '{{ .Values.ingress.proxyReadTimeout }}'
+    {{ .Values.global.ingress.api.prefix }}/proxy-send-timeout: '{{ .Values.ingress.proxySendTimeout }}'
 spec:
   tls:
   - secretName: {{ .Release.Name }}-impact-tls-secret

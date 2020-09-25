@@ -28,12 +28,12 @@ alert-trigger:
         cpu: 500m
       requests:
         memory: 1000Mi
-        cpu: 200m
+        cpu: 100m
   size1:
     resources:
       limits:
         memory: 3000Mi
-        cpu: 1000m
+        cpu: 500m
       requests:
         memory: 2000Mi
         cpu: 200m

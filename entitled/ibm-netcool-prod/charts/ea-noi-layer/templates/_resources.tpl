@@ -33,36 +33,36 @@ noieagateway:
   size0:
     resources:
       limits:
-        memory: 2048Mi
-        cpu: 1500m
-      requests:
         memory: 1024Mi
-        cpu: 300m
+        cpu: 200m
+      requests:
+        memory: 512Mi
+        cpu: 10m
   size1:
     resources:
       limits:
         memory: 4096Mi
-        cpu: 2000m
+        cpu: 500m
       requests:
         memory: 2048Mi
-        cpu: 500m
+        cpu: 100m
 noiactionservice:
   size0:
     resources:
       limits:
         memory: 512Mi
-        cpu: 300m
+        cpu: 200m
       requests:
         memory: 512Mi
-        cpu: 100m
+        cpu: 10m
   size1:
     resources:
       limits:
         memory: 1024Mi
-        cpu: 1000m
+        cpu: 500m
       requests:
         memory: 512Mi
-        cpu: 200m
+        cpu: 100m
 initContainer:
   size0:
     resources:

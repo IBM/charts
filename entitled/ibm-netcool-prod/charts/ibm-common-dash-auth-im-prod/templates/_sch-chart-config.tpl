@@ -41,6 +41,13 @@ sch:
     labelType: "prefixed"
 {{- end -}}
 
+{{- define "ibm-common-dash-auth-im-prod.data" -}}
+  metering:
+      productName: "IBM Netcool Operations Insight v1.6.0 on IBM Cloud private"
+      productID: "4DBA2B5A269740CAAE5FECDAFE0568AA"
+      productVersion: "1.6.0.2"
+      productChargedContainers: "All"
+{{- end -}}
 
 {{- /*
 ##############################

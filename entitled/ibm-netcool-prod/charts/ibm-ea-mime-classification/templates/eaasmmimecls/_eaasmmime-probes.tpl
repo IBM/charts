@@ -5,7 +5,7 @@ readinessProbe:
     - "sh"
     - "-c"
     - >-
-      test -f "custom_models/custom_model_default_model_id.ftz"
+      test -f "custom_models/custom_model_default_tenant_id.ftz"
   initialDelaySeconds: {{ .Values.readiness.initialDelaySeconds }}
   periodSeconds: {{ .Values.readiness.periodSeconds }}
   timeoutSeconds: {{ .Values.readiness.timeoutSeconds }}

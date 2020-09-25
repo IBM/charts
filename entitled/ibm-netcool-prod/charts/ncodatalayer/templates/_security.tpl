@@ -35,5 +35,4 @@ securityContext:
 hostNetwork: false
 hostPID: false
 hostIPC: false
-serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
 {{- end -}}

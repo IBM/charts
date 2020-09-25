@@ -114,7 +114,17 @@ env:
      secretKeyRef:
       name: {{ printf "%s-cassandra-auth-secret" .Release.Name | quote }}
       key: password
-
+{{- /*
+The method of updating the replication factor should be revisited when more than 2 sizes (size0, size1, ..sizen) are introduced.
+Check PopulateEdgeWeight.java and mime_config.cql
+*/ -}}
+{{- if  eq .Values.global.environmentSize  "size1" }}
+  - name: CASSANDRA_REPLICATION_FACTOR
+    value: "3"
+{{- else }}
+  - name: CASSANDRA_REPLICATION_FACTOR
+    value: "1"
+{{- end }}
 {{ include "ibm-ea-asm-mime.getCemusersUrl" (list . "AUTH_CEMUSERS_USERINFO_ENDPOINT" $integrations.users.releaseName $integrations.users.namespace $integrations.users.config.userInfoTenant) | indent 2 }}
   - name: MIME_AUTH_ENABLED
     value: {{ $.Values.authentication.enabled | quote }}

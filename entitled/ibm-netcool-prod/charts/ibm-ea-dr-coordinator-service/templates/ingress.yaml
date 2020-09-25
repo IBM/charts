@@ -1,0 +1,42 @@
+{{- if .Values.global.ingress.api.enabled }}
+{{- include "sch.config.init" (list . "ibm-ea-dr-coordinator-service.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.eacoordinator.name -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+{{ $global := . }}
+
+{{- if .Capabilities.APIVersions.Has "networking.k8s.io/v1beta1" }}
+apiVersion: networking.k8s.io/v1beta1    
+{{- else }}
+apiVersion: extensions/v1beta1           
+{{- end }}
+kind: Ingress
+metadata:
+  name: {{ $serviceName }}
+  namespace: {{ $global.Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list $global $compName) | indent 4 }}
+    origin: helm-ibm-hdm-analytics-dev
+  annotations:
+{{ include "sch.metadata.annotations.metering" (list $global $rootMetering) | indent 4 }}
+    kubernetes.io/ingress.class: '{{ .Values.global.ingress.api.class }}'
+spec:
+  tls:
+  - hosts:
+    - "netcool.{{- $global.Release.Name }}.{{- $global.Values.global.cluster.fqdn }}"
+    {{ if .Values.global.ingress.tlsSecret }}
+    secretName: {{ tpl .Values.global.ingress.tlsSecret . }}
+    {{ else }}
+    secretName: {{ include "sch.names.fullCompName" (list . "tls-ingress") | quote }}
+    {{ end }}
+
+  rules:
+  - http:
+      paths:
+      - backend:
+          serviceName: {{ $serviceName }}
+          servicePort: 8080
+      path: /coordinator
+    host: "netcool.{{- $global.Release.Name }}.{{- $global.Values.global.cluster.fqdn }}"
+{{ end }}

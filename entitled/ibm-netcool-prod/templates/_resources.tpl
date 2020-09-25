@@ -34,27 +34,27 @@ nciserver:
     resources:
       limits:
         memory: 2048Mi
-        cpu: 2000m
+        cpu: 1000m
       requests:
         memory: 1024Mi
-        cpu: 200m
+        cpu: 200m 
   size1:
     resources:
       limits:
-        memory: 2048Mi
+        memory: 4096Mi
         cpu: 2000m
       requests:
-        memory: 1024Mi
+        memory: 2048Mi
         cpu: 200m
 openldap:
   size0:
     resources:
       limits:
         memory: 1024Mi
-        cpu: 1000m
+        cpu: 500m
       requests:
-        memory: 500Mi
-        cpu: 100m
+        memory: 250Mi
+        cpu: 10m
   size1:
     resources:
       limits:
@@ -71,7 +71,7 @@ webgui:
         cpu: 2000m
       requests:
         memory: 1024Mi
-        cpu: 1000m
+        cpu: 400m
   size1:
     resources:
       limits:
@@ -88,15 +88,15 @@ db2ese:
         cpu: 1000m
       requests:
         memory: 2000Mi
-        cpu: 500m
+        cpu: 100m
   size1:
     resources:
       limits:
-        memory: 4000Mi
+        memory: 3000Mi
         cpu: 1000m
       requests:
         memory: 2000Mi
-        cpu: 500m
+        cpu: 300m
 configurationShare:
   size0:
     resources:
@@ -119,32 +119,32 @@ ncoprimary:
     resources:
       limits:
         memory: 2048Mi
-        cpu: 2000m
+        cpu: 1000m
       requests:
-        memory: 1024Mi
+        memory: 500Mi
         cpu: 1000m
   size1:
     resources:
       limits:
         memory: 4096Mi
-        cpu: 2000m
+        cpu: 1000m
       requests:
         memory: 1024Mi
-        cpu: 2000m
+        cpu: 1000m
 ncobackup:
   size0:
     resources:
       limits:
         memory: 2048Mi
-        cpu: 2000m
+        cpu: 1000m
       requests:
-        memory: 1024Mi
+        memory: 500Mi
         cpu: 1000m
   size1:
     resources:
       limits:
         memory: 4096Mi
-        cpu: 2000m
+        cpu: 1000m
       requests:
         memory: 1024Mi
         cpu: 1000m
@@ -153,35 +153,35 @@ aggGate:
     resources:
       limits:
         memory: 1024Mi
-        cpu: 1000m
-      requests:
-        memory: 500Mi
         cpu: 500m
+      requests:
+        memory: 250Mi
+        cpu: 10m
   size1:
     resources:
       limits:
         memory: 2048Mi
-        cpu: 2000m
+        cpu: 500m
       requests:
         memory: 1024Mi
-        cpu: 1000m
+        cpu: 200m
 proxy:
   size0:
     resources:
       limits:
         memory: 1024Mi
-        cpu: 1000m
+        cpu: 500m
       requests:
         memory: 128Mi
-        cpu: 500m
+        cpu: 10m 
   size1:
     resources:
       limits:
         memory: 1024Mi
-        cpu: 2000m
+        cpu: 500m
       requests:
         memory: 128Mi
-        cpu: 1000m
+        cpu: 300m
 impactgui:
   size0:
     resources:
@@ -190,7 +190,7 @@ impactgui:
         cpu: 1000m
       requests:
         memory: 1024Mi
-        cpu: 200m
+        cpu: 100m
   size1:
     resources:
       limits:

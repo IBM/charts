@@ -1,0 +1,60 @@
+{{- include "sch.config.init" (list . "ibm-common-elastic-curator.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.commonelasticcurator.name -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-curator-pattern-metrics
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  concurrencyPolicy: Forbid
+  schedule: {{ .Values.esCurator.patternIndiciesSchedule | quote }}
+  suspend: false
+  jobTemplate:
+    metadata:
+      name: {{ .Release.Name }}-curator-pattern-metrics
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering "" "" nil) | indent 8 }}
+    spec:
+      template:
+        metadata:
+          annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering "" "" nil) | indent 12 }}
+        spec:
+          affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 12 }}
+{{ include "ibm-common-elastic-curator.spec.securityContext" . | indent 10}}
+          restartPolicy: OnFailure
+          imagePullSecrets:
+          - name: {{ .Values.global.image.secret }}
+          serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+          containers:
+          - name: {{ .Release.Name }}-common-elastic-curator
+            image:  {{ include "ibm-common-elastic-curator.image.url" (list . .Values.image) | quote }}
+            imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+            command:
+              - /bin/sh
+              - -c
+              - curator ~/.curator/actions/delete_indices_pattern.yml
+{{ include "ibm-common-elastic-curator.commonelasticcurator.environment" . | indent 12 }}
+            volumeMounts:
+            - mountPath: /home/ibm/.curator/curator.yml
+              subPath: curator.yml
+              name: config-volume
+            - mountPath: /home/ibm/.curator/actions/delete_indices_pattern.yml
+              subPath: delete_indices_pattern.yml
+              name: config-volume
+            resources:
+{{ include "ibm-common-elastic-curator.comp.size.data" (list . "commonelasticcurator" "resources") | indent 14 }}
+{{ include "ibm-common-elastic-curator.psp.securityContext" . | indent 12}}
+{{ include "ibm-common-elastic-curator.commonelasticcurator.probes" . | indent 12 }}
+          volumes:
+          - name: config-volume
+            configMap:
+              defaultMode: 420
+              name: {{ .Release.Name }}-common-elastic-curator-config

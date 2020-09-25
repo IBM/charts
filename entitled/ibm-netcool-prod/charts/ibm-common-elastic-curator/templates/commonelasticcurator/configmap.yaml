@@ -1,0 +1,54 @@
+{{- include "sch.config.init" (list . "ibm-common-elastic-curator.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.commonelasticcurator.name -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-common-elastic-curator-config
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+data:
+  curator.yml: |2
+      client:
+        hosts:
+        - {{ .Release.Name }}-elasticsearch.{{ .Release.Namespace }}.svc
+        port: 9200
+        url_prefix:
+        use_ssl: False
+        certificate:
+        client_cert:
+        client_key:
+        ssl_no_validate: False
+        http_auth:
+        timeout: 30
+        master_only: False
+
+      logging:
+        loglevel: INFO
+        logfile:
+        logformat: default
+        blacklist: ['elasticsearch', 'urllib3']
+  
+  delete_indices_pattern.yml: |2
+    actions:
+      1:
+        action: delete_indices
+        description: >-
+          Delete indices older than 90 days (based on index name), for ea-pattern-metrics-
+          prefixed indices.
+        options:
+          ignore_empty_list: True
+          timeout_override:
+          continue_if_exception: False
+          disable_action: False
+        filters:
+        - filtertype: pattern
+          kind: prefix
+          value: ea-pattern-metrics-
+          exclude:
+        - filtertype: age
+          source: name
+          direction: older
+          timestring: '%d.%m.%Y'
+          unit: days
+          unit_count: 90
+          exclude:
