@@ -31,18 +31,24 @@ sch:
     metering:
       productName: "IBM Netcool Operations Insight"
       productID: "4dba2b5a269740caae5fecdafe0568aa"
-      productVersion: "1.6.1"
+      productVersion: "1.6.2"
       productChargedContainers: "All"
-      productMetric: "Managed Virtual Server"
+      productMetric: "MANAGED_VIRTUAL_SERVER"
+      cloudpakName: "IBM Netcool Operations Insight Cloud Pak"
+      cloudpakId: "4dba2b5a269740caae5fecdafe0568aa"
+      cloudpakVersion: "1.6.2"
     labelType: prefixed
 {{- end -}}
 {{- define "ibm-netcool-prod.data" -}}
   metering:
       productName: "IBM Netcool Operations Insight"
       productID: "4dba2b5a269740caae5fecdafe0568aa"
-      productVersion: "1.6.1"
+      productVersion: "1.6.2"
       productChargedContainers: "All"
-      productMetric: "Managed Virtual Server"
+      productMetric: "MANAGED_VIRTUAL_SERVER"
+      cloudpakName: "IBM Netcool Operations Insight Cloud Pak"
+      cloudpakId: "4dba2b5a269740caae5fecdafe0568aa"
+      cloudpakVersion: "1.6.2"
 {{- end -}}
 
 {{- define "parent.data" -}}

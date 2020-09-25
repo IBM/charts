@@ -33,6 +33,7 @@ sch:
       productID: "RedisHA_503r0_free_00000"
       productName: "Redis HA"
       productVersion: "5.0.5"
+      productMetric: "FREE"
     nodeAffinity:
       nodeAffinityRequiredDuringScheduling:
         operator: In
@@ -55,4 +56,24 @@ sch:
       capabilities:
         drop:
         - ALL
+{{- end -}}
+
+{{- define "ibm-redis.data" -}}
+metering:
+  productID: "RedisHA_503r0_free_00000"
+  productName: "Redis HA"
+  productVersion: "5.0.5"
+  productMetric: "FREE"
+{{- end -}}
+
+{{- /*
+##############################
+## common helper to get the root data based on parsing the template name
+##############################
+*/ -}}
+{{- define "root.data" -}}
+{{- $chartList := (splitList "/charts/" .Template.Name) -}}
+{{- $rootChartName := (index (splitList "/" (index $chartList 0)) 0) -}}
+{{- $rootDataTemplate := printf "%s.%s" $rootChartName "data" -}}
+{{- include $rootDataTemplate . -}}
 {{- end -}}

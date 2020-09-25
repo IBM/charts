@@ -1,0 +1,168 @@
+{{- $compName := "healthcron" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: "{{.Release.Name}}-healthcron"
+  labels:
+    app.kubernetes.io/name: "openldap-test"
+    helm.sh/chart: "openldap"
+    app.kubernetes.io/managed-by: "Tiller"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    release: "{{ .Release.Name }}"
+  annotations:
+spec:  
+  concurrencyPolicy: Forbid
+  schedule: {{ .Values.healthcron.schedule | quote }}
+  suspend: false
+  jobTemplate:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}  
+    spec:
+      template:
+        metadata:
+          annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering "" "" nil) | indent 12 }}
+      
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: healthchecker
+            image: "{{ include "image.docker.repository" . -}}/{{- include "image.family" . -}}-configuration-share-{{- include "image.edition" . -}}{{ include "config.share.image.suffix" . }}"
+            env: 
+            - name: OPERATOR_TIMEOUT
+              value: {{ .Values.healthcron.timeoutSeconds }}
+            - name: OMNIBUS_HOST
+              value: {{ .Release.Name }}-objserv-agg-primary-nodeport
+            - name: OMNIBUS_USER
+              value: root   
+            - name: OMNIBUS_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ printf .Values.global.omnisecretname .Release.Name }}
+                  key: OMNIBUS_ROOT_PASSWORD
+                  optional: false
+                
+            command: 
+              - "sh"
+              - "-c"
+              {{ if .Values.healthcron.command }}
+              {{ .Values.healthcron.command }} 
+              {{ else }}
+              - |
+                  NAMESPACE=`cat /var/run/secrets/kubernetes.io/serviceaccount/namespace`
+                  KUBE_TOKEN=$(</var/run/secrets/kubernetes.io/serviceaccount/token)
+                  curl -sSk -H "Authorization: Bearer $KUBE_TOKEN" https://$KUBERNETES_SERVICE_HOST/api/v1/namespaces/${NAMESPACE}/pods > /tmp/PODS
+                  echo checking for crashed pods
+                  cat /tmp/PODS   | jq '.items[] | "\(.metadata.name)~\(.status.phase)\(.status.containerStatuses[].state)"' 
+                  cat /tmp/PODS   | jq '.items[] | "\(.metadata.name)~\(.status.phase)\(.status.containerStatuses[].state)"'  | grep CrashLoopBackOff >/tmp/FAILED
+                  cat /tmp/FAILED
+                  cat /tmp/PODS   | jq '.items[] | "\(.metadata.name)~\(.status.phase)"' | cut -d '~' -f2 | sed "s/{.*//"  > /tmp/STATUS
+                  cat /tmp/STATUS | cut -d '~' -f2   > /tmp/STATE
+                  STATES=`cat /tmp/STATE | sort -u `
+                  for STATE in $STATES
+                  do 
+                    COUNT=`grep $STATE /tmp/STATE | wc -l` 
+                    STMMSG=$STMMSG" $STATE $COUNT"
+                  done
+                  STMMSG=`echo $STMMSG | sed "s/\"//g"`
+                  MSG="Status of pods [$STMMSG]"
+                  SEVERITY=3
+                  for POD in `cat /tmp/FAILED | cut -d '~' -f1 `
+                  do
+                    POD=`echo $POD | sed s/^.//`
+                    echo deleting pod $POD as it is in Crash loop back off state
+                    MSG="$MSG\nHad to delete crashed pod $POD"
+                    SEVERITY=4 
+                    curl -sSk -H "Authorization: Bearer $KUBE_TOKEN" -X DELETE https://$KUBERNETES_SERVICE_HOST/api/v1/namespaces/${NAMESPACE}/pods/$POD 
+                  done           
+                  curl -sSk -H "Authorization: Bearer $KUBE_TOKEN" https://$KUBERNETES_SERVICE_HOST/apis/noi.ibm.com/v1beta1/namespaces/${NAMESPACE}/noiformations >/tmp/NOIS     
+                  LAST_REC=`cat /tmp/NOIS   | jq '.items[].status.updateTime' | cut -d'"' -f2`
+                  echo LAST_REC $LAST_REC
+                  NOW=`date +%s`
+                  DIFF=`expr $NOW - $LAST_REC `      
+                  MSG="$MSG\n Noi operator  last updated noiformation $DIFF seconds ago."  
+                  if [ $DIFF -gt $OPERATOR_TIMEOUT ] 
+                  then
+                     NOI_POD=`cat /tmp/PODS   | jq '.items[] | "\(.metadata.name)"' | sed "s/\"//g" | grep noi-operator`
+                     MSG="$MSG\necho deleting noi pod $NOI_POD as it has not updated noi instance in more than $OPERATOR_TIMEOUT seconds" 
+                     echo NOI_POD $NOI_POD
+                     SEVERITY=4 
+                     curl -sSk -H "Authorization: Bearer $KUBE_TOKEN" -X DELETE https://$KUBERNETES_SERVICE_HOST/api/v1/namespaces/${NAMESPACE}/pods/$NOI_POD     
+                  fi
+                  echo $MSG
+                  java -cp /usr/bin/commonscripts/updatealertstatus.jar:/usr/bin/commonscripts/jconn3.jar com.ibm.noi.sybase.UpdateStatus $OMNIBUS_HOST:4100 $OMNIBUS_USER $OMNIBUS_PWD "insert into alerts.status (  Identifier,Node,Severity,Summary,Type,AlertGroup ) values ('Pod status','Pod status',$SEVERITY,'$MSG',1,'NOI status')"
+                
+                  exit 0          
+            {{ end }}      
+            securityContext:
+              privileged: false
+              readOnlyRootFilesystem: false
+              allowPrivilegeEscalation: false
+              runAsNonRoot: true
+              {{ if not (.Capabilities.APIVersions.Has "security.openshift.io/v1")  }}
+              runAsUser: 1001
+              {{- end }}
+              capabilities:
+                drop:
+                - ALL 
+            resources:
+{{ include "ibmnoiprod.comp.size.data" (list . "preinstall" "resources") | indent 14 }}
+          - env:
+            - name: LICENSE
+              value: "{{ .Values.global.license }}"
+            - name: LOGGING_LEVEL
+              value: INFO
+            - name: CASSANDRA_HOST
+              value: {{ .Release.Name }}-cassandra
+            - name: CASSANDRA_PORT
+              value: "9042"
+            - name: CASSANDRA_CLIENT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: username
+                  name: {{ .Release.Name }}-cassandra-auth-secret
+            - name: CASSANDRA_CLIENT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: {{ .Release.Name }}-cassandra-auth-secret
+            - name: KAFKA_HOST
+              value: {{ .Release.Name }}-kafka
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: {{ .Release.Name }}-kafka:9092
+            - name: KAFKA_NOI_ZOOKEEPER_HOST
+              value: {{ .Release.Name }}-zookeeper
+            - name: KAFKA_NOI_ZOOKEEPER_PORT
+              value: "2181"        
+            image: {{ include "image.docker.repository" . -}}/ea-mime-classification-service:2.0.161
+            imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+            name: servicemonitor
+            command: ["sh" ,"-c" , "/opt/app/scripts/healthcheck-orchestration.sh"] 
+            securityContext:
+              privileged: false
+              readOnlyRootFilesystem: false
+              allowPrivilegeEscalation: false
+              runAsNonRoot: true
+              {{ if not (.Capabilities.APIVersions.Has "security.openshift.io/v1")  }}
+              runAsUser: 1001
+              {{- end }}
+              capabilities:
+                drop:
+                - ALL 
+            resources:
+{{ include "ibmnoiprod.comp.size.data" (list . "preinstall" "resources") | indent 14 }}
+          affinity:
+            nodeAffinity:
+{{ include "noi.nodeAffinity.arch" . | indent 14 }}
+      {{- if .Values.global.image.secret }}  
+          imagePullSecrets:
+            - name: {{ .Values.global.image.secret }}
+      {{- end }}
+          hostNetwork: false
+          hostPID: false
+          hostIPC: false
+          serviceAccountName: noi-operator

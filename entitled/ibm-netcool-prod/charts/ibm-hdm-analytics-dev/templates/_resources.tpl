@@ -33,172 +33,172 @@ inference:
   size0:
     resources:
       limits:
-        memory: 2000Mi
-        cpu: 1000m
+        memory: 1000Mi
+        cpu: 200m
       requests:
         memory: 1000Mi
-        cpu: 100m
+        cpu: 10m
   size1:
     resources:
       limits:
-        memory: 4000Mi
-        cpu: 1000m
-      requests:
         memory: 2000Mi
-        cpu: 300m
+        cpu: 500m
+      requests:
+        memory: 1000Mi
+        cpu: 100m
 eventsqueryservice:
   size0:
     resources:
       limits:
         memory: 244Mi
-        cpu: 300m
+        cpu: 200m
       requests:
         memory: 244Mi
-        cpu: 100m
+        cpu: 10m
   size1:
     resources:
       limits:
         memory: 2400Mi
-        cpu: 1500m
+        cpu: 500m
       requests:
         memory: 500Mi
-        cpu: 300m
+        cpu: 100m
 archivingservice:
   size0:
     resources:
       limits:
         memory: 244Mi
-        cpu: 300m
+        cpu: 200m
       requests:
         memory: 244Mi
-        cpu: 100m
+        cpu: 10m
   size1:
     resources:
       limits:
-        memory: 2048Mi
-        cpu: 1000m
+        memory: 2000Mi
+        cpu: 500m
       requests:
         memory: 1000Mi
-        cpu: 300m
+        cpu: 100m
 servicemonitorservice:
   size0:
     resources:
       limits:
         memory: 244Mi
-        cpu: 300m
+        cpu: 200m
       requests:
         memory: 244Mi
-        cpu: 100m
+        cpu: 10m
   size1:
     resources:
       limits:
         memory: 1024Mi
-        cpu: 1000m
+        cpu: 500m
       requests:
         memory: 512Mi
-        cpu: 200m
+        cpu: 100m
 policyregistryservice:
   size0:
     resources:
       limits:
         memory: 244Mi
-        cpu: 300m
+        cpu: 200m
       requests:
         memory: 244Mi
-        cpu: 100m
+        cpu: 10m
   size1:
     resources:
       limits:
         memory: 2000Mi
-        cpu: 1000m
+        cpu: 500m
       requests:
         memory: 1000Mi
-        cpu: 300m
+        cpu: 100m
 ingestionservice:
   size0:
     resources:
       limits:
         memory: 244Mi
-        cpu: 300m
+        cpu: 200m
       requests:
         memory: 244Mi
-        cpu: 100m
+        cpu: 10m
   size1:
     resources:
       limits:
-        memory: 2000Mi
-        cpu: 1000m
+        memory: 1000Mi
+        cpu: 500m
       requests:
         memory: 500Mi
-        cpu: 300m
+        cpu: 100m
 trainer:
   size0:
     resources:
       limits:
         memory: 2000Mi
-        cpu: 1000m
+        cpu: 500m
       requests:
         memory: 1000Mi
-        cpu: 100m
+        cpu: 300m
   size1:
     resources:
       limits:
         memory: 4000Mi
-        cpu: 2000m
+        cpu: 500m
       requests:
         memory: 1000Mi
-        cpu: 200m
+        cpu: 300m
 aggregationcollater:
   size0:
     resources:
       limits:
         memory: 768Mi
-        cpu: 300m
+        cpu: 200m
       requests:
         memory: 768Mi
-        cpu: 100m
+        cpu: 10m
   size1:
     resources:
       limits:
         memory: 2000Mi
-        cpu: 1000m
+        cpu: 500m
       requests:
         memory: 500Mi
-        cpu: 300m
+        cpu: 100m
 aggregationnormalizer:
   size0:
     resources:
       limits:
         memory: 244Mi
-        cpu: 300m
+        cpu: 200m
       requests:
         memory: 244Mi
-        cpu: 100m
+        cpu: 10m
   size1:
     resources:
       limits:
         memory: 1000Mi
-        cpu: 1000m
+        cpu: 500m
       requests:
         memory: 500Mi
-        cpu: 300m
+        cpu: 100m
 aggregationdedup:
   size0:
     resources:
       limits:
         memory: 244Mi
-        cpu: 300m
+        cpu: 200m
       requests:
         memory: 244Mi
-        cpu: 100m
+        cpu: 10m
   size1:
     resources:
       limits:
         memory: 1000Mi
-        cpu: 1000m
+        cpu: 500m
       requests:
         memory: 500Mi
-        cpu: 300m
+        cpu: 100m
 {{- end -}}
 
 {{- define "ibmeaprod.comp.size.data" -}}

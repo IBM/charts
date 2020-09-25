@@ -16,6 +16,8 @@
 */}}
 
 {{- define "eanoi.noieagateway.application" -}}
+- name: NCO_USE_FAST_TRACK
+  value: {{ .Values.noieagateway.useFastTrack | default "true" | quote }}
 - name: NCO_VIRTUAL_PAIR_NAME
   value: {{ .Values.global.hybrid.objectserver.config.ssl.virtualPairName | default "AGG_V" | quote }}
 - name: ROOT_CA_NAME

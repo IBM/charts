@@ -64,7 +64,7 @@ livenessProbe:
   tcpSocket:
     port: unsecure-port
   timeoutSeconds: 60
-  initialDelaySeconds: 60
+  initialDelaySeconds: 70
   periodSeconds: 60
   successThreshold: 1
   failureThreshold: 3

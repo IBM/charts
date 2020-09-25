@@ -14,14 +14,19 @@
 #
 ########################################################################
 */}}
-{{ if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+{{- if .Values.global.ingress.api.enabled }}
 {{- $compName := "backend-ingress" -}}
 {{- include "sch.config.init" (list . "ibm-hdm-analytics-dev.sch.chart.config.values") -}}
 {{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
 {{- $rootData := fromYaml (include "root.data" .) -}}
-{{- $rootMetering := $rootData.metering -}}
+{{- $rootMetering := $rootData.metering }}
 
-apiVersion: extensions/v1beta1
+{{- if .Capabilities.APIVersions.Has "networking.k8s.io/v1beta1" }}
+apiVersion: networking.k8s.io/v1beta1    
+{{- else }}
+apiVersion: extensions/v1beta1           
+{{- end }}
+
 kind: Ingress
 metadata:
   name: {{ $serviceName }}
@@ -31,6 +36,7 @@ metadata:
     origin: helm-ibm-hdm-analytics-dev
   annotations:
 {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 4 }}
+    kubernetes.io/ingress.class: '{{ .Values.global.ingress.api.class }}'
 spec:
   rules:
   - http:

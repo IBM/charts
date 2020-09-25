@@ -32,6 +32,8 @@
   value: 'iducrelay'
 - name: DBACCESS_TENANTID
   value: {{ .Values.global.common.eventanalytics.tenantId | quote }}
+- name: NOIOMNIBUS_OS_APPNAME
+  value: 'nodejs-cemdatalayer-ir'
 - name: NOIOMNIBUS_IDUC_TYPE
   value: 'relay'
 - name: NOIOMNIBUS_IDUC_ENABLED
@@ -55,6 +57,8 @@
   value: 'iducrelay'
 - name: DBACCESS_TENANTID
   value: {{ .Values.global.common.eventanalytics.tenantId | quote }}
+- name: NOIOMNIBUS_OS_APPNAME
+  value: 'nodejs-cemdatalayer-irf'
 - name: NOIOMNIBUS_IDUC_TYPE
   value: 'forward'
 - name: NOIOMNIBUS_IDUC_ENABLED
@@ -82,6 +86,8 @@
   value: 'standard'
 - name: DBACCESS_TENANTID
   value: {{ .Values.global.common.eventanalytics.tenantId | quote }}
+- name: NOIOMNIBUS_OS_APPNAME
+  value: 'nodejs-cemdatalayer-std'
 - name: NOIOMNIBUS_IDUC_ENABLED
   value: 'false'
 - name: LOG_LEVEL
@@ -96,7 +102,7 @@
 - name: NOIOMNIBUS_OS_CONTACT_POINTS
   value: {{ include "ncodatalayer.os.contactpoints" . }}
 - name: NOIOMNIBUS_OS_USERNAME
-  value: 'root'
+  value: {{ include "ncodatalayer.os.username" . | quote }}
 - name: NOIOMNIBUS_OS_PASSWORD
   valueFrom:
     secretKeyRef:
@@ -107,16 +113,14 @@
   value: {{ .Values.ncodatalayer.failback.enabled | quote }}
 - name:  NOIOMNIBUS_OS_FAILBACK_TIMEOUT
   value: {{ .Values.ncodatalayer.failback.timeout | quote }}
-{{- if .Values.ncoprimary.truststore }}
 - name: NOIOMNIBUS_OS_TRUSTSTORE_PATH
-  value: "/app/actionServiceTrustStore"
+  value: "/app/ncodatalayer.jks"
 - name: NOIOMNIBUS_OS_TRUSTSTORE_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: {{ .Release.Name }}-omni-certificate-secret
+      name: {{ .Values.global.authentication.objectserver.secretRelease | default .Release.Name }}{{ .Values.global.authentication.objectserver.certificateTemplate | default "-omni-certificate-secret" }}
       key: PASSWORD
       optional: false
-{{- end }}
 {{- end -}}
 
 {{- define "common.license" -}}

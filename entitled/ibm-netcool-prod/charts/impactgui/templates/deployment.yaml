@@ -36,7 +36,7 @@ spec:
       labels:
 {{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
       annotations:
-{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
     spec:
       containers:
         - name: {{ .Chart.Name }}
@@ -58,10 +58,12 @@ spec:
             - name: {{ include "sch.names.persistentVolumeClaimName" (list . "pvc") }}
               mountPath: {{ .Values.impactgui.env.dbPath }}
             {{- end }}
-            {{ if (.Capabilities.APIVersions.Has "security.openshift.io/v1")  }}
+            {{- if and (hasKey .Values.global "hybrid" ) (hasKey .Values.global.hybrid "trustedCAsConfigMapName" ) (ne (toString .Values.global.hybrid.trustedCAsConfigMapName) "" ) }}
+            - name: {{ .Values.global.hybrid.trustedCAsConfigMapName }}-volume
+              mountPath: /home/netcool/trust-certificates/users
+            {{- end }}
             - name: {{ .Release.Name }}-inner-impactgui
               mountPath: /home/netcool/trust-certificates/internal
-            {{- end }}  
             - name: {{ .Release.Name }}-share-mount
               mountPath: /share
             - name: {{ .Release.Name }}-{{ include "sch.names.appName" (list .) }}-log4j-props
@@ -96,6 +98,11 @@ spec:
               value: "{{ .Values.global.ldapservice.internal.bindDN }}"
             - name: LDAP_BASE_DN
               value: "{{ .Values.global.ldapservice.internal.baseDN }}"
+            - name: USERPLUSROLES
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Release.Name }}-nciserver-maproles
+                  key: allusersandroles
             - name: LDAP_BIND_PWD
               valueFrom:
                 secretKeyRef:
@@ -211,13 +218,19 @@ spec:
             items:
             - key: impactgui-log4j-props-update
               path: impactgui.log4j.properties-update
+        {{- if and (hasKey .Values.global "hybrid" ) (hasKey .Values.global.hybrid "trustedCAsConfigMapName" ) (ne (toString .Values.global.hybrid.trustedCAsConfigMapName) "") }}
+        - name: {{ .Values.global.hybrid.trustedCAsConfigMapName }}-volume
+          configMap:
+            name: {{ .Values.global.hybrid.trustedCAsConfigMapName }}
+            defaultMode: 420
+            optional: true
+        {{- end }}
         - name: {{ .Release.Name }}-{{ include "sch.names.appName" (list .) }}-server-props
           configMap:
             name: {{ .Release.Name }}-{{ include "sch.names.appName" (list .) }}-config
             items:
             - key: server-props-update
               path: server.props-update
-{{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1")  }}
         - name: {{ .Release.Name }}-inner-impactgui
           secret:
             secretName: {{ .Release.Name }}-inner-impactgui
@@ -226,8 +239,6 @@ spec:
               path: trust-tls.crt
             - key: tls.key
               path: trust-tls.key
-{{- end }}
-                    
       {{- if .Values.global.image.secret }}  
       imagePullSecrets:
         - name: {{ .Values.global.image.secret }}

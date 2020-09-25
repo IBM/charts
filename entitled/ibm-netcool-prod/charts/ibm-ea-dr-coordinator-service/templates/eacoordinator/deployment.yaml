@@ -1,0 +1,82 @@
+{{- include "sch.config.init" (list . "ibm-ea-dr-coordinator-service.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.eacoordinator.name -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $serviceName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+{{- if  eq .Values.global.environmentSize  "size0" }}
+  replicas: 1
+{{- else if eq .Values.global.environmentSize "size1" }}
+  replicas: 1
+{{- else }}
+  replicas: 1
+{{- end }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering "" "" nil) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+    spec:
+      {{- if .Values.global.image.secret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      volumes:
+      {{- if .Values.global.serviceContinuity.isBackupDeployment }}
+      - name: dr-proxy-certs
+        configMap:
+          defaultMode: 420
+          name: {{ .Values.coordinatorSettings.backupDeploymentSettings.proxyCertificateConfigMap }}
+          optional: true
+      {{- end }}
+      - name: kafka-streams-tmp
+        emptyDir:
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      initContainers:
+      - name: waitforkafka
+        image: {{ include "ibm-ea-dr-coordinator-service.image.url" (list . .Values.image) | quote }}
+        command: ["sh", "-c", "i=1; until getent hosts ${KAFKA_HOST}; do echo waiting for kafka host ${KAFKA_HOST} iteration number $i; i=$((i+1)); sleep 2; done;"]
+        resources:
+{{ include "ibm-ea-dr-coordinator-service.comp.size.data" (list . "eacoordinator" "resources") | indent 10 }}
+{{ include "ibm-ea-dr-coordinator-service.psp.securityContext" . | indent 8}}
+{{ include "ibm-ea-dr-coordinator-service.eacoordinator.environment" . | indent 8 }}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - name: eacoordinator
+        image: {{ include "ibm-ea-dr-coordinator-service.image.url" (list . .Values.image) | quote }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        volumeMounts:
+        {{- if .Values.global.serviceContinuity.isBackupDeployment }}
+        - name: dr-proxy-certs
+          mountPath: /opt/app/certs
+          readOnly: false
+        {{- end }}
+        - name: kafka-streams-tmp
+          mountPath: /tmp/kafka-streams
+        ports:
+        - containerPort: 8080
+          name: unsecure-port
+          protocol: TCP
+        resources:
+{{ include "ibm-ea-dr-coordinator-service.comp.size.data" (list . "eacoordinator" "resources") | indent 10 }}
+{{ include "ibm-ea-dr-coordinator-service.eacoordinator.environment" . | indent 8 }}
+{{ include "ibm-ea-dr-coordinator-service.psp.securityContext" . | indent 8}}
+{{ include "ibm-ea-dr-coordinator-service.eacoordinator.probes" . | indent 8 }}
