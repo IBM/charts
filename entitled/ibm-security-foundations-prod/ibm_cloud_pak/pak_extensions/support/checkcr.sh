@@ -17,9 +17,27 @@
 #     ./checkcr.sh [-n cp4s] [-all]
 #
 
+checkScale() {
+  repl=$(kubectl get iscinventory iscplatform -o jsonpath="{.spec.definitions.replicas}")
+  if [ "X$repl" == "X" ]; then
+    echo "ERROR: no iscinventory found"
+    return
+  fi
+  ar=$(kubectl get deploy authsvc -o jsonpath="{.spec.replicas}")
+  case X${ar} in
+    X$repl) ;;
+    X)
+       echo "ERROR: authsvc process not found"
+       ;;
+    *) echo "ERROR: invalid number of authsvc replicas: $ar"
+       ;; 
+  esac
+  return
+}
+
 checkSeq() {
     for seq in $(kubectl get iscsequence -n $NAMESPACE -o name 2>/dev/null|sed -e 's!^.*/!!')
-    do 
+    do
       kubectl get iscsequence -n $NAMESPACE $seq -o yaml > /tmp/checkseq.$$.yaml
       gen=$(grep '    generation: ' /tmp/checkseq.$$.yaml | sed -e 's/^.*: //' -e 's/"//g')
       guard=$(kubectl get -n $NAMESPACE iscguard $seq -o 'jsonpath={.spec.generation}' 2>/dev/null)
@@ -63,8 +81,31 @@ checkSeq() {
           continue
           ;;
       esac
-    done 
+    done
     return
+}
+
+checkGoCR() {
+  for cr in $(kubectl get $1 -o name 2>/dev/null)
+  do
+    ar=$(kubectl get $cr -o yaml | sed -e '1,/status:/d')
+    status=$(echo "$ar" | grep type: | head -1 | sed -e 's/^.*: //')
+    message=$(echo "$ar" | grep message: | head -1 | sed -e 's/^.*: //')
+    time=$(echo "$ar" | grep lastTransitionTime: | head -1 | sed -e 's/^.*: //')
+
+    case "X$status" in
+       X) echo "$cr is not yet processed"
+          ;;
+       XCompleted|XSuccessful)
+          if [ $ALL -eq 1 ]; then
+            echo "$cr has been completed at $time"
+          fi
+          ;;
+        *) echo "$cr has status "$status" since $time"
+          ;;
+     esac
+
+  done
 }
 
 checkCR() {
@@ -90,7 +131,7 @@ checkCR() {
           echo "$cr is running since $time"
           continue
           ;;
-        XSuccessful)
+        XSuccessful|XComplete|XCompleted|XCreateClientSuccessful)
           if [ $ALL -eq 1 ]; then
             echo "$cr has been completed at $time"
           fi
@@ -106,7 +147,15 @@ checkCR() {
 }
 
 checkKubeSystem() {
-  pods=$(kubectl get pod -n kube-system|grep -vE 'Running|Completed|NAME')
+  csn=$(kubectl get namespace ibm-common-services -o name 2>/dev/null)
+  if [ "X$csn" == "X" ]; then
+    CS_NAMESPACE='kube-system'
+    xtra="icp-management-ingress"
+  else
+    CS_NAMESPACE='ibm-common-services'
+    xtra="management-ingress"
+  fi
+  pods=$(kubectl get pod -n $CS_NAMESPACE|grep -vE 'Running|Completed|NAME')
   if [ "X$pods" != "X" ]; then
     echo "ERROR: Some of kube-system pods are in failed state:"
     echo "$pods"
@@ -114,10 +163,10 @@ checkKubeSystem() {
 
   # check if necessary components are installed
   for app in auth-idp auth-pap auth-idp helm  \
-             platform-api icp-management-ingress \
+             platform-api $xtra \
              oidcclient-watcher secret-watcher
   do
-     pod=$(kubectl get pod -o name -n kube-system -lapp=$app)
+     pod=$(kubectl get pod -o name -n $CS_NAMESPACE -lapp=$app)
      if [ "X$pod" == "X" ]; then
          echo "ERROR: Common services application $app not installed or failed"
      fi
@@ -135,6 +184,7 @@ checkOIDC() {
     fi
   fi
 }
+
 
 set_namespace() {
   NAMESPACE="$1"
@@ -172,11 +222,14 @@ do
 esac
 done
 
+checkScale
 checkKubeSystem
 checkOIDC
 
 checkSeq
-for crd in couchdb redis etcd minio iscopenwhisk elastic cases connectors appentitlements
+
+checkGoCR isctrusts.isc.ibm.com
+for crd in etcds.isc.ibm.com minios.isc.ibm.com elastics.isc.ibm.com appentitlements cases.isc.ibm.com postgresqloperator.isc.ibm.com rabbitmq.isc.ibm.com
 do 
   checkCR $crd
 done
@@ -192,25 +245,23 @@ fi
 
 pods=$(kubectl get deploy -n $NAMESPACE -o jsonpath='{range .items[*]}{.metadata.name} {.status.replicas} {.status.readyReplicas}{"\n"}'| awk '{ if ($2 != $3) print $1 ": expect " $2 " pods have uptodate " $3 }')
 if [ "X$pods" != "X" ]; then
-  echo "Problems in deployments replicas:" 
+  echo "Problems in deployments replicas:"
   echo "$pods"
 fi
 
-pods=$(kubectl get deploy -n $NAMESPACE -o jsonpath='{range .items[*]}{.metadata.name} {.spec.template.spec.dnsConfig}{"\n"}' | egrep -v "arango|postgres" | awk '{ if ($2 == "") print $1 ": dnsConfig not configured." }')
-if [ "X$pods" != "X" ]; then
-  echo "Problems in deployments dnsConfig:" 
-  echo "$pods"
+couchdbcluster=$(kubectl get statefulset -n $NAMESPACE -lformation_id=default-couchdbcluster -o name 2> /dev/null)
+if [ "X$couchdbcluster" == "X" ]; then
+   echo "Error: couchdbcluster not created for some reason"
+fi
+
+redis=$(kubectl get statefulset -n $NAMESPACE -lformation_id=default-redis -o name 2> /dev/null)
+if [ "X$redis" == "X" ]; then
+   echo "Error: redis instance not created for some reason"
 fi
 
 pods=$(kubectl get statefulset -n $NAMESPACE -o jsonpath='{range .items[*]}{.metadata.name} {.status.replicas} {.status.readyReplicas}{"\n"}' | awk '{ if ($2 != $3) print $1 ": expect " $2 " pods, but have " $3 }')
 if [ "X$pods" != "X" ]; then
-  echo "Problems in statefulsets replicas:" 
-  echo "$pods"
-fi
-
-pods=$(kubectl get statefulset -n $NAMESPACE -o jsonpath='{range .items[*]}{.metadata.name} {.spec.template.spec.dnsConfig}{"\n"}' | awk '{ if ($2 == "") print $1 ": dnsConfig not configured." }')
-if [ "X$pods" != "X" ]; then
-  echo "Problems in statefulsets dnsConfig:" 
+  echo "Problems in statefulsets replicas:"
   echo "$pods"
 fi
 

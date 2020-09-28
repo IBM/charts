@@ -36,6 +36,17 @@ Create the name of the Operator RBAC role
 {{- end -}}
 
 {{/*
+Create the name of the Operator Cluster resources
+*/}}
+{{- define "kube-arangodb.rbac-cluster" -}}
+{{- if eq .Release.Namespace "default" -}}
+{{- printf "%s-rbac" (include "kube-arangodb.operatorName" .) | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s-rbac" (include "kube-arangodb.operatorName" .) .Release.Namespace | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Sanitise and define registries
 */}}
 {{- define "image.repository" -}}

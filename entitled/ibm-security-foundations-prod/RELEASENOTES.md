@@ -1,16 +1,15 @@
 # Breaking Changes
 None
 
-# What’s new in Chart Version 1.0.7
-App version 1.3.0.1 Release
+# What’s new in Chart Version 1.0.6
+App version 1.3.0.0 Release
 
 
 # Fixes
 Product fixes to support Cloud Pak for Security
 
 # Prerequisites
-* Tiller 2.12.3
-* Kubernetes 1.11
+* Kubernetes 1.16
 
 # Documentation
 
@@ -23,4 +22,6 @@ Product fixes to support Cloud Pak for Security
 | 1.0.4| Feb 11, 2020|  >=1.11 | | None  |Product fixes to support Cloud Pak for Security|
 | 1.0.5| Mar 26th, 2020|  >=1.11 | | None  | App version 1.2.0.0 Release|
 | 1.0.6| May 22nd, 2020|  >=1.11 | | None  | OCP 4.3 support,Defect fixes|
-| 1.0.7| July 15, 2020|  >=1.11 | | None  | OCP 4.4 support,Defect fixes|
+| 1.0.7| |  >=1.11 | | None  | Install Improvements, Helm 3 support, Product fixes to support Cloud Pak for Security|
+
+

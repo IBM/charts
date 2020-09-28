@@ -1,0 +1,334 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- if ne .Values.global.license "accept" }}
+  {{ fail (include "ibm-security-foundations-dev-chart.license" .) }}
+{{- end }}
+  name: {{ $.Values.global.extensionDiscovery.name }}-configmap
+  labels:
+    app.kubernetes.io/name: {{ $.Values.global.extensionDiscovery.name }}-configmap
+    helm.sh/chart: {{ $.Chart.Name }}
+    release: {{ $.Release.Name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+data:
+  operator-conf-file: |-
+    connectorTypes: 
+        - type: UDI
+          deployments:
+            - name: udiendpoints
+              commands:
+                - {{`'{{ $connectorName := (trimPrefix "udi-" .Name) | replace "-" "_" }} NAME={{ $connectorName }}'`}}
+                - python3 /opt/signer/signer.py verify /opt/secret/rootca.pem . > /tmp/signer.log; SIGN_EXIT=$?
+                - CERT_NAME=unknown; if [ $SIGN_EXIT -eq 0 ]; then CERT_NAME=`openssl x509 -noout -subject -in ./meta/cert.pem | sed 's/^.*CN = //'`; fi
+                - unzip ./*.whl
+                - mkdir -p /usr/src/app/config/udi/$NAME
+                - cp stix_shifter_modules/$NAME/configuration/*.json /usr/src/app/config/udi/$NAME/
+                - python3 /opt/signer/set-verified.py "$CERT_NAME" /usr/src/app/config/udi/$NAME/config.json
+                - ls -al /usr/src/app/config/udi/$NAME
+                - cat /tmp/signer.log
+                - echo $SIGN_EXIT
+                - echo $CERT_NAME
+              mountFiles:
+                - name: config-connector-volume
+                  type: emptyDir
+                  mountPath: /usr/src/app/config
+                - name: cp4s-extension-configmap
+                  type: configmap
+                  mountPath: /opt/signer/
+                  files:
+                    - key: signer-py-file
+                      path: signer.py
+                    - key: set-verified-py-file
+                      path: set-verified.py
+                - name: cp4s-extension-rootca
+                  mountPath: /opt/secret/
+                  type: secret
+                  files:
+                    - key: rootca.pem
+                      path: rootca.pem
+            - name: udiworkers
+              commands:
+                - {{`'{{ $connectorName := (trimPrefix "udi-" .Name) | replace "-" "_" }} NAME={{ $connectorName }}'`}}
+                - cp ./*.whl /app/config/
+                - ls -al /app/config/
+                - mkdir -p /app/config/libs-$NAME/
+                - cp ./libs/*.whl /app/config/libs-$NAME/ | true
+                - ls /app/config/libs-$NAME/
+              mountFiles:
+                - name: config-connector-volume
+                  type: emptyDir
+                  mountPath: /app/config
+            - name: udswebui
+              commands:
+                - {{`'{{ $connectorName := (trimPrefix "udi-" .Name) | replace "-" "_" }} NAME={{ $connectorName }}'`}}
+                - python3 /opt/signer/signer.py verify /opt/secret/rootca.pem . > /tmp/signer.log; SIGN_EXIT=$?
+                - CERT_NAME=unknown; if [ $SIGN_EXIT -eq 0 ]; then CERT_NAME=`openssl x509 -noout -subject -in ./meta/cert.pem | sed 's/^.*CN = //'`; fi
+                - unzip ./*.whl
+                - mkdir -p /opt/app-root/src/conf/udi/$NAME
+                - cp stix_shifter_modules/$NAME/configuration/*.json /opt/app-root/src/conf/udi/$NAME/
+                - python3 /opt/signer/set-verified.py "$CERT_NAME" /opt/app-root/src/conf/udi/$NAME/config.json
+                - ls -al /opt/app-root/src/conf/udi/$NAME
+                - cat /tmp/signer.log
+                - echo $SIGN_EXIT
+                - echo $CERT_NAME
+              mountFiles:
+                - name: config-connector-volume
+                  type: emptyDir
+                  mountPath: /opt/app-root/src/conf
+                - name: cp4s-extension-configmap
+                  type: configmap
+                  mountPath: /opt/signer/
+                  files:
+                    - key: signer-py-file
+                      path: signer.py
+                    - key: set-verified-py-file
+                      path: set-verified.py
+                - name: cp4s-extension-rootca
+                  mountPath: /opt/secret/
+                  type: secret
+                  files:
+                    - key: rootca.pem
+                      path: rootca.pem
+        - type: CAR
+          deployments:
+            - name: udswebui
+              commands:
+                - {{`'{{ $connectorName := (trimPrefix "car-" .Name) | replace "-" "_" }} NAME={{ $connectorName }}'`}}
+                - mkdir -p /opt/app-root/src/conf/car/$NAME
+                - cp /usr/src/app/configurations/*.json /opt/app-root/src/conf/car/$NAME/
+                - ls -al /opt/app-root/src/conf/car/$NAME/
+                - {{`sed -i "s#{image_link}#{{ .Spec.Image}}#g" /opt/app-root/src/conf/car/$NAME/config.json`}}
+              mountFiles:
+                - name: config-connector-volume
+                  type: emptyDir
+                  mountPath: /opt/app-root/src/conf
+          cronjob:
+            imageStartPattern: "isc-car-connector-[\\w-]+:"
+            events: 
+              created:
+                suspend: false
+                image: {{`'{{ .Spec.Image}}'`}}
+              removed:
+                suspend: true
+  set-verified-py-file: |-
+    import sys
+    import json
+    from collections import OrderedDict
+    
+    
+    def main():
+        status = sys.argv[-2]
+        filepath = sys.argv[-1]
+    
+        with open(filepath) as json_file:
+            data = json.load(json_file, object_pairs_hook=OrderedDict)
+    
+        data['connection']['type']['validated'] = status
+    
+        with open(filepath, 'w') as json_file:
+            data = json.dump(data, json_file, indent=4)
+    
+    
+    if __name__ == "__main__":
+        main()
+  signer-py-file: |-
+    # coding: utf-8
+    import base64
+    import sys
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import padding
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.exceptions import InvalidSignature
+    from cryptography import x509
+    import hashlib
+    from OpenSSL.crypto import load_certificate
+    from OpenSSL.crypto import X509Store, X509StoreContext, FILETYPE_PEM
+    import os
+    import shutil
+
+
+    class Encryptor(object):
+        KEY_FILE_PATH = None
+        KEY = None
+        PASSWORD = None
+        MESSAGES = []
+
+        def __init__(self, filepaths, cert=None, password=None):
+            if isinstance(filepaths, list) and len(filepaths) > 0 and cert:
+                self.KEY = cert
+                if len(filepaths) > 0:
+                    try:
+                        result = self.validate_chain(filepaths, cert)
+                        if not result:
+                            print('verify:error:untrusted certificate')
+                            exit(6)
+                    except Exception as ex:
+                        print('verify:error:certificate signature failure: ' + str(ex))
+                        exit(5)
+                    self.MESSAGES.append('cert chain validated')
+            else:
+                if cert:
+                    self.KEY = cert
+                elif filepaths:
+                    self.KEY_FILE_PATH = filepaths
+            self.PASSWORD = password
+
+        def validate_chain(self, file_names, last_cert):
+            store = X509Store()
+            for cert_file in file_names:
+                with open(cert_file, 'rb') as f:
+                    cert = load_certificate(FILETYPE_PEM, f.read())
+                    store.add_cert(cert)
+            store_ctx = X509StoreContext(store, load_certificate(FILETYPE_PEM, last_cert))
+            result = store_ctx.verify_certificate()
+            if result is None:
+                return True
+            else:
+                return False
+
+        def encrypt(self, message):
+            private_key = self._get_private_key()
+            signature = private_key.sign(
+                message,
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
+            )
+            return signature
+
+        def is_certificate(self, file_path_or_content):
+            if isinstance(file_path_or_content, list):
+                file_path_or_content = file_path_or_content[0]
+            if isinstance(file_path_or_content, bytes):
+                return 'CERTIFICATE' in file_path_or_content.decode('utf-8')
+            with open(file_path_or_content, "rb") as f:
+                for l in f.readlines():
+                    if 'CERTIFICATE' in l.decode('utf-8'):
+                        return True
+            return False
+
+        def verify(self, message, signature):
+            if self.is_certificate(self.KEY_FILE_PATH or self.KEY):
+                public_key = self._get_public_key_from_cert()
+            else:
+                public_key = self._get_public_key()
+
+            public_key.verify(
+                signature,
+                message,
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
+            )
+
+        def _get_public_key(self):
+
+            if self.KEY_FILE_PATH:
+                with open(self.KEY_FILE_PATH, "rb") as key_file:
+                    data = key_file.read()
+            elif self.KEY:
+                data = self.KEY
+
+            public_key = serialization.load_pem_public_key(
+                        data, backend=default_backend()
+                    )
+            return public_key
+
+        def _get_public_key_from_cert(self):
+            if self.KEY_FILE_PATH:
+                with open(self.KEY_FILE_PATH, "rb") as key_file:
+                    data = key_file.read()
+            elif self.KEY:
+                data = self.KEY
+            cert = x509.load_pem_x509_certificate(data, default_backend())
+            public_key = cert.public_key()
+            return public_key
+
+        def _get_private_key(self):
+            with open(self.KEY_FILE_PATH, "rb") as key_file:
+                private_key = serialization.load_pem_private_key(
+                    key_file.read(),
+                    password=self.PASSWORD,
+                    backend=default_backend()
+                )
+            return private_key
+
+
+    if __name__ == "__main__":
+        signature_path_hashes = 'meta/hashes.dat'
+        signature_path_check = 'meta/check.dat'
+        signature_path_cert = 'meta/cert.pem'
+
+        package_file = sys.argv[-1]
+
+        bundle_files = []
+        for r, d, f in os.walk(package_file):
+            for file in f:
+                bundle_files.append(os.path.join(r, file)[len(package_file)+1:])
+        if sys.argv[1] == 'sign':
+            encryptor = Encryptor(sys.argv[2])
+            hash_lines = ''
+            if signature_path_hashes not in bundle_files:
+                os.mkdir(os.path.join(package_file, 'meta'))
+                for f in bundle_files:
+                    with open(os.path.join(package_file, f), 'rb') as file:
+                        content = file.read()
+                    content_hash = hashlib.sha256(content).hexdigest()
+                    hash_lines += f + ' ' + content_hash + '\n'
+                with open(os.path.join(package_file, signature_path_hashes), 'w') as file:
+                    file.write(hash_lines)
+                check = encryptor.encrypt(hash_lines.encode())
+                check = base64.b64encode(check)
+                with open(os.path.join(package_file, signature_path_hashes), 'w') as file:
+                    file.write(hash_lines)
+                with open(os.path.join(package_file, signature_path_check), 'w') as file:
+                    file.write(check.decode('utf-8'))
+                shutil.copyfile(sys.argv[3], os.path.join(package_file, signature_path_cert))
+                print('sign:ok')
+            else:
+                print('sign:error:file has been signed already')
+                exit(1)
+        elif sys.argv[1] == 'verify':
+            with open(os.path.join(package_file, signature_path_cert), 'rb') as file:
+                cert = file.read()
+            encryptor = Encryptor(sys.argv[2:-1], cert=cert)
+            if signature_path_check in bundle_files and signature_path_hashes in bundle_files:
+                with open(os.path.join(package_file, signature_path_hashes), 'r') as file:
+                    hash_content = file.read()
+                hash_lines = hash_content.splitlines()
+                with open(os.path.join(package_file, signature_path_check), 'r') as file:
+                    check_content = base64.b64decode(file.read())
+                try:
+                    encryptor.verify(hash_content.encode(), check_content)
+                except InvalidSignature as ex:
+                    print('verify:error:hashes signature incorrect:'+str(ex))
+                    exit(3)
+                for hash_item in hash_lines:
+                    hash_items = hash_item.split()
+                    bundle_file_path = hash_items[0]
+                    with open(os.path.join(package_file, bundle_file_path), 'rb') as file:
+                        content = file.read()
+                    bundle_file_sign = hashlib.sha256(content).hexdigest()
+                    if bundle_file_sign == hash_items[1]:
+                        bundle_files.remove(bundle_file_path)
+                bundle_files.remove(signature_path_hashes)
+                bundle_files.remove(signature_path_check)
+                bundle_files.remove(signature_path_cert)
+                if bundle_files:
+                    print('verify:error:signature mismatch: ' + str(bundle_files))
+                    exit(4)
+                else:
+                    message = 'verify:ok'
+                    for m in encryptor.MESSAGES:
+                        message += ':' + m
+                    print(message)
+            else:
+                print('verify:error:archive is not signed')
+                exit(2)
+
