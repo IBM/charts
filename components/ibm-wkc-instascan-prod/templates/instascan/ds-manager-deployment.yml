@@ -61,6 +61,7 @@ spec:
           - key: certificate.pem
             path: certificate.pem
           secretName: internal-nginx-svc-tls
+      {{- if not .Values.ibmPostgres.enabled }}
       - name: pgsql
         secret:
           defaultMode: 420
@@ -68,9 +69,7 @@ spec:
           - key: pgpass
             path: .pgpass 
           secretName: {{ .Values.postgres.secret }}
-      - name: ds-manager-logs
-        persistentVolumeClaim:
-          claimName: pvc-instascan-ds-manager-logs
+      {{- end }}
       - name: ds-manager-files
         persistentVolumeClaim:
           claimName: pvc-instascan-ds-manager-files
@@ -127,18 +126,19 @@ spec:
           name: internal-tls
         - mountPath: /etc/internal-nginx-svc-tls
           name: internal-nginx-svc-tls
-        - mountPath: /log
-          name: ds-manager-logs
-          #subPath: ds-manager/logs
         - mountPath: /deepfs
           name: ds-manager-files
           #subPath: ds-manager/files
+        {{- if not .Values.ibmPostgres.enabled }}
         - mountPath: /etc/pgsql
           name: pgsql
+        {{- end }}
         - mountPath: /instaScan/config/logging.yaml
           name: ds-manager-log-config
           subPath: logging.yaml
         env:
+        - name: LOCAL_TMP
+          value: /deepfs/tmp
         - name: INSTASCAN_INTERNAL_TLS_CERT_FILE
           value: /etc/internal-tls/tls.crt
         - name: INSTASCAN_INTERNAL_TLS_KEY_FILE
@@ -150,7 +150,20 @@ spec:
         - name: AP_SERVICE_BASEURL
           value: 'https://ap-service:8443'
         - name: DOC_PREVIEW_SERVICE_BASEURL
-          value: 'https://doc-preview-service:8443'  
+          value: 'https://doc-preview-service:8443'
+        {{- if .Values.ibmPostgres.enabled }}
+        - name: IBM_POSTGRESQL_HOST
+          value: {{ .Values.ibmPostgres.host }}
+        - name: IBM_POSTGRESQL_PORT
+          value: {{ .Values.ibmPostgres.port | quote }}
+        - name: IBM_POSTGRESQL_USER
+          value: {{ .Values.ibmPostgres.user }}
+        - name: IBM_POSTGRESQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: pg_su_password
+              name: {{ .Values.ibmPostgres.authSecret }}
+        {{- end }}
         envFrom:
         - configMapRef:
             name: instascan-ds-manager-configmap
