@@ -12,7 +12,10 @@ metadata:
     app.kubernetes.io/instance: {{ $.Release.Name }}
     app.kubernetes.io/managed-by: {{ $.Release.Service }}
   annotations:
-    "helm.sh/hook": test-success
+    productID: {{ $.Values.product.id }}
+    productName: Foundations
+    productVersion: v1.4.0
+    "helm.sh/hook": test
 spec:
       restartPolicy: Never
       serviceAccountName: ibm-isc-operators
@@ -46,41 +49,6 @@ spec:
         {{- toYaml $.Values.global.tolerations | nindent 8 }}
     {{- end }}
       containers:
-        - name: ansible
-          securityContext:
-            privileged: false
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
-            runAsNonRoot: true
-            capabilities:
-              drop:
-              - ALL
-          resources:
-          {{- toYaml $op.resources | nindent 14 }}
-          command:
-          - /usr/bin/sleep
-          - "5"
-          livenessProbe:
-            exec:
-              command: 
-              - /usr/bin/true
-          readinessProbe:
-            exec:
-              command: 
-              - /usr/bin/true
-          env:
-          {{- if $op.debug }}
-          - name: ANSIBLE_VERBOSITY
-            value: "2"
-          {{- end }}
-          - name: HELM_HOME
-            value: /tmp/.helm
-          image: {{ $image }}
-          imagePullPolicy: {{ $.Values.global.imagePullPolicy | default "IfNotPresent" }}
-          volumeMounts:
-          - mountPath: /tmp/ansible-operator/runner
-            name: runner
-            readOnly: true
         - name: operator
           securityContext:
             privileged: false
@@ -95,13 +63,19 @@ spec:
           resources:
           {{- toYaml $op.resources | nindent 14 }}
           livenessProbe:
+            failureThreshold: 3
             exec:
               command: 
               - /usr/bin/true
+            initialDelaySeconds: 10
+            periodSeconds: 10
           readinessProbe:
+            failureThreshold: 3
             exec:
               command: 
               - /usr/bin/true
+            initialDelaySeconds: 5
+            periodSeconds: 10
           volumeMounts:
           - mountPath: /tmp/ansible-operator/runner
             name: runner

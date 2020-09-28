@@ -5,6 +5,7 @@
 {{- $ndx := index $.Values.global.images $op }}
 {{- $registry := ternary $founationsRepo $solutionsRepo (eq "middleware" $op) }}
 {{- $image := printf "%s/%s:%s" $founationsRepo $ndx.image $ndx.tag }}
+{{- $csns := $.Values.global.csNamespace | default "kube-system" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -85,6 +86,12 @@ spec:
     {{- end }}
       containers:
         - name: operator
+{{- if $v.go }}
+          command:
+          - /manager
+          args:
+          - --enable-leader-election
+{{- end }}
           securityContext:
             privileged: false
             allowPrivilegeEscalation: false
@@ -100,13 +107,26 @@ spec:
           {{- toYaml $v.resources | nindent 14 }}
           {{- end }}
           livenessProbe:
+            failureThreshold: 3
             exec:
               command: 
               - /usr/bin/true
+            initialDelaySeconds: 10
+            periodSeconds: 10
           readinessProbe:
+            failureThreshold: 3
             exec:
               command: 
               - /usr/bin/true
+            initialDelaySeconds: 5
+            periodSeconds: 10
+{{- if $v.go }}
+          env:
+            - name: WATCH_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+{{- else }}
           volumeMounts:
           - mountPath: /tmp/ansible-operator/runner
             name: runner
@@ -125,14 +145,6 @@ spec:
               value: {{ $registry }}
             - name: REPO_PULLS
               value: ibm-isc-pull-secret
-            - name: TILLER_NAMESPACE
-              value: kube-system
-            - name: HELM_INIT_ARGS
-              value: ""
-            - name: HELM_ARGS
-              value: "--tls"                                    
-            - name: HELM_USER 
-              value: "{{ $.Values.global.helmUser }}"
 {{- if $.Values.global.somaxconn }}
             - name: SOMAXCONN
               value: "{{ $.Values.somaxconn }}"
@@ -149,5 +161,6 @@ spec:
       volumes:
         - name: runner
           emptyDir: {}
+{{- end }}
 ---
 {{ end }}

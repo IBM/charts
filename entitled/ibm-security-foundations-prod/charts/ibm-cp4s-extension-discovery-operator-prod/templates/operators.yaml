@@ -40,6 +40,7 @@ spec:
         productID: {{ $.Values.product.id }}
         productName: {{ $.Values.product.name }}
         productVersion: {{ $.Values.product.version }}
+        productMetric: {{ $.Values.product.metric | default "" }}
     spec:
       serviceAccountName: ibm-isc-operators
       hostPID: false
@@ -94,13 +95,19 @@ spec:
           {{- toYaml $.Values.global.extensionDiscovery.resources | nindent 14 }}
           {{- end }}
           livenessProbe:
+            failureThreshold: 3
             exec:
               command: 
               - /usr/bin/true
+            initialDelaySeconds: 10
+            periodSeconds: 10
           readinessProbe:
+            failureThreshold: 3
             exec:
               command: 
               - /usr/bin/true
+            initialDelaySeconds: 5
+            periodSeconds: 10
           env:
           - name: WATCH_NAMESPACE
             valueFrom:
@@ -112,6 +119,16 @@ spec:
                 fieldPath: metadata.name
           - name: OPERATOR_NAME
             value: {{ $.Values.global.extensionDiscovery.name }}
+          volumeMounts:
+          - name: operator-conf
+            mountPath: /opt/conf
+      volumes:
+      - name: operator-conf
+        configMap:
+          name: {{ $.Values.global.extensionDiscovery.name }}-configmap
+          items:
+          - key: operator-conf-file
+            path: operator-conf.yaml
       imagePullSecrets:
         - name: ibm-isc-pull-secret
         - name: sa-{{ $.Release.Namespace }}
