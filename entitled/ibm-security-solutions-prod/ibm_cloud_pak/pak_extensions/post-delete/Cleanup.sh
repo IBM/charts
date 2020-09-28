@@ -15,9 +15,59 @@
 #     ./cleanup.sh [ -n $NAMESPACE ] [--all] [--force] [--nowait]
 #
 
+dir="$(cd $(dirname $0) && pwd)/../../.."
 FORCE="no"
 ALL="no"
 WAIT="yes"
+helm3=""
+helm2=""
+
+runSubcharts() {
+  if [ ! -d $dir/charts ]; then
+     echo "INFO: no $dir/chars: subchart execution is skipped"
+     return
+  fi
+  rm -rf /tmp/install.$$
+  mkdir /tmp/install.$$
+  for dirp in $dir/charts/*
+  do
+    if [ ! -d $dirp ]; then
+      continue
+    fi
+    chart="$(basename $dirp)"
+    script="$dirp/ibm_cloud_pak/pak_extensions/post-delete/Cleanup.sh"
+    if [ ! -f "$script" ]; then
+      continue
+    fi
+    mkdir -p /tmp/install.$$/$chart
+    cp -r $dirp/ibm_cloud_pak /tmp/install.$$/$chart
+  done
+  for tar in $dir/charts/*.tgz
+  do
+    chart=$(basename $tar | sed -e 's/-[\.0-9]*.tgz//')
+      if [ -d "$root/charts/$chart" ]; then
+         continue
+      fi
+      if [ "X$chart" == "X*.tgz" ]; then
+        continue
+      fi
+      mkdir -p /tmp/install.$$/$chart
+      tar -C /tmp/install.$$ -xzf $tar $chart/ibm_cloud_pak 2>/dev/null
+  done
+  cd /tmp/install.$$
+  for script in $(find . -name Cleanup.sh)
+  do
+    script=$(echo $script | sed -e 's!^./!!')
+    echo "INFO: Running Cleanup.sh for ${script%%/*}" 
+    bash $script $@
+    rc=$?
+    if [ $rc -ne 0 ]; then
+      echo "ERROR: Cleanup.sh for ${script%%/*} has failed"
+      exit 1
+    fi
+  done
+  rm -rf /tmp/install.$$
+}
 
 wait_crs() {
    sort="$1"
@@ -44,7 +94,7 @@ wait_crs() {
      echo "Force removing the resources"
      for cr in $found
      do
-       kubectl patch -n $NAMESPACE $cr --type json -p='[{"op": "remove", "path": "/metadata/finalizers"}]'
+       kubectl patch -n $NAMESPACE $cr --type json -p='[{"op": "remove", "path": "/metadata/finalizers"}]' 2>&1 | grep -v NotFound
      done
      found=$(kubectl get -n $NAMESPACE $sort -o name 2>/dev/null) 
      if [ "X$found" != "X" ]; then
@@ -54,7 +104,7 @@ wait_crs() {
      fi
      return
    fi
-   if [ "X$operator" == "Xnone" ]; then
+   if [ "X$operator" != "Xnone" ]; then
     echo "Restarting $operator operator"
     kubectl delete -n $NAMESPACE pod -lapp.kubernetes.io/name=$operator
    fi
@@ -62,7 +112,7 @@ wait_crs() {
 }
 
 usage() {
-  echo "Usage: $0 [-n <NAMESPACE>] [ --all ] [ --force ] [--nowait]"
+  echo "Usage: $0 [-n <NAMESPACE>] [ --all ] [ --force ] [--nowait] [--helm2 path] [--helm3 path]"
   exit 1
 }
 
@@ -104,28 +154,81 @@ set_namespace()
   fi
 }
 
+check_helm() {
+  binary="$1"
+  alias="$2"
+  version="$3"
+  flags="$4"
+
+  if [ "X$binary" == "X" ]; then
+     
+     binary=$(which $alias)
+     if [ "X$binary" == "X" ]; then
+        
+        binary=$(which helm )
+     fi
+  fi
+  if [ "X$binary" == "X" ]; then
+    echo "$alias is not set"
+    exit 1
+  fi
+
+  vcheck=$($binary version $flags 2>/dev/null)
+  if [ "X$vcheck" == "X" ]; then
+    echo "$binary has incorrect version"
+    echo "$binary version $flags"
+    exit 1
+  fi
+  echo "$binary"
+}
+
+
+del_cert_secret() {
+  labelMatch="$1"
+  for certName in $(kubectl get certificates.certmanager.k8s.io -l$labelMatch -o name)
+  do
+    secretName=$(kubectl get $certName -o jsonpath='{.spec.secretName}')
+    if [ "X$secretName" == "X" ]; then
+      secretName="${certName##*/}"
+    fi
+    kubectl delete $certName
+    kubectl delete secret $secretName
+  done
+}
+
+remove_finalizer() {
+  kind=$1
+  name=$2
+  if [ -n "$(kubectl get $kind $name -n $NAMESPACE -o jsonpath='{.metadata.finalizers}' --ignore-not-found)" ]; then
+    kubectl patch -n $NAMESPACE $kind $name --type=merge -p '{"metadata":{"finalizers":[]}}'
+  fi
+}
+
 uninstall_cases_operator() {
     echo "Delete Cases Resources"
     kubedel cases.isc.ibm.com --all --wait=false
     #wait_crs function ensures CR is removed, it removes finalizer if required
     wait_crs 'cases.isc.ibm.com' 'none'
+    remove_finalizer crd cases.isc.ibm.com
     kubedelc crd cases.isc.ibm.com
 
-    kubedel deploy isc-cases-operator isc-cases-activemq isc-cases-application
+    kubedel deploy isc-cases-operator isc-cases-activemq isc-cases-application isc-app-manager
     kubedel $(oc get jobs --selector delete.on.completion=true -o name)
 
     kubedelc clusterrole isc-cases-operator
     kubedelc clusterrolebinding isc-cases-operator
-    kubedel serviceaccount isc-cases-operator
+    kubedel serviceaccount isc-cases-operator isc-cases-application
 
     #Remove the ambassador-stomp svc finaliser
-    kubectl patch -n $NAMESPACE svc ambassador-stomp --type json -p='[{"op": "remove", "path": "/metadata/finalizers"}]'
-    kubedel svc ambassador-stomp isc-cases-activemq isc-cases-activemq-stomp isc-cases-application isc-cases-application-rest
-    kubedel configmap isc-cases-activemq-keystore isc-cases-application-keystore
-    for pod in $(kubectl get pods -l 'name in (isc-cases-activemq, isc-cases-application, isc-cases-resutil, isc-cases-operator)' -o name)
+    remove_finalizer svc ambassador-stomp
+    kubedel svc ambassador-stomp isc-cases-activemq isc-cases-activemq-stomp isc-cases-application isc-cases-application-rest isc-app-manager
+    kubedel configmap isc-cases-activemq-keystore isc-cases-application-keystore isc-app-manager-keystore
+    for pod in $(kubectl get pods -l 'name in (isc-cases-activemq, isc-app-manager, isc-cases-application, isc-cases-resutil, isc-cases-operator)' -o name)
     do
       kubedel $pod --wait=false
     done
+    #remove any encryption rotation jobs
+    kubedel job -l name=isc-cases-keyvault-encryption-rotate
 }
 
 uninstall_cp4s_postgres_operator() {
@@ -133,6 +236,7 @@ uninstall_cp4s_postgres_operator() {
     kubedel postgresqloperators.isc.ibm.com --all --wait=false
     #wait_crs function ensures CR is removed, it removes finalizer if required
     wait_crs 'postgresqloperators.isc.ibm.com' 'none'
+    remove_finalizer crd postgresqloperators.isc.ibm.com
     kubedelc crd postgresqloperators.isc.ibm.com
 
     kubedel deploy -lname=cp4s-pgoperator
@@ -179,6 +283,15 @@ uninstall_crunchy_operator() {
     kubedel clusterrole "${NAMESPACE}clusterrolesecret" "${NAMESPACE}clusterrole" "${NAMESPACE}clusterrolecrd"
     kubedel clusterrolebinding "${NAMESPACE}clusterbinding" "${NAMESPACE}clusterbindingcrd" "${NAMESPACE}clusterbindingsecret"
     kubedel service postgres-operator
+    kubedel scc ibm-cases-scc
+}
+
+delete_toolbox() {
+  echo "Deleting toolbox"
+  kubectl delete pod cp4s-toolbox --wait=false --ignore-not-found=true
+  kubectl delete sa cp4s-toolbox-sa --ignore-not-found=true
+  kubectl delete clusterrole cp4s-toolbox-role --ignore-not-found=true
+  kubectl delete clusterrolebinding cp4s-toolbox-rolebinding --ignore-not-found=true
 }
 
 if [ "X$WATCH_NAMESPACE" == "X" ]; then
@@ -209,6 +322,14 @@ do
      WAIT="no"
      FORCE="yes"
      ;;
+  --helm3)
+     helm3="$1"
+     shift
+     ;;
+  --helm2)
+     helm2="$1"
+     shift
+     ;;
   *)
      echo "ERROR: invalid argument $arg"
      usage
@@ -216,96 +337,104 @@ do
   esac
 done
 
-echo "Removing iscsequence resources:"
-kubedel iscsequence --all --wait=false
-wait_crs 'iscsequence' 'sequences'
+helm2=$(check_helm "$helm2" "helm2" 'SemVer:"v2.12' "--tls")
+helm3=$(check_helm "$helm3" "helm3" 'Version:"v3.2') 
 
-echo "Removing iscguard resources:"
-kubedel iscguard --all --wait=false
-echo "Removing iscinventory resources:"
-kubedel iscinventory --all --wait=false
-echo "Removing isccomponent resources:"
-kubedel isccomponent --all --wait=false
-      
-      
+echo "Removing iscsequences.isc.ibm.com resources:"
+kubedel iscsequences.isc.ibm.com --all --wait=false
+wait_crs 'iscsequences.isc.ibm.com' 'sequences'
+
+echo "Removing iscguards.isc.ibm.com resources:"
+kubedel iscguards.isc.ibm.com --all --wait=false
+echo "Removing iscinventories.isc.ibm.com resources:"
+kubedel iscinventories.isc.ibm.com --all --wait=false
+echo "Removing isccomponents.isc.ibm.com resources:"
+kubedel isccomponents.isc.ibm.com --all --wait=false
+
+
 # delete middleware custom resources
-echo "Removing redis resources:"
-kubedel redis --all --wait=false
-echo "Removing couchdb resources:"
-kubedel couchdb --all --wait=false
-echo "Removing etcd resources:"
+echo "Removing redis.isc.ibm.com resources:"
+kubedel redis.isc.ibm.com --all --wait=false
+echo "Removing couchdbs.isc.ibm.com resources:"
+kubedel couchdbs.isc.ibm.com --all --wait=false
+echo "Removing etcds.isc.ibm.com resources:"
 kubedel etcds.isc.ibm.com --all --wait=false
-echo "Removing minio resources:"
-kubedel minio --all --wait=false
-echo "Removing oidcclient resources"
-kubedel oidcclient --all --wait=false
-echo "Removing elastic resources"
-kubedel elastic --all --wait=false
-echo "Removing openwhisk resources"
-kubedel iscopenwhisk --all --wait=false
-echo "Removing arango deployment"
-kubedel arangodeployment --all --wait=false
+echo "Removing minios.isc.ibm.com resources:"
+kubedel minios.isc.ibm.com --all --wait=false
+echo "Removing elastics.isc.ibm.com resources"
+kubedel elastics.isc.ibm.com --all --wait=false
+echo "Removing iscopenwhisks.isc.ibm.com resources"
+kubedel iscopenwhisks.isc.ibm.com --all --wait=false
+echo "Removing iscsecret.isc.ibm.com resources"
+kubedel iscsecret.isc.ibm.com --all --wait=false
+echo "Removing isctrust.isc.ibm.com resources"
+kubedel isctrust.isc.ibm.com --all --wait=false
+echo "Removing arangodeployments.database.arangodb.com deployment"
+kubedel arangodeployments.database.arangodb.com --all --wait=false
 echo "Removing appentitlments resources"
 kubedel appentitlements.entitlements.extensions.platform.cp4s.ibm.com \
   --all --wait=false
+echo "Removing offerings resources"
+kubedel offerings.entitlements.extensions.platform.cp4s.ibm.com \
+  --all --wait=false
 echo "Removing connector resources"
 kubedel connectors.connector.isc.ibm.com --all --wait=false
+kubedel redissentinels.redis.databases.cloud.ibm.com --all --wait=false
+kubedel couchdbclusters.couchdb.databases.cloud.ibm.com --all --wait=false
 
-wait_crs 'redis' 'middleware'
-wait_crs 'couchdb' 'middleware'
+wait_crs 'redis.isc.ibm.com' 'middleware'
+wait_crs 'couchdbs.isc.ibm.com' 'middleware'
 wait_crs 'etcds.isc.ibm.com' 'middleware'
-wait_crs 'minio' 'middleware'
-wait_crs 'iscopenwhisk' 'middleware'
-wait_crs 'elastic' 'middleware'
-wait_crs 'oidcclient' 'middleware'
-wait_crs 'arangodeployment' 'none'
+wait_crs 'minios.isc.ibm.com' 'middleware'
+wait_crs 'iscopenwhisks.isc.ibm.com' 'middleware'
+wait_crs 'elastics.isc.ibm.com' 'middleware'
+wait_crs 'iscsecret.isc.ibm.com' 'middleware'
+wait_crs 'isctrust.isc.ibm.com' 'middleware'
+wait_crs 'arangodeployments.database.arangodb.com' 'none'
 wait_crs 'appentitlements.entitlements.extensions.platform.cp4s.ibm.com' 'isc-entitlements-operator'
+wait_crs 'offerings.entitlements.extensions.platform.cp4s.ibm.com' 'isc-entitlements-operator'
 wait_crs 'connectors.connector.isc.ibm.com' 'cp4s-extension'
+#wait_crs 'redissentinels.redis.databases.cloud.ibm.com' 'none'
+#wait_crs 'couchdbclusters.couchdb.databases.cloud.ibm.com' 'none'
 
 # check that 
 echo "Deleting ibm-redis helm charts"
-for redis in $(helm ls --tls -a --namespace $NAMESPACE |\
+for redis in $(${helm3} ls -a --namespace $NAMESPACE |\
     awk '{print $1}' | grep '^ibm-redis-')
 do
   echo "Chart $redis has not been deleted by the middleware operator"
-  helm delete --tls --purge $redis
+  ${helm3} delete $redis
 done
 
 echo "Deleting ibm-etcd helm charts"
-for etcd in $(helm ls --tls -a --namespace $NAMESPACE |\
+for etcd in $(${helm3} ls -a --namespace $NAMESPACE |\
    awk '{print $1}' | grep '^ibm-etcd-')
 do
   echo "Chart $etcd has not been deleted by the middleware operator"
-  helm delete --tls --purge $etcd
-  # Etcd service account is not deleted
-  instance=$(echo $etcd | sed -e 's/^ibm-etcd-//')
-  echo "Deleting $etcd serviceaccount"
-  kubectl delete serviceaccount "ibm-etcd-${instance}-ibm-etcd-serviceaccount"
-  kubectl delete -n $NAMESPACE rolebinding "ibm-etcd-${instance}-ibm-etcd-rolebinding"
-  kubectl delete -n $NAMESPACE role "ibm-etcd-instance-ibm-etcd-role"
+  ${helm3} delete $etcd
 done
 
 # Couchdb instances are not deleted by middleware operator
 echo "Deleting couchdb helm charts"
-for couch in $(helm ls --tls -a --namespace $NAMESPACE |\
+for couch in $(${helm3} ls -a --namespace $NAMESPACE |\
    awk '{print $1}' | grep '^couchdb-')
 do
   echo "Deleting $couch"
-  helm delete --tls --purge $couch
+  ${helm3} delete $couch
 done
 
-dchart=$(helm ls --tls -a --namespace $NAMESPACE |\
+dchart=$(${helm2} ls -a --tls --namespace $NAMESPACE |\
    awk '{print $1}' | grep '^isc-openwhisk-openwhisk$')
 if [ "X$dchart" != "X" ]; then
   echo "Deleting openwhisk chart as its not removed"
-  helm delete --tls --purge isc-openwhisk-openwhisk
+  ${helm2} delete --tls --purge isc-openwhisk-openwhisk
 fi
 
-dchart=$(helm ls --tls -a --namespace $NAMESPACE |\
+dchart=$(${helm3} ls  -a --namespace $NAMESPACE |\
     awk '{print $1}' | grep '^ibm-minio-ow-minio$')
 if [ "X$dchart" != "X" ]; then
   echo "Deleting minio chart as its not removed"
-  helm delete --tls --purge ibm-minio-ow-minio
+  ${helm3} delete ibm-minio-ow-minio
 fi
 
 # The invoker pods are not removed
@@ -314,11 +443,11 @@ do
   kubedel $pod --wait=false
 done
 
-dchart=$(helm ls --tls -a --namespace $NAMESPACE |\
+dchart=$(${helm3} ls -a --namespace $NAMESPACE |\
     awk '{print $1}' | grep 'ibm-dba-ek-isc-cases-elastic')
 if [ "X$dchart" != "X" ]; then
   echo "Deleting elastic chart as its not removed"
-  helm delete --tls --purge ibm-dba-ek-isc-cases-elastic
+  ${helm3} delete ibm-dba-ek-isc-cases-elastic
 fi
 
 uninstall_cases_operator
@@ -326,19 +455,30 @@ uninstall_pgcluster
 uninstall_cp4s_postgres_operator
 uninstall_crunchy_operator
 
+echo "Delete certificates"
+del_cert_secret "app.kubernetes.io/managed-by=isc-sequence-operator"
+del_cert_secret "app.kubernetes.io/managed-by=isc-middleware-operator"
+echo "Delete middleware operator objects"
+kubedel statefulset -lapp.kubernetes.io/managed-by=isc-middleware-operator
+kubedel service -lapp.kubernetes.io/managed-by=isc-middleware-operator
 echo "Delete deployments:"
 kubedel deploy -lplatform=isc
 echo "Delete secrets:"
 kubedel secret -lplatform=isc
+kubedel secret -lapp.kubernetes.io/managed-by=isctrust-operator
 echo "Delete configmaps:"
 kubedel configmap -lplatform=isc
 echo "Delete services:"
 kubedel service -lplatform=isc
 echo "Delete pvc:"
-kubedel pvc -lplatform=isc
+kubedel pvc -lplatform=isc --wait=false
 kubedel deploy isc-entitlements-operator
 kubedel job uds-deploy-functions
+kubedel job ibm-etcd-default-auth-enable-job
 kubedel svc de-minio-route
+
+kubedel pod -ljob-name=ibm-rabbitmq-udi-rabbit-creds-gen
+kubedel job ibm-rabbitmq-udi-rabbit-creds-gen
 
 # deleting arangodb pods
 for type in "agnt" "sngl"
@@ -360,6 +500,13 @@ kubedel svc cp4sint
 ### Delete PVC for etcd
 echo "Deleting pvc for ibm-etcd:"
 for pvc in $(kubectl get -n $NAMESPACE pvc -o name|grep 'persistentvolumeclaim/data-ibm-etcd-')
+do
+  kubedel --wait=false $pvc
+done
+
+# delete kubectl pvc for rabbitmq
+echo "Deleting pvc for ibm-rabbitmq"
+for pvc in $(kubectl get -n $NAMESPACE pvc -o name|grep 'persistentvolumeclaim/data-ibm-rabbitmq-')
 do
   kubedel --wait=false $pvc
 done
@@ -388,7 +535,14 @@ do
   kubedel --wait=false $pvc
 done
 
-
+# Remove Redis operator K8s resources
+#kubectl delete statefulset -l formation_id=default-redis --ignore-not-found=true
+#kubectl delete svc -l formation_id=default-redis --ignore-not-found=true
+#kubectl delete configmap -l formation_id=default-redis --ignore-not-found=true
+#kubectl delete sa default-redis --ignore-not-found=true
+#kubectl delete role default-redis --ignore-not-found=true
+#kubectl delete rolebinding default-redis --ignore-not-found=true
+#kubectl delete secret isc-cases-elastic-odcfg --ignore-not-found=true
 
 # serviceaccounts
 kubedel serviceaccount ibm-isc-aitk-orchestrator
@@ -404,6 +558,8 @@ kubedelc services -l svcowner=iscatkjob
 kubedelc secrets -l secretowner=iscatk
 kubedelc configmaps -l mapowner=iscatk
 
+kubectl delete configmap couch-migration --ignore-not-found=true
+
 kubedel monitoringdashboards.monitoringcontroller.cloud.ibm.com ibm-security-solutions-prod-ibm-security-solutions-inventory
 
 kubedel route isc-route-default
@@ -413,6 +569,18 @@ for cm in ibm-security-solutions-prod-license ibm-security-solutions-prod
 do
   kubedel configmap $cm
 done
+
+# Remove version configmaps
+for cm in car-version isc-entitlements-version
+do
+  kubedel configmap $cm
+done
+
+runSubcharts
+
+delete_toolbox
+
+kubectl delete route --ignore-not-found=true cases-rest cases-stomp isc-default-route
 
 
 if [ "X$ALL" == "Xyes" ]; then
