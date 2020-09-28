@@ -5,6 +5,17 @@
 {{- $imageRepo := (include "image.repository" .) }}
 {{- $image := printf "%s/%s:%s" $imageRepo $ndx.image $ndx.tag }}
 
+{{ if eq $root.operator.scope "legacy" -}}
+# Scope "legacy" selected
+{{ else if eq $root.operator.scope "namespaced" -}}
+# Scope "namespaced" selected
+{{ if $root.operator.features.storage -}}
+{{ fail (printf "Storage Operator not supported in %s scope!" $root.operator.scope) -}}
+{{ end -}}
+{{ else -}}
+{{ fail (printf "Operator Scope %s is not supported!" $root.operator.scope) -}}
+{{ end -}}
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,6 +28,7 @@ metadata:
         productID: {{ $.Values.product.id }}
         productName: {{ $.Values.product.name }}
         productVersion: {{ $.Values.product.version }}
+        productMetric: {{ $.Values.product.metric | default "" }}
     labels:
         app.kubernetes.io/name: {{ template "kube-arangodb.name" . }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
@@ -30,9 +42,7 @@ spec:
     selector:
         matchLabels:
             app.kubernetes.io/name: {{ template "kube-arangodb.name" . }}
-            app.kubernetes.io/managed-by: {{ .Release.Service }}
             app.kubernetes.io/instance: {{ .Release.Name }}
-            release: {{ .Release.Name }}
     template:
         metadata:
             labels:
@@ -48,6 +58,7 @@ spec:
                 productID: {{ $.Values.product.id }}
                 productName: {{ $.Values.product.name }}
                 productVersion: {{ $.Values.product.version }}
+                productMetric: {{ $.Values.product.metric | default "" }}
         spec:
             imagePullSecrets:
                 - name: ibm-isc-pull-secret
@@ -93,6 +104,7 @@ spec:
                   imagePullPolicy: {{ .Values.global.imagePullPolicy | default "IfNotPresent" }}
                   image: {{ $image }}
                   args:
+                    - --scope={{ $root.operator.scope }}
 {{- if $root.operator.features.deployment }}
                     - --operator.deployment
 {{- end -}}
@@ -106,6 +118,11 @@ spec:
                     - --operator.backup
 {{- end }}
                     - --chaos.allowed={{ $root.operator.allowChaos }}
+{{- if $root.operator.args }}
+{{- range $root.operator.args }}
+                    - {{ . | quote }}
+{{- end }}
+{{- end }}
                   env:
                       - name: MY_POD_NAMESPACE
                         valueFrom:

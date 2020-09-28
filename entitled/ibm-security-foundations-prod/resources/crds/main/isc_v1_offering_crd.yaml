@@ -1,0 +1,140 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: offerings.entitlements.extensions.platform.cp4s.ibm.com
+  labels:
+    app.kubernetes.io/instance: ibm-security-foundations
+    app.kubernetes.io/managed-by: ibm-security-foundations
+    app.kubernetes.io/name: ibm-security-foundations
+spec:
+  group: entitlements.extensions.platform.cp4s.ibm.com
+  names:
+    kind: Offering
+    listKind: Offerings
+    plural: offerings
+    singular: offering
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        description: Offering is the Schema for the offering API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            type: object
+            properties:
+              offeringId:
+                description: A string value with a unique (for this vendor) identifier for this offering
+                type: string
+                maxLength: 32
+                minLength: 4
+              name:
+                description: A descriptive name for the offerings
+                type: string
+                maxLength: 256
+                minLength: 0
+              description:
+                description: An informative description of the offering
+                type: string
+                maxLength: 512
+                minLength: 4
+              vendor:
+                description: A URI type identifer for the vendor
+                example: "cp4s.ibm.com"
+                type: string
+                maxLength: 32
+                minLength: 4
+              vendorPartNumber:
+                description: A string identifier meaningful to the vendor
+                type: string
+                maxLength: 32
+                minLength: 4
+              grantSpecification:
+                description: An object containing the grant of rights for this offerings
+                type: object
+                properties:
+                  applications:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        applicationId:
+                          type: string
+                        labels:
+                          description: Labels used as flags to describe the Offering AppEntitlement
+                          type: array
+                          items:
+                            type: string
+                        initialRoleAssignment:
+                          type: object
+                          properties:
+                            installationRole:
+                              type: string
+                            applicationRole:
+                              type: string
+                        prerequisites: 
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              type: 
+                                type: string
+                                enum: [ "MVSREQUIRED" ]
+                              mvsQuantity:
+                                type: integer
+                              mvsMultiplier:
+                                type: integer
+                              enforcement:
+                                type: string
+                                enum: [ "ADVISE_ON_INCLUDE_IN_SUBSCRIPTION", "SILENT" ]
+                      required: 
+                        - "applicationId"
+                  quotas:
+                    type: array
+                    items:
+                      type: object
+                  content:
+                    type: array
+                    items:
+                      type: object
+                anyOf:
+                - required: [ "applications" ]
+                - required: [ "quotas" ]
+                - required: [ "content" ]
+          status:
+            description: OfferingStatus defines the observed state of Offering CRS
+            properties:
+              conditions:
+                type: array
+                items:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                description: more fields to be described soon
+            type: object
+            required:
+            - conditions
+        x-kubernetes-preserve-unknown-fields: true
+    subresources:
+        status: {}
+    additionalPrinterColumns:
+    - name: STATE
+      type: string
+      jsonPath: .status.conditions[?(@.status=="True")].reason
+    - name: MESSAGE
+      type: string
+      jsonPath: .status.conditions[?(@.status=="True")].message

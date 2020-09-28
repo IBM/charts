@@ -2,37 +2,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-{{- if .Values.global.cookieFilter }}
-  annotations:
-    getambassador.io/config: |
-      ---
-      apiVersion: getambassador.io/v2
-      kind: Module
-      name: ambassador
-      config:
-        lua_scripts: |
-          function envoy_on_request(request_handle)
-            c = request_handle:headers():get('cookie')
-            if c == nil then
-              return
-            end
-            res = ''
-            for kv in c:gmatch('%s*([^;]*)%s*;?') do
-               k, v = kv:match('(.*)=([^%s;]*)%s*')
-               if k == 'X-ISC-JWT' or k == 'lang' or k == 'acctid' or
-                 k == 'ISCReqURLv2' or k == 'shellsession' or k == 'JSESSIONID' then
-                   res = res .. k .. '=' .. v .. ';'
-               end
-            end
-            if res == '' then
-               request_handle:headers():remove('cookie')
-            elseif res ~= c then
-               request_handle:headers():replace('cookie', res)
-            end
-          end
-{{- end }}
   name: {{ include "ambassador.fullname" . }}
-{{- if .Values.global.cookieFilter }}
   annotations:
     getambassador.io/config: |
       ---
@@ -40,26 +10,9 @@ metadata:
       kind: Module
       name: ambassador
       config:
-        lua_scripts: |
-          function envoy_on_request(request_handle)
-            c = request_handle:headers():get('cookie')
-            if c == nil then
-              return
-            end
-            res = ''
-            for kv in c:gmatch('%s*([^;]*)%s*;?') do
-               k, v = kv:match('(.*)=([^%s;]*)%s*')
-               if k == 'X-ISC-JWT' or k == 'lang' or k == 'acctid' or
-                 k == 'ISCReqURLv2' or k == 'shellsession' or k == 'JSESSIONID' then
-                   res = res .. k .. '=' .. v .. ';'
-               end
-            end
-            if res == '' then
-               request_handle:headers():remove('cookie')
-            elseif res ~= c then
-               request_handle:headers():replace('cookie', res)
-            end
-          end
+        server_name: cp4s
+{{- if .Values.global.cookieFilter }}
+        cookie: yes
 {{- end }}
   labels:
     app.kubernetes.io/name: {{ include "ambassador.name" . }}

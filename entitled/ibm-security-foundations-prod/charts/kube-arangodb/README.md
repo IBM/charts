@@ -50,7 +50,7 @@ This chart can only run on amd64 architecture type.
 
 ## Backup and restore
 
-ArangoDB backup and restore is implemented as part of `cp4s-toolbox`. Please refer to [cp4s-toolbox arangodb readme]( https://www.ibm.com/support/knowledgecenter/SSTDPP_1.3.0/docs/scp-core/backup-intro.html) for details.
+ArangoDB backup and restore is implemented as part of `cp4s-toolbox`. Please refer to [cp4s-toolbox knowledge center]( https://www.ibm.com/support/knowledgecenter/SSTDPP_1.3.0/docs/scp-core/backup-intro.html) for details.
 
 ## Documentation
 Further guidance can be found in the [Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.3.0)

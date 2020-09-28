@@ -11,7 +11,7 @@
 #
 # Run this script to re-execute the sequence
 #
-# This script takes two arguments; 
+# This script takes two arguments;
 #   - short name of CRD, e.g. redis
 #   - name of custem resource
 #
@@ -30,11 +30,11 @@ if [ "X$CRD" == "X" ]; then
 fi
 
 case $CRD in
-  redis|couchdb|minio|etcd|elastic|cases|iscopenwhisk|connectors|appentitlements)
+  minio|etcd|elastic|appentitlements|offering|rabbitmq)
     ;;
-  *) 
+  *)
   echo "Invalid CRD: $CRD"
-  echo "Valid values are: redis|couchdb|minio|etcd|elastic|cases|iscopenwhisk|connectors|appentitlements"
+  echo "Valid values are: minio|etcd|elastic|appentitlements|offering|rabbitmq"
   exit 1
 esac
 
@@ -51,4 +51,3 @@ fi
 
 kubectl patch $res --type merge --patch '{"spec":{"uuid":"'$(date +%s)'"}}'
 echo "Updated $res"
-
