@@ -59,19 +59,81 @@ spec:
           - key: certificate.pem
             path: certificate.pem
           secretName: {{ .Values.vault.secret }}
+      {{- if not .Values.ibmPostgres.enabled }}
       - name: pgsql
         secret:
           secretName: {{ .Values.postgres.secret }}
           defaultMode: 420
           items:
           - key: pgpass
-            path: .pgpass 
-      - name: v-vault-logs
-        persistentVolumeClaim:
-          claimName: pvc-instascan-vault-logs
+            path: .pgpass
+      {{- end }}
       - name: vault-config
         configMap:
           name: instascan-vault-configmap
+      {{- if .Values.ibmPostgres.enabled }}
+      - name: initdb-sql
+        configMap:
+          name: instascan-vault-initdb-sql
+      - name: postgres-tls
+        secret:
+          secretName: {{ .Values.ibmPostgres.tlsSecret }}
+          items:
+          - key: "tls.crt"
+            path: "tls.crt"
+      {{- end }}
+      {{- if .Values.ibmPostgres.enabled }}
+      initContainers:
+      - name: instascan-vault-initdb
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}{{ end }}/{{ .Values.ibmPostgres.image.name }}:{{ .Values.ibmPostgres.image.tag }}
+        imagePullPolicy: IfNotPresent
+        securityContext:
+{{include "nonroot.containers.securityContext" . | indent 10 }}
+          runAsUser: {{ .Values.global.nonroot.uid }}
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 10m
+          limits:
+            memory: 128Mi
+            cpu: 50m
+        volumeMounts:
+        - mountPath: /opt/ibm/postgres
+          name: postgres-tls
+        - mountPath: /tmp/
+          name: initdb-sql
+        env:
+        - name: PGHOST
+          value: {{ .Values.ibmPostgres.host }}
+        - name: PGPORT
+          value: {{ .Values.ibmPostgres.port | quote }}
+        - name: PGDATABASE
+          value: "postgres"
+        - name: PGUSER
+          value: {{ .Values.ibmPostgres.user }}
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: pg_su_password
+              name: {{ .Values.ibmPostgres.authSecret }}
+        - name: PGSSLROOTCERT
+          value: "/opt/ibm/postgres/tls.crt"
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          for i in $(seq 12)
+          do
+            pg_isready && break
+            sleep 10
+          done
+          pg_isready || exit 1
+          if [ -z "$(psql -l | awk '$1 ~ /vault/')" ]
+          then
+            psql -a -c 'CREATE DATABASE vault' || exit 1;
+          fi
+          psql -f /tmp/init-vaultdb.sql;
+      {{- end }}
       containers:
       - name: instascan-vault
         {{- if .Values.global.dockerRegistryPrefix }}
@@ -116,20 +178,33 @@ spec:
           {{- end }}
         securityContext:
 {{include "nonroot.containers.securityContext" . | indent 10 }}
-          runAsUser: 1000320999
+          runAsUser: {{ .Values.global.nonroot.uid }}
           runAsGroup: 1001      
         env:
           - name: VAULT_ADDR
             value: "http://localhost:8201"
+          {{- if .Values.ibmPostgres.enabled }}
+          - name: IBM_POSTGRESQL_HOST
+            value: {{ .Values.ibmPostgres.host }}
+          - name: IBM_POSTGRESQL_PORT
+            value: {{ .Values.ibmPostgres.port | quote }}
+          - name: IBM_POSTGRESQL_USER
+            value: {{ .Values.ibmPostgres.user }}
+          - name: IBM_POSTGRESQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: pg_su_password
+                name: {{ .Values.ibmPostgres.authSecret }}
+          {{- end }}
         volumeMounts:
         - mountPath: /etc/internal-tls
           name: internal-tls
-        - mountPath: /vault/logs
-          name: v-vault-logs
         - mountPath: /vault/config
           name: vault-config
+        {{- if not .Values.ibmPostgres.enabled }}
         - mountPath: /etc/pgsql
           name: pgsql
+        {{- end }}
         envFrom:
         - configMapRef:
             name: instascan-vault-configmap          

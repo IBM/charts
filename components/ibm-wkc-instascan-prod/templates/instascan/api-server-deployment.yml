@@ -61,6 +61,7 @@ spec:
           - key: certificate.pem
             path: certificate.pem
           secretName: internal-nginx-svc-tls
+      {{- if not .Values.ibmPostgres.enabled }}
       - name: pgsql
         secret:
           defaultMode: 420
@@ -68,15 +69,74 @@ spec:
           - key: pgpass
             path: .pgpass 
           secretName: {{ .Values.postgres.secret }}
-      - name: api-server-logs
-        persistentVolumeClaim:
-          claimName: pvc-instascan-api-server-logs
+      {{- end }}
       - name: api-server-files
         persistentVolumeClaim:
           claimName: pvc-instascan-api-server-files
       - name: api-server-log-config
         configMap:
           name: instascan-api-server-configmap
+      {{- if .Values.ibmPostgres.enabled }}
+      - name: postgres-tls
+        secret:
+          secretName: {{ .Values.ibmPostgres.tlsSecret }}
+          items:
+          - key: "tls.crt"
+            path: "tls.crt"
+      {{- end }}
+      {{- if .Values.ibmPostgres.enabled }}
+      initContainers:
+      - name: instascan-api-server-initdb
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}{{ end }}/{{ .Values.ibmPostgres.image.name }}:{{ .Values.ibmPostgres.image.tag }}
+        imagePullPolicy: IfNotPresent
+        securityContext:
+{{include "nonroot.containers.securityContext" . | indent 10 }}
+          runAsUser: {{ .Values.global.nonroot.uid }}
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 10m
+          limits:
+            memory: 128Mi
+            cpu: 50m
+        volumeMounts:
+        - mountPath: /opt/ibm/postgres
+          name: postgres-tls
+        env:
+        - name: PGHOST
+          value: {{ .Values.ibmPostgres.host }}
+        - name: PGPORT
+          value: {{ .Values.ibmPostgres.port | quote }}
+        - name: PGDATABASE
+          value: "postgres"
+        - name: PGUSER
+          value: {{ .Values.ibmPostgres.user }}
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: pg_su_password
+              name: {{ .Values.ibmPostgres.authSecret }}
+        - name: PGSSLROOTCERT
+          value: "/opt/ibm/postgres/tls.crt"
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          for i in $(seq 12)
+          do
+            pg_isready && break
+            sleep 10
+          done
+          pg_isready || exit 1
+          if [ -z "$(psql -l | awk '$1 ~ /instascan/')" ]
+          then
+            psql -a -c 'CREATE DATABASE instascan' || exit 1;
+          fi
+          if [ -z "$(psql -l | awk '$1 ~ /audit/')" ]
+          then
+            psql -a -c 'CREATE DATABASE audit' || exit 1;
+          fi
+      {{- end }}
       containers:
       - name: instascan-api-server
         {{- if .Values.global.dockerRegistryPrefix }}
@@ -127,14 +187,13 @@ spec:
           name: internal-tls
         - mountPath: /etc/internal-nginx-svc-tls
           name: internal-nginx-svc-tls
-        - mountPath: /log
-          name: api-server-logs
-          #subPath: api-server/logs
         - mountPath: /deepfs
           name: api-server-files
           #subPath: api-server/files
+        {{- if not .Values.ibmPostgres.enabled }}
         - mountPath: /etc/pgsql
           name: pgsql
+        {{- end }}
         - mountPath: /instaScan/config/logging.yaml
           name: api-server-log-config
           subPath: logging.yaml
@@ -152,7 +211,20 @@ spec:
         - name: AP_SERVICE_BASEURL
           value: 'https://ap-service:8443'
         - name: DOC_PREVIEW_SERVICE_BASEURL
-          value: 'https://doc-preview-service:8443'  
+          value: 'https://doc-preview-service:8443'
+        {{- if .Values.ibmPostgres.enabled }}
+        - name: IBM_POSTGRESQL_HOST
+          value: {{ .Values.ibmPostgres.host }}
+        - name: IBM_POSTGRESQL_PORT
+          value: {{ .Values.ibmPostgres.port | quote }}
+        - name: IBM_POSTGRESQL_USER
+          value: {{ .Values.ibmPostgres.user }}
+        - name: IBM_POSTGRESQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: pg_su_password
+              name: {{ .Values.ibmPostgres.authSecret }}
+        {{- end }}
         envFrom:
         - configMapRef:
             name: instascan-api-server-configmap

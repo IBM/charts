@@ -6,9 +6,23 @@ metadata:
   name: instascan-vault-configmap
   labels:
     io.kompose.service: instascan-vault
-{{include "instascan.labels" . | indent 4 }}    
+{{include "instascan.labels" . | indent 4 }}
     release: "{{ .Release.Name }}"
 data:
+  {{- if .Values.ibmPostgres.enabled }}
+  vault.hcl: |
+    listener "tcp" {
+      address = "0.0.0.0:8200"     
+      tls_cert_file = "/etc/internal-tls/tls.crt"
+      tls_key_file = "/etc/internal-tls/tls.key"
+      tls_require_and_verify_client_cert = "true"
+      tls_client_ca_file = "/etc/internal-tls/certificate.pem"
+    }
+    storage "postgresql" { 
+      connection_url = "postgres://stolon@wkc-instascan-db-ibm-postgresql-proxy-svc:5432/vault"
+    }
+    disable_mlock=true
+  {{- else }}
   INSTASCAN_PGPASS_PATH: "/etc/pgsql/.pgpass"
   vault.hcl: |
     listener "tcp" {
@@ -21,4 +35,5 @@ data:
     storage "postgresql" { 
       connection_url = "postgres://vaultservice@instascan-postgres:5432/vault"
     }
-    disable_mlock=true  
+    disable_mlock=true
+  {{- end }}

@@ -25,4 +25,5 @@
 | Chart | Date | Kubernetes Version Required | Breaking Changes | Details |
 | ----- | ---- | --------------------------- | ---------------- | ------- |
 | 1.1.0 | Apr 07, 2020 | >= 1.11 | None | Initial version |
-| 1.1.1 |  |  |  |  |
+| 1.1.1 | Jun 19, 2020 | >= 1.11 | None | Better scalability with ds-manager |
+| 1.1.2 |  |  |  |  |
