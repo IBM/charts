@@ -1,5 +1,5 @@
 
-# What’s new in Chart Version 1.0.7
+# What’s new in Chart Version 1.0.6
 Threat Intelligence Service and Threat Intelligence Insights for Cloud Pak for Security
 
 
@@ -7,8 +7,7 @@ Threat Intelligence Service and Threat Intelligence Insights for Cloud Pak for S
 Product fixes to support Cloud Pak for Security
 
 # Prerequisites
-* Tiller 2.12.3
-* Kubernetes 1.11
+* Kubernetes 1.16
 
 # Documentation
 
@@ -21,4 +20,4 @@ Product fixes to support Cloud Pak for Security
 | 1.0.4| Feb 11, 2020|  >=1.11 | | None  |Product fixes to support Cloud Pak for Security|
 | 1.0.5| Mar 26th, 2020|  >=1.11 | | None  |Threat Intelligence Service and Threat Intelligence Insights for Cloud Pak for Security and Cases subchart added to provide Postgresql Operator service|
 | 1.0.6| May 22nd, 2020|  >=1.11 | | None  | OCP 4.3 support,IBM Resilient support, Defect fixes|
-| 1.0.7| July 15th, 2020|  >=1.11 | | None  | OCP 4.4 support, Defect fixes|
+| 1.0.8| |  >=1.11 | | None  | Install Improvements, Helm 3 support, Product fixes to support Cloud Pak for Security|
