@@ -19,3 +19,5 @@ kubectl get route
     * [CAR-ATP connector](./cp4s-connector-car-atp/README.md)
     * [CAR-Tenable connector](./cp4s-connector-car-tenable/README.md)
     * [CAR-AWS connector](./cp4s-connector-car-aws/README.md)
+    * [CAR-IAM connector](./cp4s-connector-car-iam/README.md)
+    * [CAR-QRadar connector](./cp4s-connector-car-qradar/README.md)
