@@ -28,7 +28,16 @@ EOF
 exit 1
 }
 
+CS_NAMESPACE='kube-system'
+getCSNamespace() {
+  csn=$(kubectl get namespace ibm-common-services -o name 2>/dev/null)
+  if [ "X$csn" != "X" ]; then
+    CS_NAMESPACE='ibm-common-services'
+  fi
+}
+
 getFoundationUpgradeParameters() {
+  getCSNamespace
   ver=$(helm version --tls 2>/dev/null|grep Client:|grep 'SemVer:"v2.12.')
   if [ "X$ver" == "X" ]; then
     echo "ERROR: invalid version of helm command: 2.12.x is expected"
@@ -39,7 +48,7 @@ getFoundationUpgradeParameters() {
     echo "ERROR: Foundation chart was not installed"
     exit 1
   fi
-  values=$(helm get values --tls $fnd)
+  values=$(helm get values --tls --tiller-namespace $CS_NAMESPACE $fnd)
   helmuser=$(echo "$values" | grep 'helmUser:' | sed -e 's/^.*: //')
   repository=$(echo "$values" | grep 'repository: ' | sed -e 's/^.*: //')
   repositoryType=$(echo "$values" | grep 'repositoryType: ' | sed -e 's/^.*: //')
@@ -49,10 +58,12 @@ To upgrade $fnd chart, the following should be added as --set parameters when ru
  --set global.repository=$repository
  --set global.repositoryType=$repositoryType
  --set global.helmUser=$helmuser
+ --set global.csNamespace=$CS_NAMESPACE
 EOF
 }
 
 getSolutionsUpgradeParameters() {
+  getCSNamespace
   ver=$(helm version --tls 2>/dev/null|grep Client:|grep 'SemVer:"v2.12.')
   if [ "X$ver" == "X" ]; then
     echo "ERROR: invalid version of helm command: 2.12.x is expected"
@@ -63,10 +74,18 @@ getSolutionsUpgradeParameters() {
     echo "ERROR: Solutions chart was not installed"
     exit 1
   fi
-  values=$(helm get values --tls $fnd)
+  values=$(helm get values --tls --tiller-namespace $CS_NAMESPACE $fnd)
   storageClass=$(echo "$values" | grep '^  storageClass: ' | sed -e 's/^.*: //')
   domain=$(kubectl get iscinventory domain-default -o jsonpath='{.spec.definitions.name}')
   icphostname=$(echo "$values" | grep 'icphostname:' | sed -e 's/^.*: //')
+  if [ "X$CS_NAMESPACE" == 'ibm-common-services' ]; then
+# check if hostname has been changed
+    icphostname=$(kubectl get route -n ibm-common-services cp-console \
+       -o jsonpath='{.spec.host}')
+  elif [ "X$icphostname" == "X" ]; then
+    icphostname=$(kubectl get route -n kube-system icp-console \
+       -o jsonpath='{.spec.host}')
+  fi
   hostname=$(echo "$values" | grep  ' hostname: '| uniq| sed -e 's/^.*: //')
   repository=$(echo "$values" | grep 'repository: ' | sed -e 's/^.*: //')
   repositoryType=$(echo "$values" | grep 'repositoryType: ' | sed -e 's/^.*: //')
@@ -79,6 +98,7 @@ To upgrade $fnd chart, the following should be added as --set parameters when ru
 --set global.repositoryType=$repositoryType
 --set global.cluster.hostname=$hostname
 --set global.cluster.icphostname=$icphostname
+--set global.csNamespace=$CS_NAMESPACE
 EOF
 }
 

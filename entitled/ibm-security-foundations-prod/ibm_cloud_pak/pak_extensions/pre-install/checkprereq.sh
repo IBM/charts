@@ -18,6 +18,103 @@
 #     ./checkprereq.sh [ -n namespace ] [--solutions]
 #
 
+CS_NAMESPACE=''
+
+check_helm() {
+  binary="$1"
+  alias="$2"
+  version="$3"
+  flags="$4"
+
+  if [ "X$binary" == "X" ]; then
+
+     binary=$(which $alias)
+     if [ "X$binary" == "X" ]; then
+
+        binary=$(which helm )
+     fi
+  fi
+  if [ "X$binary" == "X" ]; then
+    echo "$alias is not set"
+    exit 1
+  fi
+
+  vcheck=$($binary version $flags 2>/dev/null)
+  if [ "X$vcheck" == "X" ]; then
+    echo "$binary has incorrect version"
+    echo "$binary version $flags"
+    exit 1
+  fi
+  echo "$binary"
+}
+
+checkapp() {
+  app="$1"
+
+  if [ "X$(which $app)" == "X" ]; then
+    echo "ERROR: $app not found on path"
+    exit 1
+  fi
+}
+
+getcrt() {
+  certname="$1"
+  fldname="$2"
+  kubectl get secret -n $CS_NAMESPACE $certname -o yaml |\
+    grep "${fldname}:" | sed -e 's/^.*: //' | base64 --decode |\
+    openssl x509 -noout -text | grep -A 1 Serial | tail -1
+}
+
+
+checkClusterCA() {
+  if [ "X$CS_NAMESPACE" == "Xkube-system" ]; then
+    cacrt='cluster-ca-cert'
+    ing='internal-management-ingress-tls-secret'
+    cafld='tls.crt'
+  else
+    cacrt='ibmcloud-cluster-ca-cert'
+    ing='icp-management-ingress-tls-secret'
+    cafld='ca.crt'
+  fi
+  if [ "X$(which openssl)" == "X" ]; then
+    echo "WARNING: no openssl found, cound not validate cert"
+    return
+  fi
+  clcert=$(getcrt $cacrt "$cafld")
+  ingcrt=$(getcrt $ing "ca.crt")
+  if [ "X$clcert" != "X$ingcrt" ]; then
+    echo "ERROR: management ingress cert does not match IBM CS CA"
+  fi
+}
+
+checkKubeSystem() {
+  pods=$(kubectl get pod --no-headers -n $CS_NAMESPACE| grep -vE 'Running|Completed'| grep -E 'auth|^platform-api|icp-mongo|helm')
+  if [ "X$pods" != "X" ]; then
+    echo "ERROR: Some of $CS_NAMESPACE pods are in failed state:"
+    echo "$pods"
+    exit 1
+  fi
+
+  if [ "X$CS_NAMESPACE" == "Xkube-system" ]; then
+    xtra="icp-management-ingress"
+  else
+    xtra="management-ingress"
+  fi
+
+  # check if necessary components are installed
+  for app in auth-idp auth-pap auth-idp helm  \
+             platform-api $xtra \
+             oidcclient-watcher secret-watcher
+  do
+     pod=$(kubectl get pod -o name -n $CS_NAMESPACE -lapp=$app)
+     if [ "X$pod" == "X" ]; then
+         echo "ERROR: Common services application $app not installed or failed"
+         exit 1
+     fi
+  done
+  echo "INFO: Common Services applications are ok"
+}
+
 isPresent() {
   kind="$1"
   name="$2"
@@ -28,40 +125,27 @@ isPresent() {
   fi
 }
 
-checkKubeSystem() {
-  pods=$(kubectl get pod -n kube-system|grep -vE 'Running|Completed|NAME')
-  if [ "X$pods" != "X" ]; then
-    echo "ERROR: Some of kube-system pods are in failed state:"
-    echo "$pods"
-    exit 1
-  fi
-
-  # check if necessary components are installed
-  for app in auth-idp auth-pap auth-idp helm  \
-             platform-api icp-management-ingress \
-             oidcclient-watcher secret-watcher
-  do
-     pod=$(kubectl get pod -o name -n kube-system -lapp=$app)
-     if [ "X$pod" == "X" ]; then
-         echo "ERROR: Common services application $app not installed or failed"
-         exit 1
-     fi
-  done
-  echo "INFO: Common Services applications are ok"
-}
-
 set_namespace()
 {
   NAMESPACE="$1"
-  ns=$(kubectl get namespace $NAMESPACE -o name 2>/dev/null) 
+  ns=$(kubectl get namespace $NAMESPACE -o name 2>/dev/null)
   if [ "X$ns" == "X" ]; then
     echo "ERROR: Invalid namespace $NAMESPACE"
     exit 1
   fi
 }
 
+checkapp kubectl
+checkapp oc
+
 NAMESPACE=$(oc project | sed -e 's/^[^"]*"//' -e 's/".*$//')
 SOLUTIONS=""
+
+if [ "X$(kubectl get namespace ibm-common-services -o name 2>/dev/null)" == "X" ]; then
+  CS_NAMESPACE='kube-system'
+else
+  CS_NAMESPACE='ibm-common-services'
+fi
 
 while true
 do
@@ -80,12 +164,13 @@ do
      ;;
   *)
      echo "ERROR: invalid argument $arg"
-     usage
+     echo "Usage: $0 [ -n namespace ] [ --solutions ]"
+     exit 1
      ;;
   esac
 done
 
-
+checkClusterCA
 checkKubeSystem
 
 nodes=$(kubectl get node -o name -lnode-role.kubernetes.io/compute=true)
@@ -97,17 +182,11 @@ if [ "X$nodes" == "X" ]; then
   fi
 fi
 
-on=$(kubectl get node -o name -lopenwhisk-role=invoker)
-if [ "X$on" == "X" ]; then
-  echo "ERROR: No openwhisk invoker nodes defined"
-  exit 1
-fi
-
 dsc=""
 for cl in $(kubectl get storageclass -o name)
-do 
-  def=$(kubectl get $cl -o jsonpath="{.metadata.annotations['storageclass\.kubernetes\.io/is-default-class']}") 
-  if [ "X$def" != "Xtrue" ]; then 
+do
+  def=$(kubectl get $cl -o jsonpath="{.metadata.annotations['storageclass\.kubernetes\.io/is-default-class']}")
+  if [ "X$def" != "Xtrue" ]; then
     continue
   fi
   if [ "X$dsc" != "X" ]; then
@@ -135,7 +214,7 @@ if [ $? -eq 0 ]; then
     exit 1
   else
     worker_nodes=$(kubectl get node -o name -lnode-role.kubernetes.io/compute=true)
-      if [ "X$worker_nodes" == "X" ]; then 
+      if [ "X$worker_nodes" == "X" ]; then
         worker_nodes=$(kubectl get node -o name -lnode-role.kubernetes.io/worker)
       fi
       for node in $worker_nodes
@@ -155,16 +234,14 @@ if [ $? -eq 0 ]; then
 fi
 
 if [ "X$SOLUTIONS" == "X" ]; then
-  echo "INFO: ibm-security-foundations prerequisites are OK"
   exit 0
 fi
 
 isPresent secret isc-ingress-default-secret
 isPresent serviceaccount ibm-dba-ek-isc-cases-elastic-bai-psp-sa
 
-idp=$(kubectl get pod -lapp=auth-idp -n kube-system -o jsonpath='{.items[0].status.phase}')
+idp=$(kubectl get pod -lapp=auth-idp -n $CS_NAMESPACE -o jsonpath='{.items[0].status.phase}')
 if [ "X$idp" != "XRunning" ]; then
   echo "ERROR: auth-idp-provider is not running"
   exit 1
 fi
-echo "INFO: ibm-security-solutions prerequisites are OK"
