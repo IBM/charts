@@ -26,7 +26,7 @@ The Middleware and Sequence operator deployed as part of this chart are Namespac
 
 ## Prerequisites
 
-- Red Hat OpenShift Container Platform 4.4 or 4.5
+- Red Hat OpenShift Container Platform >=4.4.14 or >=4.5.8
 - Helm 3.2.4
 - Helm 2.12.3 (in upgrade scenario from CP4S 1.3)
 - Kubernetes 1.16.2 or later
@@ -120,25 +120,25 @@ By default, `ibm-security-foundations` has the following resource request requir
 
 ## Installing the Chart
 
-To install the chart including its prerequisites, please refer to the `Installing IBM Cloud Pak® for Security` section in the README available within the [CASE bundle](https://github.com/IBM/cloud-pak/blob/master/repo/case/ibm-cp-security-1.0.8.tgz) for IBM Cloud Pak&reg; for Security.
+To install the chart including its prerequisites, please refer to the `Installing IBM Cloud Pak® for Security` section in the README available within the [CASE bundle](https://github.com/IBM/cloud-pak/blob/master/repo/case/ibm-cp-security-1.0.9.tgz) for IBM Cloud Pak&reg; for Security.
 
 ### Verifying the Chart
 
-The verification of the installation of the chart can be performed by following the procedure described in the `Verifying the Installation` section in the README available within the [CASE bundle](https://github.com/IBM/cloud-pak/blob/master/repo/case/ibm-cp-security-1.0.8.tgz) for IBM Cloud Pak&reg; for Security.
+The verification of the installation of the chart can be performed by following the procedure described in the `Verifying the Installation` section in the README available within the [CASE bundle](https://github.com/IBM/cloud-pak/blob/master/repo/case/ibm-cp-security-1.0.9.tgz) for IBM Cloud Pak&reg; for Security.
 
 
 ### Upgrade or update the installation
 
-To upgrade or update your installation, please refer to the `Upgrading IBM Cloud Pak® for Security` section in the README available within the [CASE bundle](https://github.com/IBM/cloud-pak/blob/master/repo/case/ibm-cp-security-1.0.8.tgz) for IBM Cloud Pak&reg; for Security.
+To upgrade or update your installation, please refer to the `Upgrading IBM Cloud Pak® for Security` section in the README available within the [CASE bundle](https://github.com/IBM/cloud-pak/blob/master/repo/case/ibm-cp-security-1.0.9.tgz) for IBM Cloud Pak&reg; for Security.
 
 ### Uninstalling the chart
 
-To uninstall the chart, please refer to the `Uninstalling IBM Cloud Pak® for Security` section in the README available within the [CASE bundle](https://github.com/IBM/cloud-pak/blob/master/repo/case/ibm-cp-security-1.0.8.tgz) for IBM Cloud Pak&reg; for Security.
+To uninstall the chart, please refer to the `Uninstalling IBM Cloud Pak® for Security` section in the README available within the [CASE bundle](https://github.com/IBM/cloud-pak/blob/master/repo/case/ibm-cp-security-1.0.9.tgz) for IBM Cloud Pak&reg; for Security.
 
 
 ## Configuration
 
-The table in the `Configuration` section in the README available within the [CASE bundle](https://github.com/IBM/cloud-pak/blob/master/repo/case/ibm-cp-security-1.0.8.tgz) for IBM Cloud Pak&reg; for Security consists the list of configurable parameters for IBM Cloud Pak&reg; for Security.
+The table in the `Configuration` section in the README available within the [CASE bundle](https://github.com/IBM/cloud-pak/blob/master/repo/case/ibm-cp-security-1.0.9.tgz) for IBM Cloud Pak&reg; for Security consists the list of configurable parameters for IBM Cloud Pak&reg; for Security.
 
 ## Limitations
 
