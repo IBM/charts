@@ -1,5 +1,5 @@
 ## What's new...
-This release contains IBM API Connect v2018.4.1.10.
+This release contains IBM API Connect v2018.4.1.13.
 
 For more details, refer to the [API Connect v2018 release notes](https://www.ibm.com/support/knowledgecenter/en/SSMNED_2018/com.ibm.apic.overview.doc/overview_whatsnew.html).
 
@@ -26,6 +26,7 @@ For detailed installation and upgrade instructions, refer to the [API Connect Kn
 
 | Chart | Date                | Kubernetes Required | Breaking Changes                                                                    | Details                                                           |
 | ----- | ------------------- | ------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 1.0.6 | September 11,2020   | >=1.10.0            |                                                                                     | API Connect v2018.4.1.13                                          |
 | 1.0.5 | March 31,2020       | >=1.10.0            |                                                                                     | API Connect v2018.4.1.10                                          |
 | 1.0.4 | November 30, 2019   | >=1.10.0            |                                                                                     | API Connect v2018.4.1.8-iFix1.0                                   |
 | 1.0.3 | October 4, 2019     | >=1.10.0            |                                                                                     | API Connect v2018.4.1.7-iFix3.0; Operations Dashboard integration |

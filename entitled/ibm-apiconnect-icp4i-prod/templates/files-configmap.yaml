@@ -35,11 +35,20 @@ data:
     TILLER_PORT={{ .Values.operator.tiller.nodePort }}
     HELM_VERSION=$(curl -k https://${CLUSTER_ADDR}:${CLUSTER_PORT}/api/v2/cli/downloads | jq -r .helm.version)
     AVAILABLE_HELM_VERSIONS=$(ls /opt/helm/)
+    VERSION=$(echo $CLUSTER_INFO | jq -r .data.version)
 
     if [[ "$AVAILABLE_HELM_VERSIONS" =~ "$HELM_VERSION" ]]; then
       echo "Found suitable Helm client $HELM_VERSION"
+
+      if [[ "$VERSION" =~ "3.2" ]]; then
+        TILLER_NS=kube-system
+      else
+        TILLER_NS=ibm-common-services
+      fi
+
       sed -i 's/{{"{{"}}.helm_version{{"}}"}}/'$HELM_VERSION'/g; 
         s/{{"{{"}}.cluster_addr{{"}}"}}/'$CLUSTER_ADDR'/g; 
+        s/{{"{{"}}.tiller_ns{{"}}"}}/'$TILLER_NS'/g; 
         s/{{"{{"}}.tiller_port{{"}}"}}/'$TILLER_PORT'/g' ./helm-wrapper.sh
       cp -f ./helm-wrapper.sh /opt/helm/helm
     else
@@ -95,7 +104,7 @@ data:
     EOF
 
     # HELM_CR_INFO=$(cat /home/apic/apiconnect-up.yml)
-    HELM_CR_INFO=$(kubectl create -f /home/apic/apiconnect-up.yml --dry-run -o json | jq '. | del(.spec.subsystems[].spec.settings[] | select(.==""))')
+    HELM_CR_INFO=$(kubectl create -f /home/apic/apiconnect-up.yml --dry-run -o json | jq '. | del(.spec.subsystems[].spec.settings[] | select(.=="" or .==null))')
 
     # obtain any existing cluster cr info
     CLUSTER_CR_INFO=$(kubectl get apiconnectcluster {{ .Release.Name }}-apic-cluster --namespace {{ .Release.Namespace }} --export -o json)
@@ -104,7 +113,7 @@ data:
     # if cluster cr exists, implement merge between it and helm cr
     if [ "$RC" == "0" ]; then
       # filter cr to remove unnecessary fields
-      CLUSTER_CR_INFO=$(echo "$CLUSTER_CR_INFO" | jq '. | .metadata={name: .metadata.name} | del(.status) | del(.spec.subsystems[].spec.settings[] | select(.==""))')
+      CLUSTER_CR_INFO=$(echo "$CLUSTER_CR_INFO" | jq '. | .metadata={name: .metadata.name} | del(.status) | del(.spec.subsystems[].spec.settings[] | select(.=="" or .==null))')
 
       # get array of subsystems from cluster and helm cr's; base64 encode to enable iterating over them
       CLUSTER_CR_SUBSYSTEMS=$(echo "$CLUSTER_CR_INFO" | jq -cr '.spec.subsystems[] | @base64')
@@ -166,9 +175,9 @@ data:
     ######################################################
 
     {{ if .Values.operator.tiller.useNodePort }}
-    /opt/helm/{{"{{"}}.helm_version{{"}}"}}/helm $@ --tls --host {{"{{"}}.cluster_addr{{"}}"}}:{{"{{"}}.tiller_port{{"}}"}}
+    /opt/helm/{{"{{"}}.helm_version{{"}}"}}/helm $@ --tiller-namespace {{"{{"}}.tiller_ns{{"}}"}} --tls --host {{"{{"}}.cluster_addr{{"}}"}}:{{"{{"}}.tiller_port{{"}}"}}
     {{ else }}
-    /opt/helm/{{"{{"}}.helm_version{{"}}"}}/helm $@ --tls
+    /opt/helm/{{"{{"}}.helm_version{{"}}"}}/helm $@ --tiller-namespace {{"{{"}}.tiller_ns{{"}}"}} --tls
     {{ end }}
   delete-cluster: |-
     #!/bin/bash
