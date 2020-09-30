@@ -53,3 +53,17 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
+{{/* these functions are used to built the registry/repository path */}}
+
+{{- define "informix-ibm.eng-repo-image" -}}
+{{- if ( eq .Values.runtime "ICP4Data" ) }}
+{{- .Values.images.eng.image.repository }}:{{ .Values.images.eng.image.tag -}}
+{{- else -}}
+{{- .Values.images.eng.image.registry }}/{{ .Values.images.eng.image.repository }}:{{ .Values.images.eng.image.tag -}}
+{{- end -}}
+{{- end -}}
+
+{{/* api is only used if ICP4Data is defined no need the extra if */}}
+{{- define "informix-ibm.api-repo-image" -}}
+{{- .Values.images.api.image.repository }}:{{ .Values.images.api.image.tag -}}
+{{- end -}}
