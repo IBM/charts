@@ -141,8 +141,8 @@ The following tables lists the configurable parameters of the IBM Informix chart
 | Parameter                            | Description                                     | Default                                                                    |
 | ----------------------------------   | ---------------------------------------------   | -------------------------------------------------------------------------- |
 | `images.eng.image.registry`          | container image registry                        | `cp.icr.io`                                                                |
-| `images.eng.image.repository`        | container image repository                      | `cp/informix-eng`                                                          |
-| `images.eng.image.tag`               | container image tag                             | `14.10.4.6`                                                          |
+| `images.eng.image.repository`        | container image repository                      | `cp/cpd/informix-eng`                                                      |
+| `images.eng.image.tag`               | container image tag                             | `14.10.4.6`                                                                |
 | `dataVolume.size`                    | Size of data volume                             | `20Gi`                                                                     |
 | `resources.requests.memory`          | Memory resource request                         | `100m`                                                                     |
 | `resource.requests.cpu`              | CPU resource request                            | `200m`                                                                     |
