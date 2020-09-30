@@ -75,7 +75,7 @@ icp4i.ibm.com/product: apiconnect
 icp4i.ibm.com/release: {{ .Release.Name }}
 cloudpakName: "IBM Cloud Pak for Integration"
 cloudpakId: "c8b82d189e7545f0892db9ef2731b90d"
-cloudpakVersion: "2020.1.1"
+cloudpakVersion: "2020.2.1"
 {{- end -}}
 
 {{- define "ibm-apiconnect-cip.subsysAnnotations" -}}
