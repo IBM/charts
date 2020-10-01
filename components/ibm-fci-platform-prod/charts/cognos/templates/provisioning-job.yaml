@@ -1,0 +1,100 @@
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+{{- $releaseName := .Release.Name }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "cognos.fullname" . }}-provisioning
+  labels:
+{{- include "common.label.metadata" (list . (include "cognos.name" .) (include "cognos.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (include "cognos.name" .) (include "cognos.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      restartPolicy: Never
+      volumes:
+        - name: zen-service-broker-secret
+          secret:
+            defaultMode: 420
+            secretName: zen-service-broker-secret
+      serviceAccountName: fci-common
+      initContainers:
+        - name: db2-provisioner
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          imagePullPolicy: {{ .Values.global.commonScripts.image.pullPolicy }}
+          env:
+{{- include "common.import-secret" (list . "db2password" "db2" "DB2INST1_PASSWORD") | indent 10 }}
+          - name: PROVISION_FOR_COGNOS
+            value: "true"
+          - name: TOKEN_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: zen-service-broker-secret
+                key: token
+          envFrom:
+          - configMapRef:
+              name: {{ .Release.Name }}-db2
+          command:
+            - bash
+            - -c
+            - /common-scripts/create-cp-service-instance.sh --debug="$DEBUG_PROVISIONING" --token="$TOKEN_SECRET" --type=db2aaservice
+          resources:
+{{ toYaml .Values.provisioner.resources | indent 12 }}
+      containers:
+        - name: {{ template "cognos.fullname" . }}-provisioning
+          volumeMounts:
+          - mountPath: /var/run/sharedsecrets
+            name: zen-service-broker-secret
+          env:
+          - name: GLOBAL_CS_DATABASEEXTERNAL
+            value: "true"
+          - name: GLOBAL_CS_DATABASETLSENABLED
+            value: "true"
+          - name: GLOBAL_CS_DATABASEPROVIDER
+            value: DB2
+          - name: CONTENT_STORE_TYPE
+            value: DB2
+          - name: CONTENT_STORE_HOST
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-db2
+                key: db_host
+          - name: CONTENT_STORE_PORT
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-db2
+                key: db_port
+          - name: CONTENT_STORE_DB
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-db2
+                key: db_name
+          - name: CONTENT_STORE_USER
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-db2
+                key: db_userid
+ {{- include "common.import-secret" (list . "CONTENT_STORE_PASS" "db2" "db2_password") | indent 10 }}
+          envFrom:
+          - configMapRef:
+              name: {{ template "cognos.fullname" . }}                     
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}
+          imagePullPolicy: {{ .Values.global.commonScripts.image.pullPolicy }}
+          command:
+            - bash
+            - -c
+            - /common-scripts/provision-cognos.sh
+          resources:
+{{ toYaml .Values.provisioner.resources | indent 12 }}          
+{{ end }}

@@ -44,6 +44,12 @@ spec:
         emptyDir: {}
       - name: shared-data
         emptyDir: {}
+      - name: db2-cert
+        secret:
+          defaultMode: 420
+          secretName: {{ .Release.Name }}-db2-secrets-env
+      - name: fcicert
+        emptyDir: {}
       - name: keytab-file
         secret:
           secretName: {{ .Release.Name }}-case-keytab
@@ -55,7 +61,11 @@ spec:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
         image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
         command: [ "/common-scripts/init-container-svc-depend.sh" ]
-        args: [ "{{ .Release.Namespace }}/{{ template "case.fullname" . }}-fci-messaging", "{{ .Release.Namespace }}/{{ .Release.Name }}-{{ .Values.libertyConfig.db2_service }}", {{ .Release.Namespace }}/{{ .Release.Name }}-security-auth-nodejs, {{ .Release.Namespace }}/{{ .Release.Name }}-cedm-integration ]
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+        args: [ "{{ .Release.Namespace }}/{{ template "case.fullname" . }}-fci-messaging", {{ .Release.Namespace }}/{{ .Release.Name }}-security-auth-nodejs, {{ .Release.Namespace }}/{{ .Release.Name }}-cedm-integration ]
+{{ else }}
+        args: [ "{{ .Release.Namespace }}/{{ template "case.fullname" . }}-fci-messaging", "{{ .Release.Namespace }}/{{ .Release.Name }}-db2-datastore-0", {{ .Release.Namespace }}/{{ .Release.Name }}-security-auth-nodejs, {{ .Release.Namespace }}/{{ .Release.Name }}-cedm-integration ]
+{{ end }}
       {{- if .Values.global.pvRequiresPermissionsFix }}
       - name: pv-permissions
         image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
@@ -72,10 +82,39 @@ spec:
         - mountPath: /mount
           name: fci-solution-volume
       {{- end }}
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+      - name: import-db2-cert
+        image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.cryptoUtils.image.repository }}:{{ .Values.global.cryptoUtils.image.tag }}"
+        command:
+          - bash
+          - -c
+          - cp /fci_universal_ks.jks /etc/tls/fci_universal_ks.jks && /opt/ibm/java-x86_64-80/jre/bin/keytool -import -noprompt -deststorepass $SSL_KEYSTORE_PASSWORD_CONFIG -file /db2cert -storetype JKS -keystore /etc/tls/fci_universal_ks.jks
+        resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+        env:
+{{- include "common.import-secret" (list . "SSL_KEYSTORE_PASSWORD_CONFIG" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
+        volumeMounts:
+        - name: fcicert
+          mountPath: /etc/tls
+        - name: db2-cert
+          mountPath: /db2cert
+          subPath: db2_cert
+        - name: file-secrets
+          mountPath: /fci_universal_ks.jks
+          subPath: fci_universal_ks.jks
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+{{ end }}
       containers:
       - image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.liberty.image.repository }}:{{ .Values.liberty.image.tag }}
         imagePullPolicy: {{ .Values.liberty.image.pullPolicy }}
         name: fci-solution
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+        command:
+        - bash
+        - -c
+        - cp /etc/tls/fci_universal_ks.jks /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.jks && /opt/ibm/fci/scripts/start.sh
+{{ end }}
         resources:
 {{ toYaml .Values.liberty.resources | indent 10 }}
 {{- with .Values.liberty.nodeSelector }}
@@ -117,10 +156,49 @@ spec:
 {{- include "common.import-secret" (list . "FCI_KAFKA_MSG_KS_ALIASNAME" "platform" "FCI_KAFKA_MSG_JKS_ALIASNAME") | indent 8 }}
 {{- include "common.import-secret" (list . "FCI_KAFKA_MSG_KS_PASSWORD" "platform" "FCI_KAFKA_MSG_JKS_PASSWORD") | indent 8 }}
 {{- include "common.import-secret" (list . "com_fci_keystore_password" "platform" "FCI_JKS_PASSWORD") | indent 8 }}
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+{{- include "common.import-secret" (list . "com_fci_db2_password" "db2" "db2_password") | indent 8 }}
+{{ else }}
 {{- include "common.import-secret" (list . "com_fci_db2_password" "db2" "FCIAUTHID_PASSWORD") | indent 8 }}
+{{ end }}
 {{- include "common.import-secret" (list . "JWT_KEY" "platform" "JWT_KEY") | indent 8 }}
         - name: HDP_SHARED_DIR
           value: /home/wlpadmin
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+        - name: com_fci_db2_userid
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-db2
+              key: db_userid
+        - name: com_fci_db2_server
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-db2
+              key: db_host
+        - name: com_isii_db2_server
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-db2
+              key: db_host
+        - name: db2_service
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-db2
+              key: db_host
+        - name: com_fci_db2_ssl_port
+          value: "50001"
+{{ else }}
+        - name: com_fci_db2_userid
+          value: fciauthid
+        - name: com_fci_db2_server
+          value: fci-db2-datastore-0
+        - name: com_isii_db2_server
+          value: fci-db2-datastore-0
+        - name: db2_service
+          value: fci-db2-datastore-0
+        - name: com_fci_db2_ssl_port
+          value: "56000"
+{{ end }}
         ports:
         - containerPort: 9080
         - containerPort: 9443
@@ -128,9 +206,6 @@ spec:
         - name: config-volume
           mountPath: /opt/ibm/wlp/usr/servers/fciServer/server_basic_registry.xml
           subPath: server_basic_registry.xml
-        - name: file-secrets
-          mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.jks
-          subPath: fci_universal_ks.jks
         - name: file-secrets
           mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/kafka.client.truststore.jks
           subPath: fci_universal_ks.jks
@@ -140,6 +215,13 @@ spec:
         - name: file-secrets
           mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_kafka_msg.p12
           subPath: fci_kafka_msg.p12
+{{ if eq .Values.global.DB2_PROVISIONER "FCI" }}
+        - name: file-secrets
+          mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.jks
+          subPath: fci_universal_ks.jks
+{{ end }}
+        - name: fcicert
+          mountPath: /etc/tls
         - mountPath: /fci-shared
           name: fci-solution-volume
         - mountPath: /opt/ibm/wlp/usr/servers/fciServer/logs

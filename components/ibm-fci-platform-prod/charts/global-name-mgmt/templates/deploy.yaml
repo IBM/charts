@@ -23,8 +23,6 @@ spec:
       securityContext:
 {{ include "common.PodSecurityContextConfig" . | indent 8 }}
       volumes:
-        - name: logs
-          emptyDir: {}
         - name: config-volume
           configMap:
             name: {{ .Release.Name }}-platform-config-files
@@ -63,21 +61,8 @@ spec:
             - name: config-volume
               mountPath: /opt/IBM/GNM/data/npp.config
               subPath: gnm_npp.config
-            - name: logs
-              mountPath: /opt/IBM/GNM/wlp/usr/servers/gnmServer/logs
           resources:
 {{ toYaml .Values.resources | indent 12 }}
-        - name: message-log
-{{ include "common.sideCarHealthCheck" . | indent 10 }}
-          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
-          resources:
-{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
-          args: [/bin/sh, -c, 'tail -n+1 -F /logs/messages.log']
-          securityContext:
-{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
-          volumeMounts:
-          - name: logs
-            mountPath: /logs
     {{- with .Values.nodeSelector }}
       nodeSelector:
 {{ toYaml . | indent 8 }}

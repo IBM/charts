@@ -28,13 +28,13 @@ There are two ways to include ibm-sch with your chart:
   dependencies:
   - name: ibm-sch
     repository: "@sch" ## where sch is based on [NAME] from the cmd: helm repo add [flags] [NAME] [URL]
-    version: "^1.2.18"
+    version: "^1.2.19"
     alias: sch
   ```
   
     Explanation of parameters:
     - Set the alias to `sch` to guarantee that all functions will work successfully.
-    - Set the version to `^1.2.18` to download the latest `1.x.x` version of ibm-sch.
+    - Set the version to `^1.2.19` to download the latest `1.x.x` version of ibm-sch.
 
 2. Download the source and copy it into your charts directory
 
@@ -53,7 +53,7 @@ Entry in subchart requirements.yaml:
 dependencies:
 - name: ibm-sch
   repository: "@sch" ## where sch is based on [NAME] from the cmd: helm repo add [flags] [NAME] [URL]
-  version: "^1.2.18"
+  version: "^1.2.19"
   alias: sch
   condition: global.sch.enabled
 ```
@@ -72,7 +72,7 @@ Entry in parent chart's requirements.yaml:
 dependencies:
 - name: ibm-sch
   repository: "@sch" ## where sch is based on [NAME] from the cmd: helm repo add [flags] [NAME] [URL]
-  version: "^1.2.18"
+  version: "^1.2.19"
   alias: sch
 ```
 

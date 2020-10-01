@@ -21,10 +21,41 @@ sideCarContainers:
 
 arch: amd64
 
+kerberosClient:
+  resources:
+    limits:
+      cpu: "100m"
+      memory: "128Mi"
+    requests:
+      cpu: "20m"
+      memory: "64Mi"
+  livenessProbe:
+    exec:
+      command:
+        - sh
+        - '-c'
+        - pgrep krblogin.sh
+    failureThreshold: 3
+    initialDelaySeconds: 300
+    periodSeconds: 60
+    successThreshold: 1
+    timeoutSeconds: 10
+  readinessProbe:
+    exec:
+      command:
+        - sh
+        - '-c'
+        - pgrep krblogin.sh
+    failureThreshold: 3
+    initialDelaySeconds: 60
+    periodSeconds: 60
+    successThreshold: 1
+    timeoutSeconds: 10
+
 arLiberty:
   image:
     repository: ibmcom/fci-analytics-runtime-liberty
-    tag: 6.5.3
+    tag: 6.5.4
     pullPolicy: IfNotPresent
   nodeSelector: {}
   tolerations: []
@@ -51,12 +82,43 @@ arLiberty:
 
 # Analytics Runtime canvas Liberty
 arLibertyConfig:
-  name: value
+  CP4D_URL: 'https://internal-nginx-svc:12443'
+  CP4D_USERNAME: 'admin'
+  CP4D_UID: '1000330999'
+  FCII_SPARK_VOLUME_NAME: 'fciisparkvolume'
+  FCII_SPARK_INSTANCE_NAME: 'fciisparkinstance'
+  FCII_SPARK_VOLUME_SIZE: '20Gi'
+  FCII_APP_VOLUME_SIZE: '20Gi'
+  ELASTIC_ADMIN_USER: 'fci_admin'
+  DATA_DIR: '/zen-volume-home/fcii/sample_data'
+  PYLIB_DIR: '/zen-volume-home/fcii/pyfiles'
+  INSTALL_DIR: '/opt/ibm/fcii'
+  EXECUTION_MODE: 'CP4D'
+  USER_NAME: 'admin'
+  SPARK_SERVICE_ENDPOINT: ''
+  SPARK_ENDPOINT: ''
+  PARTY_DATA_DIR: '/zen-volume-home/sample_data'
+  DATA_DIR: '/insurance'
+  PYLIB_DIR: '$SPARK_HOME/python:/zen-volume-home/fcii/common/model:/zen-volume-home/fcii/common/'
+  INSTALL_DIR: '/opt/ibm/fcii/'
+  SPARK_INSTANCE_NAME: 'fciisparkinstance'
+  APP_VOLUME_NAME: 'fciiappvolume'
+  SPARK_EXTRA_CLASS_PATH: '/zen-volume-home/fci/lib/*:/zen-volume-home/fci/lib/hbasejars/*:/zen-volume-home/fcii/lib/*:/zen-volume-home/hbase/conf/'
+  MOUNT_PATH: '/zen-volume-home'
+  JWT_KEY_EXPIRY: '240'
+  JWT_ISSUER: 'fci.ibm.com'
+  PYSPARK_PYTHON: '/opt/ibm/conda/miniconda3.6/bin/python'
+  CP4D_AUTH_SERVICE: '/zen-data/internal/v1/service_token'
+  HBSPARK_TOKEN_SERVICE: '/zen-data/v2/serviceInstance/token'
+  CP_ENABLE_JOB_MANAGEMENT: 'true'
+  CP_SPARK_SUBMIT_MAX_RETRIES: '100'
+  CP_MEMORY_RELEASE_WAIT_INMS: '100000'
+  HBASE_CONF_PATH: '/zen-volume-home/hbase/conf'
 
 arCanvas:
   image:
     repository: ibmcom/fci-analytics-runtime-canvas
-    tag: 6.5.3
+    tag: 6.5.4
     pullPolicy: IfNotPresent
   nodeSelector: {}
   tolerations: []
@@ -89,9 +151,11 @@ arCanvas:
       cpu: "2"
       memory: "2Gi"
 
-arLibertyPvNfsPath: /fci-analytics-runtime-data
-arLibertyPvcSpec:
-  accessModes:
-    - ReadWriteMany
-  storageClassName: null
-  size: 20Gi
+arsparkJob:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
