@@ -31,12 +31,31 @@ spec:
         - name: file-secrets
           secret:
             secretName: {{ .Release.Name }}-platform-secret-files
-        - name: ar-mount
+        - name: fcii-app-volume-mount
           persistentVolumeClaim:
-            claimName: {{ template "analytics-runtime.fullname" . }}-liberty
+            claimName: volumes-{{ .Values.global.FCII_APP_VOLUME_NAME }}-pvc
+        - name: zen-service-broker-secret
+          secret:
+            defaultMode: 420
+            secretName: zen-service-broker-secret
         - name: logs
           emptyDir: {}
+        - name: shared-data
+          emptyDir: {}
+        - name: keytab-file
+          secret:
+            secretName: {{ .Release.Name }}-cedm-keytab
       initContainers:
+        - name: init-job-depend
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          command:
+            - bash
+            - -c
+            - . /common-scripts/configure && $KUBECTL wait --for=condition=complete job/{{ .Release.Name }}-analytics-runtime-setup-spark --timeout=-1s
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
         {{- if .Values.global.pvRequiresPermissionsFix }}
         - name: pv-permissions
           image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
@@ -51,7 +70,7 @@ spec:
           - -c
           volumeMounts:
           - mountPath: /mount
-            name: ar-mount
+            name: fcii-app-volume-mount
         {{- end }}
       containers:
         - name: ar-liberty
@@ -76,9 +95,33 @@ spec:
               - -c
               - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
 {{ toYaml .Values.arLiberty.readinessProbe | indent 12 }}
+          env:
+          - name: OPENSHIFT_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: FCI_JKS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          - name: ELASTIC_ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-platform-secrets-env
+                key: ELASTIC_ADMIN_PASSWORD
+          - name: JWT_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-platform-secrets-env
+                key: JWT_KEY
+          - name: HDP_SHARED_DIR
+            value: /home/wlpadmin
           envFrom:
           - configMapRef:
               name: {{ template "analytics-runtime.fullname" . }}-liberty
+          - configMapRef:
+              name: {{ template "analytics-runtime.fullname" . }}-krb
           ports:
           - containerPort: 9080
           - containerPort: 9443
@@ -97,8 +140,14 @@ spec:
             subPath: fci_kafka_msg.p12
           - name: logs
             mountPath: /opt/ibm/wlp/usr/servers/fciServer/logs
-          - name: ar-mount
-            mountPath: /fci-analytics-runtime-data
+          - name: fcii-app-volume-mount
+            mountPath: /zen-volume-home
+          - name: zen-service-broker-secret
+            mountPath: /var/run/sharedsecrets
+          - name: shared-data
+            mountPath: /home/wlpadmin
+          - mountPath: /etc/security/keytabs
+            name: keytab-file
           resources:
 {{ toYaml .Values.arLiberty.resources | indent 12 }}
 {{- with .Values.arLiberty.nodeSelector }}
@@ -113,6 +162,36 @@ spec:
           tolerations:
 {{ toYaml . | indent 12 }}
 {{- end }}
+        - envFrom:
+          - configMapRef:
+              name: {{ .Release.Name }}-ibm-fci-platform-prod-krb
+          - configMapRef:
+              name: {{ template "analytics-runtime.fullname" . }}-krb
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.kerberosClient.image.repository }}:{{ .Values.kerberosClient.image.tag }}"
+          imagePullPolicy: {{ .Values.kerberosClient.image.pullPolicy }}
+          livenessProbe:
+{{ toYaml .Values.kerberosClient.livenessProbe | indent 12 }}
+          readinessProbe:
+{{ toYaml .Values.kerberosClient.readinessProbe | indent 12 }}
+          name: hdp-client
+          resources:
+{{ toYaml .Values.global.kerberos.resources | indent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            {{- if .Values.global.pvRequiresPermissionsFix }}
+            runAsUser: {{ .Values.global.kerberos.runAsUser }}
+            {{- end }}
+          volumeMounts:
+          - mountPath: /etc/security/keytabs
+            name: keytab-file
+          - name: shared-data
+            mountPath: /home/wlpadmin
         - name: message-log
           image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           args: [/bin/sh, -c, 'tail -n+1 -F /logs/messages.log']

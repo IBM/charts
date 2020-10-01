@@ -67,6 +67,10 @@ global:
   # At this time, DB2 instances must be set to 1
   db2Instances: 1
 
+  # Change to CLOUD_PAK to use DB2 from Cloud Pak
+  DB2_PROVISIONER: 'FCI'
+  DB2_CONNECTION_NAME: "FCI_DB2"
+
   # generateInternalPasswords determines whether secrets for internal
   # services are randomly generated.  Set to false to use a pre-existing
   # secret instead of randomly generated values.  In this case, all
@@ -126,6 +130,127 @@ global:
     # For FCI for Watson Private use, set file to: ibm.com_IBM_Financial_Crimes_Insight_with_Watson_Private-6.5.1.swidtag
     file: 'ibm.com_IBM_Cloud_Pak_for_Data_Financial_Crimes_Insight_for_Non-Production_Environment-6.5.1.swidtag'
 
+  cryptoUtils:
+    image:
+      repository: ibmcom/fci-crypto-utils
+      tag: <BUILD_TAG>
+      pullPolicy: "IfNotPresent"
+
+    resources:
+      requests:
+        memory: "16Mi"
+        cpu: "0.01"
+      limits:
+        memory: "512Mi"
+        cpu: "0.2"
+
+    # Make a note of the fully qualified domain name of your OpenShift nodes (master and workers)
+    # for your installation.
+    #
+    # You MUST do one of the following.  Failure to do so will result in an installation failure.
+    #
+    # 1) Enter the values for CERT_DN, CERT_SAN_DNS_SPEC, and CERT_SAN_IP_SPEC.
+    #    This generates new, replacement SSL keystore artifacts (including a new
+    #    self-signed certificate).  This technique is often used for 'proof of concept' installations.
+    #
+    # 2) Obtain SSL/TLS certificates from a trusted certificate authority (CA)
+    #    and configure the FCI according the documentation section called Managing SSL/TLS universal keystores.
+    #    This technique is recommended for production installations.
+
+    config:
+      # REGENERATE_CERTS - this property determines if new, replacement universal SSL
+      #                   keystore artifacts are generated.
+      #
+      #                   Valid values are: true -or- false.
+      #
+      #                   If true is specified, then confirm the certificate information
+      #                   specified in the associated properties are correct for your
+      #                   installation.
+      #
+      #                   If false is specified, then certificates will only be generated if
+      #                   they do not already exist.
+      REGENERATE_CERTS: false
+
+      # SECRET_NAME is the name of the OpenShift secret object that contains the FCI
+      # keystore artifacts.  This typically does not need to be changed.
+      SECRET_NAME: 'platform-secret-files'
+
+      # USER_SECRET_NAME is the name of the pre-defined secret that contains a user's
+      # private key and certificate chain in PEM format.
+      # The private key must be 'key.pem'.
+      # The certificate chain must be 'crt.pem'.
+      # If this secret exists and the FCI keystore secret has not been created already,
+      # then the FCI keystore artifacts will be created from the key/certificate in this
+      # pre-existing secret.
+      # Enclose the values with ''
+      USER_SECRET_NAME: 'fci-user-secret-files'
+      # CERT_DN - use this property to set the Distinguished Name for the SSL
+      #           certificate. This does not have to match up or have similar values
+      #           for the CN or DN values of your LDAP (if your install specifies an LDAP server).
+      #           Typically the default value below is fine for most installations.
+      #
+      #           Example: 'CN=FCI_server,OU=FCI_platform,O=FCI_Development,C=US'
+      #
+      CERT_DN: 'CN=FCI_server,OU=FCI_platform,O=FCI_Development,C=US'
+      #
+      # CERT_SAN_DNS_SPEC - use this property to set the DNS names to be
+      #                     included in the certificate SubjectAlternativeName
+      #                     extension.
+      #
+      #                     Run the following command to get the httpsIngressSubdomain
+      #  oc get route console -n openshift-console | grep -v 'HOST/PORT' | awk '{print $2}' | cut -d'.' -f 2-
+      #
+      #                     The format is a comma-separated list of DNS names.
+      #                     Wildcard domain specifications are acceptable.
+      #                     There MUST BE no spaces before or after the comma in this list!!
+      #                     This must include openshfit cluster information and hdp servers information
+      #
+      #                     You MUST have at least two entries for the OpenShift cluster
+      #                     1) the full DNS name of your httpsIngressSubdomain (for example fciroute.yourco.com)
+      #                     2) *.full DNS name of your httpsIngressSubdomain (for example *.fciroute.yourco.com)
+      #                     If your https and tcp ingress are different you would have 4 entries for OpenShift
+      #
+      #                     Then you must include either the dns names for each HDP server or *.subdomain that includes
+      #                     all HDP servers.  Specifying each HDP server indivdually is more secure as it limits only
+      #                     those individual HDP servers to communicate to the openshift cluster
+      #
+      #                     For OpenShift include a wildcard for the subdomain and the domain itself (see example2 below)
+      #
+      #                     The localhost,127.0.0.1 at the end of this CERT_SANS_DNS_SPEC entry is optional
+      #
+      #                     Example1: CERT_SANS_DNS_SPEC = '*.localdomain,localdomain,localhost,127.0.0.1'
+      #
+      #                     Example2: The servers or virtual machines (nodes) for your install have
+      #                     httpsIngressSubdomain that matches your tcpIngressSubdomain for an OpenShift 4.3.x install
+      #                     the httpsIngressSubdomain is: fciroute.yourco.com
+      #                     The Hadoop nodes have dns names like ambari.yourhdp.com, hdp1.yourhdp.com, hdp2.yourhdp.com
+      #                     this line would need to look like either (note if all of your hdp machines are under
+      #                     .yourhdp.com, you can simply use *.yourhdp.com, NOTE: your HDP machines must be directly under
+      #                     .yourhdp.com for *.yourhdp.com to work, the HDP host cannot be hdp1.lab.yourhdp.com for example):
+      #
+      #                     CERT_SANS_DNS_SPEC = '*.fciroute.yourco.com,fciroute.yourco.com,*.yourhdp.com,localhost,127.0.0.1'
+      #                     or
+      # CERT_SANS_DNS_SPEC = '*.fciroute.yourco.com,fciroute.yourco.com,ambari.yourhdp.com,hdp1.yourhdp.com,hdp1.yourhdp.com,hdp2.yourhdp.com,localhost,127.0.0.1'
+      #
+      #                     Example3, same as Example 2 but the tcp ingress is tcpfciroute.yourco.com
+      #                     everything else is the same as Example2 (this could be an OpenShift 3.11.x install)
+      #
+      # CERT_SANS_DNS_SPEC = '*.fciroute.yourco.com,fciroute.yourco.com,*.tcpfciroute.yourco.com,tcpfciroute.yourco.com,*.yourhdp.com'
+      #
+      CERT_SAN_DNS_SPEC: '*.localdomain,localhost,127.0.0.1'
+      #
+      # CERT_SAN_IP_SPEC - use this property to set IP addresses to be
+      #                    included in the certificate SubjectAlternativeName
+      #                    extension.
+      #
+      #                    Typically this line is a comma-separated list of IP addresses.
+      #
+      #                    Example: CERT_SAN_IP_SPEC = '127.0.0.1'
+      #                    Typically this line is left unchanged.
+      CERT_SAN_IP_SPEC: '127.0.0.1'
+      # Set to false to generate unique certificates (recommended for production use)
+      USE_DEFAULT_CERTS: false
+
 ##########################################################################
 ###
 ### With a few exceptions around specific components, not many fields
@@ -140,6 +265,13 @@ global:
       repository: ibmcom/fci-common-scripts
       tag: <BUILD_TAG>
       pullPolicy: IfNotPresent
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 64Mi
 
   nginxSslProxy:
     image:
@@ -166,7 +298,7 @@ global:
   # open -- OpenLDAP
   # none -- no LDAP server, use basic registry instead
   # appid -- to enable authentication through IBM Cloud App ID service
-  IDENTITY_SERVER_TYPE: 'msad'
+  IDENTITY_SERVER_TYPE: 'none'
 
   LDAP_SERVER_HOST: '<hostname>'
   LDAP_SERVER_PORT: '636'
@@ -216,7 +348,7 @@ global:
     # Do not modify the UI configurations below
     ROLE_SURVEILLANCE: 'si'
     ROLE_COMPLAINTS: 'si-complaints'
-    ROLE_VOICE: 'si-voice'
+    ROLE_SI_VOICE: 'si-voice'
     ROLE_CASE_MANAGER: 'case_manager'
     ROLE_INSURANCE: 'insurance'
     ROLE_KYC: 'kyc'
@@ -296,18 +428,8 @@ global:
     # Prior releases to 6.5, keep this to 3000 for the security-auth service port.
     SSO_PORT: "443"
 
-translationJob:
-  image:
-    repository: ibmcom/fci-translations
-    tag: <BUILD_TAG>
-    pullPolicy: "Always"
-  resources:
-    limits:
-      cpu: 100m
-      memory: 128Mi
-    requests:
-      cpu: 50m
-      memory: 64Mi
+  # CP4D Application Volume name to be created for analytics runtime 
+  FCII_APP_VOLUME_NAME: fciiappvolume
 
 db2:
   hostIPC: true
@@ -326,8 +448,8 @@ db2:
 
   # Load Balancer Node Ports - Ports to expose in load balancer for Cloud Pak for Data installs
   # Set to an empty string to use a random port
-  sslNodePort: "30560"
-
+  sslNodePort: "30560" 
+ 
   image:
     repository: ibmcom/fci-data-store-server
     tag: <BUILD_TAG>
@@ -350,6 +472,41 @@ db2:
       - ReadWriteMany
     storageClassName: null
     size: 1Gi
+
+  storageType:
+    META_STORAGE_CLASS: null
+    DATA_STORAGE_CLASS: null
+    BACKUP_STORAGE_CLASS: null
+
+  config:
+    ENV_HEALTHCHECK_CONNECTION_TEST: 'false'
+    com_fci_db2_precheck: 'true'
+    NAMESPACE: 'fci'
+    SERVICE_INSTANCE_VERSION: '11.5.4.0-x86_64'
+    ARCHITECTURE: 'x86_64'
+    DB2_CPU: '2'
+    DATABASE_NAME: 'FCIDB'
+    METADATA_DEDICATED: 'false'
+    METADATA_DISPLAY_NAME: 'IBM FCI DB2'
+    DB2_MEM: '6'
+    META_STORAGE_SIZE: '10'
+    DATA_STORAGE_SIZE: '10'
+    BACKUP_STORAGE_SIZE: '10'
+    META_STORAGE_ACCESS_MODE: 'ReadWriteMany'
+    DATA_STORAGE_ACCESS_MODE: 'ReadWriteMany'
+    BACKUP_STORAGE_ACCESS_MODE: 'ReadWriteMany'
+    DEBUG_PROVISIONING: "false"
+    CONNECTION_NAME: "FCI_DB2"
+    PAGE_SIZE: "32768"
+    DEDICATED: 'false'
+    PAGE_SIZE: "32768"
+    LOGFILSIZ: "25000"
+    LOGPRIMARY: "10"
+    LOGSECOND:  "100"
+    APPLHEAPSZ: "2048"
+    APP_CTL_HEAP_SZ: "1024"
+    PCKCACHESZ: "AUTOMATIC"
+    LOCKTIMEOUT: "30"
 
 global-name-mgmt:
   enabled: false
@@ -574,6 +731,63 @@ cognos:
       cpu: "4"
 
   config:
+    # CPD Cognos Analytics provisioning parameters.
+    # The user should set:
+    SHARED_STORAGE_CLASS: ""
+    # The following probably would not be overridden but maybe if users know what they're doing?
+    SERVICE_INSTANCE_CPU: "9"
+    SERVICE_INSTANCE_GPU: "0"
+    SERVICE_INSTANCE_MEMORY: "22.59"
+    ARTIFACTS_RESOURCES_LIMITS_CPU: "0.5"
+    ARTIFACTS_RESOURCES_LIMITS_MEMORY: "300Mi"
+    ARTIFACTS_RESOURCES_REQUESTS_CPU: "0.3"
+    ARTIFACTS_RESOURCES_REQUESTS_MEMORY: "100Mi"
+    ARTIFACTSPVC_SIZE: "2Gi"
+    BIAPP_RESOURCES_LIMITS_CPU: "4"
+    BIAPP_RESOURCES_LIMITS_MEMORY: "14Gi"
+    BIAPP_RESOURCES_REQUESTS_CPU: "2"
+    BIAPP_RESOURCES_REQUESTS_MEMORY: "8Gi"
+    CGS_HPA_MAXREPLICAS: "2"
+    CGS_HPA_MINREPLICAS: "1"
+    CGS_RESOURCES_LIMITS_CPU: "1.5"
+    CGS_RESOURCES_LIMITS_MEMORY: "500Mi"
+    CGS_RESOURCES_REQUESTS_CPU: "1"
+    CGS_RESOURCES_REQUESTS_MEMORY: "200Mi"
+    CM_ANONYMOUS: "false"
+    CM_RESOURCES_LIMITS_CPU: "3"
+    CM_RESOURCES_LIMITS_MEMORY: "12Gi"
+    CM_RESOURCES_REQUESTS_CPU: "2"
+    CM_RESOURCES_REQUESTS_MEMORY: "8Gi"
+    CS_INSTANCEMEMORY: "500"
+    CS_RESOURCES_LIMITS_CPU: "1"
+    CS_RESOURCES_LIMITS_MEMORY: "500Mi"
+    CS_RESOURCES_REQUESTS_CPU: ".5"
+    CS_RESOURCES_REQUESTS_MEMORY: "200Mi"
+    CS_SERVICEACCOUNTNAME: "ibm-cognos-analytics-cs-sa"
+    DS_HPA_MAXREPLICAS: "1"
+    DS_HPA_MINREPLICAS: "1"
+    DS_RESOURCES_LIMITS_CPU: "3"
+    DS_RESOURCES_LIMITS_MEMORY: "16Gi"
+    DS_RESOURCES_REQUESTS_CPU: "2"
+    DS_RESOURCES_REQUESTS_MEMORY: "4Gi"
+    EXTERNAL_SIGNAL_ENABLED: "true"
+    GLOBAL_CONFIGDATAPVC_SIZE: "100Mi"
+    GLOBAL_CONFIGOVERRIDESPVC_SIZE: "100Mi"
+    GLOBAL_FILEBEAT_OUTPUT_CONSOLEENABLED: "true"
+    GLOBAL_FILEBEAT_OUTPUT_LOGSTASHENABLED: "false"
+    GLOBAL_ICP4DATA: "true"
+    GLOBAL_PVC_SIZE: "smallGi"
+    PVC_SIZE: "smallGi"
+    RS_HPA_MAXREPLICAS: "1"
+    RS_HPA_MINREPLICAS: "1"
+    RS_RESOURCES_LIMITS_CPU: "2"
+    RS_RESOURCES_LIMITS_MEMORY: "8Gi"
+    RS_RESOURCES_REQUESTS_CPU: "1"
+    RS_RESOURCES_REQUESTS_MEMORY: "2Gi" 
+    SERVICE_TYPE: "ClusterIP"
+    SERVICEACCOUNTNAME: "cpd-viewer-sa"
+    #=====================================
+    # FCI Cognos
     # MAX_HTTP_HEADER_SIZE is the maximum size, in bytes, of HTTP headers that Cognos will allow
     # in HTTP requests
     MAX_HTTP_HEADER_SIZE: "16000"
@@ -584,121 +798,6 @@ cognos:
       repository: ibmcom/fci-dashboards-proxy
       tag: <BUILD_TAG>
       pullPolicy: "IfNotPresent"
-
-crypto-utils:
-  image:
-    repository: ibmcom/fci-crypto-utils
-    tag: <BUILD_TAG>
-    pullPolicy: "IfNotPresent"
-
-  resources: {}
-
-  # Make a note of the fully qualified domain name of your OpenShift nodes (master and workers)
-  # for your installation.
-  #
-  # You MUST do one of the following.  Failure to do so will result in an installation failure.
-  #
-  # 1) Enter the values for CERT_DN, CERT_SAN_DNS_SPEC, and CERT_SAN_IP_SPEC.
-  #    This generates new, replacement SSL keystore artifacts (including a new
-  #    self-signed certificate).  This technique is often used for 'proof of concept' installations.
-  #
-  # 2) Obtain SSL/TLS certificates from a trusted certificate authority (CA)
-  #    and configure the FCI according the documentation section called Managing SSL/TLS universal keystores.
-  #    This technique is recommended for production installations.
-
-  config:
-    # REGENERATE_CERTS - this property determines if new, replacement universal SSL
-    #                   keystore artifacts are generated.
-    #
-    #                   Valid values are: true -or- false.
-    #
-    #                   If true is specified, then confirm the certificate information
-    #                   specified in the associated properties are correct for your
-    #                   installation.
-    #
-    #                   If false is specified, then certificates will only be generated if
-    #                   they do not already exist.
-    REGENERATE_CERTS: false
-
-    # SECRET_NAME is the name of the OpenShift secret object that contains the FCI
-    # keystore artifacts.  This typically does not need to be changed.
-    SECRET_NAME: 'platform-secret-files'
-
-    # USER_SECRET_NAME is the name of the pre-defined secret that contains a user's
-    # private key and certificate chain in PEM format.
-    # The private key must be 'key.pem'.
-    # The certificate chain must be 'crt.pem'.
-    # If this secret exists and the FCI keystore secret has not been created already,
-    # then the FCI keystore artifacts will be created from the key/certificate in this
-    # pre-existing secret.
-    # Enclose the values with ''
-    USER_SECRET_NAME: 'fci-user-secret-files'
-    # CERT_DN - use this property to set the Distinguished Name for the SSL
-    #           certificate. This does not have to match up or have similar values
-    #           for the CN or DN values of your LDAP (if your install specifies an LDAP server).
-    #           Typically the default value below is fine for most installations.
-    #
-    #           Example: 'CN=FCI_server,OU=FCI_platform,O=FCI_Development,C=US'
-    #
-    CERT_DN: 'CN=FCI_server,OU=FCI_platform,O=FCI_Development,C=US'
-    #
-    # CERT_SAN_DNS_SPEC - use this property to set the DNS names to be
-    #                     included in the certificate SubjectAlternativeName
-    #                     extension.
-    #
-    #                     Run the following command to get the httpsIngressSubdomain
-    #  oc get route console -n openshift-console | grep -v 'HOST/PORT' | awk '{print $2}' | cut -d'.' -f 2-
-    #
-    #                     The format is a comma-separated list of DNS names.
-    #                     Wildcard domain specifications are acceptable.
-    #                     There MUST BE no spaces before or after the comma in this list!!
-    #                     This must include openshfit cluster information and hdp servers information
-    #
-    #                     You MUST have at least two entries for the OpenShift cluster
-    #                     1) the full DNS name of your httpsIngressSubdomain (for example fciroute.yourco.com)
-    #                     2) *.full DNS name of your httpsIngressSubdomain (for example *.fciroute.yourco.com)
-    #                     If your https and tcp ingress are different you would have 4 entries for OpenShift
-    #
-    #                     Then you must include either the dns names for each HDP server or *.subdomain that includes
-    #                     all HDP servers.  Specifying each HDP server indivdually is more secure as it limits only
-    #                     those individual HDP servers to communicate to the openshift cluster
-    #
-    #                     For OpenShift include a wildcard for the subdomain and the domain itself (see example2 below)
-    #
-    #                     The localhost,127.0.0.1 at the end of this CERT_SANS_DNS_SPEC entry is optional
-    #
-    #                     Example1: CERT_SANS_DNS_SPEC = '*.localdomain,localdomain,localhost,127.0.0.1'
-    #
-    #                     Example2: The servers or virtual machines (nodes) for your install have
-    #                     httpsIngressSubdomain that matches your tcpIngressSubdomain for an OpenShift 4.3.x install
-    #                     the httpsIngressSubdomain is: fciroute.yourco.com
-    #                     The Hadoop nodes have dns names like ambari.yourhdp.com, hdp1.yourhdp.com, hdp2.yourhdp.com
-    #                     this line would need to look like either (note if all of your hdp machines are under
-    #                     .yourhdp.com, you can simply use *.yourhdp.com, NOTE: your HDP machines must be directly under
-    #                     .yourhdp.com for *.yourhdp.com to work, the HDP host cannot be hdp1.lab.yourhdp.com for example):
-    #
-    #                     CERT_SANS_DNS_SPEC = '*.fciroute.yourco.com,fciroute.yourco.com,*.yourhdp.com,localhost,127.0.0.1'
-    #                     or
-    # CERT_SANS_DNS_SPEC = '*.fciroute.yourco.com,fciroute.yourco.com,ambari.yourhdp.com,hdp1.yourhdp.com,hdp1.yourhdp.com,hdp2.yourhdp.com,localhost,127.0.0.1'
-    #
-    #                     Example3, same as Example 2 but the tcp ingress is tcpfciroute.yourco.com
-    #                     everything else is the same as Example2 (this could be an OpenShift 3.11.x install)
-    #
-    # CERT_SANS_DNS_SPEC = '*.fciroute.yourco.com,fciroute.yourco.com,*.tcpfciroute.yourco.com,tcpfciroute.yourco.com,*.yourhdp.com'
-    #
-    CERT_SAN_DNS_SPEC: '*.localdomain,localhost,127.0.0.1'
-    #
-    # CERT_SAN_IP_SPEC - use this property to set IP addresses to be
-    #                    included in the certificate SubjectAlternativeName
-    #                    extension.
-    #
-    #                    Typically this line is a comma-separated list of IP addresses.
-    #
-    #                    Example: CERT_SAN_IP_SPEC = '127.0.0.1'
-    #                    Typically this line is left unchanged.
-    CERT_SAN_IP_SPEC: '127.0.0.1'
-    # Set to false to generate unique certificates (recommended for production use)
-    USE_DEFAULT_CERTS: false
 
 logging:
   # set to False to disable logging infrastructure in a non-production environment
@@ -725,7 +824,7 @@ security-audit:
 
   config:
     FLYWAY_BASELINE_VERSION: '2019.02.28.13.59.00'
-    AUDIT_STORE: "CLOUD_PAK"
+    AUDIT_STORE: "db2"
     AUDIT_FILE_LOCATION: "/var/log/fciAudit-%g.log"
     AUDIT_FILE_SIZE_IN_BYTES: "10000000"
     AUDIT_NUM_FILES: "2"
@@ -766,6 +865,18 @@ security-auth:
       tag: '<BUILD_TAG>'
       pullPolicy: IfNotPresent
 
+  translationJob:
+    image:
+      repository: ibmcom/fci-translations
+      tag: <BUILD_TAG>
+      pullPolicy: "Always"
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
 
   securityAuthConfig:
     # set to '0' to disable auditing in a non-production environment
@@ -1065,6 +1176,9 @@ cedm:
   # set to True otherwise
   enabled: True
 
+  # set to True to mount the Analytics Runtime application volume
+  requireARMount: False
+
   liberty:
     image:
       repository: ibmcom/fci-cedm-integration
@@ -1234,7 +1348,7 @@ common-ui:
 
   nginxConfig:
     # INCLUDE_CONFIG is a comma-separated list of components to include
-    # valid values are: case,cedm,odm,search,fcai,fcdd,sifs,graph
+    # valid values are: case,cedm,odm,search,fcai,fcdd,sifs,graph,art
     INCLUDE_CONFIG: 'case,cedm,odm,search,graph'
 
 
@@ -1376,8 +1490,30 @@ analytics-runtime:
         cpu: "2"
         memory: "2Gi"
 
-  arLibertyPvcSpec:
-    accessModes:
-      - ReadWriteMany
-    storageClassName: null
-    size: 20Gi
+  arLibertyConfig:
+    CP4D_URL: https://internal-nginx-svc:12443
+    FCII_SPARK_INSTANCE_NAME: 'fciisparkinstance'
+    FCII_SPARK_VOLUME_NAME: 'fciisparkvolume'
+    FCII_SPARK_VOLUME_SIZE: '20Gi'
+    FCII_APP_VOLUME_SIZE: '20Gi'
+
+  kerberosClient:
+    image:
+      repository: ibmcom/fci-hdp-client
+      tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent
+
+real-time-analytics:
+  enabled: false
+  liberty:
+    image:
+      repository: ibmcom/fci-real-time-analytics
+      tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: "1"
+      limits:
+        memory: "8Gi"
+        cpu: "4"  
