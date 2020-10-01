@@ -1,0 +1,105 @@
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "cedm.fullname" . }}-populate-db
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "cedm.name" .) "config") (include "cedm.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "cedm.name" .) "config") (include "cedm.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      restartPolicy: Never
+      serviceAccountName: fci-common-scripts
+      volumes:
+      - name: file-secrets
+        secret:
+          secretName: {{ .Release.Name }}-platform-secret-files
+      - name: db2-cert
+        secret:
+          defaultMode: 420
+          secretName: {{ .Release.Name }}-db2-secrets-env
+      - name: fcicert
+        emptyDir: {}
+      initContainers:
+      - name: init-svc-depend
+        resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 10 }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        command: [ "/common-scripts/init-container-svc-depend.sh" ]
+        args: [ {{ .Release.Namespace }}/{{ .Release.Name }}-cedm-integration ]
+      - name: import-db2-cert
+        image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.cryptoUtils.image.repository }}:{{ .Values.global.cryptoUtils.image.tag }}"
+        command:
+          - bash
+          - -c
+          - cp /fci_universal_ks.jks /etc/tls/fci_universal_ks.jks && /opt/ibm/java-x86_64-80/jre/bin/keytool -import -noprompt -deststorepass $SSL_KEYSTORE_PASSWORD_CONFIG -file /db2cert -storetype JKS -keystore /etc/tls/fci_universal_ks.jks
+        resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+        env:
+{{- include "common.import-secret" (list . "SSL_KEYSTORE_PASSWORD_CONFIG" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
+        volumeMounts:
+        - name: fcicert
+          mountPath: /etc/tls
+        - name: db2-cert
+          mountPath: /db2cert
+          subPath: db2_cert
+        - name: file-secrets
+          mountPath: /fci_universal_ks.jks
+          subPath: fci_universal_ks.jks
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+      containers:
+        - name: populate-db
+          command:
+          - bash
+          - -c
+          - /fcimount/populateDb.sh 
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.db2.image.repository }}:{{ .Values.db2.image.tag }}"
+          imagePullPolicy: {{ .Values.db2.image.pullPolicy }}
+          resources:
+{{ toYaml .Values.db2.resources | indent 12 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          envFrom:
+          - configMapRef:
+              name: {{ template "cedm.fullname" . }}
+          env:
+{{- include "common.import-secret" (list . "FLYWAY_PASSWORD" "db2" "db2_password") | indent 10 }}
+{{- include "common.import-secret" (list . "SSL_KEYSTORE_PASSWORD_CONFIG" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
+          - name: FLYWAY_USER
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-db2
+                key: db_userid
+          - name: com_fci_db2_server
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-db2
+                key: db_host  
+          - name: DB2_HOST
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-db2
+                key: db_host
+          - name: FLYWAY_URL
+            value: "{{ printf "jdbc:db2://$(DB2_HOST):50001/FCIDB:sslConnection=true;sslTrustStoreLocation=/etc/tls/fci_universal_ks.jks;sslTrustStorePassword=$(SSL_KEYSTORE_PASSWORD_CONFIG);" }}"
+          volumeMounts:
+          - name: file-secrets
+            mountPath: /fci_universal_ks.jks
+            subPath: fci_universal_ks.jks
+          - name: fcicert
+            mountPath: /etc/tls  
+{{ end }}

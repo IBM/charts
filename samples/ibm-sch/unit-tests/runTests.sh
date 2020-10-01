@@ -40,6 +40,9 @@ do
     if [ ! -f $TESTDIR/expected_helm3.yaml ]; then
       sed 's/"Tiller"/"Helm"/g' $TESTDIR/expected.yaml > $TESTDIR/expected_helm3.yaml
       $SCRIPTDIR/compareyaml -expected=$TESTDIR/expected_helm3.yaml -actual=$TESTDIR/output.yaml
+      if [ $? != 0 ]; then
+        FAIL=true
+      fi
       rm $TESTDIR/expected_helm3.yaml
     else
       $SCRIPTDIR/compareyaml -expected=$TESTDIR/expected_helm3.yaml -actual=$TESTDIR/output.yaml

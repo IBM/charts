@@ -1,0 +1,71 @@
+{{ if .Values.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "analytics-runtime.name" .) "setup-spark") (include "analytics-runtime.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+  name: {{ template "analytics-runtime.fullname" . }}-setup-spark
+spec:
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "analytics-runtime.name" .) "setup-spark") (include "analytics-runtime.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      restartPolicy: Never
+      serviceAccountName: fci-common-scripts
+      volumes:
+      - name: zen-service-broker-secret
+        secret:
+          defaultMode: 420
+          secretName: zen-service-broker-secret
+      - name: file-secrets
+        secret:
+          secretName: {{ .Release.Name }}-platform-secret-files
+      containers:
+        - name: setup-spark
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          env:
+          - name: CP4D_URL
+            value: {{ .Values.arLibertyConfig.CP4D_URL | quote }}
+          - name: CP4D_USERNAME
+            value: {{ .Values.arLibertyConfig.CP4D_USERNAME | quote }}
+          - name: CP4D_UID
+            value: {{ .Values.arLibertyConfig.CP4D_UID | quote }}
+          - name: OPENSHIFT_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: FCII_SPARK_INSTANCE_NAME
+            value: {{ .Values.arLibertyConfig.FCII_SPARK_INSTANCE_NAME | quote }}
+          - name: FCII_SPARK_VOLUME_NAME
+            value: {{ .Values.arLibertyConfig.FCII_SPARK_VOLUME_NAME | quote }}
+          - name: FCII_SPARK_VOLUME_SIZE
+            value: {{ .Values.arLibertyConfig.FCII_SPARK_VOLUME_SIZE | quote }}
+          - name: STORAGE_CLASS
+            value: {{ .Values.global.persistence.storageClassName | quote }}
+          - name: FCII_APP_VOLUME_NAME
+            value: {{ .Values.global.FCII_APP_VOLUME_NAME | quote }}
+          - name: FCII_APP_VOLUME_SIZE
+            value: {{ .Values.arLibertyConfig.FCII_APP_VOLUME_SIZE | quote }}
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          imagePullPolicy: {{ .Values.global.commonScripts.image.pullPolicy }}
+          command:
+            - bash
+            - -c
+            - /common-scripts/fci-ar-provision-spark-env.sh 
+          volumeMounts:
+          - mountPath: /var/run/sharedsecrets
+            name: zen-service-broker-secret
+          - name: file-secrets
+            mountPath: /fci_universal_ks.crt.pem
+            subPath: fci_universal_ks.crt.pem
+          resources:
+{{ toYaml .Values.arsparkJob.resources | indent 12 }}
+{{ end }}

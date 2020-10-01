@@ -102,7 +102,7 @@ spec:
           resources:
 {{ toYaml .Values.db2Container.resources | indent 12 }}
       containers:
-        - name: sifs-liberty-1
+        - name: fccs-liberty
           image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.surveillanceLiberty.image.repository }}:{{ .Values.surveillanceLiberty.image.tag }}"
           imagePullPolicy: {{ .Values.surveillanceLiberty.image.pullPolicy }}
           securityContext:
@@ -110,38 +110,30 @@ spec:
             runAsUser: {{ .Values.global.runAsUser}}
           readinessProbe:
             httpGet:
-              path: /SIFSServices/health
+              path: /baseservices/health
               port: 9443
               scheme: HTTPS
-            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
-            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
-            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
-            successThreshold: {{ .Values.readinessProbe.successThreshold }}
-            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+{{ toYaml .Values.readinessProbe | indent 12 }}
           livenessProbe:
             httpGet:
-              path: /SIFSServices/health
+              path: /baseservices/health
               port: 9443
               scheme: HTTPS
-            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
-            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
-            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
-            successThreshold: {{ .Values.livenessProbe.successThreshold }}
-            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+{{ toYaml .Values.livenessProbe | indent 12 }}
           envFrom:
           - configMapRef:
               name: {{ template "ibm-fci-conduct-surveillance.fullname" . }}
           env:
-          - name: db2_password
+          - name: hbase_zookeeper_quorum
             valueFrom:
-              secretKeyRef:
-                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-db2-secrets-env
-                key: FCIAUTHID_PASSWORD
-          - name: fciauthid_password
+              configMapKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-ibm-fci-platform-prod-krb
+                key: HDP_ZOOKEEPER_SERVERS
+          - name: hbase_zookeeper_property_clientPort
             valueFrom:
-              secretKeyRef:
-                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-db2-secrets-env
-                key: FCIAUTHID_PASSWORD
+              configMapKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-ibm-fci-platform-prod-krb
+                key: HDP_ZOOKEEPER_PORT
           - name: fci_jks_password
             valueFrom:
               secretKeyRef:
@@ -152,16 +144,6 @@ spec:
               secretKeyRef:
                 name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
                 key: JWT_KEY
-          - name: SSL_TRUSTSTORE_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
-                key: FCI_JKS_PASSWORD
-          - name: SSL_KEYSTORE_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
-                key: FCI_JKS_PASSWORD
           - name: fci_kafka_msg_jks_password
             valueFrom:
               secretKeyRef:
@@ -172,11 +154,6 @@ spec:
               secretKeyRef:
                 name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
                 key: FCI_KAFKA_MSG_JKS_ALIASNAME
-          - name: SERVER_TRUSTSTORE_PWD
-            valueFrom:
-              secretKeyRef:
-                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
-                key: FCI_JKS_PASSWORD
           - name: fciadmin_password
             valueFrom:
               secretKeyRef:
@@ -202,26 +179,14 @@ spec:
             - name: file-secrets
               mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.jks
               subPath: fci_universal_ks.jks
-            - name: file-secrets
-              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.pvtk.pem
-              subPath: fci_universal_ks.pvtk.pem
-            - name: file-secrets
-              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.crt.pem
-              subPath: fci_universal_ks.crt.pem
-            - name: file-secrets
-              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.kdb
-              subPath: fci_universal_ks.kdb
-            - name: file-secrets
-              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.sth
-              subPath: fci_universal_ks.sth
-            - name: file-secrets
-              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/kafka.client.truststore.jks
-              subPath: fci_universal_ks.jks
-            - name: file-secrets
-              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/kafka.client.keystore.jks
-              subPath: fci_universal_ks.jks
-            - name: file-secrets
-              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_kafka_msg.p12
+            - name: file-secrets	
+              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/kafka.client.truststore.jks	
+              subPath: fci_universal_ks.jks	
+            - name: file-secrets	
+              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/kafka.client.keystore.jks	
+              subPath: fci_universal_ks.jks	
+            - name: file-secrets	
+              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_kafka_msg.p12	
               subPath: fci_kafka_msg.p12
           resources:
 {{ toYaml .Values.surveillanceLiberty.resources | indent 12 }}
@@ -253,6 +218,17 @@ spec:
             name: keytab-file
           - name: fccs-shared-volume
             mountPath: /home/liberty-anchor
+        - name: message-log
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          args: [/bin/sh, -c, 'sleep 60; tail -n+1 -F /fccs-mount/logs/messages.log']
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+{{ include "common.sideCarHealthCheck" . | indent 10 }}
+          volumeMounts:
+          - name: sifs-liberty-volume
+            mountPath: /fccs-mount
     {{- with .Values.nodeSelector }}
       nodeSelector:
 {{ toYaml . | indent 8 }}

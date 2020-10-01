@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "real-time-analytics.fullname" . }}-liberty
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "real-time-analytics.name" .) "liberty") (include "real-time-analytics.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+{{ include "common.scaleDownIfDisabled" . | indent 2 }}
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "real-time-analytics.name" .) "liberty" ) .Release.Name ) | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "real-time-analytics.name" .) "liberty") (include "real-time-analytics.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+{{- include "common.using-secrets" (list "elastic" "platform") | indent 8 }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      serviceAccountName: fci-common-scripts
+      volumes:
+      - name: file-secrets
+        secret:
+          secretName: {{ .Release.Name }}-platform-secret-files
+      - name: logs
+        emptyDir: {}
+      containers:
+      - image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.liberty.image.repository }}:{{ .Values.liberty.image.tag }}
+        imagePullPolicy: {{ .Values.liberty.image.pullPolicy }}
+        name: liberty
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+{{- with .Values.liberty.resources }}
+        resources:
+{{ toYaml . | indent 10 }}
+{{- end }}
+{{- with .Values.liberty.nodeSelector }}
+        nodeSelector:
+{{ toYaml . | indent 10 }}
+{{- end }}
+{{- with .Values.liberty.tolerations }}
+        tolerations:
+{{ toYaml . | indent 10 }}
+{{- end }}
+{{- with .Values.liberty.affinity }}
+        affinity:
+{{ toYaml . | indent 10 }}
+{{- end }}
+        livenessProbe:
+{{ toYaml .Values.liberty.livenessProbe | indent 10 }}
+        readinessProbe:
+{{ toYaml .Values.liberty.readinessProbe | indent 10 }}
+        envFrom:
+        - configMapRef:
+            name: {{ template "real-time-analytics.fullname" . }}
+        env:
+{{- include "common.import-secret" (list . "com_fci_keystore_password" "platform" "FCI_JKS_PASSWORD") | indent 8 }}
+{{- include "common.import-secret" (list . "JWT_KEY" "platform" "JWT_KEY") | indent 8 }}  
+        - name: ODM_RES_USER
+          value: resAdmin
+        - name: ODM_RES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-odm-secrets-env
+              key: odm_resadmin_password  
+        ports:
+        - containerPort: 9080
+        - containerPort: 9443
+        volumeMounts:
+        - name: file-secrets
+          mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.jks
+          subPath: fci_universal_ks.jks
+        - mountPath: /opt/ibm/wlp/usr/servers/fciServer/logs
+          name: logs
+      - image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        name: message-log
+        resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 10 }}
+        args: [/bin/sh, -c, 'tail -n+1 -F /logs/messages.log']
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+{{ include "common.sideCarHealthCheck" . | indent 8 }}
+        volumeMounts:
+        - name: logs
+          mountPath: /logs
+      - image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        name: trace-log
+        resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 10 }}
+        args: [/bin/sh, -c, 'tail -n+1 -F /logs/trace.log']
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+{{ include "common.sideCarHealthCheck" . | indent 8 }}
+        volumeMounts:
+        - name: logs
+          mountPath: /logs
+      restartPolicy: Always 

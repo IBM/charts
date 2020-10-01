@@ -3,7 +3,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   labels:
-{{- include "common.label.metadata" (list . (include "fci-core-services.name" .)  (include "fci-core-services.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "security-auth.name" .) "translations") (include "security-auth.chart" .) .Release.Name .Release.Service ) | indent 4 }}
   name: {{ .Release.Name }}-translations-job
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
@@ -12,16 +12,22 @@ spec:
   template:
     metadata:
       labels:
-{{- include "common.label.metadata" (list . (include "fci-core-services.name" .)  (include "fci-core-services.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "security-auth.name" .) "translations") (include "security-auth.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8}}
     spec:
       restartPolicy: Never
       serviceAccountName: fci-common
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
       containers:
       - command:
         - /coreapi-server
         - post-translations
         image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.translationJob.image.repository }}:{{ .Values.translationJob.image.tag }}"
         imagePullPolicy: {{ .Values.translationJob.image.pullPolicy }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
         name: translations-job
         resources:
 {{ toYaml .Values.translationJob.resources | indent 10 }}

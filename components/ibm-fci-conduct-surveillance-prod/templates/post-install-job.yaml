@@ -12,6 +12,8 @@ spec:
     metadata:
       labels:
 {{- include "common.label.metadata" (list . (printf "%s-%s" (include "ibm-fci-conduct-surveillance.name" .) "post-upgrade" ) (include "ibm-fci-conduct-surveillance.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
     spec:
 {{ include "common.configureHostAliases" . | indent 6 }}
 {{ include "common.PodHostConfig" . | indent 6 }}
@@ -32,8 +34,17 @@ spec:
             value: {{ .Release.Name }}
           - name: CORE_REL_NAME
             value: {{ .Values.global.coreReleaseName }}
+          - name: ES_SERVICE
+            value: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-elasticsearch:9200
+          - name: ES_USERNAME
+            value: {{ .Values.global.config.esUsername }}
           - name: HDP_HOST
             value: {{ .Values.global.config.HDP_MASTER_HOST }}
+          - name: ES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-elastic-secrets-env
+                key: ELASTIC_ADMIN_PASSWORD
           command:
             - bash
             - -c
