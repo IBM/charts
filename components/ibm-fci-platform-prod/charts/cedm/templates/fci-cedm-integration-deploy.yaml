@@ -32,15 +32,28 @@ spec:
         - name: file-secrets
           secret:
             secretName: {{ .Release.Name }}-platform-secret-files
-        - name: db2-instance
-          persistentVolumeClaim:
-            claimName: {{ .Release.Name }}-db2-scripts-{{ .Release.Name }}-{{ .Values.cedmConfig.db2_service }}
         - name: bulk-loader
           persistentVolumeClaim:
             claimName: {{ template "cedm.fullname" . }}-liberty
+        {{- if .Values.requireARMount }}
+        - name: fci-ar-app-volume-mount
+          persistentVolumeClaim:
+            claimName: volumes-{{ .Values.global.FCII_APP_VOLUME_NAME }}-pvc
+        {{- end }}
         - name: logs
           emptyDir: {}
         - name: shared-data
+          emptyDir: {}
+{{ if eq .Values.global.DB2_PROVISIONER "FCI" }}
+        - name: db2-instance
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-db2-scripts-{{ .Release.Name }}-db2-datastore-0
+{{ end }}
+        - name: db2-cert
+          secret:
+            defaultMode: 420
+            secretName: {{ .Release.Name }}-db2-secrets-env
+        - name: fcicert
           emptyDir: {}
         - name: keytab-file
           secret:
@@ -48,12 +61,31 @@ spec:
       initContainers:
         - name: init-svc-depend
           image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+          command:
+            - bash
+            - -c
+            - . /common-scripts/configure && $KUBECTL wait --for=condition=complete job/fci-db2-provisioner --timeout=-1s
+{{ else }}
           command: [ "/common-scripts/init-container-svc-depend.sh" ]
+          args: [ "{{ .Release.Namespace }}/{{ .Release.Name }}-db2-datastore-0" ]
+{{ end }}
           resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 12 }}
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
-          args: [ "{{ .Release.Namespace }}/{{ .Release.Name }}-{{ .Values.cedmConfig.db2_service }}" ]
+        {{- if .Values.requireARMount }}
+        - name: init-job-depend
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          command:
+            - bash
+            - -c
+            - . /common-scripts/configure && $KUBECTL wait --for=condition=complete job/{{ .Release.Name }}-analytics-runtime-setup-spark --timeout=-1s
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+        {{- end }}
         {{- if .Values.global.pvRequiresPermissionsFix }}
         - name: pv-permissions
           image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
@@ -63,13 +95,43 @@ spec:
 {{ include "common.RootFownerContainerSecurityContext" . | indent 12 }}
           args:
           - chmod -R g+w /mount;
+          {{-   if .Values.requireARMount }}
+          - chmod -R g+w /mount1;
+          {{-   end }}
           command:
           - /bin/sh
           - -c
           volumeMounts:
           - mountPath: /mount
             name: bulk-loader
+          {{-   if .Values.requireARMount }}
+          - mountPath: /mount1
+            name: fci-ar-app-volume-mount
+          {{-   end }}
         {{- end }}
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+        - name: import-db2-cert
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.cryptoUtils.image.repository }}:{{ .Values.global.cryptoUtils.image.tag }}"
+          command:
+            - bash
+            - -c
+            - cp /fci_universal_ks.jks /etc/tls/fci_universal_ks.jks && /opt/ibm/java-x86_64-80/jre/bin/keytool -import -noprompt -deststorepass $SSL_KEYSTORE_PASSWORD_CONFIG -file /db2cert -storetype JKS -keystore /etc/tls/fci_universal_ks.jks
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          env:
+{{- include "common.import-secret" (list . "SSL_KEYSTORE_PASSWORD_CONFIG" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
+          volumeMounts:
+          - name: fcicert
+            mountPath: /etc/tls
+          - name: db2-cert
+            mountPath: /db2cert
+            subPath: db2_cert
+          - name: file-secrets
+            mountPath: /fci_universal_ks.jks
+            subPath: fci_universal_ks.jks
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+{{ end }}
         - name: db-client
           image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.db2.image.repository }}:{{ .Values.db2.image.tag }}"
           imagePullPolicy: {{ .Values.db2.image.pullPolicy }}
@@ -84,18 +146,60 @@ spec:
           - configMapRef:
               name: {{ template "cedm.fullname" . }}
           env:
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+{{- include "common.import-secret" (list . "FLYWAY_PASSWORD" "db2" "db2_password") | indent 10 }}
+{{ else }}
 {{- include "common.import-secret" (list . "FLYWAY_PASSWORD" "db2" "DB2INST1_PASSWORD") | indent 10 }}
+{{ end }}
 {{- include "common.import-secret" (list . "SSL_KEYSTORE_PASSWORD_CONFIG" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+          - name: FLYWAY_USER
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-db2
+                key: db_userid
+          - name: DB2_HOST
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-db2
+                key: db_host
+          - name: DB2_PROVISIONER
+            value: "{{ .Values.global.DB2_PROVISIONER }}"
+{{ else }}
+          - name: FLYWAY_USER
+            value: "db2inst1"
+          - name: DB2_HOST
+            value: "fci-db2-datastore-0" 
+          - name: com_fci_db2_server
+            value: "fci-db2-datastore-0"
+          - name: DB2_PROVISIONER
+            value: "{{ .Values.global.DB2_PROVISIONER }}"
+{{ end }}
           - name: FLYWAY_URL
-            value: "{{ printf "jdbc:db2://%s-%s:56000/fcidb:sslConnection=true;sslTrustStoreLocation=/fci_universal_ks.jks;sslTrustStorePassword=$(SSL_KEYSTORE_PASSWORD_CONFIG);" .Release.Name .Values.cedmConfig.db2_service }}"
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+            value: "{{ printf "jdbc:db2://$(DB2_HOST):50001/FCIDB:sslConnection=true;sslTrustStoreLocation=/etc/tls/fci_universal_ks.jks;sslTrustStorePassword=$(SSL_KEYSTORE_PASSWORD_CONFIG);" }}"
+{{ else }}
+            value: "{{ printf "jdbc:db2://%s-db2-datastore-0:56000/fcidb:sslConnection=true;sslTrustStoreLocation=/fci_universal_ks.jks;sslTrustStorePassword=$(SSL_KEYSTORE_PASSWORD_CONFIG);" .Release.Name }}"
+
+{{ end }}
           volumeMounts:
           - name: file-secrets
             mountPath: /fci_universal_ks.jks
             subPath: fci_universal_ks.jks
+{{ if eq .Values.global.DB2_PROVISIONER "FCI" }}
           - name: db2-instance
             mountPath: /db2Instance
+{{ end }}
+          - name: fcicert
+            mountPath: /etc/tls  
       containers:
         - name: cedm-integration
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+          command:
+            - bash
+            - -c
+            - cp /etc/tls/fci_universal_ks.jks /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.jks && /opt/ibm/fci/scripts/start.sh
+{{ end }}
           image: "{{ required "When global.createPv is set to true, global.nfsServer must specify the NFS server that holds the persistent volume." .Values.global.dockerRegistryPrefix }}/{{ .Values.liberty.image.repository }}:{{ .Values.liberty.image.tag }}"
           imagePullPolicy: {{ .Values.liberty.image.pullPolicy }}
           securityContext:
@@ -120,30 +224,70 @@ spec:
 {{- include "common.import-secret" (list . "FCI_KAFKA_MSG_KS_ALIASNAME" "platform" "FCI_KAFKA_MSG_JKS_ALIASNAME") | indent 10 }}
 {{- include "common.import-secret" (list . "FCI_KAFKA_MSG_KS_PASSWORD" "platform" "FCI_KAFKA_MSG_JKS_PASSWORD") | indent 10 }}
 {{- include "common.import-secret" (list . "com_fci_keystore_password" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+{{- include "common.import-secret" (list . "com_fci_db2_password" "db2" "db2_password") | indent 10 }}
+{{ else }}
 {{- include "common.import-secret" (list . "com_fci_db2_password" "db2" "FCIAUTHID_PASSWORD") | indent 10 }}
+{{ end }}
 {{- include "common.import-secret" (list . "JWT_KEY" "platform" "JWT_KEY") | indent 10 }}
           - name: HDP_SHARED_DIR
             value: /home/bigmatch
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+          - name: com_fci_db2_userid
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-db2
+                key: db_userid
+          - name: com_fci_db2_server
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-db2
+                key: db_host  
+          - name: db2_service
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-db2
+                key: db_host  
+          - name: com_fci_db2_ssl_port
+            value: "50001"
+{{ else }}
+          - name: com_fci_db2_userid
+            value: "fciauthid"
+          - name: com_fci_db2_server
+            value: "fci-db2-datastore-0"
+          - name: db2_service
+            value: "fci-db2-datastore-0"
+          - name: com_fci_db2_ssl_port
+            value: "56000"
+{{ end }}
           ports:
           - containerPort: 9080
           - containerPort: 9443
           volumeMounts:
           - name: file-secrets
-            mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.jks
-            subPath: fci_universal_ks.jks
-          - name: file-secrets
             mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/kafka.client.truststore.jks
             subPath: fci_universal_ks.jks
+{{ if eq .Values.global.DB2_PROVISIONER "FCI" }}
+          - name: file-secrets
+            mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.jks
+            subPath: fci_universal_ks.jks
+{{ end }}
           - name: file-secrets
             mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/kafka.client.keystore.jks
             subPath: fci_universal_ks.jks
           - name: file-secrets
             mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_kafka_msg.p12
             subPath: fci_kafka_msg.p12
+          - name: fcicert
+            mountPath: /etc/tls
           - name: logs
             mountPath: /opt/ibm/wlp/usr/servers/fciServer/logs
           - name: bulk-loader
             mountPath: "/fci-cedm-integration-data"
+          {{- if .Values.requireARMount }}
+          - name: fci-ar-app-volume-mount
+            mountPath: /zen-volume-home
+          {{- end }}
           - name: shared-data
             mountPath: /home/bigmatch
           - mountPath: /etc/security/keytabs

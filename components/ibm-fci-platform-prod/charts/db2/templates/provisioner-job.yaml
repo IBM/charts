@@ -1,0 +1,44 @@
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "db2.fullname" . }}-provisioner
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "db2.name" .) "config") (include "db2.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "db2.name" .) "config") (include "db2.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      restartPolicy: Never
+      serviceAccountName: fci-common-scripts
+      containers:
+        - name: {{ template "db2.fullname" . }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          imagePullPolicy: {{ .Values.global.commonScripts.image.pullPolicy }}
+          env:
+{{- include "common.import-secret" (list . "db2password" "db2" "DB2INST1_PASSWORD") | indent 10 }}
+          - name: TOKEN_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: zen-service-broker-secret
+                key: token
+          envFrom:
+          - configMapRef:
+              name: {{ template "db2.fullname" . }}
+          command:
+            - bash
+            - -c
+            - /common-scripts/create-cp-service-instance.sh --debug="$DEBUG_PROVISIONING" --token="$TOKEN_SECRET" --type=db2aaservice
+          resources:
+{{ toYaml .Values.provisioner.resources | indent 12 }}
+{{ end }}

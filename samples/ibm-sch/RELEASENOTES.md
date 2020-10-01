@@ -1,8 +1,8 @@
-# What's new in Chart Version 1.2.18
-* Added route length helper
+# What's new in Chart Version 1.2.19
+* Fixed bug to allow the "key" for sch.affinity.nodeAffinity to be overridden 
 
 # Fixes
-* None
+* Fixed bug to allow the "key" for sch.affinity.nodeAffinity to be overridden 
 
 # Prerequisites
 * Kubernetes version 1.9 or greater
@@ -16,6 +16,7 @@
 # Version History
 | Chart  | Date     | Kubernetes Required | Details |
 |--------|----------|---------------------|---------|
+| 1.2.19 | 09/25/20 | >=1.9.0 | Fixed nodeAffinity bug |
 | 1.2.18 | 06/17/20 | >=1.9.0 | Added route length helper |
 | 1.2.17 | 03/24/20 | >=1.9.0 | Added helper to inject cp namespace into entitled registry image path |
 | 1.2.16 | 02/20/20 | >=1.9.0 | Allow overriding standard label to avoid Helm 2 to Helm 3 upgrade issue, allow overriding secret creating Helm hook |

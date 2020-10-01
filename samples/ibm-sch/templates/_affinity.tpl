@@ -1,16 +1,16 @@
 {{- /*
 affinity helpers for SCH (Shared Configurable Helpers)
 
-sch/affinity.tpl contains shared configurable helper templates for 
+sch/affinity.tpl contains shared configurable helper templates for 
 creating resource structures for node affinity and pod affinity/anti-affinity.
 
 Usage of "sch.affinity.*" requires the following line be included at
 the begining of template:
 {{- include "sch.config.init" (list . "sch.chart.config.values") -}}
- 
+ 
 ********************************************************************
-*** This file is shared across multiple charts, and changes must be 
-*** made in centralized and controlled process. 
+*** This file is shared across multiple charts, and changes must be 
+*** made in centralized and controlled process. 
 *** Do NOT modify this file with chart specific changes.
 *****************************************************************
 */ -}}
@@ -105,7 +105,7 @@ nodeAffinity:
 requiredDuringSchedulingRequiredDuringExecution:
     nodeSelectorTerms:
     - matchExpressions:
-      - key: {{ default "beta.kubernetes.io/arch" $affinity.key }}
+      - key: {{ default "beta.kubernetes.io/arch" $affinity.nodeAffinityRequiredDuringScheduling.key }}
         operator: {{ $operator }}
         values:
     {{- range $key := $values }}
@@ -136,7 +136,7 @@ requiredDuringSchedulingRequiredDuringExecution:
   requiredDuringSchedulingIgnoredDuringExecution:
     nodeSelectorTerms:
     - matchExpressions:
-      - key: {{ default "beta.kubernetes.io/arch" $affinity.key }}
+      - key: {{ default "beta.kubernetes.io/arch" $affinity.nodeAffinityRequiredDuringScheduling.key }}
         operator: {{ $operator }}
         values:
             {{- end }}
@@ -147,7 +147,7 @@ requiredDuringSchedulingRequiredDuringExecution:
   requiredDuringSchedulingIgnoredDuringExecution:
     nodeSelectorTerms:
     - matchExpressions:
-      - key: {{ default "beta.kubernetes.io/arch" $affinity.key }}
+      - key: {{ default "beta.kubernetes.io/arch" $affinity.nodeAffinityRequiredDuringScheduling.key }}
         operator: {{ $operator }}
         values:
         - {{ $root.Values.arch }}
@@ -156,7 +156,7 @@ requiredDuringSchedulingRequiredDuringExecution:
   requiredDuringSchedulingIgnoredDuringExecution:
     nodeSelectorTerms:
     - matchExpressions:
-      - key: {{ default "beta.kubernetes.io/arch" $affinity.key }}
+      - key: {{ default "beta.kubernetes.io/arch" $affinity.nodeAffinityRequiredDuringScheduling.key }}
         operator: {{ $operator }}
         values:
     {{- range $key := $values }}
@@ -302,7 +302,7 @@ podAffinity:
 requiredDuringSchedulingRequiredDuringExecution:
   - labelSelector:
       matchExpressions:
-      - key: {{ default "beta.kubernetes.io/arch" $affinity.key }}
+      - key: {{ default "beta.kubernetes.io/arch" $affinity.requiredDuringSchedulingRequiredDuringExecution.key }}
         operator: {{ $operator }}
         values:
     {{- range $key := $values }}
@@ -321,7 +321,7 @@ requiredDuringSchedulingRequiredDuringExecution:
 requiredDuringSchedulingIgnoredDuringExecution:
   - labelSelector:
       matchExpressions:
-      - key: {{ default "beta.kubernetes.io/arch" $affinity.key }}
+      - key: {{ default "beta.kubernetes.io/arch" $affinity.requiredDuringSchedulingRequiredDuringExecution.key }}
         operator: {{ $operator }}
         values:
     {{- range $key := $values }}
