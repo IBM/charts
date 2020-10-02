@@ -8,6 +8,8 @@ metadata:
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     name: monitor
     release: {{ .Release.Name }}
+    paw_instance_name: {{ .Values.paw_instance_name }}
+    
   name: monitor
   namespace: {{ .Release.Namespace }}
 spec:
@@ -26,14 +28,17 @@ spec:
         cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
         cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
         cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
+         
       labels:
         app.kubernetes.io/name: paw
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         name: monitor
+        pa-cacerts-secret: {{ .Values.secrets.cacertVersion }}
+        pa-paw-secret: {{ .Values.secrets.pawSecretVersion }}
         release: {{ .Release.Name }}
-        version: {{ .Values.monitor.imageversion }}
+        version: "2.0.56.2022-ubi7"
     spec:
       affinity:
         nodeAffinity:
@@ -53,24 +58,29 @@ spec:
             secretName: pa-cacerts
       containers:
         - name: monitor
-          image: {{.Values.docker_registry_prefix}}/pa-monitor:{{ .Values.monitor.imageversion }}
+          image: {{ .Values.docker_registry_prefix }}/pa-monitor:2.0.55.2025-ubi7
           ports:
             - containerPort: 9082
               protocol: TCP
           env:
             - name: CREDENTIAL_STORE_KEY_FILE
-              value: "/run/secrets/{{ .Release.Namespace }}/pa_paw_credential/tls.key"
+              value: "/run/secrets/paw/tls.key"
             - name: SecureSessionCookie
               value: "{{ .Values.common.secureSessionCookie }}"
+            {{- if .Values.common.tm1InternalType }}
             - name: DEPLOYMENT_MODE
               value: "cp4d"
+            {{- else }}
+            - name: DEPLOYMENT_MODE
+              value: "local"
+            {{- end }}
           resources:
             limits:
               cpu: "{{ .Values.monitor.cpuLimit }}"
               memory: "{{ .Values.monitor.memoryLimit }}"
             requests:
-              cpu: "{{ .Values.monitor.cpuRequest }}"
-              memory: "{{ .Values.monitor.memoryRequest }}"
+              cpu: "{{ .Values.monitor.cpuRequestLimit }}"
+              memory: "{{ .Values.monitor.memoryRequestLimit }}"
           securityContext:
             runAsNonRoot: true
             capabilities:
@@ -79,14 +89,11 @@ spec:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
-            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
-            runAsUser: 2000
-            {{- end }}
           volumeMounts:
             - name: pa-cacerts
               mountPath: /run/config
             - name: pa-credential-store-key
-              mountPath: /run/secrets/{{ .Release.Namespace }}/pa_paw_credential/
+              mountPath: /run/secrets/paw
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
@@ -114,3 +121,4 @@ spec:
     rollingUpdate:
       maxUnavailable: 1
       maxSurge: 1
+

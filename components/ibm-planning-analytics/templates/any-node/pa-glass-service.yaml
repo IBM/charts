@@ -8,6 +8,8 @@ metadata:
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     name: glass
     release: {{ .Release.Name }}
+    paw_instance_name: {{ .Values.paw_instance_name }}
+    
   name: glass
   namespace: {{ .Release.Namespace }}
 spec:
@@ -26,6 +28,7 @@ spec:
         cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
         cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
         cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
+        
       labels:
         app.kubernetes.io/name: paw
         app.kubernetes.io/instance: {{ .Release.Name }}
@@ -33,7 +36,7 @@ spec:
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         name: glass
         release: {{ .Release.Name }}
-        version: {{ .Values.glass.imageversion }}
+        version: "1.0.9-ubi7"
     spec:
       affinity:
         nodeAffinity:
@@ -46,20 +49,20 @@ spec:
                 - {{ .Values.arch }}
       containers:
         - name: glass
-          image: {{.Values.docker_registry_prefix}}/pa-glass:{{ .Values.glass.imageversion }}
+          image: {{ .Values.docker_registry_prefix }}/pa-glass:1.0.9-ubi7
           env:
             - name: CARBON_STYLE_LINK
               value: "/cdn/common/cp4d-carbon/carbon-overrides.css"
           ports:
-            - containerPort: 1337
+            - containerPort: 9080
               protocol: TCP
           resources:
             limits:
               cpu: "{{ .Values.glass.cpuLimit }}"
               memory: "{{ .Values.glass.memoryLimit }}"
             requests:
-              cpu: "{{ .Values.glass.cpuRequest }}"
-              memory: "{{ .Values.glass.memoryRequest }}"
+              cpu: "{{ .Values.glass.cpuRequestLimit }}"
+              memory: "{{ .Values.glass.memoryRequestLimit }}"
           securityContext:
             runAsNonRoot: true
             capabilities:
@@ -68,9 +71,6 @@ spec:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
-            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
-            runAsUser: 2000
-            {{- end }}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
@@ -78,13 +78,13 @@ spec:
             initialDelaySeconds: 300
             failureThreshold: 1
             tcpSocket:
-              port: 1337
+              port: 9080
             periodSeconds: 2
           readinessProbe:
             failureThreshold: 1
             periodSeconds: 2
             tcpSocket:
-              port: 1337
+              port: 9080
       hostNetwork: false
       hostIPC: false
       hostPID: false
@@ -98,3 +98,4 @@ spec:
     rollingUpdate:
       maxUnavailable: 1
       maxSurge: 1
+

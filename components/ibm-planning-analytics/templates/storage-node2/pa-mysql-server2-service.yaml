@@ -9,6 +9,8 @@ metadata:
     lb: mysql-server
     name: mysql-server2
     release: {{ .Release.Name }}
+    paw_instance_name: {{ .Values.paw_instance_name }}
+    
   name: mysql-server2
   namespace: {{ .Release.Namespace }}
 spec:
@@ -28,6 +30,7 @@ spec:
         cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
         cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
         cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
+        
       labels:
         app.kubernetes.io/name: paw
         app.kubernetes.io/instance: {{ .Release.Name }}
@@ -36,7 +39,7 @@ spec:
         lb: mysql-server
         name: mysql-server2
         release: {{ .Release.Name }}
-        version: {{ .Values.mysqlCluster.imageversion }}
+        version: "1.0.97-ubi7"
     spec:
       affinity:
         nodeAffinity:
@@ -47,7 +50,7 @@ spec:
                 operator: In
                 values:
                 - {{ .Values.arch }}
-        podAntiAffinity:
+        podAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
           - weight: 100
             podAffinityTerm:
@@ -56,12 +59,19 @@ spec:
                 - key: name
                   operator: In
                   values:
-                  - mysql-data1
+                  - mysql-data2
               topologyKey: kubernetes.io/hostname
+      volumes:
+        - name: pa-cacerts
+          secret:
+            secretName: pa-cacerts          
+        - name: pa-internal-tls-cert
+          secret:
+            secretName: pa-internal-tls-cert
       containers:
         - name: mysql-server2
-          image: {{.Values.docker_registry_prefix}}/pa-mysql-cluster:{{ .Values.mysqlCluster.imageversion }}
-          args: ["mysqld", "--log-error=/var/lib/mysql/log.err"]
+          image: {{ .Values.docker_registry_prefix }}/pa-mysql-cluster:1.0.97-ubi7
+          args: ["mysqld", "--log-error=/var/lib/mysql/log.err", "--ssl-fips-mode=ON", "--character-set-server=latin1"]
           ports:
             - containerPort: 3306
               protocol: TCP
@@ -70,8 +80,19 @@ spec:
               cpu: "{{ .Values.mysqlServer.cpuLimit }}"
               memory: "{{ .Values.mysqlServer.memoryLimit }}"
             requests:
-              cpu: "{{ .Values.mysqlServer.cpuRequest }}"
-              memory: "{{ .Values.mysqlServer.memoryRequest }}"
+              cpu: "{{ .Values.mysqlServer.cpuRequestLimit }}"
+              memory: "{{ .Values.mysqlServer.memoryRequestLimit }}"
+          env:
+            - name: ENABLE_SSL
+              value: "false"
+            - name: MYSQL_DOMAIN
+              value: "{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
+            - name: SSL_CERTIFICATE_KEY_FILE
+              value: "/run/secrets/paw/internal-tls-cert/tls.key"
+            - name: SSL_CERTIFICATE_CHAIN_FILE
+              value: "/run/secrets/paw/internal-tls-cert/tls.crt"
+            - name: SSL_CA_BUNDLE_FILE
+              value: "/run/config/cacerts.pem"
           securityContext:
             runAsNonRoot: true
             capabilities:
@@ -80,9 +101,11 @@ spec:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
-            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
-            runAsUser: 27
-            {{- end }}
+          volumeMounts:
+            - name: pa-cacerts
+              mountPath: /run/config              
+            - name: pa-internal-tls-cert
+              mountPath: /run/secrets/paw/internal-tls-cert
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
@@ -109,3 +132,4 @@ spec:
     rollingUpdate:
       maxUnavailable: 1
       maxSurge: 1
+

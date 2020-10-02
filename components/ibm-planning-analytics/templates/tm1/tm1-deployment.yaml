@@ -1,3 +1,4 @@
+{{- if .Values.common.tm1InternalType }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -6,12 +7,15 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    tm1_name: {{ .Values.resources.dv.requests.name }}
+    paw_instance_name: {{ .Values.paw_instance_name }}
     name: tm1
     app: tm1
     release: {{ .Release.Name }}
   name: tm1
 spec:
+  strategy:
+    type: Recreate
+    rollingUpdate: null
   replicas: 1
   selector:
     matchLabels:
@@ -39,7 +43,7 @@ spec:
       containers:
       - env:
         - name: TM1_NAME
-          value: {{ .Values.resources.dv.requests.name }}
+          value: {{ .Values.paw_instance_name }}
         - name: GID
           value: "0"
         - name: MAX_RELOADS
@@ -51,8 +55,8 @@ spec:
         - name: MANAGE_PORT
           value: "8081"
         - name: MAX_MEMORY_GB
-          value: "{{ .Values.resources.dv.requests.tm1.maxMemoryDisplayPAAGB }}"
-        image: {{.Values.docker_registry_prefix}}/pa-tm1-cp4d:{{ .Values.tm1.imageversion }}
+          value: "{{ .Values.tm1.maxMemoryDisplayPAAGB }}"
+        image: {{.Values.docker_registry_prefix}}/pa-tm1-cp4d:b625CP4D
         imagePullPolicy: Always
         name: tm1
         readinessProbe:
@@ -61,13 +65,19 @@ spec:
             port: 8081
           initialDelaySeconds: 5
           periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /oddt/v1/tm1s/startIfNot
+            port: 8081
+          initialDelaySeconds: 240
+          periodSeconds: 10
         resources:
           limits:
-            cpu: {{ .Values.resources.dv.requests.tm1.cpu }}
-            memory: {{ .Values.resources.dv.requests.tm1.memory }}
+            cpu: {{ .Values.tm1.cpu }}
+            memory: {{ .Values.tm1.memory }}
           requests:
-            cpu: {{ .Values.resources.dv.requests.tm1.cpu }}
-            memory: {{ .Values.resources.dv.requests.tm1.memory }}
+            cpu: {{ .Values.tm1.cpu }}
+            memory: {{ .Values.tm1.memory }}
         volumeMounts:
         - mountPath: /tm1mnt
           name: tm1-storage
@@ -82,3 +92,4 @@ spec:
       - name: jwt-cert
         secret:
           secretName: pa-internal-tls-cert
+{{- end }}
