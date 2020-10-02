@@ -8,6 +8,8 @@ metadata:
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     name: social
     release: {{ .Release.Name }}
+    paw_instance_name: {{ .Values.paw_instance_name }}
+    
   name: social
   namespace: {{ .Release.Namespace }}
 spec:
@@ -26,6 +28,7 @@ spec:
         cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
         cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
         cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
+        
       labels:
         app.kubernetes.io/name: paw
         app.kubernetes.io/instance: {{ .Release.Name }}
@@ -33,7 +36,7 @@ spec:
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         name: social
         release: {{ .Release.Name }}
-        version: {{ .Values.social.imageversion }}
+        version: "1.0.349-ubi7"
     spec:
       affinity:
         nodeAffinity:
@@ -44,22 +47,30 @@ spec:
                 operator: In
                 values:
                 - {{ .Values.arch }}
+      volumes:
+        - name: pa-cacerts
+          secret:
+            secretName: pa-cacerts
       containers:
         - name: social
-          image: {{.Values.docker_registry_prefix}}/pa-social:{{ .Values.social.imageversion }}
+          image: {{ .Values.docker_registry_prefix }}/pa-social:1.0.346-ubi7
           ports:
             - containerPort: 1341
               protocol: TCP
           env:
+            - name: COUCHDB_DOMAIN
+              value: "{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
             - name: COUCHDB_URL
               value: "http://couchdb:5984/"
+            - name: SSL_CA_BUNDLE_FILE
+              value: "/run/config/cacerts.pem"
           resources:
             limits:
               cpu: "{{ .Values.social.cpuLimit }}"
               memory: "{{ .Values.social.memoryLimit }}"
             requests:
-              cpu: "{{ .Values.social.cpuRequest }}"
-              memory: "{{ .Values.social.memoryRequest }}"
+              cpu:  "{{ .Values.social.cpuRequestLimit }}"
+              memory: "{{ .Values.social.memoryRequestLimit }}"
           securityContext:
             runAsNonRoot: true
             capabilities:
@@ -68,9 +79,9 @@ spec:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
-            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
-            runAsUser: 2000
-            {{- end }}
+          volumeMounts:
+            - name: pa-cacerts
+              mountPath: /run/config 
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
@@ -98,3 +109,4 @@ spec:
     rollingUpdate:
       maxUnavailable: 1
       maxSurge: 1
+

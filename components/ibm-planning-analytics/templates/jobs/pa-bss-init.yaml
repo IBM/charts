@@ -6,9 +6,10 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    paw_instance_name: {{ .Values.resources.dv.requests.name }}
     name: bss-init
     release: {{ .Release.Name }}
+    paw_instance_name: {{ .Values.paw_instance_name }}
+    
   name: bss-init
   namespace: {{ .Release.Namespace }}
 spec:
@@ -25,15 +26,15 @@ spec:
         cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
         cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
         cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
+        
       labels:
         app.kubernetes.io/name: paw
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        paw_instance_name: {{ .Values.resources.dv.requests.name }}
         name: bss-init
         release: {{ .Release.Name }}
-        version: {{ .Values.bssInit.imageversion }}
+        version: "1.0.234-ubi7"
     spec:
       affinity:
         nodeAffinity:
@@ -46,7 +47,7 @@ spec:
                 - {{ .Values.arch }}
       containers:
         - name: bss-init
-          image: {{.Values.docker_registry_prefix}}/pa-bss-init:{{ .Values.bssInit.imageversion }}
+          image: {{ .Values.docker_registry_prefix }}/pa-bss-init:1.0.234-ubi7
           env:
             - name: TM1Location
               value: "{{ .Values.common.tm1Location }}"
@@ -68,11 +69,11 @@ spec:
               value: "{{ .Values.bssInit.enableIntentBar }}"
           resources:
             limits:
-              cpu: {{ .Values.bssInit.cpuLimit }}
-              memory: {{ .Values.bssInit.memoryLimit }}
+              cpu: "1000m"
+              memory: "500M"
             requests:
-              cpu: {{ .Values.bssInit.cpuRequest }}
-              memory: {{ .Values.bssInit.memoryRequest }}
+              cpu: "100m"
+              memory: "250M"
           securityContext:
             runAsNonRoot: true
             capabilities:
@@ -81,9 +82,6 @@ spec:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
-            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
-            runAsUser: 2000
-            {{- end }}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
@@ -107,3 +105,4 @@ spec:
       terminationGracePeriodSeconds: 30
       dnsPolicy: ClusterFirst
       schedulerName: default-scheduler
+

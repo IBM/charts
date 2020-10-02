@@ -8,6 +8,8 @@ metadata:
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     name: prism-app
     release: {{ .Release.Name }}
+    paw_instance_name: {{ .Values.paw_instance_name }}
+    
   name: prism-app
   namespace: {{ .Release.Namespace }}
 spec:
@@ -26,6 +28,7 @@ spec:
         cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
         cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
         cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
+        
       labels:
         app.kubernetes.io/name: paw
         app.kubernetes.io/instance: {{ .Release.Name }}
@@ -33,7 +36,7 @@ spec:
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         name: prism-app
         release: {{ .Release.Name }}
-        version: {{ .Values.prismApp.imageversion }}
+        version: "1.0.5249-ubi7"
     spec:
       affinity:
         nodeAffinity:
@@ -44,32 +47,40 @@ spec:
                 operator: In
                 values:
                 - {{ .Values.arch }}
+      volumes:
+        - name: pa-cacerts
+          secret:
+            secretName: pa-cacerts         
       containers:
         - name: prism-app
-          image: {{.Values.docker_registry_prefix}}/pa-prism-app:{{ .Values.prismApp.imageversion }}
+          image: {{ .Values.docker_registry_prefix }}/pa-prism-app:1.0.5245-ubi7
           ports:
             - containerPort: 9600
               protocol: TCP
           env:
             - name: REDIS_SENTINEL
               value: "{ \"name\": \"redis-cluster\", \"sentinels\": [{ \"host\": \"sentinel1\", \"port\": 26379 }, { \"host\": \"sentinel2\", \"port\": 26379 }, { \"host\": \"sentinel3\", \"port\": 26379 }]}"
-            - name: WINSTON_LOG_LEVEL
-              value: "error"
+            - name: REDIS_DOMAIN
+              value: "{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
+            - name: SSL_CA_BUNDLE_FILE
+              value: "/run/config/cacerts.pem"              
             - name: CDN_URL
-              value: "/prism/{{ .Values.prismProxy.imageversion }}"
+              value: "/prism/1.0.9151-ubi7"
             - name: SHARE_URL
-              value: "/wa-share/{{ .Values.shareApp.imageversion }}"
+              value: "/wa-share/1.0.388-ubi7"
             - name: SAVE_URL
-              value: "/wa-save/1.0.256-ubi7"
+              value: "/wa-save/1.0.280"
+            - name: MDV_URL
+              value: "/prism/mdv/0.0.427"
             - name: CARBON_STYLE_LINK
               value: "/cdn/common/cp4d-carbon/carbon-overrides.css"
           resources:
             limits:
-              cpu:  "{{ .Values.prismApp.cpuLimit }}"
+              cpu: "{{ .Values.prismApp.cpuLimit }}"
               memory: "{{ .Values.prismApp.memoryLimit }}"
             requests:
-              cpu: "{{ .Values.prismApp.cpuRequest }}"
-              memory: "{{ .Values.prismApp.memoryRequest }}"
+              cpu: "{{ .Values.prismApp.cpuRequestLimit }}"
+              memory: "{{ .Values.prismApp.memoryRequestLimit }}"
           securityContext:
             runAsNonRoot: true
             capabilities:
@@ -78,9 +89,9 @@ spec:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
-            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
-            runAsUser: 2000
-            {{- end }}
+          volumeMounts:
+            - name: pa-cacerts
+              mountPath: /run/config
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
@@ -108,3 +119,4 @@ spec:
     rollingUpdate:
       maxUnavailable: 1
       maxSurge: 1
+

@@ -8,6 +8,8 @@ metadata:
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     name: neo-provision
     release: {{ .Release.Name }}
+    paw_instance_name: {{ .Values.paw_instance_name }}
+    
   name: neo-provision
   namespace: {{ .Release.Namespace }}
 spec:
@@ -26,6 +28,7 @@ spec:
         cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
         cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
         cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
+        
       labels:
         app.kubernetes.io/name: paw
         app.kubernetes.io/instance: {{ .Release.Name }}
@@ -33,7 +36,7 @@ spec:
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         name: neo-provision
         release: {{ .Release.Name }}
-        version: {{ .Values.neoProvision.imageversion }}
+        version: "1.0.239-ubi7"
     spec:
       affinity:
         nodeAffinity:
@@ -44,15 +47,25 @@ spec:
                 operator: In
                 values:
                 - {{ .Values.arch }}
+      volumes:
+        - name: pa-cacerts
+          secret:
+            secretName: pa-cacerts
       containers:
         - name: neo-provision
-          image: {{.Values.docker_registry_prefix}}/pa-neo-provision:{{ .Values.neoProvision.imageversion }}
+          image: {{ .Values.docker_registry_prefix }}/pa-neo-provision:1.0.239-ubi7
           ports:
             - containerPort: 8083
               protocol: TCP
           env:
+            - name: MONGO_DOMAIN
+              value: "{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
             - name: MONGO_NODES
               value: "mongo1:27017 mongo2:27017 mongo3:27017"
+            - name: MONGO_SSL
+              value: "false"
+            - name: TRUST_STORE_FILE
+              value: "/run/config/cacerts"
             - name: SecureSessionCookie
               value: "{{ .Values.common.secureSessionCookie }}"
           resources:
@@ -60,8 +73,8 @@ spec:
               cpu: "{{ .Values.neoProvision.cpuLimit }}"
               memory: "{{ .Values.neoProvision.memoryLimit }}"
             requests:
-              cpu: "{{ .Values.neoProvision.cpuRequest }}"
-              memory: "{{ .Values.neoProvision.memoryRequest }}"
+              cpu: "{{ .Values.neoProvision.cpuRequestLimit }}"
+              memory: "{{ .Values.neoProvision.memoryRequestLimit }}"
           securityContext:
             runAsNonRoot: true
             capabilities:
@@ -70,9 +83,9 @@ spec:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
-            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
-            runAsUser: 2000
-            {{- end }}
+          volumeMounts:
+            - name: pa-cacerts
+              mountPath: /run/config
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
@@ -100,3 +113,4 @@ spec:
     rollingUpdate:
       maxUnavailable: 1
       maxSurge: 1
+
