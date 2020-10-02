@@ -1,0 +1,31 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pa-upgrade
+  labels:
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  template:
+    metadata:
+      annotations:
+        productName: IBM Planning Analytics
+        productID: com.ibm.ba.pa.{{ .Release.Name }}
+        productVersion: "2.0.55"
+      labels:
+        release: {{ .Release.Name }}
+    spec:
+      serviceAccountName: ibm-planning-analytics-sa
+      containers:
+      - name: upgrade
+        image: "{{ .Values.global.dockerRegistryPrefix }}/pa-cp4d-post-upgrade-job:2.0.55-21"
+        volumeMounts:
+          - name: tiller-certs
+            mountPath: "/tiller-certs"
+            readOnly: true
+      volumes:
+      - name: tiller-certs
+        secret:
+          secretName: helm-secret
+      restartPolicy: Never
+  backoffLimit: 4

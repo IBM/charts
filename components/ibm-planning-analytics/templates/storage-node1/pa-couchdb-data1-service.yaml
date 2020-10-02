@@ -9,6 +9,8 @@ metadata:
     name: couchdb-data1
     lb: couchdb
     release: {{ .Release.Name }}
+    paw_instance_name: {{ .Values.paw_instance_name }}
+    
   name: couchdb-data1
   namespace: {{ .Release.Namespace }}
 spec:
@@ -28,6 +30,7 @@ spec:
         cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
         cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
         cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
+        
       labels:
         app.kubernetes.io/name: paw
         app.kubernetes.io/instance: {{ .Release.Name }}
@@ -35,7 +38,7 @@ spec:
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         name: couchdb-data1
         release: {{ .Release.Name }}
-        version: "{{ .Values.couchdb.imageversion }}"
+        version: "114-ubi7"
         lb: couchdb
     spec:
       affinity:
@@ -59,25 +62,43 @@ spec:
                   - couchdb-data2
               topologyKey: kubernetes.io/hostname
       volumes:
-        - name: shared-storage
+        - name: pa-cacerts
+          secret:
+            secretName: pa-cacerts          
+        - name: pa-internal-tls-cert
+          secret:
+            secretName: pa-internal-tls-cert          
+        - name: couchdb-data1-storage
           persistentVolumeClaim:
             claimName: shared-storage
       containers:
         - name: couchdb1
-          image: {{.Values.docker_registry_prefix}}/pa-couchdb:{{ .Values.couchdb.imageversion }}
+          image: {{ .Values.docker_registry_prefix }}/pa-couchdb:114-ubi7
           ports:
             - containerPort: 5984
               protocol: TCP
           env:
+            - name: COUCHDB_LOCAL_SERVER
+              value: "couchdb1"
             - name: TARGET
               value: "couchdb2"
+            - name: COUCHDB_DOMAIN
+              value: "{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
+            - name: ENABLE_SSL
+              value: "false"
+            - name: SSL_CERTIFICATE_KEY_FILE
+              value: "/run/secrets/paw/internal-tls-cert/tls.key"
+            - name: SSL_CERTIFICATE_CHAIN_FILE
+              value: "/run/secrets/paw/internal-tls-cert/tls.crt"
+            - name: SSL_CA_BUNDLE_FILE
+              value: "/run/config/cacerts.pem"
           resources:
             limits:
-              memory: "{{ .Values.couchdb.cpuLimit }}"
+              cpu: "{{ .Values.couchdb.cpuLimit }}"
               memory: "{{ .Values.couchdb.memoryLimit }}"
             requests:
-              cpu: "{{ .Values.couchdb.cpuRequest }}"
-              memory: "{{ .Values.couchdb.memoryRequest }}"
+              cpu: "{{ .Values.couchdb.cpuRequestLimit }}"
+              memory: "{{ .Values.couchdb.memoryRequestLimit }}"
           securityContext:
             runAsNonRoot: true
             capabilities:
@@ -86,16 +107,17 @@ spec:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
-            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
-            runAsUser: 5984
-            {{- end }}
           volumeMounts:
-            - name: shared-storage
+            - name: couchdb-data1-storage
               mountPath: /opt/couchdb/data
               subPath: couchdb-data1
-            - name: shared-storage
+            - name: couchdb-data1-storage
               mountPath: /opt/couchdb/etc/local.d
               subPath: couchdb-ini1
+            - name: pa-cacerts
+              mountPath: /run/config
+            - name: pa-internal-tls-cert
+              mountPath: /run/secrets/paw/internal-tls-cert              
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
@@ -123,3 +145,4 @@ spec:
     rollingUpdate:
       maxUnavailable: 1
       maxSurge: 1
+

@@ -8,6 +8,8 @@ metadata:
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     name: user-admin
     release: {{ .Release.Name }}
+    paw_instance_name: {{ .Values.paw_instance_name }}
+    
   name: user-admin
   namespace: {{ .Release.Namespace }}
 spec:
@@ -26,6 +28,7 @@ spec:
         cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
         cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
         cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
+        
       labels:
         app.kubernetes.io/name: paw
         app.kubernetes.io/instance: {{ .Release.Name }}
@@ -33,7 +36,7 @@ spec:
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         name: user-admin
         release: {{ .Release.Name }}
-        version: {{ .Values.userAdmin.imageversion }}
+        version: "1.0.389-ubi7"
     spec:
       affinity:
         nodeAffinity:
@@ -44,22 +47,30 @@ spec:
                 operator: In
                 values:
                 - {{ .Values.arch }}
+      volumes:
+        - name: pa-cacerts
+          secret:
+            secretName: pa-cacerts             
       containers:
         - name: user-admin
-          image: {{.Values.docker_registry_prefix}}/pa-user-admin:{{ .Values.userAdmin.imageversion }}
+          image: {{ .Values.docker_registry_prefix }}/pa-user-admin:1.0.389-ubi7
           ports:
             - containerPort: 3333
               protocol: TCP
-          env:
+          env:          
             - name: REDIS_SENTINEL
               value: "{ \"name\": \"redis-cluster\", \"sentinels\": [{ \"host\": \"sentinel1\", \"port\": 26379 }, { \"host\": \"sentinel2\", \"port\": 26379 }, { \"host\": \"sentinel3\", \"port\": 26379 }]}"
+            - name: REDIS_DOMAIN
+              value: "{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
+            - name: SSL_CA_BUNDLE_FILE
+              value: "/run/config/cacerts.pem"              
           resources:
             limits:
               cpu: "{{ .Values.userAdmin.cpuLimit }}"
               memory: "{{ .Values.userAdmin.memoryLimit }}"
             requests:
-              cpu: "{{ .Values.userAdmin.cpuRequest }}"
-              memory: "{{ .Values.userAdmin.memoryRequest }}"
+              cpu: "{{ .Values.userAdmin.cpuRequestLimit }}"
+              memory: "{{ .Values.userAdmin.memoryRequestLimit }}"
           securityContext:
             runAsNonRoot: true
             capabilities:
@@ -68,9 +79,9 @@ spec:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
-            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
-            runAsUser: 2000
-            {{- end }}
+          volumeMounts:
+            - name: pa-cacerts
+              mountPath: /run/config
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
@@ -98,3 +109,4 @@ spec:
     rollingUpdate:
       maxUnavailable: 1
       maxSurge: 1
+

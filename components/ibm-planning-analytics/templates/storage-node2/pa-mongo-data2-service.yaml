@@ -8,6 +8,8 @@ metadata:
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     name: mongo-data2
     release: {{ .Release.Name }}
+    paw_instance_name: {{ .Values.paw_instance_name }}
+    
   name: mongo-data2
   namespace: {{ .Release.Namespace }}
 spec:
@@ -26,6 +28,7 @@ spec:
         cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
         cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
         cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
+        
       labels:
         app.kubernetes.io/name: paw
         app.kubernetes.io/instance: {{ .Release.Name }}
@@ -33,7 +36,7 @@ spec:
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         name: mongo-data2
         release: {{ .Release.Name }}
-        version: {{ .Values.mongo.imageversion }}
+        version: "1.0.91-ubi7"
     spec:
       affinity:
         nodeAffinity:
@@ -57,16 +60,22 @@ spec:
                   - mongo-data3
               topologyKey: kubernetes.io/hostname
       volumes:
-        - name: shared-storage
+        - name: mongo-data2-storage
           persistentVolumeClaim:
             claimName: shared-storage
-        - name: readiness-root
+        - name: pa-cacerts
+          secret:
+            secretName: pa-cacerts          
+        - name: pa-internal-tls-cert
+          secret:
+            secretName: pa-internal-tls-cert          
+        - name: pa-temp
           emptyDir:
             medium: "{{ .Values.mongo.emptyDirMedium }}"
             sizeLimit: "{{ .Values.mongo.emptyDirSizeLimit }}"
       containers:
         - name: wait-for-pods
-          image: {{.Values.docker_registry_prefix}}/pa-mongo:{{ .Values.mongo.imageversion }}
+          image: {{ .Values.docker_registry_prefix }}/pa-mongo:1.0.91-ubi7
           command: ["/bin/bash", "-c", "/tmp/wait-for-pods.sh" ]
           ports:
             - containerPort: 31000
@@ -74,17 +83,19 @@ spec:
           resources:
             limits:
               cpu: "200m"
-              memory: "13M"
+              memory: "100M"
             requests:
               cpu: "100m"
-              memory: "5M"
+              memory: "50M"
           env:
-            - name: SERVICENAMES
-              value: "mongo1 mongo2 mongo3"
+            - name: MONGO_DOMAIN
+              value: "{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
             - name: READINESS_PORT
               value: "31000"
             - name: READINESS_ROOT
-              value: "/run/readiness"
+              value: "/run/pa-temp"
+            - name: SERVICENAMES
+              value: "mongo1 mongo2 mongo3"
           securityContext:
             runAsNonRoot: true
             capabilities:
@@ -93,12 +104,9 @@ spec:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
-            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
-            runAsUser: 999
-            {{- end }}
           volumeMounts:
-            - name: readiness-root
-              mountPath: /run/readiness
+            - name: pa-temp
+              mountPath: /run/pa-temp
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
@@ -115,8 +123,8 @@ spec:
             initialDelaySeconds: 0
             periodSeconds: 60
         - name: mongo2
-          image: {{.Values.docker_registry_prefix}}/pa-mongo:{{ .Values.mongo.imageversion }}
-          command: ["/bin/bash", "-c", "while [ ! -f /run/readiness/true ]; do sleep 2; done; exec /paw-entrypoint.sh mongod --replSet rs0"]
+          image: {{ .Values.docker_registry_prefix }}/pa-mongo:1.0.91-ubi7
+          command: ["/bin/bash", "-c", "while [ ! -f ${TEMP_DIR}/true ]; do sleep 2; done; exec /paw-entrypoint.sh mongod --replSet rs0"]
           ports:
             - containerPort: 27017
               protocol: TCP
@@ -125,31 +133,44 @@ spec:
               cpu: "{{ .Values.mongo.cpuLimit }}"
               memory: "{{ .Values.mongo.memoryLimit }}"
             requests:
-              cpu: "{{ .Values.mongo.cpuRequest }}"
-              memory: "{{ .Values.mongo.memoryRequest }}"
+              cpu: "{{ .Values.mongo.cpuRequestLimit }}"
+              memory: "{{ .Values.mongo.memoryRequestLimit }}"
           env:
+            - name: ENABLE_SSL
+              value: "false"
+            - name: MONGO_DOMAIN
+              value: "{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
             - name: SERVICENAMES
               value: "mongo1 mongo2 mongo3"
+            - name: SSL_CERTIFICATE_KEY_FILE
+              value: "/run/secrets/paw/internal-tls-cert/tls.key"
+            - name: SSL_CERTIFICATE_CHAIN_FILE
+              value: "/run/secrets/paw/internal-tls-cert/tls.crt"
+            - name: SSL_CA_BUNDLE_FILE
+              value: "/run/config/cacerts.pem"              
+            - name: TEMP_DIR
+              value: "/run/pa-temp"
           securityContext:
             runAsNonRoot: true
             capabilities:
               drop:
-              - ALL
+                - ALL
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
-            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
-            runAsUser: 999
-            {{- end }}
           volumeMounts:
-            - name: shared-storage
+            - name: mongo-data2-storage
               mountPath: /data/db
               subPath: mongo-data2
-            - name: shared-storage
+            - name: mongo-data2-storage
               mountPath: /data/configdb
               subPath: mongo-data2/configdb
-            - name: readiness-root
-              mountPath: /run/readiness
+            - name: pa-cacerts
+              mountPath: /run/config              
+            - name: pa-internal-tls-cert
+              mountPath: /run/secrets/paw/internal-tls-cert              
+            - name: pa-temp
+              mountPath: /run/pa-temp
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
@@ -176,3 +197,4 @@ spec:
     rollingUpdate:
       maxUnavailable: 1
       maxSurge: 1
+

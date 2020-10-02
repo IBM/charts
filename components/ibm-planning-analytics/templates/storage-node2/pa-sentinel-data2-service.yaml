@@ -8,6 +8,8 @@ metadata:
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     name: sentinel-data2
     release: {{ .Release.Name }}
+    paw_instance_name: {{ .Values.paw_instance_name }}
+    
   name: sentinel-data2
   namespace: {{ .Release.Namespace }}
 spec:
@@ -26,6 +28,7 @@ spec:
         cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
         cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
         cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
+        
       labels:
         app.kubernetes.io/name: paw
         app.kubernetes.io/instance: {{ .Release.Name }}
@@ -33,7 +36,7 @@ spec:
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         name: sentinel-data2
         release: {{ .Release.Name }}
-        version: {{ .Values.redis.imageversion }}
+        version: "1.0.122-ubi7"
     spec:
       affinity:
         nodeAffinity:
@@ -57,27 +60,30 @@ spec:
                   - sentinel-data3
               topologyKey: kubernetes.io/hostname
       volumes:
-        - name: shared-storage
+        - name: pa-cacerts
+          secret:
+            secretName: pa-cacerts          
+        - name: pa-internal-tls-cert
+          secret:
+            secretName: pa-internal-tls-cert          
+        - name: sentinel-data2-storage
           persistentVolumeClaim:
             claimName: shared-storage
-      containers:
-        - name: sentinel2
-          image: {{.Values.docker_registry_prefix}}/pa-redis:{{ .Values.redis.imageversion }}
-          ports:
-            - containerPort: 26379
-              protocol: TCP
+      initContainers:
+        - name: sentinel2-reset
+          image: {{ .Values.docker_registry_prefix }}/pa-k8s-config:1.0.40-ubi7
+          command: ["/bin/bash"]
+          args: ["-c", "/opt/harmony/start.sh sentinel"]
+          env:
+            - name: SERVICE
+              value: sentinel2
           resources:
             limits:
-              cpu: "{{ .Values.sentinel.cpuLimit }}"
-              memory: "{{ .Values.sentinel.memoryLimit }}"
+              cpu: "100m"
+              memory: "100M"
             requests:
-              cpu: "{{ .Values.sentinel.cpuRequest }}"
-              memory: "{{ .Values.sentinel.memoryRequest }}"
-          env:
-            - name: REDIS_TYPE
-              value: "sentinel"
-            - name: ANNOUNCE_IP
-              value: "sentinel2"
+              cpu: "100m"
+              memory: "50M"
           securityContext:
             runAsNonRoot: true
             capabilities:
@@ -86,13 +92,55 @@ spec:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
-            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
-            runAsUser: 999
-            {{- end }}
           volumeMounts:
-            - name: shared-storage
+            - name: sentinel-data2-storage
+              mountPath: /data
+              subPath: sentinel-data2            
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: IfNotPresent
+      containers:
+        - name: sentinel2
+          image: {{ .Values.docker_registry_prefix }}/pa-redis:1.0.122-ubi7
+          ports:
+            - containerPort: 26379
+              protocol: TCP
+          resources:
+            limits:
+              cpu: "{{ .Values.sentinel.cpuLimit }}"
+              memory: "{{ .Values.sentinel.memoryLimit }}"
+            requests:
+              cpu: "{{ .Values.sentinel.cpuRequestLimit }}"
+              memory: "{{ .Values.sentinel.memoryRequestLimit }}"
+          env:             
+            - name: REDIS_TYPE
+              value: "sentinel"
+            - name: ANNOUNCE_IP
+              value: "sentinel2"
+            - name: ENABLE_SSL
+              value: "false"
+            - name: SSL_CERTIFICATE_KEY_FILE
+              value: "/run/secrets/paw/internal-tls-cert/tls.key"
+            - name: SSL_CERTIFICATE_CHAIN_FILE
+              value: "/run/secrets/paw/internal-tls-cert/tls.crt"
+            - name: SSL_CA_BUNDLE_FILE
+              value: "/run/config/cacerts.pem"                           
+          securityContext:
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: sentinel-data2-storage
               mountPath: /data
               subPath: sentinel-data2
+            - name: pa-cacerts
+              mountPath: /run/config              
+            - name: pa-internal-tls-cert
+              mountPath: /run/secrets/paw/internal-tls-cert              
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
@@ -120,3 +168,4 @@ spec:
     rollingUpdate:
       maxUnavailable: 1
       maxSurge: 1
+
