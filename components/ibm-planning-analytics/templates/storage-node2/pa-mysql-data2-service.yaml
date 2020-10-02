@@ -8,6 +8,8 @@ metadata:
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     name: mysql-data2
     release: {{ .Release.Name }}
+    paw_instance_name: {{ .Values.paw_instance_name }}
+    
   name: mysql-data2
   namespace: {{ .Release.Namespace }}
 spec:
@@ -26,6 +28,7 @@ spec:
         cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
         cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
         cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
+        
       labels:
         app.kubernetes.io/name: paw
         app.kubernetes.io/instance: {{ .Release.Name }}
@@ -33,7 +36,7 @@ spec:
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         name: mysql-data2
         release: {{ .Release.Name }}
-        version: {{ .Values.mysqlCluster.imageversion }}
+        version: "1.0.97-ubi7"
     spec:
       affinity:
         nodeAffinity:
@@ -56,7 +59,7 @@ spec:
                   - mysql-data1
               topologyKey: kubernetes.io/hostname
       volumes:
-        - name: shared-storage
+        - name: mysql-data2-storage
           persistentVolumeClaim:
             claimName: shared-storage
         - name: readiness-root
@@ -65,7 +68,7 @@ spec:
             sizeLimit: "{{ .Values.mysqlCluster.emptyDirSizeLimit }}"
       containers:
         - name: wait-for-pods
-          image: {{.Values.docker_registry_prefix}}/pa-mysql-cluster:{{ .Values.mysqlCluster.imageversion }}
+          image: {{ .Values.docker_registry_prefix }}/pa-mysql-cluster:1.0.97-ubi7
           command: ["/bin/bash", "-c", "/tools/wait-for-pods.sh" ]
           ports:
             - containerPort: 31001
@@ -73,11 +76,13 @@ spec:
           resources:
             limits:
               cpu: "200m"
-              memory: "13M"
+              memory: "100M"
             requests:
               cpu: "100m"
-              memory: "5M"
+              memory: "50M"
           env:
+            - name: MYSQL_DOMAIN
+              value: "{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
             - name: SERVICENAMES
               value: "mysql-data1 mysql-data2 mysql-mgmt"
             - name: READINESS_PORT
@@ -92,12 +97,9 @@ spec:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
-            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
-            runAsUser: 27
-            {{- end }}
           volumeMounts:
-            - name: readiness-root
-              mountPath: /run/readiness
+           - name: readiness-root
+             mountPath: /run/readiness
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
@@ -112,10 +114,10 @@ spec:
               command:
                 - date
             initialDelaySeconds: 0
-            periodSeconds: 60
+            periodSeconds: 60          
         - name: mysql-data2
-          image: {{.Values.docker_registry_prefix}}/pa-mysql-cluster:{{ .Values.mysqlCluster.imageversion }}
-          command: ["/bin/bash", "-c", "while [ ! -f /run/readiness/true ]; do sleep 2; done; exec /paw-entrypoint.sh ndbd"]
+          image: {{ .Values.docker_registry_prefix }}/pa-mysql-cluster:1.0.97-ubi7
+          command: ["/bin/bash", "-c", "while [ ! -f /run/readiness/true ]; do sleep 2; done; exec /paw-entrypoint.sh ndbd"]          
           ports:
             - containerPort: 2202
               protocol: TCP
@@ -124,8 +126,11 @@ spec:
               cpu: "{{ .Values.mysqlData.cpuLimit }}"
               memory: "{{ .Values.mysqlData.memoryLimit }}"
             requests:
-              cpu: "{{ .Values.mysqlData.cpuRequest }}"
-              memory: "{{ .Values.mysqlData.memoryRequest }}"
+              cpu: "{{ .Values.mysqlData.cpuRequestLimit }}"
+              memory: "{{ .Values.mysqlData.memoryRequestLimit }}"
+          env:
+            - name: MYSQL_DOMAIN
+              value: "{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
           securityContext:
             runAsNonRoot: true
             capabilities:
@@ -134,15 +139,12 @@ spec:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
-            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
-            runAsUser: 27
-            {{- end }}
           volumeMounts:
-            - name: shared-storage
+            - name: mysql-data2-storage
               mountPath: /var/lib/mysql
               subPath: mysql-data2
             - name: readiness-root
-              mountPath: /run/readiness
+              mountPath: /run/readiness              
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
@@ -150,10 +152,14 @@ spec:
             exec:
               command:
                 - date
+            initialDelaySeconds: 30
+            periodSeconds: 60
           readinessProbe:
             exec:
               command:
                 - date
+            initialDelaySeconds: 30
+            periodSeconds: 60
       hostNetwork: false
       hostIPC: false
       hostPID: false
@@ -167,3 +173,4 @@ spec:
     rollingUpdate:
       maxUnavailable: 1
       maxSurge: 1
+

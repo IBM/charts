@@ -8,6 +8,8 @@ metadata:
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     name: paw-ui-api
     release: {{ .Release.Name }}
+    paw_instance_name: {{ .Values.paw_instance_name }}
+    
   name: paw-ui-api
   namespace: {{ .Release.Namespace }}
 spec:
@@ -26,6 +28,7 @@ spec:
         cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
         cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
         cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
+        
       labels:
         app.kubernetes.io/name: paw
         app.kubernetes.io/instance: {{ .Release.Name }}
@@ -33,7 +36,7 @@ spec:
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         name: paw-ui-api
         release: {{ .Release.Name }}
-        version: {{ .Values.pawUiApi.imageversion }}
+        version: "1.0.77-ubi7"
     spec:
       affinity:
         nodeAffinity:
@@ -46,7 +49,7 @@ spec:
                 - {{ .Values.arch }}
       containers:
         - name: paw-ui-api
-          image: {{.Values.docker_registry_prefix}}/pa-paw-ui-api:{{ .Values.pawUiApi.imageversion }}
+          image: {{ .Values.docker_registry_prefix }}/pa-paw-ui-api:1.0.74-ubi7
           ports:
             - containerPort: 3000
               protocol: TCP
@@ -55,8 +58,8 @@ spec:
               cpu: "{{ .Values.pawUiApi.cpuLimit }}"
               memory: "{{ .Values.pawUiApi.memoryLimit }}"
             requests:
-              cpu: "{{ .Values.pawUiApi.cpuRequest }}"
-              memory: "{{ .Values.pawUiApi.memoryRequest }}"
+              cpu: "{{ .Values.pawUiApi.cpuRequestLimit }}"
+              memory: "{{ .Values.pawUiApi.memoryRequestLimit }}"
           securityContext:
             runAsNonRoot: true
             capabilities:
@@ -65,9 +68,6 @@ spec:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
-            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
-            runAsUser: 2000
-            {{- end }}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
@@ -95,3 +95,4 @@ spec:
     rollingUpdate:
       maxUnavailable: 1
       maxSurge: 1
+

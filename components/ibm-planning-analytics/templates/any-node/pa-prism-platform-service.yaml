@@ -8,6 +8,8 @@ metadata:
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     name: prism-platform
     release: {{ .Release.Name }}
+    paw_instance_name: {{ .Values.paw_instance_name }}
+    
   name: prism-platform
   namespace: {{ .Release.Namespace }}
 spec:
@@ -20,20 +22,23 @@ spec:
       annotations:
         productName: IBM Planning Analytics Workspace
         productID: com.ibm.ba.paw.{{ .Release.Name }}
-        productVersion: {{ .Release.Name }}
+        productVersion: {{ .Release.Name }}   
         productMetric: "VIRTUAL_PROCESSOR_CORE"
         productChargedContainers: "All"
         cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
         cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
         cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
+         
       labels:
         app.kubernetes.io/name: paw
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         name: prism-platform
+        pa-cacerts-secret: {{ .Values.secrets.cacertVersion }}
+        pa-paw-secret: {{ .Values.secrets.pawSecretVersion }}
         release: {{ .Release.Name }}
-        version: {{ .Values.prismPlatform.imageversion }}
+        version: "1.0.1729-ubi7"
     spec:
       affinity:
         nodeAffinity:
@@ -53,24 +58,30 @@ spec:
             secretName: pa-cacerts
       containers:
         - name: prism-platform
-          image: {{.Values.docker_registry_prefix}}/pa-prism-platform:{{ .Values.prismPlatform.imageversion }}
+          image: {{ .Values.docker_registry_prefix }}/pa-prism-platform:1.0.1726.3-ubi7
           ports:
             - containerPort: 9080
               protocol: TCP
           env:
             - name: CREDENTIAL_STORE_KEY_FILE
-              value: "/run/secrets/{{ .Release.Namespace }}/pa_paw_credential/tls.key"
+              value: "/run/secrets/paw/tls.key"
             - name: SecureSessionCookie
               value: "{{ .Values.common.secureSessionCookie }}"
             - name: ProxyTimeoutSeconds
               value: "{{ .Values.common.proxyTimeoutSeconds }}"
+            - name: JVM_ARGS
+              value: "{{ .Values.prismPlatform.jvmArgs }}"
+            - name: CDN_URL
+              value: "/prism/1.0.9151-ubi7"
+            - name: MDV_URL
+              value: "/prism/mdv/0.0.427"
           resources:
             limits:
               cpu: "{{ .Values.prismPlatform.cpuLimit }}"
               memory: "{{ .Values.prismPlatform.memoryLimit }}"
             requests:
-              cpu: "{{ .Values.prismPlatform.cpuRequest }}"
-              memory: "{{ .Values.prismPlatform.memoryRequest }}"
+              cpu: "{{ .Values.prismPlatform.cpuRequestLimit }}"
+              memory: "{{ .Values.prismPlatform.memoryRequestLimit }}"
           securityContext:
             runAsNonRoot: true
             capabilities:
@@ -79,14 +90,11 @@ spec:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
-            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
-            runAsUser: 2000
-            {{- end }}
           volumeMounts:
             - name: pa-cacerts
               mountPath: /run/config
             - name: pa-credential-store-key
-              mountPath: /run/secrets/{{ .Release.Namespace }}/pa_paw_credential/
+              mountPath: /run/secrets/paw
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
@@ -114,3 +122,4 @@ spec:
     rollingUpdate:
       maxUnavailable: 1
       maxSurge: 1
+

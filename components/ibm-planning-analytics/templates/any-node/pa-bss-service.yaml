@@ -8,6 +8,8 @@ metadata:
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     name: bss
     release: {{ .Release.Name }}
+    paw_instance_name: {{ .Values.paw_instance_name }}
+    
   name: bss
   namespace: {{ .Release.Namespace }}
 spec:
@@ -26,6 +28,7 @@ spec:
         cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
         cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
         cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
+        
       labels:
         app.kubernetes.io/name: paw
         app.kubernetes.io/instance: {{ .Release.Name }}
@@ -33,7 +36,7 @@ spec:
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         name: bss
         release: {{ .Release.Name }}
-        version: {{ .Values.bss.imageversion }}
+        version: "1.0.1181-ubi7"
     spec:
       affinity:
         nodeAffinity:
@@ -44,9 +47,13 @@ spec:
                 operator: In
                 values:
                 - {{ .Values.arch }}
+      volumes:
+        - name: pa-cacerts
+          secret:
+            secretName: pa-cacerts                
       containers:
         - name: bss
-          image: {{.Values.docker_registry_prefix}}/pa-bss:{{ .Values.bss.imageversion }}
+          image: {{ .Values.docker_registry_prefix }}/pa-bss:1.0.1181-ubi7
           ports:
             - containerPort: 8082
               protocol: TCP
@@ -59,13 +66,17 @@ spec:
               value: "pauser"
             - name: DBDICTIONARY
               value: "mysql(TableType=ndb)"
+            - name: MYSQL_DOMAIN
+              value: "{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
+            - name: TRUST_STORE_FILE
+              value: "/run/config/cacerts"              
           resources:
             limits:
               cpu: "{{ .Values.bss.cpuLimit }}"
               memory: "{{ .Values.bss.memoryLimit }}"
             requests:
-              cpu: "{{ .Values.bss.cpuRequest }}"
-              memory: "{{ .Values.bss.memoryRequest }}"
+              cpu: "{{ .Values.bss.cpuRequestLimit }}"
+              memory: "{{ .Values.bss.memoryRequestLimit }}"
           securityContext:
             runAsNonRoot: true
             capabilities:
@@ -74,9 +85,9 @@ spec:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
-            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
-            runAsUser: 2000
-            {{- end }}
+          volumeMounts:
+            - name: pa-cacerts
+              mountPath: /run/config
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
@@ -105,3 +116,4 @@ spec:
     rollingUpdate:
       maxUnavailable: 1
       maxSurge: 1
+
