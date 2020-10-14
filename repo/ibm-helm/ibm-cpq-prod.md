@@ -1,6 +1,23 @@
-# IBM Sterling Configure Price Quote Software v10.0.0.10
+# IBM Sterling Configure Price Quote Software v10.0.0.12
 
 ## What's New
+* Added support to turn on/off Swagger UI and API docs through Omni Configurator deployment chart.
+* Added support to execute VisualModeler Database SQL migration script using existing datasetup job.
+* The Applications Pods run with a arbitrary user id, inside the containers.
+* The Pod logs are externalized in the repository.
+* Incorporates FixPack12 of CPQ Application.
+
+## Introduction
+* The v10.0.0.12 release of IBM Sterling Configure Price Quote is built and deployed on OpenShift 4.4.
+* Red Hat OpenShift Container Platform 4.4 has a feature of catalog experience for installation of helm  charts.
+Helm charts which are onboarded to the Red Hat Helm Repo will appear in the OpenShift Developer Catalog out-of-the-box.
+This will facilitate the user to deploy Helm Charts from the Web UI , rather than CLI.
+This feature is available in  Developer Catalog -> Add -> From Catalog -> Check Helm Chart Filter.
+* This document describes how to deploy IBM Sterling Configure Price Quote Software v10.0.0.12. This helm chart does not install database server. Database need to be setup and configured separately for IBM Sterling Configure Price Quote Software.
+
+Note: This helm chart supports deployment of IBM Sterling Configure Price Quote Software with DB2 or Oracle database.
+
+## Highlights of Previous Releases
 * EhCache - The in-memory cache EhCache is implemented in OmniConfigurator, for improved performance.
 * The EhCache works in a distributed mode and makes use of RMI replication to support multiple Pods.
   For more information refer 'Ehcache enablement in OC' topic.
@@ -12,17 +29,6 @@
   For more information refer 'Fixpack Installation for IFS' and 'Fixpack Installation for VM and OC'
 * Liberty Trustore is Upgraded to use PKCS12 standard.
 * Liberty image is upgraded to 19.0.0.6.  
-
-## Introduction
-
-* The v10.0.0.10 release of IBM Sterling Configure Price Quote is built and deployed on OpenShift 4.4.
-* Red Hat OpenShift Container Platform 4.4 has a feature of catalog experience for installation of helm  charts.
-Helm charts which are onboarded to the Red Hat Helm Repo will appear in the OpenShift Developer Catalog out-of-the-box.
-This will facilitate the user to deploy Helm Charts from the Web UI , rather than CLI.
-This feature is available in  Developer Catalog -> Add -> From Catalog -> Check Helm Chart Filter.
-* This document describes how to deploy IBM Sterling Configure Price Quote Software v10.0.0.10. This helm chart does not install database server. Database need to be setup and configured separately for IBM Sterling Configure Price Quote Software.
-
-Note: This helm chart supports deployment of IBM Sterling Configure Price Quote Software with DB2 or Oracle database.
 
 ## Chart Details
 
@@ -48,6 +54,21 @@ This chart will do the following:
 4. Ensure that the docker registry is configured in Manage -> Resource Security -> Image Policies and also ensure that docker image can be pulled on all of Kubernetes worker nodes.
 
 5. When using podman for image operations for eg launching Base Container, make sure you have root priviledges for the logged in user. Otherwise option is to use sudo.
+
+## Dependency of CPQ Applications on each other
+VM , OC and IFS to work together and hence their configurations are dependent on each other. 
+When the applications are deployed over https protocol , they need to be aware of each other by exchanging the certificates and hence it is important to understand the dependencies since this can impact the installation sequence of these applications.
+
+1. OC requires certificate of IFS. Hence when you install OC, make sure you have certificate created for IFS and
+populate the ingress fields - `Values.ifsappserver.ingress.host` and `Values.ifsappserver.ingress.ssl.secretname`.
+
+2. VM requires certificate of OC. Hence when you install VM, make sure you have certificate created for OC and
+populate the ingress fields - `Values.ocappserver.ingress.host` and `Values.ocappserver.ingress.ssl.secretname`.
+
+3. IFS requires certificate of OC. Hence when you install IFS, make sure you have certificate created for OC and
+populate the ingress fields - `Values.ocappserver.ingress.host` and `Values.ocappserver.ingress.ssl.secretname`.
+
+*Note: If you do the above configuration change after installation of a application, you would need to re-install it to take above change into effect.
 
 ## Installing the Chart (Installing the VisualModeler(VM) and OmniConfigurator(OC) Applications)
 Prepare a custom values.yaml file based on the configuration section. Ensure that application license is accepted by setting the value of `global.license` to true.
@@ -108,9 +129,9 @@ If you have a image downloaded , please follow below steps if you plan to use th
    `podman login [image-registry-routeURL]` - you will need admin user credentials.
    * Once you login to the registry, you will need to tag it appropriately.
      For eg to push the image to 'default' namespace eg tag cmd for VisualModeler image would be -
-     `podman tag [ImageId] [image-registry-routeURL]/default/cpq-vm-app:10.0.0.10-x86_64`
+     `podman tag [ImageId] [image-registry-routeURL]/default/cpq-vm-app:10.0.0.12-x86_64`
       Then push the image to this registry using 
-     `podman push [image-registry-routeURL]/default/cpq-vm-app:10.0.0.10-x86_64`
+     `podman push [image-registry-routeURL]/default/cpq-vm-app:10.0.0.12-x86_64`
 7. Since you are now pointing to OPenshift Repo you don't need the set the field pullsecret
    You can set the filed as  `global.image.pullsecret="'`.
    This will skip the imagepullsecret in the Pods.
@@ -134,10 +155,8 @@ If you have a image downloaded , please follow below steps if you plan to use th
    have a shared directory which stores the OmniConfigurator repository.
    For that you need to extract the repo.tar and have a directory structure similar to below -
 4. For Visual Modeler Customization, new folder structure is added where the customized jar, properties,
-   xml and JSP file can be placed. These files will be deployed inside VisualModeler.war during the 
+   xml, DTD, log4.properties and JSP file can be placed. These files will be deployed inside VisualModeler.war during the 
    installation of VM. 
-
-   [mounted dir]/configurator_logs
 
    [mounted dir]/omniconfigurator
 
@@ -150,12 +169,20 @@ If you have a image downloaded , please follow below steps if you plan to use th
    [mounted dir]/omniconfigurator/rules
 
    [mounted dir]/omniconfigurator/tenants
+   
+   [mounted dir]/configurator_logs
 
    [mounted dir]/VM/extensions
 
    [mounted dir]/VM/properties
 
    [mounted dir]/VM/web
+
+   [mounted dir]/VM/schema
+
+   [mounted dir]/VM/messages
+
+   [mounted dir]/VM/classes
 
    Make sure you have set the permissions on the repository correctly.
    You can do that by mounting the above folder into a node and execute below cmds.
@@ -166,11 +193,24 @@ If you have a image downloaded , please follow below steps if you plan to use th
    The above cmds make sure the repository folders and files have right permissions for the pods to access them.
    As noted the owner of the files in folders is the user 1001 and group as root.
    Also the rwx permissions are 770.
+   
+   "To create the rules repository you will need to copy corresponding jars from base image /opt/VMSDK/configurator.war to rules folder in the repository.
+   Extract the configurator.war in /tmp by cmd - 'jar xvf  /opt/VMSDK/configurator.war' and find the jars inside /WEB-INF/lib.
+   For details of jars to be copied, please refer KC- https://www.ibm.com/support/knowledgecenter/en/SS6PEW_10.0.0/installation/c_OC_Configuration.html
+
+
    * Warning : The repository is shared between the VM , OC and IFS application. The way it works is , once the repository is copied
    to a NFS shared folder, a PVC from the application, will be pointing to it. The intended folder is then mounted in the pod via the config map.
    Caution is to be followed since the pod will mount only unique folder. For eg if two folders point to same NFS location , only one of them will
    be mounted in the pod. You can check by executing hte cmd - `df -h` inside the pod to make sure you have got correct mounts. The mounted path should
    be in sync with the path of the repository you give in the SMCFS Application Platform console.
+
+### Identify Sub Domain Name of your cluster
+* Steps to find Sub Domain Name. You would need this information when you need to provide a hostname to provide to ingress and in sign-in certificates.
+  Taking an eg of a cluster web console URL  - `https://console-openshift-console.apps.somename.os.mycompany.com`
+  1. Identify the cluster name in the console URL, for eg somename is the cluster name.
+  2. Identify the base domain which is placed after the cluster name. In above the base domain is os.mycompany.com.
+  3. So sub domain name is derived as - apps.<cluster name>.<base domain> i.e.  apps.somename.os.mycompany.com
 
 ### Install Persistent related objects in Openshift - (Below are example files used to create Persistent Volume and related object using NFS server.)
 * Note - The charts are bundled with sample files as templates , you can use these to plugin in your configuration and
@@ -289,9 +329,9 @@ For **production environments** it is strongly recommended to obtain a CA certif
         e.g. global.image.repository: "cp.icr.io/ibm-cpq" 
     2. Set the image names -
         e.g. vmappserver.image.name: cpq-vm-app 
-        e.g. vmappserver.image.tag: 10.0.0.10-x86_64
+        e.g. vmappserver.image.tag: 10.0.0.12-x86_64
         e.g. ocappserver.image.name: cpq-oc-app
-        e.g. ocappserver.image.tag: 10.0.0.10-x86_64
+        e.g. ocappserver.image.tag: 10.0.0.12-x86_64
     3. Set the ingress host
         * Note: The ingress host should end in same subdomain as the cluster node.
     4. Follow above steps for ocappserver.
@@ -385,9 +425,6 @@ roleRef:
 
 
 ```
-For a different namespace (i.e. other than default namespace) you will need to add anyuid scc to default service account in that namespace
-
-`oc adm policy add-scc-to-user anyuid -z default`
 
 ## PodSecurityPolicy Requirements
 
@@ -487,9 +524,9 @@ oc create -f cpq_psp_role_and_binding.yaml
 ```
 ## SecurityContextConstraints Requirements
 [`ibm-restricted-scc`](https://ibm.biz/cpkspec-scc)
-Predefined securitycontextconstraint - restricted is to be used.
-* To enable pods to run as anyuid , yo will need to add the `serveraccount default` to anyuid scc.
-  Use this cmd to do that - `oc adm policy add-scc-to-user anyuid -z default`
+Predefined securitycontextconstraint - 'restricted' is to be used which is out of the box in OCP.
+* By default pods will run with an arbitrary id i.e. no runAsUser field would appear in charts.
+  This applies to OCP only.
 
 Custom SecurityContextConstraints definition:
 ```
@@ -536,7 +573,6 @@ spec:
 In order to deploy CPQ Software, the timezone of the database, application servers, and agents should be same. Additionally, this timezone must be compatible with the locale code specified in CPQ Software.
 By default, the containers are deployed in UTC, also the locale code in CPQ is set as en_US_UTC. Hence ensure that the database is also deployed in UTC.
 
-
 ## Configuration
 ### Ingress
 * For Visual Modeler Ingress can be enabled by setting the parameter `vmappserver.ingress.enabled` as true. If ingress is enabled, then the application is exposed as a `ClusterIP` service, otherwise the application is exposed as `NodePort` service. It is recommended to enable and use ingress for accessing the application from outside the cluster. For production workloads, the only recommended approach is Ingress with cluster ip. Do not use NodePort.
@@ -553,6 +589,50 @@ By default, the containers are deployed in UTC, also the locale code in CPQ is s
 
 ### Installation of new database
 This will create the required database tables and factory data in the database.
+Assuming you have already created a New user in Database, follow below steps -
+When installing the chart on a empty database i.e. which does not have IBM Visual Modeler tables and data, do the following:
+
+•	Ensure that the install.runtime.enabled=true, runtime.image has the details of correct cpq-vmoc-base image and tag.
+
+•	Ensure that following flags are set to install the database, migrate the database, load database and load Matrix database in Values.yaml
+
+vmdatasetup.dbType = “DB2” (choose between Oracle / DB2) 
+vmdatasetup.createDB = true 
+vmdatasetup.loadDB = true (load minimal DB)
+vmdatasetup.loadMatrixDB = true (load Matrix reference models)
+vmdatasetup.skipCreateWAR = true
+vmdatasetup.generateImage = false
+vmdatasetup.loadFactoryData = install
+vmdatasetup.migrateDB.enabled = true
+vmdatasetup.migrateDB.fromFPVersion =  10.0.0.10
+vmdatasetup.migrateDB.toFPVersion = 10.0.0.12
+
+Note :
+  vmdatasetup.createDB should be set to true for Fresh Data Creation.
+  vmdatasetup.migrateDB.enabled should be set to true to migrate DB from One Fixpack version to another.
+  So at time either of vmdatasetup.createDB or vmdatasetup.migrateDB.enabled can be set to true.
+  fromFPVersion and toFPVersion should match the folder in the system.
+
+
+vmdatasetup job will take approximately 4- 5 mins to create, loadDB and loadMatrixDB
+
+To ensure datasetup job completion user can check the logs under <NFSSHARE>/logs/DBUtility  and <NFSSHARE>/logs/VisualModeler/[podname]_runtime.log folder
+
+
+### Installation against a pre-loaded database
+
+When installing the chart against a database which already has the IBM Visual Modeler tables and factory data.
+
+•	Ensure that the install.runtime.enabled is set to false and also ensure that all flags listed below are set accordingly. This will avoid re-creating tables and overwriting factory data.
+
+vmdatasetup.dbType = “DB2” (choose between Oracle / DB2) 
+vmdatasetup.createDB = false
+vmdatasetup.loadDB = false 
+vmdatasetup.loadMatrixDB = false
+vmdatasetup.skipCreateWAR = true
+vmdatasetup.generateImage = false
+vmdatasetup.loadFactoryData =
+
 #### DB2 database secrets:
 1. Create db2 database user.
 2. Add following properties in `vmoc-secrets.yaml` file.
@@ -649,6 +729,7 @@ Parameter                                        | Description                  
 -------------------------------------------------|----------------------------------------------------------------------| -------------
 `vmappserver.replicaCount`                       | Number of vmappserver instances                                      | `1`
 `vmappserver.image`                              | Docker image details of vmappserver                                  |   
+`vmappserver.runAsUser`                          | Needed for non OCP cluster                                           |1001
 `vmappserver.config.vendor`                      | OMS Vendor                                                           | `websphere`
 `vmappserver.config.vendorFile`                  | OMS Vendor file                                                      | `servers.properties`
 `vmappserver.config.serverName`                  | App server name                                                      | `DefaultAppServer`
@@ -667,6 +748,7 @@ Parameter                                        | Description                  
 `vmappserver.ingress.contextRoots`               | Context roots which are allowed to be accessed through ingress       | ["VisualModeler"]
 `vmappserver.ingress.annotations`                | Annotations for the ingress resource                                 |
 `vmappserver.ingress.ssl.enabled`                | Whether SSL enabled for ingress                                      | true
+`vmappserver.ingress.routeTimeout`               | Set the route timeout, default is 1 hour
 `vmappserver.podLabels`                          | Custom labels for the vmappserver pod                                  |
 `vmappserver.tolerations`                        | Tolerations for vmappserver pod. Specify in accordance with k8s PodSpec.tolerations.         |
 `vmappserver.custom.functionHandler`             | Specify the path of the FunctionHandlers property file               | WEB-INF/properties/custom_functionHandlers.properties
@@ -674,6 +756,7 @@ Parameter                                        | Description                  
 `importcert.secretname`                          | Secret name consisting of certificate to be imported into VM.
 `ocappserver.replicaCount`                       | Number of ocappserver instances                                      | `1`
 `ocappserver.image`                              | Docker image details of ocappserver                                  |   
+`ocappserver.runAsUser`                          | Needed for non OCP cluster                                           |1001
 `ocappserver.config.vendor`                      | OMS Vendor                                                           | `websphere`
 `ocappserver.config.vendorFile`                  | OMS Vendor file                                                      | `servers.properties`
 `ocappserver.config.serverName`                  | App server name                                                      | `DefaultAppServer`
@@ -692,9 +775,10 @@ Parameter                                        | Description                  
 `ocappserver.ingress.contextRoots`               | Context roots which are allowed to be accessed through ingress       | ["ConfiguratorUI","configurator"]
 `ocappserver.ingress.annotations`                | Annotations for the ingress resource                                 |
 `ocappserver.ingress.ssl.enabled`                | Whether SSL enabled for ingress                                      | true
-`ocappserver.podLabels`                          | Custom labels for the ocappserver pod                                  |
+`ocappserver.podLabels`                          | Custom labels for the ocappserver pod                                |
 `ocappserver.tolerations`                        | Tolerations for ocappserver pod. Specify in accordance with k8s PodSpec.tolerations. Refer 
 `importcert.secretname`                          | Secret name consisting of certificate to be imported into OC.
+`ocappserver.swagger.enabled`                    | Whether Swagger API docs and Swagger UI should be enabled            | true
 section "Affinity and Tolerations". | 
 `vmappserver.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`      | k8s PodSpec.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity and Tolerations". | 
 `vmappserver.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`     | k8s PodSpec.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity and Tolerations". | 
@@ -731,10 +815,14 @@ section "Affinity and Tolerations". |
 `vmdatasetup.createDB`                         | Specifying this flag as true will create Database Schema             | true
 `vmdatasetup.loadDB`                           | Specifying this flag as true will load configuration data            | true
 `vmdatasetup.loadMatrixDB`                     | Specifying this flag as true will load reference configuration data  | false
+`vmdatasetup.migrateDB.enabled`                | Specifying this flag as true to migrate Database from one Fixpack version to another  | false
+`vmdatasetup.migrateDB.fromFPVersion`          | The current Fixpack version from which the Database needs to be migrated  |
+`vmdatasetup.migrateDB.toFPVersion`            | The targeted Fixpack version to which the Database needs to be migrated   |
 `vmdatasetup.skipCreateWAR`                    | Specifying this flag as true will prevent the creatio of application war | true
 `vmdatasetup.generateImage`                    | Specifying this flag as true will prevent the creation of CPQ image  | false
-`vmdatasetup.loadFactoryData`                  | Load factory data of VM Application                                 |
+`vmdatasetup.loadFactoryData`                  | Load factory data of VM Application                                  |
 `runtime.image.name`                           | The Base image used for generating customized images of VM and OC.   |cpq-vmoc-base
+`runtime.runAsUser`                            | Needed for non OCP cluster                                           |1001
 
 
 ## Affinity and Tolerations
@@ -848,6 +936,8 @@ imageRegistryURL - specify registry URL to push the image.
 imageRegistryPassword - password/API key required to login to registry.
 
 IMAGE_TAG_NAME - Provide tag name to image. The generated image will be pushed in registry with this tag name.
+
+* /opt/VMSDK/rt.log is where logs would be saved.
   
 	
    ***5.2 DB specific image :***
@@ -1282,6 +1372,7 @@ Parameter                                    | Description                      
 -----------------------------------------------| ---------------------------------------------------------------------| -------------
 `ifsappserver.replicaCount`                    | Number of appserver instances                                        | `1`
 `ifsappserver.image`                           | Docker image details of appserver                                    |   
+`ifsappserver.runAsUser`                       | Needed for non OCP cluster                                           |1001
 `ifsappserver.config.vendor`                   | OMS Vendor                                                           | `websphere`
 `ifsappserver.config.vendorFile`               | OMS Vendor file                                                      | `servers.properties`
 `ifsappserver.config.serverName`               | App server name                                                      | `DefaultAppServer`
@@ -1318,6 +1409,7 @@ Parameter                                    | Description                      
 `ifsappserver.podAntiAffinity.replicaNotOnSameNode` | Directive to prevent scheduling of replica pod on the same node. valid values: `prefer`, `require`, blank. Refer section "Affinity and Tolerations". | `prefer`
 `ifsappserver.podAntiAffinity.weightForPreference`  | Preference weighting 1-100. Used if 'prefer' is specified for `ifsappserver.podAntiAffinity.replicaNotOnSameNode`. Refer section "Affinity and Tolerations". | 100 
 `ifsagentserver.image`                               | Docker image details of agent server                                 |  
+`ifsagentserver.runAsUser`                           | Needed for non OCP cluster                                           |1000
 `ifsagentserver.deployHealthMonitor`                 | Deploy health monitor agent                                          | `true`
 `ifsagentserver.common.jvmArgs`                      | Default JVM args that will be passed to the list of agent servers    | 
 `ifsagentserver.common.replicaCount`                 | Default number of instances of agent servers that will be deployed   |  
@@ -1759,8 +1851,9 @@ This would allow you to execute linux cmds to locate logs.
 To locate logs you can `cd /logs` inside the pod.
 More debug logs can be found at `cd /output` inside the pod.
 For easier view of log files you can copy logs out of the pod to your local, as below  e.g.
+(Out of the Box the message log files are saved in repo ../logs/ folder)
 
-`oc cp mypod:/logs/messages.log ./messages.log`
+`oc cp mypod:/output/debs.log ./debs.log`
 
 To check whether the NFS is mounted in pod you can -
 
@@ -1774,8 +1867,10 @@ To restart a pod you can simple delete it and it will auto restart -
 
 `oc delete pod mypod`
 
-The logs for VM and OC are available on the shared NFS where you store the repository.
+The logs for VM , OC and IFS are available on the shared NFS where you store the repository.
 You can mount the repository on a system and check out the logs in path /omscommonfile/configrepo in the repository. 
+To fine tune trace level you can customize server xml of the respective application in 'logging' tag. For details visit the topic
+'Customizing server.xml for Liberty' above and Liberty IBM Knowledge Center online. The console logs would appear in messages log file.
 Look into the repository install section above 'Install repository' for repository details.
 * Warning - Make sure your NFS storage has enough space for the logs and to use it adequately you may
 want to clean the older logs.
@@ -1789,6 +1884,8 @@ Check yfs_heartbeat and make sure the entry HealthMonitor Service is present.
 
 Swagger URL : https://<OC_Hostname>/configurator/swagger/index.html
 
+* Swagger UI and API docs can be turned on or off using the flag ocappserver.swagger.enabled
+  default value is true.
 
 ### Errors - Below section documents some common errors that user might face while deploying application.
 
