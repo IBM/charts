@@ -1,60 +1,51 @@
+{{- if .Values.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ template "cognos.fullname" . }}
   labels:
 {{- include "common.label.metadata" (list . (include "cognos.name" .) (include "cognos.chart" .) .Release.Name .Release.Service ) | indent 4 }}
-{{- with .Values.config }}
 data:
+{{- /* ***************************************** Common or exposed in parent values.yaml */ -}}
+{{- with .Values.config }}
 {{ toYaml . | indent 2 }}
-{{- end }}
-{{- if eq .Values.global.DB2_PROVISIONER "FCI" }}
+{{- end -}}
+{{- /* ********************************************************************** FCI config */ -}}
+{{- if eq .Values.global.DB2_PROVISIONER "FCI" -}}
   COGNOS_DB2_SERVER: {{ .Release.Name }}-{{ .Values.db2_service }}
-  COGNOS_DB2_PORT: '56000'
-  COGNOS_DB2_USERID: 'fciauthid'
-  COGNOS_DB2_DB: 'COGNOSDB'
-  COGNOS_KEYSTORE_ALIAS: 'fci_universal_label'
-  COGNOS_DB2_SSL_ENABLED: 'true'
-  COGNOS_SERVICE_URL: http://localhost:9300
-  COGNOS_ADMIN_URL: 'b_action=cogadmin'
-  ALLOWED_DASHBOARD_ROLES: 'admin,analyst,investigator,supervisor,data_scientist'
-  ALLOWED_ADMIN_ROLES: 'admin'
-  LOG_LEVEL: 'info'
-  JWT_ISSUER: 'fci.ibm.com'
-{{- end }}
-{{- if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
-  SERVICE_INSTANCE_TYPE: "cognos-analytics-app"
-  SERVICE_INSTANCE_NAME: "IBM FCI Cognos"
-  SERVICE_INSTANCE_VERSION: "3.5.1"
-  PLAN_SIZE: "small"
-  METADATA_PLANSIZE: "small"
-  METADATA_EXTERNALCSCONNECTIONNAME: {{ .Values.global.DB2_CONNECTION_NAME }}
-  METADATA_STORAGETYPE: "storage-class"
-  METADATA_STORAGECLASS: ""
-  ARTIFACTSPVC_PVPROVISIONING: "NamedStorageClass"
-  GLOBAL_CONFIGDATAPVC_PVPROVISIONING: "NamedStorageClass"  
-  GLOBAL_CONFIGOVERRIDESPVC_PVPROVISIONING: "NamedStorageClass"  
-  GLOBAL_PVC_PVPROVISIONING: "NamedStorageClass"
-  PVC_PVPROVISIONING: "NamedStorageClass"
-{{-   if .Values.global.persistence.useDynamicProvisioning }}
-{{-     if not .Values.config.SHARED_STORAGE_CLASS }}
-  ARTIFACTSPVC_STORAGECLASSNAME: {{ default nil .Values.global.persistence.storageClassName | quote }}
-  GLOBAL_CONFIGDATAPVC_STORAGECLASSNAME: {{ default nil .Values.global.persistence.storageClassName | quote }}
-  GLOBAL_CONFIGOVERRIDESPVC_STORAGECLASSNAME: {{ default nil .Values.global.persistence.storageClassName | quote }}
-  GLOBAL_PVC_STORAGECLASSNAME: {{ default nil .Values.global.persistence.storageClassName | quote }}
-  PVC_STORAGECLASSNAME: {{ default nil .Values.global.persistence.storageClassName | quote }}
-{{-     else }}
-  ARTIFACTSPVC_STORAGECLASSNAME: {{ quote .Values.config.SHARED_STORAGE_CLASS }}
-  GLOBAL_CONFIGDATAPVC_STORAGECLASSNAME: {{ quote .Values.config.SHARED_STORAGE_CLASS }}
-  GLOBAL_CONFIGOVERRIDESPVC_STORAGECLASSNAME: {{ quote .Values.config.SHARED_STORAGE_CLASS }}
-  GLOBAL_PVC_STORAGECLASSNAME: {{ quote .Values.config.SHARED_STORAGE_CLASS }}
-  PVC_STORAGECLASSNAME: {{ quote .Values.config.SHARED_STORAGE_CLASS }}
-{{-     end }}
-{{-   else }}
-  ARTIFACTSPVC_STORAGECLASSNAME: {{ default "" .Values.config.SHARED_STORAGE_CLASS | quote }}
-  GLOBAL_CONFIGDATAPVC_STORAGECLASSNAME: {{ default "" .Values.config.SHARED_STORAGE_CLASS | quote }}
-  GLOBAL_CONFIGOVERRIDESPVC_STORAGECLASSNAME: {{ default "" .Values.config.SHARED_STORAGE_CLASS | quote }}
-  GLOBAL_PVC_STORAGECLASSNAME: {{ default "" .Values.config.SHARED_STORAGE_CLASS | quote }}
-  PVC_STORAGECLASSNAME: {{ default "" .Values.config.SHARED_STORAGE_CLASS | quote }}  
-{{-   end }}
-{{- end }}
+{{-   with .Values.configFci }}
+{{ toYaml . | indent 2 }}
+{{-   end -}}
+{{- end }} {{- /* FCI */ -}}
+{{- /* ***************************************************************** CloudPak config */ -}}
+{{- if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" -}}
+  METADATA_EXTERNALCSCONNECTIONNAME: {{ .Values.config.CONNECTION_NAME }}
+{{-   with .Values.configCloudPak }}
+{{ toYaml . | indent 2 }}
+{{-   end -}}
+{{-   if .Values.global.persistence.useDynamicProvisioning -}}
+{{-     if not .Values.config.DATA_STORAGE_CLASS -}}
+  SHARED_STORAGE_CLASS: {{ default "" .Values.global.persistence.storageClassName | quote }}
+  ARTIFACTSPVC_STORAGECLASSNAME: {{ default "" .Values.global.persistence.storageClassName | quote }}
+  GLOBAL_CONFIGDATAPVC_STORAGECLASSNAME: {{ default "" .Values.global.persistence.storageClassName | quote }}
+  GLOBAL_CONFIGOVERRIDESPVC_STORAGECLASSNAME: {{ default "" .Values.global.persistence.storageClassName | quote }}
+  GLOBAL_PVC_STORAGECLASSNAME: {{ default "" .Values.global.persistence.storageClassName | quote }}
+  PVC_STORAGECLASSNAME: {{ default "" .Values.global.persistence.storageClassName | quote }}
+{{-     else -}}
+  SHARED_STORAGE_CLASS: {{ quote .Values.config.DATA_STORAGE_CLASS }}
+  ARTIFACTSPVC_STORAGECLASSNAME: {{ quote .Values.config.DATA_STORAGE_CLASS }}
+  GLOBAL_CONFIGDATAPVC_STORAGECLASSNAME: {{ quote .Values.config.DATA_STORAGE_CLASS }}
+  GLOBAL_CONFIGOVERRIDESPVC_STORAGECLASSNAME: {{ quote .Values.config.DATA_STORAGE_CLASS }}
+  GLOBAL_PVC_STORAGECLASSNAME: {{ quote .Values.config.DATA_STORAGE_CLASS }}
+  PVC_STORAGECLASSNAME: {{ quote .Values.config.DATA_STORAGE_CLASS }}
+{{-     end -}}
+{{-   else -}}
+  SHARED_STORAGE_CLASS: {{ default "" .Values.config.DATA_STORAGE_CLASS | quote }}
+  ARTIFACTSPVC_STORAGECLASSNAME: {{ default "" .Values.config.DATA_STORAGE_CLASS | quote }}
+  GLOBAL_CONFIGDATAPVC_STORAGECLASSNAME: {{ default "" .Values.config.DATA_STORAGE_CLASS | quote }}
+  GLOBAL_CONFIGOVERRIDESPVC_STORAGECLASSNAME: {{ default "" .Values.config.DATA_STORAGE_CLASS | quote }}
+  GLOBAL_PVC_STORAGECLASSNAME: {{ default "" .Values.config.DATA_STORAGE_CLASS | quote }}
+  PVC_STORAGECLASSNAME: {{ default "" .Values.config.DATA_STORAGE_CLASS | quote }}  
+{{-   end -}}
+{{- end -}} {{- /* CLOUD_PAK */ -}}
+{{- end -}} {{- /* if enabled */ -}}

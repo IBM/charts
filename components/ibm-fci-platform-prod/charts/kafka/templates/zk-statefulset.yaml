@@ -71,6 +71,10 @@ spec:
       serviceAccountName: fci-kafka
       affinity:
 {{ include "common.ArchNodeAffinity" . | indent 8 }}
+      volumes:
+      - name: zookeeper-tls
+        secret:
+          secretName: {{ .Release.Name }}-zookeeper-tls
       initContainers:
         {{- if .Values.global.pvRequiresPermissionsFix }}
         - name: permissionsfix
@@ -112,8 +116,6 @@ spec:
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
           ports:
-          - containerPort: 2181
-            name: client
           - containerPort: 2888
             name: server
           - containerPort: 3888
@@ -123,10 +125,24 @@ spec:
               exec:
                 command: ["zookeeper-server-stop"]
           env:
+{{- include "common.import-secret" (list . "ZOOKEEPER_SSL_TRUSTSTORE_PASSWORD" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
+{{- include "common.import-secret" (list . "ZOOKEEPER_SSL_KEYSTORE_PASSWORD" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
           - name: ZOOKEEPER_SNAPSHOT_TRUST_EMPTY
             value: "true"
           - name: ZOOKEEPER_TICK_TIME
             value: "{{ .Values.zookeeper.tickTime }}"
+          - name: ZOOKEEPER_SECURE_CLIENT_PORT
+            value: "2182"
+          - name: ZOOKEEPER_SSL_HOSTNAME_VERIFICATION
+            value: "false"
+          - name: ZOOKEEPER_SSL_CLIENT_AUTH
+            value: "none"
+          - name: ZOOKEEPER_SERVER_CNXN_FACTORY
+            value: "org.apache.zookeeper.server.NettyServerCnxnFactory"
+          - name: ZOOKEEPER_SSL_KEYSTORE_LOCATION
+            value: "/zkTls/keystore.jks"
+          - name: ZOOKEEPER_SSL_TRUSTSTORE_LOCATION
+            value: "/zkTls/truststore.jks"
           - name: ZOOKEEPER_CLIENT_PORT
             value: "2181"
           - name: ZOOKEEPER_ELECTION_PORT
@@ -149,3 +165,9 @@ spec:
               mountPath: /var/lib/zookeeper/data
             - name: {{ .Release.Name }}-log-zk
               mountPath: /var/lib/zookeeper/log
+            - name: zookeeper-tls
+              mountPath: /zkTls/keystore.jks
+              subPath: keystore.jks
+            - name: zookeeper-tls
+              mountPath: /zkTls/truststore.jks
+              subPath: truststore.jks

@@ -482,7 +482,7 @@ db2:
     ENV_HEALTHCHECK_CONNECTION_TEST: 'false'
     com_fci_db2_precheck: 'true'
     NAMESPACE: 'fci'
-    SERVICE_INSTANCE_VERSION: '11.5.4.0-x86_64'
+    DB2OLTP_VERSION: '11.5.5.0-x86_64'
     ARCHITECTURE: 'x86_64'
     DB2_CPU: '2'
     DATABASE_NAME: 'FCIDB'
@@ -515,6 +515,12 @@ global-name-mgmt:
     repository: ibmcom/fci-global-name-mgmt
     tag: <BUILD_TAG>
     pullPolicy: "IfNotPresent"
+
+  gnmPvcSpec:
+    accessModes:
+    - ReadWriteMany
+    storageClassName: null
+    size: 1Gi  
 
 kafka:
   # Set to False to disable Kafka in a non-production environment
@@ -731,66 +737,32 @@ cognos:
       cpu: "4"
 
   config:
-    # CPD Cognos Analytics provisioning parameters.
-    # The user should set:
-    SHARED_STORAGE_CLASS: ""
-    # The following probably would not be overridden but maybe if users know what they're doing?
-    SERVICE_INSTANCE_CPU: "9"
-    SERVICE_INSTANCE_GPU: "0"
-    SERVICE_INSTANCE_MEMORY: "22.59"
-    ARTIFACTS_RESOURCES_LIMITS_CPU: "0.5"
-    ARTIFACTS_RESOURCES_LIMITS_MEMORY: "300Mi"
-    ARTIFACTS_RESOURCES_REQUESTS_CPU: "0.3"
-    ARTIFACTS_RESOURCES_REQUESTS_MEMORY: "100Mi"
-    ARTIFACTSPVC_SIZE: "2Gi"
-    BIAPP_RESOURCES_LIMITS_CPU: "4"
-    BIAPP_RESOURCES_LIMITS_MEMORY: "14Gi"
-    BIAPP_RESOURCES_REQUESTS_CPU: "2"
-    BIAPP_RESOURCES_REQUESTS_MEMORY: "8Gi"
-    CGS_HPA_MAXREPLICAS: "2"
-    CGS_HPA_MINREPLICAS: "1"
-    CGS_RESOURCES_LIMITS_CPU: "1.5"
-    CGS_RESOURCES_LIMITS_MEMORY: "500Mi"
-    CGS_RESOURCES_REQUESTS_CPU: "1"
-    CGS_RESOURCES_REQUESTS_MEMORY: "200Mi"
-    CM_ANONYMOUS: "false"
-    CM_RESOURCES_LIMITS_CPU: "3"
-    CM_RESOURCES_LIMITS_MEMORY: "12Gi"
-    CM_RESOURCES_REQUESTS_CPU: "2"
-    CM_RESOURCES_REQUESTS_MEMORY: "8Gi"
-    CS_INSTANCEMEMORY: "500"
-    CS_RESOURCES_LIMITS_CPU: "1"
-    CS_RESOURCES_LIMITS_MEMORY: "500Mi"
-    CS_RESOURCES_REQUESTS_CPU: ".5"
-    CS_RESOURCES_REQUESTS_MEMORY: "200Mi"
-    CS_SERVICEACCOUNTNAME: "ibm-cognos-analytics-cs-sa"
-    DS_HPA_MAXREPLICAS: "1"
-    DS_HPA_MINREPLICAS: "1"
-    DS_RESOURCES_LIMITS_CPU: "3"
-    DS_RESOURCES_LIMITS_MEMORY: "16Gi"
-    DS_RESOURCES_REQUESTS_CPU: "2"
-    DS_RESOURCES_REQUESTS_MEMORY: "4Gi"
-    EXTERNAL_SIGNAL_ENABLED: "true"
-    GLOBAL_CONFIGDATAPVC_SIZE: "100Mi"
-    GLOBAL_CONFIGOVERRIDESPVC_SIZE: "100Mi"
-    GLOBAL_FILEBEAT_OUTPUT_CONSOLEENABLED: "true"
-    GLOBAL_FILEBEAT_OUTPUT_LOGSTASHENABLED: "false"
-    GLOBAL_ICP4DATA: "true"
-    GLOBAL_PVC_SIZE: "smallGi"
-    PVC_SIZE: "smallGi"
-    RS_HPA_MAXREPLICAS: "1"
-    RS_HPA_MINREPLICAS: "1"
-    RS_RESOURCES_LIMITS_CPU: "2"
-    RS_RESOURCES_LIMITS_MEMORY: "8Gi"
-    RS_RESOURCES_REQUESTS_CPU: "1"
-    RS_RESOURCES_REQUESTS_MEMORY: "2Gi" 
-    SERVICE_TYPE: "ClusterIP"
-    SERVICEACCOUNTNAME: "cpd-viewer-sa"
-    #=====================================
-    # FCI Cognos
-    # MAX_HTTP_HEADER_SIZE is the maximum size, in bytes, of HTTP headers that Cognos will allow
-    # in HTTP requests
+    # MAX_HTTP_HEADER_SIZE: max size in bytes of HTTP headers that Cognos will allow in HTTP requests
     MAX_HTTP_HEADER_SIZE: "16000"
+    # The folowing values are for the CPD-provisioned Cognos Analytics with db2-as-a-service instance.
+    # DATA_STORAGE_CLASS is used for COGNOSDB as well as other Cognos PVCs. Make sure it supports the access mode. 
+    # DATA_STORAGE_SIZE is for COGNOSDB.
+    DATA_STORAGE_CLASS: ""
+    DATA_STORAGE_ACCESS_MODE: ReadWriteMany
+    DATA_STORAGE_SIZE: "10"
+    DATABASE_NAME: COGNOSDB
+    APPLHEAPSZ: "2048"
+    APP_CTL_HEAP_SZ: "1024"
+    CONNECTION_NAME: FCI_COGNOS
+    DB2_CPU: "2"
+    DB2_MEM: "6"
+    DEBUG_PROVISIONING: "false"
+    DEDICATED: "false"
+    LOCKTIMEOUT: "30"
+    LOCKTIMEOUT: "30"
+    LOGFILSIZ: "25000"
+    LOGPRIMARY: "10"
+    LOGSECOND: "100"
+    METADATA_DISPLAY_NAME: IBM FCI COGNOS DB2
+    NAMESPACE: 'fci'
+    PAGE_SIZE: "32768"
+    PCKCACHESZ: AUTOMATIC
+    DB2OLTP_VERSION: '11.5.5.0-x86_64'
 
   proxy:
     resources: {}
@@ -824,7 +796,7 @@ security-audit:
 
   config:
     FLYWAY_BASELINE_VERSION: '2019.02.28.13.59.00'
-    AUDIT_STORE: "db2"
+    AUDIT_STORE: "CLOUD_PAK"
     AUDIT_FILE_LOCATION: "/var/log/fciAudit-%g.log"
     AUDIT_FILE_SIZE_IN_BYTES: "10000000"
     AUDIT_NUM_FILES: "2"
@@ -1224,13 +1196,10 @@ cedm:
     HDP_VERSION: '3.1.0'
 
     # Big Match Oozie Workflow Config
+    # The number of worker tasks, threads, Java heap size are automatically adjusted during  
+    # installation by the IBM data platform install script that takes into account HDP cluster resources.
     OOZIE_MAX_JVM_HEAP_SIZE: '4712'
-
     OOZIE_NUM_OF_WORKER_TASKS: '4'
-    # If using the HDP development environment, set the number of worker tasks to 2
-    # If using a single HDP server, set the number of worker tasks to 1.
-    #OOZIE_NUM_OF_WORKER_TASKS: '2'
-
     OOZIE_NUM_OF_THREADS_FOR_EACH_WORKER: '1'
     OOZIE_PORT: '11443'
     OOZIE_JOBTRACKER_PORT: '8050'
@@ -1241,13 +1210,10 @@ cedm:
     OOZIE_SERVER: '<hostname>'
     OOZIE_USER_NAME: 'bigmatch'
 
-    # If using the HDP development environment or HDP single server do two things to configure the HDP_NAME_NODE
-    # i) uncomment the the line below and provide HDP_MASTER_NODE (just delete the #)
-    #HDP_NAME_NODE: 'hdfs://<HDP_MASTER_NODE>:8020'
-    # ii) comment out the other line HDP_NAME_NODE: 'hdfs://fcicluster'
-    #  Scoring Oozie workflow config
-    # By default, yarn decides the HDP container requirements. But it can be overridden by providing the below attributes.
-    # The values are indicative and will depend on HDP cluster resources.
+    #  Scoring Oozie workflow config Spark parameters
+    # By default, yarn decides the HDP container requirements. The Scoring Driver & Executor Memory & 
+    # Number of Executors are automatically adjusted during installation by the IBM data platform install 
+    # script that takes into account HDP cluster resources.
     SCORING_DRIVER_MEMORY: '2048m'
     SCORING_EXECUTOR_MEMORY: '2048m'
     SCORING_NO_OF_EXECUTORS: '8'
@@ -1503,11 +1469,11 @@ analytics-runtime:
       tag: <BUILD_TAG>
       pullPolicy: IfNotPresent
 
-real-time-analytics:
+realtime-scoring:
   enabled: false
   liberty:
     image:
-      repository: ibmcom/fci-real-time-analytics
+      repository: ibmcom/fci-realtime-scoring
       tag: <BUILD_TAG>
       pullPolicy: IfNotPresent
     resources:

@@ -38,6 +38,11 @@ spec:
         - name: graph-writer-liberty-volume
           persistentVolumeClaim:
             claimName: {{ template "graph-writer.fullname" . }}-liberty
+        - name: shared-data
+          emptyDir: {}
+        - name: keytab-file
+          secret:
+            secretName: {{ .Release.Name }}-graph-keytab  
         - name: logs
           emptyDir: {}
       initContainers:
@@ -95,9 +100,20 @@ spec:
           envFrom:
           - configMapRef:
               name: {{ template "graph-writer.fullname" . }}-liberty
+          - configMapRef:
+              name: {{ template "graph-writer.fullname" . }}-gremlin-krb
           env:
 {{- include "common.import-secret" (list . "FCI_JKS_PASSWORD" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
 {{- include "common.import-secret" (list . "JWT_KEY" "platform" "JWT_KEY") | indent 10 }}
+{{- include "common.import-secret" (list . "ELASTICSEARCH_PASSWORD" "elastic" "ELASTIC_ADMIN_PASSWORD") | indent 10 }}
+          - name: HDP_SHARED_DIR
+            value: /home/fcigraph
+          - name: ELASTICSEARCH_USERNAME
+            value: fci_admin
+          - name: hbase_zookeeper_quorum
+            value: "{{ .Values.global.hbase.hbase_zookeeper_quorum }}"
+          - name: ELASTICSEARCH_SERVICE_NAME
+            value: "{{ .Release.Name }}-elasticsearch"
           ports:
           - containerPort: 9554
           volumeMounts:
@@ -106,8 +122,42 @@ spec:
             subPath: fci_universal_ks.jks
           - name: graph-writer-liberty-volume
             mountPath: /fciexports/graph-writer
+          - name: shared-data
+            mountPath: /home/fcigraph
+          - mountPath: /etc/security/keytabs
+            name: keytab-file
           - name: logs
             mountPath: /opt/ibm/wlp/usr/servers/graphapiservice/logs
+        - envFrom:
+          - configMapRef:
+              name: {{ .Release.Name }}-ibm-fci-platform-prod-krb
+          - configMapRef:
+              name: {{ template "graph-writer.fullname" . }}-gremlin-krb
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.kerberosClient.image.repository }}:{{ .Values.kerberosClient.image.tag }}"
+          imagePullPolicy: {{ .Values.kerberosClient.image.pullPolicy }}
+          livenessProbe:
+{{ toYaml .Values.kerberosClient.livenessProbe | indent 12 }}
+          readinessProbe:
+{{ toYaml .Values.kerberosClient.readinessProbe | indent 12 }}
+          name: hdp-client
+          resources:
+{{ toYaml .Values.global.kerberos.resources | indent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            {{- if .Values.global.pvRequiresPermissionsFix }}
+            runAsUser: {{ .Values.global.kerberos.runAsUser }}
+            {{- end }}
+          volumeMounts:
+          - mountPath: /etc/security/keytabs
+            name: keytab-file
+          - name: shared-data
+            mountPath: /home/fcigraph
         - name: graph-liberty-log
           resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 12 }}
