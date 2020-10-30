@@ -58,6 +58,10 @@ sch:
           generator: "fci.password.generator"
         - name: mongodb-eraas-investigation-password
           generator: "fci.password.generator"
+        - name: mongodb-eraas-outcome-password
+          generator: "fci.password.generator"
+        - name: mongodb-eraas-workflow-password
+          generator: "fci.password.generator"
         - name: mongodb-eraas-proxy-password
           generator: "fci.password.generator"
         - name: mongodb-eraas-kyc-adapter-password

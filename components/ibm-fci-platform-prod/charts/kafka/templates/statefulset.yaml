@@ -144,6 +144,8 @@ spec:
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         env:
+{{- include "common.import-secret" (list . "KAFKA_ZOOKEEPER_SSL_TRUSTSTORE_PASSWORD" "platform" "FCI_JKS_PASSWORD") | indent 8 }}
+{{- include "common.import-secret" (list . "KAFKA_ZOOKEEPER_SSL_KEYSTORE_PASSWORD" "platform" "FCI_JKS_PASSWORD") | indent 8 }}
         - name: POD_IP
           valueFrom:
             fieldRef:
@@ -170,6 +172,18 @@ spec:
           value: "kafka.controller=WARN,state.change.logger=WARN,kafka.log.LogCleaner=WARN,kafka=WARN"
         - name: CONNECT_LOG4J_ROOT_LOGLEVEL
           value: WARN
+        - name: KAFKA_ZOOKEEPER_CLIENT_CNXN_SOCKET
+          value: "org.apache.zookeeper.ClientCnxnSocketNetty"
+        - name: KAFKA_ZOOKEEPER_SSL_CLIENT_ENABLE
+          value: "true"
+        - name: KAFKA_ZOOKEEPER_CLIENT_SECURE
+          value: "true"
+        - name: KAFKA_ZOOKEEPER_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM
+          value: ""
+        - name: KAFKA_ZOOKEEPER_SSL_KEYSTORE_LOCATION
+          value: "/zkTls/keystore.jks"
+        - name: KAFKA_ZOOKEEPER_SSL_TRUSTSTORE_LOCATION
+          value: "/zkTls/truststore.jks"
         - name: KAFKA_TOOLS_LOG4J_ROOT_LOGLEVEL
           value: WARN
         - name: KAFKA_LOG4J_ROOT_LOGLEVEL
@@ -215,6 +229,12 @@ spec:
         - name: file-secrets
           mountPath: /etc/kafka/secrets/kafka.client.truststore.jks
           subPath: fci_universal_ks.jks
+        - name: zookeeper-tls
+          mountPath: /zkTls/keystore.jks
+          subPath: keystore.jks
+        - name: zookeeper-tls
+          mountPath: /zkTls/truststore.jks
+          subPath: truststore.jks
         - name: file-secrets
           mountPath: /etc/kafka/secrets/kafka.client.keystore.jks
           subPath: fci_universal_ks.jks
@@ -227,6 +247,9 @@ spec:
       - name: env-secrets
         secret:
           secretName: {{ .Release.Name }}-platform-secrets-env
+      - name: zookeeper-tls
+        secret:
+          secretName: {{ .Release.Name }}-zookeeper-tls
       - name: file-secrets
         secret:
           secretName: {{ .Release.Name }}-platform-secret-files

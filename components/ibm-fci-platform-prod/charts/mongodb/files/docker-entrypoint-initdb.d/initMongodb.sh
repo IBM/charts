@@ -45,6 +45,12 @@ echo "Creating ERaaS KYC Adapter database"
 mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.createUser( { user: '${MONGODB_ERAAS_KYC_ADAPTER_USER}', pwd: '${MONGODB_ERAAS_KYC_ADAPTER_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_KYC_ADAPTER_DB}' }]})"
 mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.updateUser('${MONGODB_ERAAS_KYC_ADAPTER_USER}', { pwd: '${MONGODB_ERAAS_KYC_ADAPTER_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_KYC_ADAPTER_DB}' }]})"
 
+echo "Creating ERaaS Outcome database"
+mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.createUser( { user: '${MONGODB_ERAAS_OUTCOME_USER}', pwd: '${MONGODB_ERAAS_OUTCOME_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_OUTCOME_DB}' }]})"
+mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.updateUser('${MONGODB_ERAAS_OUTCOME_USER}', { pwd: '${MONGODB_ERAAS_OUTCOME_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_OUTCOME_DB}' }]})"
+mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.createUser( { user: '${MONGODB_ERAAS_WORKFLOW_USER}', pwd: '${MONGODB_ERAAS_WORKFLOW_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_OUTCOME_DB}' }]})"
+mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.updateUser('${MONGODB_ERAAS_WORKFLOW_USER}', { pwd: '${MONGODB_ERAAS_WORKFLOW_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_OUTCOME_DB}' }]})"
+
 
 echo "Set feature compatibility"
 mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u root -p ${MONGODB_ROOT_PASSWORD} --eval "db.adminCommand( { setFeatureCompatibilityVersion: '4.0' } )"

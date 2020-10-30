@@ -65,7 +65,7 @@ Form the Kafka Zookeeper connect string.
 {{- $replicas := .Values.zookeeperReplicaCount | int }}
 {{- range $i, $e := until $replicas }}
 {{- $index1 := $i | add1 -}}
-{{- printf "%s-zk-%d.%s-zk.%s.svc:2181" $kafkaFullname $i $kafkaFullname $namespace }}
+{{- printf "%s-zk-%d.%s-zk.%s.svc:2182" $kafkaFullname $i $kafkaFullname $namespace }}
 {{- if ne $index1 $replicas }}
 {{- printf "," }}
 {{- end -}}
