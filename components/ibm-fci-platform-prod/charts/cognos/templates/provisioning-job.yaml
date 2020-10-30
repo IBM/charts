@@ -1,4 +1,5 @@
-{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+{{- if .Values.enabled }}
+{{- if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
 {{- $releaseName := .Release.Name }}
 apiVersion: batch/v1
 kind: Job
@@ -42,7 +43,7 @@ spec:
                 key: token
           envFrom:
           - configMapRef:
-              name: {{ .Release.Name }}-db2
+              name: {{ template "cognos.fullname" . }}
           command:
             - bash
             - -c
@@ -55,35 +56,10 @@ spec:
           - mountPath: /var/run/sharedsecrets
             name: zen-service-broker-secret
           env:
-          - name: GLOBAL_CS_DATABASEEXTERNAL
-            value: "true"
-          - name: GLOBAL_CS_DATABASETLSENABLED
-            value: "true"
-          - name: GLOBAL_CS_DATABASEPROVIDER
-            value: DB2
-          - name: CONTENT_STORE_TYPE
-            value: DB2
-          - name: CONTENT_STORE_HOST
-            valueFrom:
-              configMapKeyRef:
-                name: {{ .Release.Name }}-db2
-                key: db_host
-          - name: CONTENT_STORE_PORT
-            valueFrom:
-              configMapKeyRef:
-                name: {{ .Release.Name }}-db2
-                key: db_port
-          - name: CONTENT_STORE_DB
-            valueFrom:
-              configMapKeyRef:
-                name: {{ .Release.Name }}-db2
-                key: db_name
-          - name: CONTENT_STORE_USER
-            valueFrom:
-              configMapKeyRef:
-                name: {{ .Release.Name }}-db2
-                key: db_userid
- {{- include "common.import-secret" (list . "CONTENT_STORE_PASS" "db2" "db2_password") | indent 10 }}
+ {{- include "common.import-secret" (list . "CONTENT_STORE_PASS" "db2" "DB2INST1_PASSWORD") | indent 10 }}
+          envFrom:
+          - configMapRef:
+              name: {{ .Release.Name }}-db2 
           envFrom:
           - configMapRef:
               name: {{ template "cognos.fullname" . }}                     
@@ -94,7 +70,8 @@ spec:
           command:
             - bash
             - -c
-            - /common-scripts/provision-cognos.sh
+            - /common-scripts/provision-cognos.sh "$DEBUG_PROVISIONING"
           resources:
 {{ toYaml .Values.provisioner.resources | indent 12 }}          
-{{ end }}
+{{- end -}} {{- /* if CLOUD_PAK provisioning */ -}}
+{{- end -}} {{- /* if enabled */ -}}

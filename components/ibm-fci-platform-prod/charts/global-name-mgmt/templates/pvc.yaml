@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ template "global-name-mgmt.fullname" . }}
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s" (include "global-name-mgmt.name" .)) (include "global-name-mgmt.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+{{-   if .Values.gnmPvcSpec.accessModes }}
+{{-     with .Values.gnmPvcSpec.accessModes }}
+  accessModes:
+{{        toYaml . | indent 4 -}}
+{{-     end -}}
+{{-   end }}
+{{- if .Values.global.persistence.useDynamicProvisioning }}
+{{-   if not .Values.gnmPvcSpec.storageClassName }}
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{-   else }}
+  storageClassName: {{ .Values.gnmPvcSpec.storageClassName | quote }}
+{{-   end }}
+{{- else }}
+  storageClassName: {{ default "" .Values.gnmPvcSpec.storageClassName | quote }}
+{{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.gnmPvcSpec.size }}
+{{- if not .Values.global.persistence.useDynamicProvisioning }}
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s" (include "global-name-mgmt.name" .)) .Release.Name ) | indent 6 }}
+{{- end -}}
+
