@@ -41,6 +41,12 @@ spec:
 {{- end }}
       - name: logs
         emptyDir: {}
+      - name: db2-cert
+        secret:
+          defaultMode: 420
+          secretName: {{ .Values.global.coreReleaseName }}-db2-secrets-env
+      - name: fcicert
+        emptyDir: {}
       - name: config-volume
         configMap:
           name: {{ .Values.global.coreReleaseName }}-platform-config-files
@@ -57,9 +63,36 @@ spec:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
           image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           command: [ "/common-scripts/init-container-svc-depend.sh" ]
-          args: [ "{{ .Release.Namespace }}/{{ .Values.global.coreReleaseName }}-{{ .Values.config.DB2_SERVICE }}" ]
+          args: [ "{{ .Release.Namespace }}/{{ .Values.global.coreReleaseName }}-case-manager-fci-solution" ]
           resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+        - name: import-db2-cert
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.cryptoUtils.image.repository }}:{{ .Values.global.cryptoUtils.image.tag }}"
+          command:
+            - bash
+            - -c
+            - cp /fci_universal_ks.jks /etc/tls/fci_universal_ks.jks && /opt/ibm/java-x86_64-80/jre/bin/keytool -import -noprompt -deststorepass $SSL_KEYSTORE_PASSWORD_CONFIG -file /db2cert -storetype JKS -keystore /etc/tls/fci_universal_ks.jks
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          env:
+          - name: SSL_KEYSTORE_PASSWORD_CONFIG
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.global.coreReleaseName }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          volumeMounts:
+          - name: fcicert
+            mountPath: /etc/tls
+          - name: db2-cert
+            mountPath: /db2cert
+            subPath: db2_cert
+          - name: file-secrets
+            mountPath: /fci_universal_ks.jks
+            subPath: fci_universal_ks.jks
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+{{ end }}
         - name: fcii-data-store-client
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
@@ -74,22 +107,56 @@ spec:
             valueFrom:
               secretKeyRef:
                 name: {{ .Values.global.coreReleaseName }}-db2-secrets-env
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+                key: db2_password
+{{ else }}
                 key: DB2INST1_PASSWORD
+{{ end }}
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+          - name: FLYWAY_USER
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.global.coreReleaseName }}-db2
+                key: db_userid
+          - name: DB2_HOST
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.global.coreReleaseName }}-db2
+                key: db_host
+{{ else }}
+          - name: FLYWAY_USER
+            value: "db2inst1"
+          - name: DB2_HOST
+            value: fci-db2-datastore-0
+{{ end }}
           - name: SSL_KEYSTORE_PASSWORD_CONFIG
             valueFrom:
               secretKeyRef:
                 name: {{ .Values.global.coreReleaseName }}-platform-secrets-env
                 key: FCI_JKS_PASSWORD
           - name: FLYWAY_URL
-            value: "{{ printf "jdbc:db2://%s-%s:56000/fcidb:sslConnection=true;sslTrustStoreLocation=/fci_universal_ks.jks;sslTrustStorePassword=$(SSL_KEYSTORE_PASSWORD_CONFIG);" .Values.global.coreReleaseName .Values.config.DB2_SERVICE }}"
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+            value: "{{ printf "jdbc:db2://$(DB2_HOST):50001/FCIDB:sslConnection=true;sslTrustStoreLocation=/etc/tls/fci_universal_ks.jks;sslTrustStorePassword=$(SSL_KEYSTORE_PASSWORD_CONFIG);" }}"
+{{ else }}
+            value: "{{ printf "jdbc:db2://%s-db2-datastore-0:56000/fcidb:sslConnection=true;sslTrustStoreLocation=/fci_universal_ks.jks;sslTrustStorePassword=$(SSL_KEYSTORE_PASSWORD_CONFIG);" .Values.global.coreReleaseName }}"
+
+{{ end }}
           resources:
 {{ toYaml .Values.dbClient.resources | indent 12 }}
           volumeMounts:
             - name: file-secrets
               mountPath: /fci_universal_ks.jks
               subPath: fci_universal_ks.jks
+            - name: fcicert
+              mountPath: /etc/tls
       containers:
         - name: liberty
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+          command:
+              - bash
+              - -c
+              - cp /etc/tls/fci_universal_ks.jks /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.jks && /opt/ibm/fci/scripts/start.sh
+{{ end }}
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
           image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.fciiUi.image.repository }}:{{ .Values.fciiUi.image.tag }}"
@@ -129,11 +196,44 @@ spec:
               secretKeyRef:
                 name: {{ .Values.global.coreReleaseName }}-platform-secrets-env
                 key: FCI_JKS_PASSWORD
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+          - name: com_fci_db2_userid
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.global.coreReleaseName }}-db2
+                key: db_userid
+          - name: db2_service
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.global.coreReleaseName }}-db2
+                key: db_host
+          - name: com_fci_db2_server
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.global.coreReleaseName }}-db2
+                key: db_host
+          - name: com_fci_db2_ssl_port
+            value: "56000"
+          - name: com_fci_db2_password
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.global.coreReleaseName }}-db2-secrets-env
+                key: db2_password
+{{ else }}
+          - name: com_fci_db2_userid
+            value: "fciauthid"
+          - name: db2_service
+            value: "fci-db2-datastore-0"
+          - name: com_fci_db2_server
+            value: "fci-db2-datastore-0"
+          - name: com_fci_db2_ssl_port
+            value: "56000"
           - name: com_fci_db2_password
             valueFrom:
               secretKeyRef:
                 name: {{ .Values.global.coreReleaseName }}-db2-secrets-env
                 key: FCIAUTHID_PASSWORD
+{{ end }}
           envFrom:
           - configMapRef:
               name: {{ template "fci-insurance.fullname" . }}
@@ -146,9 +246,13 @@ spec:
           - name: config-volume
             mountPath: /opt/ibm/wlp/usr/servers/fciServer/server_basic_registry.xml
             subPath: server_basic_registry.xml
+{{ if eq .Values.global.DB2_PROVISIONER "FCI" }}
           - name: file-secrets
             mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.jks
             subPath: fci_universal_ks.jks
+{{ end }}
+          - name: fcicert
+            mountPath: /etc/tls
           - mountPath: /opt/ibm/wlp/usr/servers/fciServer/logs
             name: logs
 {{- if hasKey .Values "global" }}
