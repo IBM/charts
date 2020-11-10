@@ -393,11 +393,10 @@ The Helm chart has the following values that can be overriden using the --set pa
 
 | Qualifier | Parameter  | Definition | Allowed Value |
 |---|---|---|---|
+| version |  | The product version to install |  |
 | image | pullPolicy | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to Always |
-|       | repository | Name of image, including repository prefix (if required) | See [Extended description of Docker tags](https://docs.docker.com/engine/reference/commandline/tag/#extended-description) |
-|       | tag | Docker image tag | See [Docker tag description](https://docs.docker.com/engine/reference/commandline/tag/) |
 |       | secret |  An image pull secret used to authenticate with the image registry | Empty (default) if no authentication is required to access the image registry. |
-| service | type | Specify type of service | Valid options are NodePort and LoadBalancer (for clusters that support LoadBalancer). Default is NodePort |
+| service | type | Specify type of service | Valid options are NodePort and LoadBalancer (for clusters that support LoadBalancer). Default is ClusterIP |
 | database | type | The type of database UCD will connect to | Valid values are db2, mysql, mariadb, oracle, and sqlserver |
 |          | name | The name of the database to use |  |
 |          | hostname | The hostname/IP of the database server | |
@@ -406,7 +405,8 @@ The Helm chart has the following values that can be overriden using the --set pa
 |          | jdbcConnUrl | The JDBC Connection URL used to connect to the database used by the UCD server. This value is normally constructed using the database type and other database field values, but must be specified here when using Oracle RAC/ORAAS or SQL Server with Integrated Security. | |
 | secureConnections  | required | Specify whether UCD server connections are required to be secure | Default value is "true" |
 | secret | name | Kubernetes secret which defines required UCD passwords. | You may leave this blank to use default name of 'HelmReleaseName-secrets' where HelmReleaseName is the name of your Helm Release. |
-| ucdLicense | serverURL | Information required to connect to the UCD license server. | Empty (default) to begin a 60-day evaluation license period.|
+| license | serverURL | Information required to connect to the UCD license server. | Empty (default) to begin a 60-day evaluation license period.|
+|         | accept | Set to true to accept license agreement | |
 | extLibVolume | name | The base name used when the Persistent Volume and/or Persistent Volume Claim for the extlib directory is created by the chart. | Default value is "ext-lib" |
 |              | storageClassName | The name of the storage class to use when persistence.useDynamicProvisioning is set to "true". |  |
 |              | size | Size of the volume used to hold the JDBC driver .jar files |  |
