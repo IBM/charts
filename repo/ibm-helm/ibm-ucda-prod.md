@@ -11,7 +11,7 @@ This chart deploys a single instance of the UrbanCode Deploy agent that may be s
 
 ## Prerequisites
 
-1. Kubernetes 1.11.0+; kubectl and oc CLI; Helm 3;
+1. Kubernetes 1.16.0+; kubectl and oc CLI; Helm 3;
 * [Install and setup oc/kubectl CLI](https://docs.okd.io/latest/cli_reference/get_started_cli.html#installing-the-cli)
 * [Install and setup the Helm 3 CLI](https://helm.sh/docs/intro/install/).
 
@@ -253,7 +253,7 @@ This chart defines a custom `SecurityContextConstraints` which can be used to fi
   * `pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh`
 
 ## Resources Required
-Kubernetes 1.11.0+
+Kubernetes 1.16.0+
 
 ## Installing the Chart
 
@@ -301,10 +301,10 @@ The Helm chart has the following values that can be overriden using the --set pa
 
 | Qualifier | Parameter  | Definition | Allowed Value |
 |---|---|---|---|
+| version |  | The product version to install |  |
 | image | pullPolicy | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to Always |
-|       | repository | Name of image, including repository prefix (if required) | See [Extended description of Docker tags](https://docs.docker.com/engine/reference/commandline/tag/#extended-description) |
-|       | tag | Docker image tag | See [Docker tag description](https://docs.docker.com/engine/reference/commandline/tag/) |
 |       | secret |  An image pull secret used to authenticate with the image registry | Empty (default) if no authentication is required to access the image registry. |
+| license | accept | Set to true to accept license agreement | |
 | persistence | enabled | Determines if persistent storage will be used to hold the UCD server appdata directory contents. This should always be true to preserve server data on container restarts. | Default value "true" |
 |             | useDynamicProvisioning | Set to "true" if the cluster supports dynamic storage provisoning | Default value "false" |
 |             | fsGroup | fsGroup value to use for gid when accessing persistent storage | Default value is "0" |
