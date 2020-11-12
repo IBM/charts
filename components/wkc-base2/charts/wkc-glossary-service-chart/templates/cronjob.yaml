@@ -1,3 +1,4 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
 apiVersion: batch/v1beta1
 kind: CronJob
 metadata:
@@ -21,12 +22,13 @@ spec:
         chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         release: {{ .Release.Name }}
         heritage: {{ .Release.Service }}
-        icpdsupport/app: "apis"
-        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         app.kubernetes.io/name: wkc-glossary-service-sync-cronjob
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
     spec:
       template:
         metadata:
@@ -36,15 +38,17 @@ spec:
             chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
             release: {{ .Release.Name }}
             heritage: {{ .Release.Service }}
-            icpdsupport/app: "apis"
-            {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
             app.kubernetes.io/instance: {{ .Release.Name }}
             app.kubernetes.io/managed-by: {{ .Release.Service }}
             app.kubernetes.io/name: wkc-glossary-service-sync-cronjob
             helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-          annotations:
-            {{- if .Values.global.podAnnotations }}{{ toYaml .Values.global.podAnnotations | trim | nindent 12 }}
+            {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 12 }}
             {{- end }}
+          annotations:
+          {{- if .Values.global.podAnnotations }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 12 }}
+          {{- end }}
         spec:
           hostNetwork: false
           hostPID: false
@@ -60,6 +64,7 @@ spec:
                     - amd64
           securityContext:
             runAsNonRoot: true
+          serviceAccountName: cpd-admin-sa
           restartPolicy: OnFailure
           containers:
           - name: wkc-glossary-service-sync-cronjob
@@ -94,15 +99,39 @@ spec:
             - "-ec"
             - |
               set -o nounset
-              set -o errexit
-              echo "Begin :: Glossary Sync Activated & Deactivated Artifacts CRON Job."
+
+              LogMsg() {
+                logMsg="$1"
+                echo "["$(date +"%d-%B-%Y %R:%S %Z")"]" ${logMsg}
+              }
+
+              LogInfo() {
+                LogMsg "INFO: $@"
+              }
+
+              LogError() {
+                LogMsg "ERROR: $@"
+              }
+
+              LogInfo "Waiting for wkc-glossary-service pod to be ready"
+              kubectl wait --for=condition=ready --timeout=90m pod/$(kubectl get pod -l app.kubernetes.io/name=wkc-glossary-service -o jsonpath="{.items[0].metadata.name}")
+
+              LogInfo "Begin :: Glossary Sync Activated & Deactivated Artifacts CRON Job."
               echo
-              echo "curl -s -k -X POST $BASE_URL/v3/glossary_terms/admin/open-metadata/sync -H Authorization: Basic <SERVICE_ID>"
-              curl -s -k -X POST "$BASE_URL/v3/glossary_terms/admin/open-metadata/sync" -H "Authorization: Basic $SERVICE_ID"
+              LogInfo "curl --connect-timeout 180 --max-time 600 -s -k -X POST $BASE_URL/v3/glossary_terms/admin/open-metadata/sync -H Authorization: Basic <SERVICE_ID>"
+              curl --connect-timeout 180 --max-time 600 -s -k -X POST "$BASE_URL/v3/glossary_terms/admin/open-metadata/sync" -H "Authorization: Basic $SERVICE_ID"
+              EXIT_CODE=$?
+              if [ ${EXIT_CODE} != "0" ]
+              then
+                LogError "curl command failed with ${EXIT_CODE}"
+              else
+                echo
+                LogInfo "End :: Glossary Sync Activated & Deactivated Artifacts CRON Job."
+              fi
               echo
-              echo "End   :: Glossary Sync Activated & Deactivated Artifacts CRON Job."
-              echo
+              exit 0
 {{- if .Values.repository.secret.name }}
           imagePullSecrets:
             - name: {{ .Values.repository.secret.name }}
+{{- end }}
 {{- end }}

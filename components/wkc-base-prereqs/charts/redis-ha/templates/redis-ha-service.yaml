@@ -16,6 +16,7 @@ spec:
   type: ClusterIP
   clusterIP: None
   ports:
+  {{- if not (and .Values.ssl.enabled .Values.ssl.disableNonSSL) }}      
   - name: server
     port: {{ .Values.redis.port }}
     protocol: TCP
@@ -24,6 +25,17 @@ spec:
     port: {{ .Values.sentinel.port }}
     protocol: TCP
     targetPort: sentinel
+  {{- end }} 
+  {{- if .Values.ssl.enabled }}      
+  - name: serverssl
+    port: {{ .Values.ssl.tlsPort }}
+    protocol: TCP
+    targetPort: redisssl
+  - name: sentinelssl
+    port: {{ .Values.ssl.tlsSentinelPort }}
+    protocol: TCP
+    targetPort: sentinelssl
+  {{- end }}
   selector:
     release: {{ .Release.Name }}
     app: {{ template "redis-ha.name" . }}
@@ -41,9 +53,16 @@ metadata:
   {{- end }}
 spec:
   ports:
-  - port: 6379
+  {{- if not (and .Values.ssl.enabled .Values.ssl.disableNonSSL) }}               
+  - port: {{ .Values.redis.port }}
     protocol: TCP
     targetPort: {{ .Values.redis.port }}
+  {{- end }}
+  {{- if .Values.ssl.enabled }}      
+  - port: {{ .Values.ssl.tlsPort }}
+    protocol: TCP
+    targetPort: {{ .Values.ssl.tlsPort }}
+  {{- end }}
   selector:
     app: {{ template "redis-ha.name" . }}
     release: "{{ .Release.Name }}"

@@ -1,0 +1,227 @@
+# Licensed Materials - Property of IBM
+# 5724-Q36
+# Copyright IBM Corp. 2019, 2020
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.ia.analysis_name }}
+  labels:
+    app: {{ .Values.ia.app_name }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/name: {{ .Values.ia.app_name }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 9080
+    name: http
+  - port: 443
+    targetPort: 9443
+    name: https
+  selector:
+    app: {{ .Values.ia.app_name }}
+    svc: {{ .Values.ia.analysis_name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.ia.analysis_name }}
+  labels:
+    app: {{ .Values.ia.app_name }}
+    svc: {{ .Values.ia.analysis_name }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/name: {{ .Values.ia.app_name }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.ia.app_name }}
+      svc: {{ .Values.ia.analysis_name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.ia.app_name }}
+        svc: {{ .Values.ia.analysis_name }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/name: {{ .Values.ia.app_name }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
+      annotations:
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      initContainers:
+      {{- include "wait-services" . | indent 6 }}
+      containers:
+      - name: {{ .Values.ia.analysis_name }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.iaAnalysis.repository }}:{{ .Values.iaAnalysis.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          requests:
+            memory: "{{ .Values.iaAnalysis.requests.memory }}"
+            cpu: "{{ .Values.iaAnalysis.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.iaAnalysis.limits.memory }}"
+            cpu: "{{ .Values.iaAnalysis.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: IA_SERVICES_IMPL
+          value: "services_jpa.properties"
+        - name: IA_ZOOKEEPER_HOST
+          value: {{ .Values.zookeeper.app_name }}:2181
+        - name: SOLR_CONNECT
+          value: http://{{ .Values.solr.app_name }}:8983/solr
+        - name: SOLR_USER
+          value: solr
+        - name: SOLR_PASS
+          value:
+        - name: IIS_URL
+          value: https://is-servicesdocker:9446
+        - name: IIS_USERNAME_SECRET
+          value: isadmin
+        - name: IIS_PASSWORD_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: isadmin_password
+        - name: WKC_URL
+          valueFrom:
+            configMapKeyRef:
+              key: host-url
+              name: wdp-config
+        - name: WKC_CREDENTIALS
+          valueFrom:
+            secretKeyRef:
+              name: wdp-service-id
+              key: service-id-credentials
+        - name: ZEN_DATA_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: zen-service-broker-secret
+              key: token
+        - name: ASSET_RELATION_DB_TYPE
+          value: db2
+        - name: ASSET_RELATION_DB_HOST
+          value: is-xmetadocker
+        - name: ASSET_RELATION_DB_PORT
+          value: "50000"
+        - name: ASSET_RELATION_DB_USER
+          value: xmeta
+        - name: ASSET_RELATION_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: xmeta_password
+        - name: ASSET_RELATION_DB_NAME
+          value: xmeta
+        - name: ASSET_RELATION_DB_ORACLE_TYPE
+          value: serviceName
+        ports:
+        - name: http
+          containerPort: 9080
+          protocol: TCP
+        - name: https
+          containerPort: 9443
+          protocol: TCP
+        volumeMounts:
+        - name: secrets-pv-volume
+          mountPath: /config/secrets
+          readOnly: true
+        - name: ia-config
+          mountPath: /ia-config
+          readOnly: true
+        - name: ia-config
+          mountPath: /config/jvm.options
+          subPath: jvm.options
+          readOnly: true
+        - name: ia-lib-ext
+          mountPath: /ia-lib-ext
+          readOnly: true
+        - name: logs-dir
+          mountPath: /logs
+        - name: wlp-output-dir
+          mountPath: /opt/ibm/wlp/output
+        - name: tmp-dir
+          mountPath: /tmp
+        - name: zen-service-broker-secret  
+          mountPath: /var/run/sharedsecrets  
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 60
+          timeoutSeconds: 15
+          periodSeconds: 120
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 60
+          timeoutSeconds: 15
+          periodSeconds: 60
+          successThreshold: 1
+          failureThreshold: 5
+      securityContext:
+        runAsNonRoot: true
+        {{- if .Values.iaAnalysis.runAsUser }}
+        runAsUser: {{ .Values.iaAnalysis.runAsUser }}
+        {{- end }}
+        {{- if .Values.iaAnalysis.fsGroup }}
+        fsGroup: {{ .Values.iaAnalysis.fsGroup }}
+        {{- end }}
+      {{- if .Values.iaAnalysis.serviceAccountName }}
+      serviceAccountName: {{ .Values.iaAnalysis.serviceAccountName }}
+      {{- end }}
+      {{- include "image-secret" . | indent 6 }}
+      volumes:
+      - name: secrets-pv-volume
+        persistentVolumeClaim:
+           claimName: iis-secrets-pv
+      - name: ia-config
+        configMap:
+          name: {{ .Values.ia.config_name }}
+      - name: ia-lib-ext
+        secret:
+          secretName: {{ .Values.ia.secret_name }}
+      - name: logs-dir
+        emptyDir: {}
+      - name: wlp-output-dir
+        emptyDir: {}
+      - name: tmp-dir
+        emptyDir: {}
+      - name: zen-service-broker-secret
+        secret:
+          defaultMode: 420
+          secretName: zen-service-broker-secret  

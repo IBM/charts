@@ -1,0 +1,335 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iis-xmetarepo
+  labels:
+    app: iis-xmetarepo
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: iis-xmetarepo
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iis-xmetarepo
+  strategy:
+    type: Recreate
+    rollingUpdate:
+  template:
+    metadata:
+      labels:
+        app: iis-xmetarepo
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        type: "engine"
+        app.kubernetes.io/name: iis-xmetarepo
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        istier: xmeta
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
+      annotations:
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 2
+            preference:
+              matchExpressions:
+              - key: wkc-privileged
+                operator: In
+                values:
+                - {{ .Values.nodeLabel }}
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.archx86_64 }}
+                - {{ .Values.archppc64le }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  type: "engine"
+              topologyKey: "kubernetes.io/hostname"
+            weight: 1
+          - podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: wdp-db2
+              topologyKey: "kubernetes.io/hostname"
+            weight: 1
+      hostname: is-xmetadocker
+      hostIPC: true
+      initContainers:
+      - name: load-data
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.release.image.iis.xmetarepo.repository }}:{{ .Values.release.image.iis.xmetarepo.tag }}
+        imagePullPolicy: {{ .Values.release.image.pullPolicy }}
+        resources:
+            requests:
+               memory: "{{ .Values.xmetarepoResources.initContainer.requests.memory }}"
+               cpu: "{{ .Values.xmetarepoResources.initContainer.requests.cpu }}"
+            limits:
+               memory: "{{ .Values.xmetarepoResources.initContainer.limits.memory }}"
+               cpu: "{{ .Values.xmetarepoResources.initContainer.limits.cpu }}"
+        securityContext:
+          {{- if .Values.release.image.iis.xmetarepo.runAsUser }}
+          runAsUser: {{ .Values.release.image.iis.xmetarepo.runAsUser }}
+          {{- end }}
+          {{- if .Values.release.image.iis.xmetarepo.fsGroup }}
+          fsGroup: {{ .Values.release.image.iis.xmetarepo.fsGroup }}
+          {{- end }}
+          privileged: false
+          capabilities:
+           add: ["SETFCAP", "SYS_NICE", "IPC_OWNER"]
+          allowPrivilegeEscalation: true
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+        command: ['/bin/bash', '-c', '--']
+        args: [ " set -x;
+                  datadir=/home/db2inst1/Repos;
+                  installdir=/opt/IBM/InformationServer;
+                  if [ ! -d ${datadir}/xmeta ];
+                  then
+                   ${installdir}/initScripts/initReposVolumeData.sh;
+                  else
+                  chown -R db2inst1:db2iadm1 ${datadir};
+                  chmod -R 755 ${datadir};
+                  fi;
+                  echo Calling chUserPasswd script to set password for all users
+                  set +x
+                  sudo ${installdir}/initScripts/chUserPasswd.sh -user db2inst1 -password $DB2INST1_PASSWORD
+                  sudo ${installdir}/initScripts/chUserPasswd.sh -user db2fenc1 -password $DB2FENC1_PASSWORD
+                  sudo ${installdir}/initScripts/chUserPasswd.sh -user xmeta -password $XMETA_PASSWORD
+                  sudo ${installdir}/initScripts/chUserPasswd.sh -user xmetasr -password $XMETASR_PASSWORD
+                  sudo ${installdir}/initScripts/chUserPasswd.sh -user dsodb -password $DSODB_PASSWORD
+                  sudo ${installdir}/initScripts/chUserPasswd.sh -user srduser -password $SRDUSER_PASSWORD
+                  sudo ${installdir}/initScripts/chUserPasswd.sh -user iauser -password $IAUSER_PASSWORD
+                  sudo ${installdir}/initScripts/chUserPasswd.sh -user dasusr1 -password $DASUSR1_PASSWORD
+                  set -x
+                  su - db2inst1 -c '/bin/rm -f /home/db2inst1/sqllib/.ftok; /home/db2inst1/sqllib/bin/db2ftok';
+                  su - db2inst1 -c '. sqllib/db2profile; db2start';
+                  su - db2inst1 -c '. sqllib/db2profile; db2 catalog database XMETA on /home/db2inst1/Repos/xmeta;
+                  db2 catalog database IADB on /home/db2inst1/Repos/iadb; db2 catalog database DSODB on /home/db2inst1/Repos/dsodb';
+                  /opt/IBM/InformationServer/initScripts/upgradeDb.sh;
+                  su - db2inst1 -c '. sqllib/db2profile; db2 activate database xmeta; db2 activate db iadb; db2 activate db dsodb';
+                  su - xmeta -c '. /home/db2inst1/sqllib/db2profile;
+                  db2 connect to xmeta; db2 -tvf /opt/IBM/InformationServer/initScripts/updateNodeCert.sql;
+                  db2 connect reset;';
+                  if [ $SUPPORT_4K_DEVICE = true ]; then
+                    echo enabling 4k device support;
+                    su - db2inst1 -c '. sqllib/db2profile; db2set DB2_4K_DEVICE_SUPPORT=ON';
+                  fi;
+                  su - db2inst1 -c '. /home/db2inst1/sqllib/db2profile; db2stop force;';"]
+        env:
+        - name: IS_KUBE
+          value: "true"
+        - name: SUPPORT_4K_DEVICE
+          value: "{{ default false .Values.xmetarepoVolumeInfo.support4kDevice }}"
+        - name: DEDICATED_REPOS_VOLPATH
+          value: /mnt/dedicated_vol/Repository
+        - name: ISADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: isadmin_password
+        - name: DB2INST1_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: db2inst1_password
+        - name: DB2FENC1_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: db2fenc1_password
+        - name: XMETA_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: xmeta_password
+        - name: XMETASR_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: xmetasr_password
+        - name: DSODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: dsodb_password
+        - name: SRDUSER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: srduser_password
+        - name: IAUSER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: iauser_password
+        - name: DASUSR1_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: dasusr1_password
+
+        volumeMounts:
+        - name: xmeta-pv-volume
+          mountPath: "/mnt/dedicated_vol/Repository"
+        - mountPath: /dev/shm
+          name: dshm
+      containers:
+       - name: iis-xmetadocker-container
+         image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.release.image.iis.xmetarepo.repository }}:{{ .Values.release.image.iis.xmetarepo.tag }}
+         imagePullPolicy: {{ .Values.release.image.pullPolicy }}
+         securityContext:
+           {{- if .Values.release.image.iis.xmetarepo.container.runAsUser }}
+           runAsUser: {{ .Values.release.image.iis.xmetarepo.container.runAsUser }}
+           {{- end }}
+           {{- if .Values.release.image.iis.xmetarepo.container.fsGroup }}
+           fsGroup: {{ .Values.release.image.iis.xmetarepo.container.fsGroup }}
+           {{- end }}
+           capabilities:
+             add: ["SETFCAP", "SYS_NICE", "IPC_OWNER"]
+           privileged: false
+           allowPrivilegeEscalation: true
+           runAsNonRoot: false
+           readOnlyRootFilesystem: false
+         command: ['/bin/bash', '-c', '--']
+         args: ["set +x;
+                 sudo /opt/IBM/InformationServer/initScripts/chUserPasswd.sh -user db2inst1 -password $DB2INST1_PASSWORD;
+                 sudo /opt/IBM/InformationServer/initScripts/chUserPasswd.sh -user db2fenc1 -password $DB2FENC1_PASSWORD;
+                 sudo /opt/IBM/InformationServer/initScripts/chUserPasswd.sh -user xmeta -password $XMETA_PASSWORD;
+                 sudo /opt/IBM/InformationServer/initScripts/chUserPasswd.sh -user xmetasr -password $XMETASR_PASSWORD;
+                 sudo /opt/IBM/InformationServer/initScripts/chUserPasswd.sh -user dsodb -password $DSODB_PASSWORD;
+                 sudo /opt/IBM/InformationServer/initScripts/chUserPasswd.sh -user srduser -password $SRDUSER_PASSWORD;
+                 sudo /opt/IBM/InformationServer/initScripts/chUserPasswd.sh -user iauser -password $IAUSER_PASSWORD;
+                 sudo /opt/IBM/InformationServer/initScripts/chUserPasswd.sh -user dasusr1 -password $DASUSR1_PASSWORD;
+                 set -x;
+                 /opt/IBM/InformationServer/initScripts/startcontainer.sh"]
+         resources:
+            requests:
+               memory: "{{ .Values.xmetarepoResources.requests.memory }}"
+               cpu: "{{ .Values.xmetarepoResources.requests.cpu }}"
+            limits:
+               memory: "{{ .Values.xmetarepoResources.limits.memory }}"
+               cpu: "{{ .Values.xmetarepoResources.limits.cpu }}"
+         ports:
+           - containerPort: 50000
+             protocol: TCP
+         env:
+         - name: IS_KUBE
+           value: "true"
+         - name: SUPPORT_4K_DEVICE
+           value: "{{ default false .Values.xmetarepoVolumeInfo.support4kDevice }}"
+         - name: MY_NODE_NAME
+           valueFrom:
+             fieldRef:
+               fieldPath: spec.nodeName
+         - name: MY_POD_NAME
+           valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+         - name: MY_POD_NAMESPACE
+           valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+         - name: DEDICATED_REPOS_VOLPATH
+           value: "/mnt/dedicated_vol/Repository"
+         - name: ISADMIN_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: isadmin_password
+         - name: DB2INST1_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: db2inst1_password
+         - name: DB2FENC1_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: db2fenc1_password
+         - name: XMETA_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: xmeta_password
+         - name: XMETASR_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: xmetasr_password
+         - name: DSODB_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: dsodb_password
+         - name: SRDUSER_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: srduser_password
+         - name: IAUSER_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: iauser_password
+         - name: DASUSR1_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: dasusr1_password
+         livenessProbe:
+            tcpSocket:
+              port: 50000
+            initialDelaySeconds: 600
+            periodSeconds: 60
+            failureThreshold: 3
+         readinessProbe:
+            tcpSocket:
+              port: 50000
+            initialDelaySeconds: 120
+            periodSeconds: 60
+            failureThreshold: 10
+         volumeMounts:
+         - mountPath: "/mnt/dedicated_vol/Repository"
+           name: xmeta-pv-volume
+         - mountPath: "/sampledata"
+           name: sampledata-pv-volume
+         - mountPath: /dev/shm
+           name: dshm
+      {{- if .Values.xmetarepo.serviceAccountName }}
+      serviceAccountName: {{ .Values.xmetarepo.serviceAccountName }}
+      {{- end }}
+      {{- include "image-secret" . | indent 6 }}
+      volumes:
+       - name: xmeta-pv-volume
+         persistentVolumeClaim:
+         {{- if .Values.xmetarepoVolumeInfo.volumeClaim.existingClaimName }}
+           claimName: {{ .Values.xmetarepoVolumeInfo.volumeClaim.existingClaimName }}
+         {{- else }}
+           claimName: {{ .Release.Name }}-{{ .Values.xmetarepoVolumeInfo.volumeClaim.name }}
+         {{- end }}
+       - emptyDir:
+          medium: Memory
+         name: dshm
+       - name: sampledata-pv-volume
+         persistentVolumeClaim:
+          {{- if .Values.sampleData.volumeClaim.existingClaimName }}
+            claimName: {{ .Values.sampleData.volumeClaim.existingClaimName }}
+          {{- else }}
+            claimName: {{ .Release.Name }}-{{ .Values.sampleData.volumeClaim.name }}
+          {{- end }}

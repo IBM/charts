@@ -5,8 +5,14 @@ global:
   persistence:
     storageClassName: ""
     useDynamicProvisioning: false
-  serviceabilityLabelName: wkc
-  serviceabilityLabelValue: wkc
+  podLabels:
+    icpdsupport/app: "api"
+    icpdsupport/addOnId: "ccs"
+  podAnnotations:
+    productName: "IBM Common Core Services for IBM Cloud Pak for Data"
+    productID: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    productVersion: "3.5.0"
+    
 ## for single node non-HA, set replicas=1, redis.config.min-slaves-to-write=0, sentinel.quorum=1
   
 ## Configure resource requests and limits
@@ -14,7 +20,7 @@ global:
 ##
 image:
   repository: redis
-  tag: 5.0.5-54
+  tag: 6.0.5-101
   pullPolicy: IfNotPresent
   pullSecret: ""
 ## replicas number for each component
@@ -40,6 +46,17 @@ serviceAccount:
 rbac:
   create: false
 
+ssl:
+  enabled: true
+  disableNonSSL: false
+  tlsReplication: "yes"
+  tlsPort: 6380
+  tlsSentinelPort: 26380
+  tlsProtocols: TLSv1.2
+  tlsCertFile: /etc/ssl/certs/redis.crt 
+  tlsKeyFile: /etc/ssl/certs/redis.key
+  tlsCaCertFile: /etc/ssl/certs/ca.crt
+  tlsCertAndKeyPEM: /etc/ssl/certs/certandkey.pem
 
 ## Redis specific configuration options
 redis:
@@ -59,7 +76,9 @@ redis:
     repl-diskless-sync: "yes"
     rdbcompression: "yes"
     rdbchecksum: "yes"
-
+    
+    
+    
   ## Custom redis.conf files used to override default settings. If this file is
   ## specified then the redis.config above will be ignored.
   # customConfig: |-
@@ -118,7 +137,7 @@ affinity: |
             matchLabels:
               app:  {{ template "redis-ha.name" . }}
               release: {{ .Release.Name }}
-          topologyKey: failure-domain.beta.kubernetes.io/zone
+          topologyKey: kubernetes.io/hostname
 
 
 podDisruptionBudget: {}
@@ -187,7 +206,7 @@ initContainer:
 haproxy:
   image:
     repository: haproxy
-    tag: 1.9-17
+    tag: 2.0.14-28
     pullPolicy: IfNotPresent
     pullSecret: ""
   securityContext:
@@ -204,9 +223,6 @@ haproxy:
     limits:
       memory: 1Gi
       cpu: 1
-  # haproxy container frontend ports
-  ports:
-    master: 6379
   # haproxy connection origins (* for all)
   bindAddresses: "*"
   # stats functionality enablement and configuration
@@ -229,16 +245,8 @@ haproxy:
     # max number of connections per backend
     maxConnections: 9900
     # connection check interval for backends (in seconds)
-    checkSeconds: 1
-  podAnnotations:
-    productName: "IBM Common Core Services for IBM Cloud Pak for Data"
-    productID: "shared infrastructure"
-    productVersion: "3.0"
+    checkSeconds: 10
 
-podAnnotations:
-  productName: "IBM Common Core Services for IBM Cloud Pak for Data"
-  productID: "shared infrastructure"
-  productVersion: "3.0"
   
 ## Kubernetes Cluster Domain
 clusterDomain: cluster.local

@@ -103,7 +103,6 @@ Licensing parameters include:
 
 - **cloudpakName:** the Cloud Pak name (optional if not a Cloud Pak)
 - **cloudpakId:** the Cloud Pak ID (optional if not a Cloud Pak)
-- **cloudpakVersion:** the Cloud Pak version (optional if not a Cloud Pak)
 - **productMetric:** the install-based metric (PROCESSOR_VALUE_UNIT,
   VIRTUAL_PROCESSOR_CORE, RESOURCE_VALUE_UNIT, etc.)
 - **productChargedContainers:** which containers are affected ("All", "", or a
@@ -162,7 +161,6 @@ sch:
       productCloudpakRatio: "8:1"
       cloudpakName: "Reference Cloud Pak"
       cloudpakId: "4df52d2cdc374ba09f631a650ad2c6cf"
-      cloudpakVersion: "3.0"
 {{- end -}}
 ```
 used in template as follows:

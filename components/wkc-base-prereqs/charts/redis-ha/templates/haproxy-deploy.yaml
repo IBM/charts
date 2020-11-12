@@ -31,14 +31,18 @@ spec:
         app.kubernetes.io/managed-by: {{ .Release.Service }} 
         app.kubernetes.io/name: {{ .Chart.Name }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        icpdsupport/app: "apis"
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
         chart: {{ .Chart.Name }}
-        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
       annotations:       
         checksum/config: {{ include (print $.Template.BasePath "/haproxy-configmap.yaml") . | sha256sum }}
       {{- if .Values.haproxy.podAnnotations }}
-{{ toYaml .Values.haproxy.podAnnotations | indent 8 }}
-      {{- end }}
+{{ tpl (toYaml .Values.haproxy.podAnnotations) . | indent 8 }}
+      {{- end }}        
+        {{- if .Values.global.podAnnotations }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+        {{- end }}
     spec:
       # Needed when using unmodified rbac-setup.yml
       serviceAccountName: {{ template "redis-ha.serviceAccountName" . }}
@@ -49,29 +53,6 @@ spec:
         runAsNonRoot: true
       nodeSelector:
 {{ toYaml .Values.haproxy.nodeSelector | indent 8 }}
-      {{- if eq .Values.haproxy.podAntiAffinity "hard" }}
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchLabels:
-                app: {{ template "redis-ha.name" . }}-haproxy
-                release: {{ .Release.Name }}
-                component: server
-            topologyKey: kubernetes.io/hostname
-      {{- else if eq .Values.haproxy.podAntiAffinity "soft" }}
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 1
-            podAffinityTerm:
-              labelSelector:
-                matchLabels:
-                  app: {{ template "redis-ha.fullname" . }}-haproxy
-                  release: {{ .Release.Name }}
-                  component: server
-              topologyKey: kubernetes.io/hostname
-      {{- end }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -82,13 +63,40 @@ spec:
                 values:
                 - {{ .Values.archx86_64 }}
                 - {{ .Values.archppc64le }}
+      {{- if eq .Values.haproxy.podAntiAffinity "hard" }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: {{ template "redis-ha.name" . }}-haproxy
+                release: {{ .Release.Name }}
+                component: server
+            topologyKey: kubernetes.io/hostname
+      {{- else if eq .Values.haproxy.podAntiAffinity "soft" }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: {{ template "redis-ha.fullname" . }}-haproxy
+                  release: {{ .Release.Name }}
+                  component: server
+              topologyKey: kubernetes.io/hostname
+      {{- end }} 
       containers:      
       - name: haproxy
         image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.haproxy.image.repository }}:{{ .Values.haproxy.image.tag }}
         imagePullPolicy: {{ .Values.haproxy.image.pullPolicy }}
         ports:
+        {{- if not (and .Values.ssl.enabled .Values.ssl.disableNonSSL) }}
         - name: master
-          containerPort: {{ .Values.haproxy.ports.master }}
+          containerPort: {{ .Values.redis.port }}
+        {{- end }}  
+        {{- if .Values.ssl.enabled }}   
+        - name: masterssl
+          containerPort: {{ .Values.ssl.tlsPort }}
+        {{- end }}
         {{ if eq .Values.haproxy.stats.http.enable true }}
         - name: stats
           containerPort: {{ .Values.haproxy.stats.http.port }}
@@ -121,7 +129,7 @@ spec:
             port: {{ .Values.haproxy.stats.http.port }}
           initialDelaySeconds: 10
           timeoutSeconds: 30
-          periodSeconds: 30
+          periodSeconds: 20
           failureThreshold: 5
         securityContext:
           privileged: false
@@ -141,6 +149,10 @@ spec:
           mountPath: /usr/local/etc/haproxy
         - name: shared-socket
           mountPath: /run/haproxy
+        {{- if .Values.ssl.enabled }}
+        - name: cert
+          mountPath: /etc/ssl/certs
+        {{- end }}
       {{- if .Values.haproxy.image.pullSecret }}    
       imagePullSecrets:
       - name: {{ .Values.haproxy.image.pullSecret }}
@@ -151,4 +163,10 @@ spec:
           name: {{ template "redis-ha.fullname" . }}-haproxy
       - name: shared-socket
         emptyDir: {}
+      {{- if .Values.ssl.enabled }}
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: {{ template "redis-ha.fullname" . }}-cert
+      {{- end }}
 {{- end }}        

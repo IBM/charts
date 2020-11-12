@@ -17,6 +17,11 @@ spec:
   selector:
     matchLabels:
       app: wkc-glossary-service
+  {{- if eq .Values.global.deploymentTarget "icp4data" }}
+  strategy:
+    type: Recreate
+    rollingUpdate:
+  {{- end }}
   template:
     metadata:
       labels:
@@ -25,17 +30,21 @@ spec:
         chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         release: {{ .Release.Name }}
         heritage: {{ .Release.Service }}
-        icpdsupport/app: "apis"
-        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         app.kubernetes.io/name: wkc-glossary-service
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+      {{- if eq .Values.global.deploymentTarget "icp4data" }}  
       annotations:
-        {{- if .Values.global.podAnnotations }}
-{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
-        {{- end }}
+      {{- if .Values.global.podAnnotations }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+      {{- end }}
+      {{- end }}
     spec:
+      {{- if eq .Values.global.deploymentTarget "icp4data" }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -50,12 +59,14 @@ spec:
                 - amd64
       securityContext:
         runAsNonRoot: true
+      {{- end }}  
       containers:
       - name: wkc-glossary-service
         image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
         ports:
         - containerPort: {{ int .Values.ports.targetPort }}
           protocol: TCP
+        {{- if eq .Values.global.deploymentTarget "icp4data" }}   
         volumeMounts:
         - name: wkc-gs-conf
           mountPath: "{{ .Values.environment.BG_CONFIG_LOCATION }}"
@@ -64,6 +75,7 @@ spec:
         - name: wdp-certs
           mountPath: "/etc/wdp_certs"
           readOnly: true
+{{- end }}
 {{- end }}
         livenessProbe:
           httpGet:
@@ -86,6 +98,7 @@ spec:
           successThreshold: {{ .Values.readinessProbe.successThreshold }}
           failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
         env:
+          {{- if eq .Values.global.deploymentTarget "icp4data" }}   
           - name: {{ .Values.environment.DOMAIN.name }}
             valueFrom:
               configMapKeyRef:
@@ -96,148 +109,168 @@ spec:
               configMapKeyRef:
                 name: {{ .Values.environment.GATEWAY.secret}}
                 key: {{ .Values.environment.GATEWAY.key }}
+          {{- end }}
           - name: "BM_APP_NAME"
-            value: {{ .Values.environment.BM_APP_NAME }}
-          {{- if .Values.environment.ENABLE_NEWRELIC }}
-          - name: "ENVIRONMENT_TYPE"
-            value: "{{ .Values.environment.ENVIRONMENT_TYPE }}"
-          {{- end }}
-          - name: "TRUST_ALL_SSL_CERT"
-            value: "{{ .Values.environment.TRUST_ALL_SSL_CERT }}"
+            value: {{ quote .Values.environment.BM_APP_NAME }}
           - name: "BM_APP_VERSION"
-            value: "{{ .Values.image.tag }}"
-          - name: "ENVIRONMENT_NAME"
-            value: "{{ .Values.environment.ENVIRONMENT_NAME }}"
-          {{- if .Values.environment.ENVIRONMENT_TYPE }}
-          - name: "ENVIRONMENT_TYPE"
-            value: {{ .Values.environment.ENVIRONMENT_TYPE }}
-          {{- end }}
-          {{- if .Values.environment.DEPLOY_TARGET }}
-          - name: "DEPLOY_TARGET"
-            value: "{{ .Values.environment.DEPLOY_TARGET }}"
-          {{- end }}
-          {{- if .Values.environment.DEPLOYMENT_TARGET }}
-          - name: "DEPLOYMENT_TARGET"
-            value: {{ .Values.environment.DEPLOYMENT_TARGET }}
-          {{- end }}
+            value: {{ quote .Values.image.tag }}
           - name: "BM_APP_VERSION_ENDPOINT"
-            value: {{ .Values.environment.BM_APP_VERSION_ENDPOINT }}
+            value: {{ quote .Values.environment.BM_APP_VERSION_ENDPOINT }}
           - name: "BG_SWAGGER_BASE_URL"
-            value: {{ .Values.environment.BG_SWAGGER_BASE_URL }}
+            value: {{ quote .Values.environment.BG_SWAGGER_BASE_URL }}
           - name: "BG_BASE_URL"
-            value: {{ .Values.environment.BG_BASE_URL }}
+            value: {{ quote .Values.environment.BG_BASE_URL }}
           - name: "BG_CAMS_URL"
-            value: {{ .Values.environment.BG_CAMS_URL }}
+            value: {{ quote .Values.environment.BG_CAMS_URL }}
           - name: "BG_DPS_URL"
-            value: {{ .Values.environment.BG_DPS_URL }}
+            value: {{ quote .Values.environment.BG_DPS_URL }}
           - name: "BG_DATA_PROFILES_URL"
-            value: {{ .Values.environment.BG_DATA_PROFILES_URL }}
+            value: {{ quote .Values.environment.BG_DATA_PROFILES_URL }}
           - name: "BG_ENABLE_RABBIT_MQ"
-            value: "{{ .Values.environment.BG_ENABLE_RABBIT_MQ }}"
+            value: {{ quote .Values.environment.BG_ENABLE_RABBIT_MQ }}
           - name: "BG_RABBIT_MQ_BG_EXCHANGE_NAME"
-            value: {{ .Values.environment.BG_RABBIT_MQ_BG_EXCHANGE_NAME }}
+            value: {{ quote .Values.environment.BG_RABBIT_MQ_BG_EXCHANGE_NAME }}
           - name: "BG_ENABLE_EXTERNAL_RABBIT_MQ"
-            value: "{{ .Values.environment.BG_ENABLE_EXTERNAL_RABBIT_MQ }}"
+            value: {{ quote .Values.environment.BG_ENABLE_EXTERNAL_RABBIT_MQ }}
           - name: "BG_RABBIT_MQ_EXTERNAL_QUEUE_NAME"
-            value: {{ .Values.environment.BG_RABBIT_MQ_EXTERNAL_QUEUE_NAME }}
+            value: {{ quote .Values.environment.BG_RABBIT_MQ_EXTERNAL_QUEUE_NAME }}
           - name: "BG_SECURITY_BG_ADMINISTRATOR_LIST"
-            value: "{{ .Values.environment.BG_SECURITY_BG_ADMINISTRATOR_LIST }}"
-          - name: "BG_OMRS_ENABLED"
-            value: "{{ .Values.environment.BG_OMRS_ENABLED }}"
-          - name: "BG_REDIS_ENABLED"
-            value: "{{ .Values.environment.BG_REDIS_ENABLED }}"
-          {{- if .Values.environment.BG_TECHNICAL_TERMS_FILENAME }}
-          - name: "BG_TECHNICAL_TERMS_FILENAME"
-            value: {{ .Values.environment.BG_TECHNICAL_TERMS_FILENAME }}
-          {{- end }}
+            value: {{ quote .Values.environment.BG_SECURITY_BG_ADMINISTRATOR_LIST }}
           - name: "BG_JWT_AUTHENTICATION_PROVIDER_IMPL"
-            value: {{ .Values.environment.BG_JWT_AUTHENTICATION_PROVIDER_IMPL }}
-          - name: "BG_ROLES_AUTHORIZATION_IMPL"
-            value: {{ .Values.environment.BG_ROLES_AUTHORIZATION_IMPL }}
+            value: {{ quote .Values.environment.BG_JWT_AUTHENTICATION_PROVIDER_IMPL }}
           - name: "BG_WDP_ROLES_API_BASE_URL"
-            value: {{ .Values.environment.BG_WDP_ROLES_API_BASE_URL }}
+            value: {{ quote .Values.environment.BG_WDP_ROLES_API_BASE_URL }}
           - name: "BG_IMPORT_REPORT_PERSISTENCE"
-            value: {{ .Values.environment.BG_IMPORT_REPORT_PERSISTENCE }}
-          {{- if .Values.environment.BG_READ_ONLY_MODE }}
+            value: {{ quote .Values.environment.BG_IMPORT_REPORT_PERSISTENCE }}
+          - name: "PUBLIC_CLOUD_MODE_ENABLED"
+            value: {{ quote .Values.environment.PUBLIC_CLOUD_MODE_ENABLED }}
+          {{- if .Values.environment.BG_READ_ONLY_MODE }}  
           - name: "BG_READ_ONLY_MODE"
-            value: "{{ .Values.environment.BG_READ_ONLY_MODE }}"
+            value: {{ quote .Values.environment.BG_READ_ONLY_MODE }}
           {{- end }}
-          {{- if .Values.environment.BG_BOOTSTRAP_UGI_TECHNICAL_TERMS }}
+          {{- if .Values.environment.BG_ICP4D_BASE_URL }}  
+          - name: "BG_ICP4D_BASE_URL"
+            value: {{ quote .Values.environment.BG_ICP4D_BASE_URL }}
+          {{- end }}
+          {{- if .Values.environment.CATEGORY_LEVEL_PERMISSIONS_ENABLED }}  
+          - name: "CATEGORY_LEVEL_PERMISSIONS_ENABLED"
+            value: {{ quote .Values.environment.CATEGORY_LEVEL_PERMISSIONS_ENABLED }}
+          {{- end }}
+          {{- if .Values.environment.DPS_SERVICE_IMPL }}  
+          - name: "DPS_SERVICE_IMPL"
+            value: {{ quote .Values.environment.DPS_SERVICE_IMPL }}
+          {{- end }}
+          {{- if .Values.environment.BG_BOOTSTRAP_UGI_TECHNICAL_TERMS }}  
           - name: "BG_BOOTSTRAP_UGI_TECHNICAL_TERMS"
-            value: "{{ .Values.environment.BG_BOOTSTRAP_UGI_TECHNICAL_TERMS }}"
-          {{- end }}
-          {{- if .Values.environment.GLOBAL_SEARCH_SERVICE_NOTIFICATION_ENABLED }}
-          - name: "GLOBAL_SEARCH_SERVICE_NOTIFICATION_ENABLED"
-            value: "{{ .Values.environment.GLOBAL_SEARCH_SERVICE_NOTIFICATION_ENABLED }}"
-          {{- end }}
-          {{- if .Values.environment.WORKFLOW_SERVICE_IMPL }}
-          - name: "WORKFLOW_SERVICE_IMPL"
-            value: "{{ .Values.environment.WORKFLOW_SERVICE_IMPL }}"
-          {{- end }}
+            value: {{ quote .Values.environment.BG_BOOTSTRAP_UGI_TECHNICAL_TERMS }}
+          {{- end }} 
+          {{- if .Values.environment.CLASSIFIER_GROUP_ENABLED }}  
           - name: "CLASSIFIER_GROUP_ENABLED"
-            value: "{{ .Values.environment.CLASSIFIER_GROUP_ENABLED }}"
-          - name: "COMPONENT_ID"
-            value: {{ .Values.environment.COMPONENT_ID }}
-          - name: "IAM_URL"
-            value: {{ .Values.environment.IAM_URL }}
-          - name: "CONTAINER_MEMORY"
-            value: {{ .Values.environment.CONTAINER_MEMORY }}
-          - name: "STANDALONE_TERM_SEMANTICS_PROPERTY"
-            value: "{{ .Values.environment.STANDALONE_TERM_SEMANTICS_PROPERTY }}"
-          - name: "LOG_DB_NAME_PREFIX"
-            value: {{ .Values.environment.LOG_DB_NAME_PREFIX }}
-          {{- if .Values.environment.ENABLE_NEWRELIC }}
-          - name: "ENABLE_NEWRELIC"
-            value: "{{ .Values.environment.ENABLE_NEWRELIC }}"
+            value: {{ quote .Values.environment.CLASSIFIER_GROUP_ENABLED }}
           {{- end }}
+          - name: "COMPONENT_ID"
+            value: {{ quote .Values.environment.COMPONENT_ID }}
+          {{- if .Values.environment.CONTAINER_MEMORY }}  
+          - name: "CONTAINER_MEMORY"
+            value: {{ quote .Values.environment.CONTAINER_MEMORY }}
+          {{- end }}  
+          {{- if .Values.environment.STANDALONE_TERM_SEMANTICS_PROPERTY }}
+          - name: "STANDALONE_TERM_SEMANTICS_PROPERTY"
+            value: {{ quote .Values.environment.STANDALONE_TERM_SEMANTICS_PROPERTY }}
+          {{- end }}  
+          - name: "LOG_DB_NAME_PREFIX"
+            value: {{ quote .Values.environment.LOG_DB_NAME_PREFIX }}
           - name: "BG_GLOBAL_SEARCH_SERVICE_URL"
-            value: "{{ .Values.environment.BG_GLOBAL_SEARCH_SERVICE_URL }}"
+            value: {{ quote .Values.environment.BG_GLOBAL_SEARCH_SERVICE_URL }}
           - name: "USER_MGMT_SERVICE_URL"
-            value: "{{ .Values.environment.USER_MGMT_SERVICE_URL }}"
+            value: {{ quote .Values.environment.USER_MGMT_SERVICE_URL }}
           - name: "WORKFLOW_SERVICE_URL"
-            value: "{{ .Values.environment.WORKFLOW_SERVICE_URL }}"
+            value: {{ quote .Values.environment.WORKFLOW_SERVICE_URL }}
           - name: "BG_USER_PROFILE_SERVICE_URL"
-            value: "{{ .Values.environment.BG_USER_PROFILE_SERVICE_URL }}"
-          - name: "BG_LOGGING_REFRESH_SECONDS"
-            value: "{{ .Values.environment.BG_LOGGING_REFRESH_SECONDS }}"
-          - name: "BG_LOGGING_CONFIG_LOCATION"
-            value: "{{ .Values.environment.BG_CONFIG_LOCATION }}/logging.properties"
+            value: {{ quote .Values.environment.BG_USER_PROFILE_SERVICE_URL }}
           - name: "BG_DB2_HOST"
-            value: "{{ .Values.environment.BG_DB2_HOST }}"
+            value: {{ quote .Values.environment.BG_DB2_HOST }}
           - name: "BG_DB2_PORT"
-            value: "{{ .Values.environment.BG_DB2_PORT }}"
+            value: {{ quote .Values.environment.BG_DB2_PORT }}
           - name: "BG_DB2_SSL"
-            value: "{{ .Values.environment.BG_DB2_SSL }}"
+            value: {{ quote .Values.environment.BG_DB2_SSL }}
           - name: "BG_DB2_DATABASE_NAME"
+          {{- if eq .Values.global.deploymentTarget "icp4data" }}
             valueFrom:
               configMapKeyRef:
                 name: "{{ .Values.environment.BG_DB_CONFIG_MAP }}"
                 key: "BG_DB2_DATABASE_NAME"
                 optional: true
+          {{- else }}
+            value: {{ quote .Values.environment.BG_DB2_DATABASE_NAME }}
+          {{- end }}  
           - name: "BG_DB2_CONNECTION_POOL_SIZE"
-            value: "{{ .Values.environment.BG_DB2_CONNECTION_POOL_SIZE }}"
+            value: {{ quote .Values.environment.BG_DB2_CONNECTION_POOL_SIZE }}
           - name: "BG_DB2_SCHEMA_INIT_MODE"
-            value: "{{ .Values.environment.BG_DB2_SCHEMA_INIT_MODE }}"
-          - name: "BG_DB2_USER"
-            value: "{{ .Values.environment.BG_DB2_USER }}"
+            value: {{ quote .Values.environment.BG_DB2_SCHEMA_INIT_MODE }}
           - name: {{ .Values.environment.BG_DB2_PASSWORD.name }}
             valueFrom:
               secretKeyRef:
                 name: {{ .Values.environment.BG_DB2_PASSWORD.secret }}
                 key: {{ .Values.environment.BG_DB2_PASSWORD.key }}
+          - name: "BG_DB2_USER"
+            value: {{ quote .Values.environment.BG_DB2_USER }}
+          - name: "BG_DB2_ADMIN_USER"
+            value: {{ quote .Values.environment.BG_DB2_ADMIN_USER }}
+          - name: "BG_DB2_ADMIN_GROUP"
+            value: {{ quote .Values.environment.BG_DB2_ADMIN_GROUP }}
+          - name: {{ .Values.environment.BG_REDIS_URL.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.BG_REDIS_URL.secret }}
+                key: {{ .Values.environment.BG_REDIS_URL.key }}
                 optional: true
+          - name: {{ .Values.environment.BG_REDIS_CERTIFICATE.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.BG_REDIS_CERTIFICATE.secret }}
+                key: {{ .Values.environment.BG_REDIS_CERTIFICATE.key }}
+                optional: true
+          {{- if .Values.environment.GLOBAL_SEARCH_THREAD_COUNT }}
+          - name: "GLOBAL_SEARCH_THREAD_COUNT"
+            value: {{ quote .Values.environment.GLOBAL_SEARCH_THREAD_COUNT }}
+          {{- end }}
+          - name: "WF_NOTIFICATION_BASE_URL"
+            value: {{ quote .Values.environment.WF_NOTIFICATION_BASE_URL }}
+          - name: "WF_CES_BASE_URL"
+            value: {{ quote .Values.environment.WF_CES_BASE_URL }}
+          - name: "WF_DB_URL"
+            value: {{ quote .Values.environment.WF_DB_URL }}
+          - name: "WF_DB_USERNAME"
+            value: {{ quote .Values.environment.WF_DB_USERNAME }}
+          - name: {{ .Values.environment.WF_DB_PASSWORD.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.WF_DB_PASSWORD.secret }}
+                key: {{ .Values.environment.WF_DB_PASSWORD.key }}
+          - name: "WF_AUTH_SERVICE_IMPL"
+            value: {{ quote .Values.environment.WF_AUTH_SERVICE_IMPL }}
+          {{- if eq .Values.global.deploymentTarget "icp4data" }}
+          - name: "TRUST_ALL_SSL_CERT"
+            value: {{ quote .Values.environment.TRUST_ALL_SSL_CERT }}
+          - name: "BG_OMRS_ENABLED"
+            value: {{ quote .Values.environment.BG_OMRS_ENABLED }}
+          - name: "BG_LOGGING_REFRESH_SECONDS"
+            value: {{ quote .Values.environment.BG_LOGGING_REFRESH_SECONDS }}
+          - name: "BG_LOGGING_CONFIG_LOCATION"
+            value: "{{ .Values.environment.BG_CONFIG_LOCATION }}/logging.properties"
           - name: "XMETA_DB2_HOST"
-            value: "{{ .Values.environment.XMETA_DB2_HOST }}"
+            value: {{ quote .Values.environment.XMETA_DB2_HOST }}
           - name: "XMETA_DB2_PORT"
-            value: "{{ .Values.environment.XMETA_DB2_PORT }}"
+            value: {{ quote .Values.environment.XMETA_DB2_PORT }}
           - name: "XMETA_DB2_SSL"
-            value: "{{ .Values.environment.XMETA_DB2_SSL }}"
+            value: {{ quote .Values.environment.XMETA_DB2_SSL }}
           - name: "XMETA_DB2_DATABASE_NAME"
-            value: "{{ .Values.environment.XMETA_DB2_DATABASE_NAME }}"
+            value: {{ quote .Values.environment.XMETA_DB2_DATABASE_NAME }}
           - name: "XMETA_DB2_CONNECTION_POOL_SIZE"
-            value: "{{ .Values.environment.XMETA_DB2_CONNECTION_POOL_SIZE }}"
+            value: {{ quote .Values.environment.XMETA_DB2_CONNECTION_POOL_SIZE }}
           - name: "XMETA_DB2_USER"
-            value: "{{ .Values.environment.XMETA_DB2_USER }}"
+            value: {{ quote .Values.environment.XMETA_DB2_USER }}
           - name: {{ .Values.environment.XMETA_DB2_PASSWORD.name }}
             valueFrom:
               secretKeyRef:
@@ -273,13 +306,180 @@ spec:
               secretKeyRef:
                 name: {{ .Values.environment.WDP_SERVICE_ID_CREDENTIAL.secret }}
                 key: {{ .Values.environment.WDP_SERVICE_ID_CREDENTIAL.key }}
-                optional: true
-          - name: {{ .Values.environment.BG_REDIS_URL.name }}
+                optional: true      
+          {{- end }}      
+          {{- if eq .Values.global.deploymentTarget "cloud" }}
+          - name: "PRODUCT_NAME"
+            value: {{ quote .Values.environment.PRODUCT_NAME }}
+          - name: "ENVIRONMENT_NAME"
+            value: {{ quote .Values.environment.ENVIRONMENT_NAME }}
+          - name: "ENVIRONMENT_TYPE"
+            value: {{ quote .Values.environment.ENVIRONMENT_TYPE }}
+          - name: "DEPLOY_TARGET"
+            value: {{ quote .Values.environment.DEPLOY_TARGET }}
+          - name: "DEPLOYMENT_TARGET"
+            value: {{ quote .Values.environment.DEPLOYMENT_TARGET }}
+          - name: "WORKFLOW_SERVICE_IMPL"
+            value: {{ quote .Values.environment.WORKFLOW_SERVICE_IMPL }}
+          - name: "ENABLE_NEWRELIC"
+            value: {{ quote .Values.environment.ENABLE_NEWRELIC }}
+          - name: "GATEWAY_URL"
+            value: {{ quote .Values.environment.GATEWAY_URL }}
+          - name: "BM_DOMAIN"
+            value: {{ quote .Values.environment.BM_DOMAIN }}
+          - name: "MONITORING_ENABLED"
+            value: {{ quote .Values.environment.MONITORING_ENABLED }}
+          - name: "NEW_RELIC_APP_NAME"
+            value: {{ quote .Values.environment.NEW_RELIC_APP_NAME }}
+          - name: "JVM_ARGS"
+            value: {{ quote .Values.environment.JVM_ARGS }}
+          - name: "BG_GENERATE_TOKEN_USING_API_KEY"
+            value: {{ quote .Values.environment.BG_GENERATE_TOKEN_USING_API_KEY }}
+          - name: "IAM_PUBLIC_KEYS_URL"
+            value: {{ quote .Values.environment.IAM_PUBLIC_KEYS_URL }}
+          - name: "IAM_TOKEN_URL"
+            value: {{ quote .Values.environment.IAM_TOKEN_URL }}
+          - name: "BM_DOMAIN"
+            value: {{ quote .Values.environment.BM_DOMAIN }}
+          - name: "SERVICE_SPACE_GUID"
+            value: {{ quote .Values.environment.SERVICE_SPACE_GUID }}
+          - name: "BLUEMIX_REGION"
+            value: {{ quote .Values.environment.BLUEMIX_REGION }}
+          - name: "REGION"
+            value: {{ quote .Values.environment.REGION }}
+          - name: "DATA_CENTER"
+            value: {{ quote .Values.environment.DATA_CENTER }}
+          - name: "LOG_AT_EVENTS"
+            value: {{ quote .Values.environment.LOG_AT_EVENTS }}
+          - name: "BG_ACTIVITY_TRACKER_URL"
+            value: {{ quote .Values.environment.BG_ACTIVITY_TRACKER_URL }}
+          - name: "BG_ACTIVITY_TRACKER_CRN"
+            value: {{ quote .Values.environment.BG_ACTIVITY_TRACKER_CRN }}
+          - name: "BG_ACTIVITY_TRACKER_INGESTION_KEY"
+            value: {{ quote .Values.environment.BG_ACTIVITY_TRACKER_INGESTION_KEY }}
+          - name: "BG_SYNCHRONIZATION_PROVIDER_IMPL"
+            value: {{ quote .Values.environment.BG_SYNCHRONIZATION_PROVIDER_IMPL }}
+          - name: "BG_ETCD_V3_ENABLED"
+            value: {{ quote .Values.environment.BG_ETCD_V3_ENABLED }}
+          - name: "BM_API_URL_ENDPOINT"
+            value: {{ quote .Values.environment.BM_API_URL_ENDPOINT }}
+          - name: "BM_APP_HOST"
+            value: {{ quote .Values.environment.BM_APP_HOST }}
+          - name: "HEALTH_CHECK_DELAY"
+            value: {{ quote .Values.environment.HEALTH_CHECK_DELAY }}
+          - name: "RECORD_METRIC_DELAY"
+            value: {{ quote .Values.environment.RECORD_METRIC_DELAY }}
+          - name: "IBM_COS_ENDPOINT"
+            value: {{ quote .Values.environment.IBM_COS_ENDPOINT }}
+          - name: "LOGDNA_SAVE_SERVICE_COPY"
+            value: {{ quote .Values.environment.LOGDNA_SAVE_SERVICE_COPY }}
+          - name: "BG_GENERATE_TOKEN_USING_API_KEY"
+            value: {{ quote .Values.environment.BG_GENERATE_TOKEN_USING_API_KEY }}
+          - name: "SERVICE_AT_NAME"
+            value: {{ quote .Values.environment.SERVICE_AT_NAME }}
+          - name: "SERVICE_INSTANCE_GUID"
+            value: {{ quote .Values.environment.SERVICE_INSTANCE_GUID }}
+          - name: "BG_SERVICE_INSTANCE_ID"
+            value: {{ quote .Values.environment.BG_SERVICE_INSTANCE_ID }}
+          - name: "USER_PROFILE_SERVICE_IMPL"
+            value: {{ quote .Values.environment.USER_PROFILE_SERVICE_IMPL }}
+          - name: "WDP_UI_PROXY_URL"
+            value: {{ quote .Values.environment.WDP_UI_PROXY_URL }}
+          - name: "SERVICE_OFFERING_NAME"
+            value: {{ quote .Values.environment.SERVICE_OFFERING_NAME }}
+          - name: "BG_SECURITY_FUNCTIONALUSER_LIST"
+            value: {{ quote .Values.environment.BG_SECURITY_FUNCTIONALUSER_LIST }}
+          - name: {{ .Values.environment.BG_SERVICE_API_KEY.name }}
             valueFrom:
               secretKeyRef:
-                name: {{ .Values.environment.BG_REDIS_URL.secret }}
-                key: {{ .Values.environment.BG_REDIS_URL.key }}
-                optional: true
+                name: {{ .Values.environment.BG_SERVICE_API_KEY.secret }}
+                key: {{ .Values.environment.BG_SERVICE_API_KEY.key }}
+          - name: "BG_CLOUDANT_DATABASE_URL"
+            value: {{ quote .Values.environment.BG_CLOUDANT_DATABASE_URL }}
+          - name: "BG_CLOUDANT_DATABASE_USER"
+            value: {{ quote .Values.environment.BG_CLOUDANT_DATABASE_USER }}
+          - name: {{ .Values.environment.BG_CLOUDANT_DATABASE_PASSWORD.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.BG_CLOUDANT_DATABASE_PASSWORD.secret }}
+                key: {{ .Values.environment.BG_CLOUDANT_DATABASE_PASSWORD.key }}
+          - name: {{ .Values.environment.BG_RABBITMQ_PRIMARY_URL.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.BG_RABBITMQ_PRIMARY_URL.secret }}
+                key: {{ .Values.environment.BG_RABBITMQ_PRIMARY_URL.key }}
+          - name: {{ .Values.environment.BG_RABBITMQ_BACKUP_URL.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.BG_RABBITMQ_BACKUP_URL.secret }}
+                key: {{ .Values.environment.BG_RABBITMQ_BACKUP_URL.key }}
+          - name: "BG_RABBITMQ_CERTIFICATE_BASE64"
+            value: {{ quote .Values.environment.BG_RABBITMQ_CERTIFICATE_BASE64 }}
+          - name: {{ .Values.environment.BG_EXTERNAL_RABBITMQ_PRIMARY_URL.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.BG_EXTERNAL_RABBITMQ_PRIMARY_URL.secret }}
+                key: {{ .Values.environment.BG_EXTERNAL_RABBITMQ_PRIMARY_URL.key }}
+          - name: "BG_RABBITMQ_CERTIFICATE_BASE64"
+            value: {{ quote .Values.environment.BG_RABBITMQ_CERTIFICATE_BASE64 }}
+          - name: {{ .Values.environment.BG_EXTERNAL_RABBITMQ_BACKUP_URL.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.BG_EXTERNAL_RABBITMQ_BACKUP_URL.secret }}
+                key: {{ .Values.environment.BG_EXTERNAL_RABBITMQ_BACKUP_URL.key }}
+          - name: {{ .Values.environment.bgetcd_Url.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.bgetcd_Url.secret }}
+                key: {{ .Values.environment.bgetcd_Url.key }} 
+          - name: {{ .Values.environment.bgetcd_Ssl.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.bgetcd_Ssl.secret }}
+                key: {{ .Values.environment.bgetcd_Ssl.key }}      
+          - name: {{ .Values.environment.bgetcd_v3_Url.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.bgetcd_v3_Url.secret }}
+                key: {{ .Values.environment.bgetcd_v3_Url.key }}      
+          - name: {{ .Values.environment.bgetcd_v3_Ssl.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.bgetcd_v3_Ssl.secret }}
+                key: {{ .Values.environment.bgetcd_v3_Ssl.key }}      
+          - name: {{ .Values.environment.bgetcd_v3_Ssl_Cert.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.bgetcd_v3_Ssl_Cert.secret }}
+                key: {{ .Values.environment.bgetcd_v3_Ssl_Cert.key }}
+          - name: {{ .Values.environment.bgetcd_v3_Deploy_Id.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.bgetcd_v3_Deploy_Id.secret }}
+                key: {{ .Values.environment.bgetcd_v3_Deploy_Id.key }} 
+          - name: {{ .Values.environment.newRelicLicenseKey.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.newRelicLicenseKey.secret }}
+                key: {{ .Values.environment.newRelicLicenseKey.key }}  
+          - name: {{ .Values.environment.crnCluster.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.crnCluster.secret }}
+                key: {{ .Values.environment.crnCluster.key }}
+          - name: {{ .Values.environment.iamProfileKeyStorePassword.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.iamProfileKeyStorePassword.secret }}
+                key: {{ .Values.environment.iamProfileKeyStorePassword.key }} 
+          - name: {{ .Values.environment.logDNASource.name }}
+            valueFrom:
+               secretKeyRef:
+                 name: {{ .Values.environment.logDNASource.secret }}
+                 key: {{ .Values.environment.logDNASource.key }}
+          - name: "DPS_SERVICE_IMPL"
+            value: {{ quote .Values.environment.DPS_SERVICE_IMPL }}    
+          {{- end }}
         resources:
           limits:
             cpu: {{ .Values.resources.limits.cpu }}
@@ -287,6 +487,7 @@ spec:
           requests:
             cpu: {{ .Values.resources.requests.cpu }}
             memory: {{ .Values.resources.requests.memory }}
+        {{- if eq .Values.global.deploymentTarget "icp4data" }}    
         securityContext:
           privileged: false
           allowPrivilegeEscalation: false
@@ -300,6 +501,12 @@ spec:
         - name: "wdp-certs"
           projected:
             sources:
+            - secret:
+                name: internal-nginx-svc-tls
+                items:
+                - key: certificate.pem
+                  path: internal-nginx.cert.pem
+                optional: true
             - secret:
                 name: wdp-db2-cert
                 items:
@@ -316,6 +523,7 @@ spec:
         - name: "wkc-gs-conf"
           configMap:
             name: wkc-glossary-service-config
+        {{- end }}    
 {{- if .Values.repository.secret.name }}
       imagePullSecrets:
         - name: {{ .Values.repository.secret.name }}

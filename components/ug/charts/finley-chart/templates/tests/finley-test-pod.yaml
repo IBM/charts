@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-test-finley"
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+     app: {{ .Release.Name }}-test-finley
+     chart: "{{ .Chart.Name }}"
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}"
+     app.kubernetes.io/name: {{ .Values.finley.app_name }}
+     helm.sh/chart: {{ .Chart.Name }}
+     app.kubernetes.io/managed-by: {{ .Release.Service }}
+     app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  affinity:
+  {{- include "nodeaffinity" . | indent 6 }}
+  containers:
+  - name: {{ .Release.Name }}-test-finley
+    image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.finley.repository }}:{{ .Values.finley.tag }}
+    command: ["sh", "-c", "ls -la"]
+    resources:
+      requests:
+        memory: "{{ .Values.finley.requests.memory }}"
+        cpu: "{{ .Values.finley.requests.cpu }}"
+      limits:
+        memory: "{{ .Values.finley.limits.memory }}"
+        cpu: "{{ .Values.finley.limits.cpu }}"
+    securityContext:
+      privileged: false
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      readOnlyRootFilesystem: false
+      capabilities:
+        drop:
+        - ALL
+  {{- if .Values.serviceAccountName }}
+  serviceAccountName: {{ .Values.serviceAccountName }}
+  {{- end }}
+  restartPolicy: Never

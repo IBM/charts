@@ -1,0 +1,215 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Values.solr.app_name }}
+  labels:
+     app: {{ .Values.solr.app_name }}
+     chart: "{{ .Chart.Name }}"
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}"
+     app.kubernetes.io/name: {{ .Values.solr.app_name }}
+     helm.sh/chart: {{ .Chart.Name }}
+     app.kubernetes.io/managed-by: {{ .Release.Service }}
+     app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  serviceName: {{ .Values.solr.app_name }}
+  selector:
+    matchLabels:
+      app: {{ .Values.solr.app_name }}
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.solr.app_name }}
+        chart: {{ .Values.solr.chartName }}
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/name: {{ .Values.solr.app_name }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
+      annotations:
+        helm.sh/hook: test-success
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: "app"
+                    operator: In
+                    values:
+                    - {{ .Values.solr.app_name }}
+              topologyKey: "kubernetes.io/hostname"
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+             - weight: 1
+               podAffinityTerm:
+                 labelSelector:
+                    matchExpressions:
+                      - key: "app"
+                        operator: In
+                        values:
+                        - {{ index .Values "zookeeper" "app_name" }}
+                 topologyKey: "kubernetes.io/hostname"
+      terminationGracePeriodSeconds: 60
+      initContainers:
+      - name: ug-config
+        command: [ "sh", "-c", "--" ]
+        args: [ "cp -rpf /tmp/configsets /solrconfig;"
+              ]
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.global.image.wkcugconfig.repository }}:{{ .Values.global.image.wkcugconfig.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          requests:
+            memory: "{{ .Values.global.image.wkcugconfig.requests.memory }}"
+            cpu: "{{ .Values.global.image.wkcugconfig.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.global.image.wkcugconfig.limits.memory }}"
+            cpu: "{{ .Values.global.image.wkcugconfig.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+         - name: solr-data
+           mountPath: /solrconfig
+      - name: zk-wait
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.global.image.wkcinitcontainer.repository }}:{{ .Values.global.image.wkcinitcontainer.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          requests:
+            memory: "{{ .Values.global.image.wkcinitcontainer.requests.memory }}"
+            cpu: "{{ .Values.global.image.wkcinitcontainer.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.global.image.wkcinitcontainer.limits.memory }}"
+            cpu: "{{ .Values.global.image.wkcinitcontainer.limits.cpu }}"
+        command: ['sh', '-c', '--']
+        args: [ "zk_status=1;
+                 while [ $zk_status != 0  ];
+                 do sleep 2;
+                 zk_status=`nc {{ index .Values "zookeeper" "app_name" }} 2181 < /dev/null; echo $?`;
+                 done;"
+              ]
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+      containers:
+        - name: {{ .Values.solr.app_name }}
+          image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.solr.repository }}:{{ .Values.solr.tag }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          resources:
+            requests:
+               memory: "{{ .Values.solrResources.requests.memory }}"
+               cpu: "{{ .Values.solrResources.requests.cpu }}"
+            limits:
+               memory: "{{ .Values.solrResources.limits.memory }}"
+               cpu: "{{ .Values.solrResources.limits.cpu }}"
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+              - ALL
+          ports:
+            - containerPort: 8983
+              name: server
+          env:
+          - name: SOLR_JAVA_MEM
+            value: "{{ .Values.solrResources.java_mem }}"
+          - name: SOLR_ZOOKEEPER_CONNECT
+            value: "{{ .Values.zookeeper.app_name }}:2181/solr"
+          - name: SOLR_POD_NAME
+            valueFrom:
+             fieldRef:
+              fieldPath: metadata.name
+          - name: SOLR_ADVERTISED_HOST
+            value: "$(SOLR_POD_NAME).{{ .Values.solr.app_name }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+          - name: SOLR_ENABLE_UI
+            value: "true"
+          readinessProbe:
+            httpGet:
+              path: /solr/admin/info/system
+              port: server
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /solr/admin/info/system
+              port: server
+            initialDelaySeconds: 20
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: solr-data
+              mountPath: /var/solr/data
+            - name: solr-logs-volume
+              mountPath: /var/solr/logs
+            - name: config-volume
+              mountPath: /opt/solr/server/resources/log4j.properties
+              subPath: log4j.properties
+      {{- include "image-secret" . | indent 6 }}
+      securityContext:
+        {{- if .Values.solr.runAsUser }}
+        runAsUser: {{ .Values.solr.runAsUser }}
+        {{- end }}
+        {{- if .Values.solr.fsGroup }}
+        fsGroup: {{ .Values.solr.fsGroup }}
+        {{- end }}
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- end }}
+      volumes:
+        - name: solr-logs-volume
+          emptyDir: {}
+        - name: config-script
+          configMap:
+            name: solr-configmap
+            defaultMode: 0755
+        - name: config-volume
+          configMap:
+            name: solr-configmap
+  volumeClaimTemplates:
+  - metadata:
+      name: solr-data
+    spec:
+      {{- if and .Values.global.persistence.useDynamicProvisioning (not .Values.solr.volumeClaim.overrideStorageClass) }}
+      # If present, use the storageClassName from the values.yaml, else use the
+      # default storageClass setup by Kubernetes Administrator
+      #
+      # Setting storageClassName to nil means use the default storage class
+      storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+      {{- else }}
+      storageClassName: {{ .Values.solr.volumeClaim.storageClassName | quote }}
+      {{- end }}
+      {{- if (not .Values.global.persistence.useDynamicProvisioning ) }}
+      selector:
+        matchLabels:
+          assign-to: "{{ .Release.Namespace }}-solr"
+      {{- end }}
+      accessModes: [ {{ .Values.solr.volumeClaim.accessMode }} ]
+      resources:
+        requests:
+          storage: {{ .Values.solr.volumeClaim.size }}

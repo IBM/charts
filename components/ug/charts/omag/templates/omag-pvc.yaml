@@ -1,0 +1,36 @@
+{{ if and .Values.global.persistence.enabled (not .Values.omag.volumeClaim.existingClaimName) -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-{{ .Values.omag.volumeClaim.name }}
+  labels:
+    app: {{ .Values.omag.app_name }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/name: {{ .Values.omag.app_name }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  {{- if and .Values.global.persistence.useDynamicProvisioning (not .Values.omag.volumeClaim.overrideStorageClass) }}
+  ## if present, use the storageClassName from the values.yaml, else use the
+  ## default storageClass setup by kube Administrator
+  ##
+  ## setting storageClassName to nil means use the default storage class
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+  {{- else }}
+  ## disable dynamic provisioning
+  storageClassName: {{ .Values.omag.volumeClaim.storageClassName | quote }}
+  {{- end }}
+  accessModes:
+    - {{ .Values.omag.volumeClaim.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.omag.volumeClaim.size }}
+  {{- if (not .Values.global.persistence.useDynamicProvisioning ) }}
+  selector:
+    matchLabels:
+      assign-to: "{{ .Release.Namespace }}-omag"
+  {{- end }}
+  {{- end }}

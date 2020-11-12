@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-test-odf-fast-analyzer"
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+    app: {{ .Release.Name }}-test-odf-fast-analyzer
+    releaseName: {{ .Release.Name }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+  containers:
+  - name: {{ .Release.Name }}-test-odf-fast-analyzer
+    image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.release.image.odfFastAnalyzer.repository }}:{{ .Values.release.image.odfFastAnalyzer.tag }}
+    command: ["sh", "-c", "ls -la"]
+    resources:
+      requests:
+        memory: "{{ .Values.release.image.odfFastAnalyzer.requests.memory }}"
+        cpu: "{{ .Values.release.image.odfFastAnalyzer.requests.cpu }}"
+      limits:
+        memory: "{{ .Values.release.image.odfFastAnalyzer.limits.memory }}"
+        cpu: "{{ .Values.release.image.odfFastAnalyzer.limits.cpu }}"
+    securityContext:
+      privileged: false
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      readOnlyRootFilesystem: false
+      capabilities:
+        drop:
+        - ALL
+  {{- if .Values.serviceAccountName }}
+  serviceAccountName: {{ .Values.serviceAccountName }}
+  {{- end }}
+  restartPolicy: Never

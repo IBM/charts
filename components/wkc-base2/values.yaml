@@ -8,6 +8,7 @@ enabled:
   recommendation: true
   profiling: true
   metadataDiscovery: true
+  metadata-imports-ui: true
   wkc-workflow-service: true
   policy-service: true
   lineage: true
@@ -19,20 +20,23 @@ global:
   serviceId: "icp4d-dev"
   userAuthSecret: "wdp-user-auth"
   deploymentTarget: "icp4data"
+  podLabels:
+    icpdsupport/addOnId: "wkc"
   installCerts: true
-  ibmProduct: ""
+  ibmProduct: "zen"
   dockerRegistryPrefix: ""
   persistence:
     useDynamicProvisioning: true
   podAnnotations:
     productName: "IBM Watson Knowledge Catalog for IBM Cloud Pak for Data"
-    productID: "ICP4D-WKCLite-Prod-3-2-0"
-    productVersion: "3.2.0"
+    productID: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    productVersion: "3.5.1"
     productMetric: "VIRTUAL_PROCESSOR_CORE"
     productChargedContainers: "All"
     cloudpakName: "IBM Cloud Pak for Data"
     cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
-    cloudpakVersion: "3.0.1"
+    cloudpakInstanceId: "{{ .Values.global.cloudpakInstanceId }}"
+    productCloudpakRatio: "1:1"
 
 postDelete:
   serviceAccountName: cpd-admin-sa
@@ -40,7 +44,7 @@ postDelete:
 preInstall:
   image:
     repository: wkc-init-container
-    tag: 1.0.85
+    tag: 1.0.111
     imagePullSecrets: ""
   resources:
     limits:
@@ -62,12 +66,12 @@ wkc-glossary-service-chart:
       memory: 512Mi
   image:
     repository: wkc-glossary-service
-    tag: 3.2.6
+    tag: 3.5.234
     pullSecret: ""
   preInstall:
     image:
       repository: wkc-init-container
-      tag: 1.0.85
+      tag: 1.0.111
       imagePullSecrets: ""
     resources:
       limits:
@@ -91,7 +95,7 @@ wdp-search-chart:
       memory: 700Mi
   image:
     repository: wdp-search
-    tag: 1.0.430
+    tag: 1.0.460
 
 wdp-profiling-chart:
   minReplicas: 1
@@ -105,7 +109,7 @@ wdp-profiling-chart:
       memory: 600Mi
   image:
     repository: wdp-profiling
-    tag: 3.1.713
+    tag: 3.5.108
 
 wdp-profiling-messaging-chart:
   minReplicas: 1
@@ -119,7 +123,7 @@ wdp-profiling-messaging-chart:
       memory: 300Mi
   image:
     repository: wdp-profiling-messaging
-    tag: 3.0.247
+    tag: 3.5.46
 
 wdp-profiling-ui-chart:
   minReplicas: 1
@@ -133,7 +137,7 @@ wdp-profiling-ui-chart:
       memory: 128Mi
   image:
     repository: wdp-profiling-ui
-    tag: 3.0.353
+    tag: 3.5.77
 
 wkc-gov-ui-chart:
   minReplicas: 1
@@ -147,7 +151,7 @@ wkc-gov-ui-chart:
       memory: 300Mi
   image:
     repository: wkc-gov-ui
-    tag: 3.1.435
+    tag: 3.5.766
     release: ""
   env:
     PRODUCT_NAME: "wkc"
@@ -165,7 +169,7 @@ dataconn-engine-opdiscovery-chart:
       memory: 350Mi
   image:
     repository: dataconn-engine-opdiscovery
-    tag: 2.0.43
+    tag: 3.0.142
 
 dataconn-engine-service-chart:
   minReplicas: 1
@@ -179,7 +183,7 @@ dataconn-engine-service-chart:
       memory: 512Mi
   image:
     repository: dataconn-engine-service
-    tag: 4.0.65
+    tag: 5.0.138
 
 dataconn-engine-spark-cluster-chart:
   minReplicas: 1
@@ -193,7 +197,7 @@ dataconn-engine-spark-cluster-chart:
       memory: 1500Mi
   image:
     repository: dataconn-engine-spark-cluster
-    tag: 4.0.65
+    tag: 5.0.138
   nodeLabel: wkc-privileged-node
 
 wdp-activities-chart:
@@ -208,7 +212,7 @@ wdp-activities-chart:
       memory: 800Mi
   image:
     repository: wdp-activities
-    tag: 2.0.26
+    tag: 3.0.98
 
 metadata-discovery:
   replicas: 1
@@ -220,17 +224,33 @@ metadata-discovery:
     memory: 400Mi
   image:
     repository: metadata-discovery
-    tag: 1.0.902
+    tag: 1.0.1109
   imagePullSecrets:
     name: ""
   env:
     enforceWKCPermission:
       value: true
 
+wkc-metadata-imports-ui-chart:
+  replicas: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1024Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  image:
+    repository: wkc-metadata-imports-ui
+    tag: 3.5.91
+  repository:
+    secret:
+      name: ""
+
 wkc-workflow-service-chart:
   image:
     repository: wkc-workflow-service
-    tag: 3.1.92
+    tag: 3.5.170
     pullSecret: ""
   env:
     PRODUCT_NAME: "wkc"
@@ -247,14 +267,14 @@ wdp-policy-service-chart:
   maxReplicas: 1
   resources:
     limits:
-      cpu: 500m
+      cpu: 700m
       memory: 4096Mi
     requests:
-      cpu: 100m
+      cpu: 200m
       memory: 480Mi
   image:
     repository: wdp-policy-service
-    tag: 3.1.152
+    tag: 3.5.298
   repository:
     secret:
       name: ""
@@ -264,6 +284,8 @@ wdp-policy-service-chart:
     DPS_JDBC_URL: "jdbc:db2://wdp-db2:50001/ILGDB:sslConnection=true;"
     DPS_ENABLE_RULES_AS_FIRST_CLASS: "\"true\""
     DPS_INCLUDE_CLASSIFICATION_LHS_TERM: "\"true\""
+    TS_USE_SERVICEID_IMPERSONATION: "\"false\""
+    DPS_ENABLE_RCR: "\"true\""
 
 wdp-lineage-chart:
   minReplicas: 1
@@ -277,6 +299,6 @@ wdp-lineage-chart:
       memory: 450Mi
   image:
     repository: wdp-lineage
-    tag: 3.2.4
+    tag: 3.5.65
   imagePullSecrets:
     name: ""

@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.igcUI.app_name }}
+  labels:
+     app: {{ .Values.igcUI.app_name }}
+     chart: "{{ .Chart.Name }}"
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}"
+     app.kubernetes.io/name: {{ .Values.igcUI.app_name }}
+     helm.sh/chart: {{ .Chart.Name }}
+     app.kubernetes.io/managed-by: {{ .Release.Service }}
+     app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+     matchLabels:
+       app: {{ .Values.igcUI.app_name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.igcUI.app_name }}
+        chart: "{{ .Values.igcUI.chartName }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/name: {{ .Values.igcUI.app_name }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
+      annotations:
+      {{- include "product-metering" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: "app"
+                operator: In
+                values:
+                - {{ .Values.igcUI.app_name }}
+            topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: {{ .Values.igcUI.app_name }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.igcUI.repository }}:{{ .Values.igcUI.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          requests:
+            memory: "{{ .Values.igcUI.requests.memory }}"
+            cpu: "{{ .Values.igcUI.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.igcUI.limits.memory }}"
+            cpu: "{{ .Values.igcUI.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+        command: [ "/bin/sh", "-c", "--" ]
+        args: [ "sed -i '/<html lang=\"en\">/a <meta name=\"toggle\" content=\"featureShowInZen\" value=\"on\" >' /app/dist/index.html;
+                 sed -i '/<html lang=\"en\">/a <meta name=\"toggle\" content=\"featureShowEdit\" value=\"on\" >' /app/dist/index.html;
+                 sed -i '/<html lang=\"en\">/a <meta name=\"toggle\" content=\"featureMaskingRules\" value=\"off\" >' /app/dist/index.html;
+                 sed -i 's/<title>Information Governance Catalog<\\/title>/<title>IBM Cloud Pak for Data<\\/title>/g' /app/dist/index.html;
+                 sed -i '/<meta name=\"toggle\" content=\"featureShowInZen\" value=\"on\">/a <meta name=\"toggle\" content=\"featureMaskingRules\" value=\"off\" >' /app/dist/index.zen.html;
+                 npm start;"
+             ]
+        env:
+        - name: RUN_TYPE
+          value: {{.Values.global.ibmProduct | quote | upper }}
+        ports:
+        - name: http
+          containerPort: 3000
+        readinessProbe:
+          tcpSocket:
+            port: 3000
+          initialDelaySeconds: 5
+        livenessProbe:
+          tcpSocket:
+            port: 3000
+          initialDelaySeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        {{- if .Values.igcUI.runAsUser }}
+        runAsUser: {{ .Values.igcUI.runAsUser }}
+        {{- end }}
+        {{- if .Values.igcUI.fsGroup }}
+        fsGroup: {{ .Values.igcUI.fsGroup }}
+        {{- end }}
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- end }}
+      {{- include "image-secret" . | indent 6 }}

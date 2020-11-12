@@ -25,17 +25,21 @@ spec:
         chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         release: {{ .Release.Name }}
         heritage: {{ .Release.Service }}
-        icpdsupport/app: "ui"
         app.kubernetes.io/name: {{ template "wkc-gov-ui-chart.fullname" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         helm.sh/chart: {{ .Chart.Name }}
-        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
+      {{- if eq .Values.global.deploymentTarget "icp4data" }}
       annotations:
         {{- if .Values.global.podAnnotations }}
-{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
         {{- end }}
+      {{- end }}
     spec:
+      {{- if eq .Values.global.deploymentTarget "icp4data" }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -44,11 +48,15 @@ spec:
       {{- if .Values.securityContext.runAsUser }}
         runAsUser: {{ .Values.securityContext.runAsUser }}
       {{- end }}
-      {{- if eq .Values.global.deploymentTarget "icp4data" }}
+      serviceAccount: cpd-editor-sa
+      serviceAccountName: cpd-editor-sa
       volumes:
         - name: certificate
           secret:
             secretName: ca-certificate-chain-trust
+        - name: user-home-mount
+          persistentVolumeClaim:
+            claimName: user-home-pvc
       {{- end }}
       containers:
       - name: {{ template "wkc-gov-ui-chart.fullname" . }}
@@ -57,6 +65,8 @@ spec:
         volumeMounts:
           - name: certificate
             mountPath: /etc/certificate
+          - name: user-home-mount
+            mountPath: /user-home
         {{- end }}
         ports:
         - containerPort: {{ .Values.ports.targetPort }}
@@ -92,6 +102,7 @@ spec:
           value: "{{ .Values.image.tag }}"
         - name: "BM_APP_VERSION_ENDPOINT"
           value: {{ .Values.environment.BM_APP_VERSION_ENDPOINT }}
+        {{- if eq .Values.global.deploymentTarget "icp4data" }}
         {{- if .Values.environment.wdpHostDomain }}
         - name: "CUSTOM_DOMAIN"
           valueFrom:
@@ -110,6 +121,23 @@ spec:
               name: wdp-service-id
               key: service-id-credentials
               optional: true
+        - name: auth__icp4d__zenServiceSecret
+          valueFrom:
+            secretKeyRef:
+              key: token
+              name: zen-service-broker-secret
+              optional: true
+        - name: "config__iisServer__user"
+          value: "isadmin"
+        - name: "config__iisServer__password"
+          valueFrom:
+            secretKeyRef:
+              key: isadmin_password
+              name: iis-usr-secrets
+              optional: true
+        - name: "config__session__key"
+          value: {{ .Values.environment.config__session__key }}
+        {{- end }}
         - name: "{{ .Values.environment.config__session__secret.name }}"
           valueFrom:
             secretKeyRef:
@@ -128,12 +156,14 @@ spec:
               name: "{{ .Values.environment.config__composeRedis__cryptoPassword.secret }}"
               key: "{{ .Values.environment.config__composeRedis__cryptoPassword.key }}"
               optional: true
+        {{- if eq .Values.global.deploymentTarget "icp4data" }}
         - name: "{{ .Values.environment.auth__crypto__password.name }}"
           valueFrom:
             secretKeyRef:
               name: "{{ .Values.environment.auth__crypto__password.secret }}"
               key: "{{ .Values.environment.auth__crypto__password.key }}"
               optional: true
+        {{- end }}
         {{- if .Values.environment.config__composeRedis__tlsServer }}
         - name: "{{ .Values.environment.config__composeRedis__tlsServer.name }}"
           valueFrom:
@@ -174,10 +204,117 @@ spec:
           value: "{{ .Values.environment.NODE_MODULES_CACHE }}"
         - name: "PRODUCTION"
           value: "{{ .Values.environment.PRODUCTION }}"
-        - name: "config__session__key"
-          value: {{ .Values.environment.config__session__key }}
         - name: NODE_OPTIONS
           value: "--max-http-header-size=32768"
+        - name: rabbitmq__fallbackUrl
+          valueFrom:
+            secretKeyRef:
+              key:  {{ .Values.environment.rabbitmq__fallbackUrl.key }}
+              name: {{ .Values.environment.rabbitmq__fallbackUrl.secret }}
+        - name: rabbitmq__primaryUrl
+          valueFrom:
+            secretKeyRef:
+              key: {{ .Values.environment.rabbitmq__primaryUrl.key }}
+              name: {{ .Values.environment.rabbitmq__primaryUrl.secret }}
+        - name: rabbitmq__enabled
+          value: {{ .Values.environment.rabbitmq_enabled | default true | quote }}
+        {{- if eq .Values.global.deploymentTarget "cloud" }}
+        - name: "BM_DOMAIN"
+          value: {{ quote .Values.environment.BM_DOMAIN }}
+        - name: "ENABLE_NEWRELIC"
+          value: {{ quote .Values.environment.ENABLE_NEWRELIC }}
+        - name: "ENABLE_MONITORING"
+          value: {{ quote .Values.environment.ENABLE_MONITORING }}
+        - name: "JVM_ARGS"
+          value: {{ quote .Values.environment.JVM_ARGS }}
+        - name: "LOGDNA_SAVE_SERVICE_COPY"
+          value: {{ quote .Values.environment.LOGDNA_SAVE_SERVICE_COPY }}
+        - name: "NEW_RELIC_APP_NAME"
+          value: {{ quote .Values.environment.NEW_RELIC_APP_NAME }}
+        - name: "SERVICE_INSTANCE_GUID"
+          value: {{ quote .Values.environment.SERVICE_INSTANCE_GUID }}
+        - name: "CUSTOM_DOMAIN"
+          value: {{ quote .Values.environment.CUSTOM_DOMAIN }}
+        - name: "APP_ENV_LOG_TO_SLACK"
+          value: {{ quote .Values.environment.APP_ENV_LOG_TO_SLACK }}
+        - name: "APP_ENV_SLACK_CHANNEL"
+          value: {{ quote .Values.environment.APP_ENV_SLACK_CHANNEL }}
+        - name: {{ .Values.environment.configSessionKey.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.configSessionKey.secret }}
+              key: {{ .Values.environment.configSessionKey.key }}
+              optional: true
+        - name: {{ .Values.environment.crnCluster.name}}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.crnCluster.secret }}
+              key: {{ .Values.environment.crnCluster.key }}
+              optional: true
+        - name: {{ .Values.environment.newRelicLicenseKey.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.newRelicLicenseKey.secret }}
+              key: {{ .Values.environment.newRelicLicenseKey.key }}
+              optional: true
+        - name: {{ .Values.environment.configComposeRedisTlsServer.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.configComposeRedisTlsServer.secret }}
+              key: {{ .Values.environment.configComposeRedisTlsServer.key }}
+              optional: true
+        - name: {{ .Values.environment.configComposeRedisCertificate.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.configComposeRedisCertificate.secret }}
+              key: {{ .Values.environment.configComposeRedisCertificate.key }}
+              optional: true
+        - name: {{ .Values.environment.authIamIdClientSecret.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.authIamIdClientSecret.secret }}
+              key: {{ .Values.environment.authIamIdClientSecret.key }}
+              optional: true
+        - name: {{ .Values.environment.authIamIdClientId.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.authIamIdClientId.secret }}
+              key: {{ .Values.environment.authIamIdClientId.key }}
+              optional: true
+        - name: {{ .Values.environment.authUAARedirectUrl.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.authUAARedirectUrl.secret }}
+              key: {{ .Values.environment.authUAARedirectUrl.key }}
+              optional: true
+        - name: {{ .Values.environment.authUAAClientSecret.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.authUAAClientSecret.secret }}
+              key: {{ .Values.environment.authUAAClientSecret.key }}
+              optional: true
+        - name: {{ .Values.environment.authUAAClientId.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.authUAAClientId.secret }}
+              key: {{ .Values.environment.authUAAClientId.key }}
+              optional: true
+        - name: {{ .Values.environment.logDNASource.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.logDNASource.secret }}
+              key: {{ .Values.environment.logDNASource.key }}
+        - name: {{ .Values.environment.appEnvSlackCrashHook.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.appEnvSlackCrashHook.secret }}
+              key: {{ .Values.environment.appEnvSlackCrashHook.key }}
+        - name: {{ .Values.environment.segmentKey.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.segmentKey.secret }}
+              key: {{ .Values.environment.segmentKey.key }}
+        {{- end }}
         resources:
           limits:
             cpu: {{ .Values.resources.limits.cpu }}
@@ -185,6 +322,7 @@ spec:
           requests:
             cpu: {{ .Values.resources.requests.cpu }}
             memory: {{ .Values.resources.requests.memory }}
+        {{- if eq .Values.global.deploymentTarget "icp4data" }}
         securityContext:
           privileged: false
           allowPrivilegeEscalation: false
@@ -196,10 +334,12 @@ spec:
           capabilities:
             drop:
             - ALL
+        {{- end }}
     {{- if .Values.repository.secret.name }}
       imagePullSecrets:
       - name: {{ .Values.repository.secret.name }}
     {{- end }}
+      {{- if eq .Values.global.deploymentTarget "icp4data" }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -210,3 +350,4 @@ spec:
                 values:
                 - amd64
                 - ppc64le
+      {{- end }}

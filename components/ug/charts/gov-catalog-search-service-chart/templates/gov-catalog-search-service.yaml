@@ -1,0 +1,144 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.catalogSearchService.app_name }}
+  labels:
+     app: {{ .Values.catalogSearchService.app_name }}
+     chart: "{{ .Chart.Name }}"
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}"
+     app.kubernetes.io/name: {{ .Values.catalogSearchService.app_name }}
+     helm.sh/chart: {{ .Chart.Name }}
+     app.kubernetes.io/managed-by: {{ .Release.Service }}
+     app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.catalogSearchService.app_name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.catalogSearchService.app_name }}
+        chart: "{{ .Values.catalogSearchService.chartName }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/name: {{ .Values.catalogSearchService.app_name }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
+      annotations:
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      initContainers:
+      {{- include "wait-services" . | indent 6 }}
+      containers:
+      - name: {{ .Values.catalogSearchService.app_name }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.catalogSearchService.repository }}:{{ .Values.catalogSearchService.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          requests:
+            memory: "{{ .Values.catalogSearchService.requests.memory }}"
+            cpu: "{{ .Values.catalogSearchService.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.catalogSearchService.limits.memory }}"
+            cpu: "{{ .Values.catalogSearchService.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: XMETA_DB_TYPE
+          value: db2
+        - name: XMETA_DB_HOST
+          value: is-xmetadocker
+        - name: XMETA_DB_PORT
+          value: "50000"
+        - name: XMETA_DB_NAME
+          value: xmeta
+        - name: XMETA_DB_USER
+          value: xmeta
+        - name: XMETA_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: xmeta_password
+        - name: SOLR_HTTP_CONNECT
+          value: http://{{ .Values.solr.app_name }}:8983/solr
+        - name: SOLR_DATA_COLLECTION
+          value: da-datasets
+        ports:
+        - containerPort: 9080
+        volumeMounts:
+        - name: secrets-pv-volume
+          mountPath: /config/secrets
+        - name: config-dir
+          mountPath: /config/config
+        - name: config-dropins-defaults-dir
+          mountPath: /config/configDropins/defaults
+        - name: config-dropins-trace-logging
+          mountPath: /config/configDropins/defaults/trace-logging.xml
+          subPath: trace-logging.xml
+        - name: logs-dir
+          mountPath: /logs
+        - name: wlp-output-dir
+          mountPath: /opt/ibm/wlp/output
+        - name: tmp-dir
+          mountPath: /tmp
+        readinessProbe:
+          httpGet:
+            path: /ibm/iis/api/catalog_search/v1
+            port: 9080
+          initialDelaySeconds: 30
+          failureThreshold: 3
+          periodSeconds: 30
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /ibm/iis/api/catalog_search/v1/health
+            port: 9080
+          initialDelaySeconds: 300
+          failureThreshold: 3
+          periodSeconds: 30
+          timeoutSeconds: 5
+      securityContext:
+        runAsNonRoot: true
+        {{- if .Values.catalogSearchService.runAsUser }}
+        runAsUser: {{ .Values.catalogSearchService.runAsUser }}
+        {{- end }}
+        {{- if .Values.catalogSearchService.fsGroup }}
+        fsGroup: {{ .Values.catalogSearchService.fsGroup }}
+        {{- end }}
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- end }}
+      {{- include "image-secret" . | indent 6 }}
+      volumes:
+      - name: secrets-pv-volume
+        persistentVolumeClaim:
+            claimName: iis-secrets-pv
+      - name: config-dir
+        emptyDir: {}
+      - name: config-dropins-defaults-dir
+        emptyDir: {}
+      - name: logs-dir
+        emptyDir: {}
+      - name: wlp-output-dir
+        emptyDir: {}
+      - name: tmp-dir
+        emptyDir: {}
+      - name: config-dropins-trace-logging
+        configMap:
+          name: gov-catalog-search-service-trace-logging

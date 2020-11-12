@@ -12,7 +12,7 @@ metadata:
     app.kubernetes.io/name: {{ .Chart.Name }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
 {{- if .Values.extraLabels }}
-{{ toYaml .Values.extraLabels | indent 4 }}
+{{ tpl (toYaml .Values.extraLabels) . | indent 4 }}
 {{- end }}
 spec:
   podManagementPolicy: {{ .Values.podManagementPolicy }}
@@ -35,29 +35,23 @@ spec:
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         app.kubernetes.io/name: {{ .Chart.Name }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        icpdsupport/app: "apis"
-        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
 {{- if .Values.extraLabels }}
-{{ toYaml .Values.extraLabels | indent 8 }}
+{{ tpl (toYaml .Values.extraLabels) . | indent 8 }}
 {{- end }}
       annotations:
         {{- if not .Values.existingConfigMap }}
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         {{- end }}
 {{- if .Values.podAnnotations }}
-{{ toYaml .Values.podAnnotations | indent 8 }}
+{{ tpl (toYaml .Values.podAnnotations) . | indent 8 }}
 {{- end }}
-    spec:
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: beta.kubernetes.io/arch
-                operator: In
-                values:
-                - {{ .Values.archx86_64 }}
-                - {{ .Values.archppc64le }}
+        {{- if .Values.global.podAnnotations }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+        {{- end }}  
+    spec:     
       {{- if .Values.image.pullSecrets }}
       imagePullSecrets:
       {{- range .Values.image.pullSecrets }}
@@ -117,29 +111,6 @@ spec:
               touch "${RABBITMQ_MNESIA_DIR}/force_load";
             fi
             {{- end }}
-            
-            # set total_memory_available_override_value based on container memory limit
-            
-            # determine whether to set "vm_memory_high_watermark" (based on cgroups)
-            memTotalKb=
-            if [ -r /proc/meminfo ]; then
-              memTotalKb="$(awk -F ':? +' '$1 == "MemTotal" { print $2; exit }' /proc/meminfo)"
-            fi
-            memLimitB=
-            if [ -r /sys/fs/cgroup/memory/memory.limit_in_bytes ]; then
-              # "18446744073709551615" is a valid value for "memory.limit_in_bytes", which is too big for Bash math to handle
-              # "$(( 18446744073709551615 / 1024 ))" = 0; "$(( 18446744073709551615 * 40 / 100 ))" = 0
-              memLimitB="$(awk -v totKb="$memTotalKb" '{
-              limB = $0;
-              limKb = limB / 1024;
-              if (!totKb || limKb < totKb) {
-                printf "%.0f\n", limB;
-              }
-            }' /sys/fs/cgroup/memory/memory.limit_in_bytes)"
-            fi
-            if [ -n "$memLimitB" ]; then
-              echo "total_memory_available_override_value = $memLimitB" >> /etc/rabbitmq/rabbitmq.conf
-            fi
             
           securityContext:
             privileged: false
@@ -241,6 +212,8 @@ spec:
                   fieldPath: metadata.name
             - name: RABBITMQ_USE_LONGNAME
               value: "true"
+            - name: RABBITMQ_IO_THREAD_POOL_SIZE
+              value: {{ default "128" .Values.ioThreadPoolSize | quote }}
             - name: RABBITMQ_NODENAME
               value: rabbit@$(MY_POD_NAME).{{ template "rabbitmq-ha.fullname" . }}-discovery.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}
             - name: K8S_HOSTNAME_SUFFIX
@@ -281,7 +254,6 @@ spec:
               mountPath: /var/lib/rabbitmq
             - name: config
               mountPath: /etc/rabbitmq
-              readOnly: true
             {{- if not .Values.existingSecret }}
             - name: definitions
               mountPath: /etc/definitions
@@ -299,8 +271,17 @@ spec:
       tolerations:
 {{ toYaml .Values.tolerations | indent 8 }}
       {{- end }}
-      {{- if eq .Values.podAntiAffinity "hard" }}
       affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.archx86_64 }}
+                - {{ .Values.archppc64le }}
+      {{- if eq .Values.podAntiAffinity "hard" }}
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - topologyKey: "kubernetes.io/hostname"
@@ -309,7 +290,6 @@ spec:
                   app: {{ template "rabbitmq-ha.name" . }}
                   release: {{ .Release.Name }}
       {{- else if eq .Values.podAntiAffinity "soft" }}
-      affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 1

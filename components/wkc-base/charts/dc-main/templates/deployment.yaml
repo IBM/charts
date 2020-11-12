@@ -30,10 +30,12 @@ spec:
         app.kubernetes.io/name: {{ .Chart.Name }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         icpdsupport/app: "ui"
-        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim  | indent 8 }}
+        {{- end }}
       annotations:
-      {{- if .Values.global.annotations }}
-{{ toYaml .Values.global.annotations | trim  | indent 8 }}
+      {{- if .Values.global.podAnnotations }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim  | indent 8 }}
       {{- end }}
     spec:
       {{- if eq .Values.global.deploymentTarget "icp4data" }}
@@ -113,7 +115,7 @@ spec:
           failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
         env:
            - name: config__iisServer__user
-             {{- if eq .Values.env.DEPLOYMENT_TARGET "icp4data" }}
+             {{- if eq .Values.global.deploymentTarget "icp4data" }}
              value: "isadmin"
              {{- else}}
              valueFrom:
@@ -123,7 +125,7 @@ spec:
                  optional: true
              {{- end}}
            - name: config__iisServer__password
-             {{- if eq .Values.env.DEPLOYMENT_TARGET "icp4data" }}
+             {{- if eq .Values.global.deploymentTarget "icp4data" }}
              valueFrom:
                 secretKeyRef:
                    key:  isadmin_password
@@ -201,34 +203,48 @@ spec:
                    key: config__composeRedis__cryptoPassword
                    name: portal-catalog-secret
            - name: config__composeRedis__url
-             {{- if eq .Values.env.DEPLOYMENT_TARGET "cloud" }}
+           {{- if eq .Values.env.DEPLOYMENT_TARGET "cloud" }}
              valueFrom:
                 secretKeyRef:
-                   key: config__composeRedis__url
-                   name: portal-catalog-secret
-             {{- else}}
+                  key: config__composeRedis__url
+                  name: portal-catalog-secret
+           {{- else}}
              valueFrom:
                 secretKeyRef:
-                   key: redis-url.txt
-                   name: redis-url
-             {{- end}}
+                  key: redis-url-ssl
+                  name: redis-ha
+           {{- end}}
+           - name: config__composeRedis__tlsServer
+           {{- if eq .Values.env.DEPLOYMENT_TARGET "cloud" }}
+             valueFrom:
+                secretKeyRef:
+                  key: config__composeRedis__tlsServer
+                  name: portal-catalog-secret
+                  optional: true
+           {{- else}}
+             valueFrom:
+                secretKeyRef:
+                  key: redis-host
+                  name: redis-ha-secret-host-and-port
+           {{- end}}
+           - name: config__composeRedis__certificate
+           {{- if eq .Values.env.DEPLOYMENT_TARGET "cloud" }}
+             valueFrom:
+                secretKeyRef:
+                  key: config__composeRedis__certificate
+                  name: portal-catalog-secret
+                  optional: true
+           {{- else}}
+             valueFrom:
+                secretKeyRef:
+                  key: cacertb64.pem
+                  name: redis-ha-cert
+           {{- end}}
            - name: WDP_SERVICE_ID_CREDENTIAL
              valueFrom:
                 secretKeyRef:
                    name: wdp-service-id
                    key: service-id-credentials
-                   optional: true
-           - name: config__composeRedis__tlsServer
-             valueFrom:
-                secretKeyRef:
-                   key: config__composeRedis__tlsServer
-                   name: portal-catalog-secret
-                   optional: true
-           - name: config__composeRedis__certificate
-             valueFrom:
-                secretKeyRef:
-                   key: config__composeRedis__certificate
-                   name: portal-catalog-secret
                    optional: true
            - name: config__session__secret
              valueFrom:
@@ -255,17 +271,16 @@ spec:
            {{- if eq .Values.global.deploymentTarget "icp4data" }}
            - name: NODE_EXTRA_CA_CERTS
              value: /etc/certificate/certificate.pem
+           {{- else if ne .Values.global.deploymentTarget "cloud" }}
+           - name: NODE_TLS_REJECT_UNAUTHORIZED
+             value: "0"
            {{- end }}
            - name: APP_ENV_SUBDOMAIN
              value: {{ .Values.env.APP_ENV_SUBDOMAIN | quote }}
            - name: DEPLOY_TIMESTAMP
              value: {{ now | date "Mon Jan/02/2006-3:04:05 PM" }}
            - name: APP_NAME
-             {{- if .Values.image.branch }}
-             value: "DC-Main-{{ .Values.image.version }}"
-             {{- else }}
-             value: "DC-Main-{{ .Values.image.tag }}"
-             {{- end }}
+             value: "DC-Main"
            - name: DOMAIN
              value: {{ .Values.env.DOMAIN | quote }}
            - name: EXT_DOMAIN
@@ -320,12 +335,24 @@ spec:
              {{- end }}
            - name: config__redisServer
              {{- if eq .Values.global.deploymentTarget "icp4data" }}
-             value: "redis-ha-master-svc:6379"
+             value: "redis-ha-master-svc:6380"
              {{- else }}
              value: "redis:6379"
              {{- end }}
+           - name: PRODUCT_VERSION
+             {{- if .Values.image.branch }}
+             value: {{ .Values.image.version }}
+             {{- else }}
+             value: {{ .Values.image.tag }}
+             {{- end }}
            - name: config__iisServer__url
              value: https://$(IIS_HOST_NAME):$(IIS_HOST_PORT)
+           - name: config__segment__key
+             valueFrom:
+               secretKeyRef:
+                 key: config__segment__key
+                 name: portal-catalog-secret
+                 optional: true
       {{- if .Values.image.pullSecret }}
       imagePullSecrets:
           - name: {{ .Values.image.pullSecret | quote }}

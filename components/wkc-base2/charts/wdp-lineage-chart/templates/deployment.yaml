@@ -25,15 +25,16 @@ spec:
         chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         release: {{ .Release.Name }}
         heritage: {{ .Release.Service }}
-        icpdsupport/app: "apis"
-        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         app.kubernetes.io/name: wdp-lineage
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
       annotations:
         {{- if .Values.global.podAnnotations }}
-{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
         {{- end }}
     spec:
       affinity:
@@ -317,6 +318,12 @@ spec:
         - name: "wdp-certs"
           projected:
             sources:
+            - secret:
+                name: internal-nginx-svc-tls
+                items:
+                - key: certificate.pem
+                  path: internal-nginx.cert.pem
+                optional: true
             - secret:
                 name: wdp-db2-cert
                 items:

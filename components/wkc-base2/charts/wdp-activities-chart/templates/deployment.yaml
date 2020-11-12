@@ -1,11 +1,17 @@
 ---
-{{- include "sch.config.init" (list . "wdp-activities.sch.chart.config.values") -}}
+{{ include "sch.config.init" (list . "wdp-activities.sch.chart.config.values") }}
 kind: Deployment
 apiVersion: apps/v1
 metadata:
   name: {{ template "wdp-activities.fullname" . }}
   labels:
 {{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+    app: {{ include "sch.names.appName" (list .)  | quote}}
+    chart: {{ .Chart.Name | quote }}
+    heritage: {{ .Release.Service | quote }}
+    {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 4 }}
+    {{- end }}
 spec:
   replicas: {{ .Values.minReplicas }}
   selector:
@@ -14,26 +20,37 @@ spec:
   template:
     metadata:
       labels:
-{{ include "sch.metadata.labels.standard" (list . "" (dict "icpdsupport/app" "apis" .Values.global.serviceabilityLabelName .Values.global.serviceabilityLabelValue)) | indent 8 }}
+        app: {{ include "sch.names.appName" (list .)  | quote}}
+        date: "date"
+        chart: {{ .Chart.Name | quote }}
+        heritage: {{ .Release.Service | quote }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
       annotations:
         {{- if .Values.global.podAnnotations }}
-{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
         {{- end }}
     spec:
+      {{- if ne .Values.global.deploymentTarget "cloud" }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
       securityContext:
         runAsNonRoot: true
+      {{- end }}
       containers:
       - name: {{ template "wdp-activities.fullname" . }}
         image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+{{- if ne .Values.global.deploymentTarget "cloud" }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
 {{- if .Values.global.installCerts }}
         volumeMounts:
         - name: wdp-certs
           mountPath: "/etc/wdp_certs"
           readOnly: true
+{{- end }}
 {{- end }}
         ports:
         - containerPort: {{ .Values.ports.targetPort }}
@@ -43,9 +60,11 @@ spec:
             path: "/v2/data_flows/version"
             port: {{ .Values.ports.targetPort }}
             scheme: "HTTPS"
+            {{- if .Values.host }}
             httpHeaders:
             - name: Host
-              value: $(GATEWAY_URL)
+              value: {{ .Values.host }}
+            {{- end }}
           initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
           timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
           periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
@@ -56,15 +75,269 @@ spec:
             path: "/v2/data_flows/version"
             port: {{ .Values.ports.targetPort }}
             scheme: "HTTPS"
+            {{- if .Values.host }}
             httpHeaders:
             - name: Host
-              value: $(GATEWAY_URL)
+              value: {{ .Values.host }}
+            {{- end }}
           initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
           timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
           periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
           successThreshold: {{ .Values.readinessProbe.successThreshold }}
           failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
         env:
+        - name: COMPONENT_ID
+          value: WDP-DataFlows
+        - name: ENABLE_DEBUG
+          value: {{ .Values.environment.enableDebug | quote }}
+        - name: IGNORE_ENTITLEMENT_CHECK
+          value: {{ .Values.environment.ignoreEntitlementCheck | quote }}
+        - name: PRODUCT_NAME
+          value: {{ .Values.global.ibmProduct }}
+        - name: TRUST_ALL_SSL_CERT
+          value: {{ .Values.environment.trustAllSsl | quote }}
+{{- if eq .Values.global.deploymentTarget "cloud" }}
+        {{- if eq .Values.environment.enableActivityTracker "true" }}
+        - name: ACTIVITY_TRACKER_CRN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.activityTrackerCrn.secret }}
+              key: {{ .Values.environment.activityTrackerCrn.key }}
+        - name: ACTIVITY_TRACKER_INGESTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.activityTrackerIngestionKey.secret }}
+              key: {{ .Values.environment.activityTrackerIngestionKey.key }}
+        - name: ACTIVITY_TRACKER_SERVICE_NAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.activityTrackerServiceName.secret }}
+              key: {{ .Values.environment.activityTrackerServiceName.key }}
+        - name: ACTIVITY_TRACKER_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.activityTrackerUrl.secret }}
+              key: {{ .Values.environment.activityTrackerUrl.key }}
+        {{- end }}
+        {{- if .Values.environment.allowedBillingIds.VaultMultiKeys }}
+        - name: ALLOWED_BILLING_IDS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.allowedBillingIds.secret }}
+              key: {{ .Values.environment.allowedBillingIds.key }}
+        {{- end }}
+        {{- if .Values.environment.allowedMonitoringIds.VaultMultiKeys }}
+        - name: ALLOWED_MONITORING_IDS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.allowedMonitoringIds.secret }}
+              key: {{ .Values.environment.allowedMonitoringIds.key }}
+        {{- end }}
+        {{- if .Values.environment.allowedNoPipelineInsertion.VaultMultiKeys }}
+        - name: ALLOWED_NO_PIPELINE_INSERTION_SERVICE_IDS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.allowedNoPipelineInsertion.secret }}
+              key: {{ .Values.environment.allowedNoPipelineInsertion.key }}
+        {{- end }}
+        {{- if .Values.environment.allowedOriginOverrideUrls.VaultMultiKeys }}
+        - name: ALLOWED_ORIGIN_OVERRIDE
+          value: "true"
+        - name: ALLOWED_ORIGIN_OVERRIDE_URLS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.allowedOriginOverrideUrls.secret }}
+              key: {{ .Values.environment.allowedOriginOverrideUrls.key }}
+        {{- end }}
+        {{- if .Values.environment.allowedServiceIds.VaultMultiKeys }}
+        - name: ALLOWED_SERVICE_IDS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.allowedServiceIds.secret }}
+              key: {{ .Values.environment.allowedServiceIds.key }}
+        {{- end }}
+        {{- if .Values.environment.allowedVersionIncDep.VaultMultiKeys }}
+        - name: ALLOWED_VERSION_INCDEP
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.allowedVersionIncDep.secret }}
+              key: {{ .Values.environment.allowedVersionIncDep.key }}
+        {{- end }}
+        - name: CLOUDAMQP_SSL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.cloudAmqpSsl.secret }}
+              key: {{ .Values.environment.cloudAmqpSsl.key }}
+        - name: CLOUDAMQP_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.cloudAmqpUrl.secret }}
+              key: {{ .Values.environment.cloudAmqpUrl.key }}
+        - name: CLOUDANT_APIKEY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.cloudantApiKeyPassword.secret }}
+              key: {{ .Values.environment.cloudantApiKeyPassword.key }}
+        - name: CLOUDANT_APIKEY_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.cloudantApiKeyUrl.secret }}
+              key: {{ .Values.environment.cloudantApiKeyUrl.key }}
+        - name: CLOUDANT_APIKEY_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.cloudantApiKeyUser.secret }}
+              key: {{ .Values.environment.cloudantApiKeyUser.key }}
+        - name: CLOUDANT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.cloudantPassword.secret }}
+              key: {{ .Values.environment.cloudantPassword.key }}
+        - name: CLOUDANT_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.cloudantUrl.secret }}
+              key: {{ .Values.environment.cloudantUrl.key }}
+        - name: CLOUDANT_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.cloudantUser.secret }}
+              key: {{ .Values.environment.cloudantUser.key }}
+        - name: DATA_POLICY_SERVICE_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.dataPolicyServiceId.secret }}
+              key: {{ .Values.environment.dataPolicyServiceId.key }}
+        - name: DEPLOY_TARGET
+          value: armada
+        - name: ENABLE_NEWRELIC
+          value: "true"
+        - name: ENGINE_SERVICE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.gatewayUrl.secret }}
+              key: {{ .Values.environment.gatewayUrl.key }}
+        - name: ENVIRONMENT_NAME
+          value: {{ .Values.environment.environmentName }}
+        - name: ETCD_V3_DEPLOYMENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.etcdV3DeploymentId.secret }}
+              key: {{ .Values.environment.etcdV3DeploymentId.key }}
+        - name: ETCD_V3_SSL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.etcdV3Ssl.secret }}
+              key: {{ .Values.environment.etcdV3Ssl.key }}
+        - name: ETCD_V3_URLS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.etcdV3Urls.secret }}
+              key: {{ .Values.environment.etcdV3Urls.key }}
+        - name: GATEWAY_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.gatewayUrl.secret }}
+              key: {{ .Values.environment.gatewayUrl.key }}
+        - name: HYPERSYNC_URL
+          value: {{ .Values.environment.hypersyncUrl }}
+        - name: IAM_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.iamUrl.secret }}
+              key: {{ .Values.environment.iamUrl.key }}
+        - name: KMS_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.kmsApiKey.secret }}
+              key: {{ .Values.environment.kmsApiKey.key }}
+        {{- if .Values.environment.kmsIamUrl.secret }}
+        - name: KMS_IAM_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.kmsIamUrl.secret }}
+              key: {{ .Values.environment.kmsIamUrl.key }}
+        {{- end }}
+        - name: KMS_INSTANCE_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.kmsInstanceId.secret }}
+              key: {{ .Values.environment.kmsInstanceId.key }}
+        - name: KMS_ROOT_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.kmsRootKeyId.secret }}
+              key: {{ .Values.environment.kmsRootKeyId.key }}
+        - name: KMS_SERVICE_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.kmsServiceId.secret }}
+              key: {{ .Values.environment.kmsServiceId.key }}
+        - name: KMS_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.kmsUrl.secret }}
+              key: {{ .Values.environment.kmsUrl.key }}
+        - name: NEW_RELIC_LICENSE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.newRelicLicenseKey.secret }}
+              key: {{ .Values.environment.newRelicLicenseKey.key }}
+        - name: LOGDNA_LOG_SOURCE_CRN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.logDnaLogSourceCrn.secret }}
+              key: {{ .Values.environment.logDnaLogSourceCrn.key }}
+        - name: LOGDNA_SAVE_SERVICE_COPY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.logDnaSaveServiceCopy.secret }}
+              key: {{ .Values.environment.logDnaSaveServiceCopy.key }}
+        - name: PROFILING_SERVICE_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.profilingServiceId.secret }}
+              key: {{ .Values.environment.profilingServiceId.key }}
+        {{- if .Values.environment.rabbitMqQueueSuffix }}
+        - name: RABBITMQ_QUEUE_SUFFIX
+          value: {{ .Values.environment.rabbitMqQueueSuffix }}
+        {{- end }}
+        - name: SAMPLING_SERVICE_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.samplingServiceId.secret }}
+              key: {{ .Values.environment.samplingServiceId.key }}
+        - name: SEGMENT_WRITE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.segmentWriteKey.secret }}
+              key: {{ .Values.environment.segmentWriteKey.key }}
+        - name: SERVICE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.serviceApiKey.secret }}
+              key: {{ .Values.environment.serviceApiKey.key }}
+        - name: SERVICE_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.serviceId.secret }}
+              key: {{ .Values.environment.serviceId.key }}
+        - name: TRANSFORM_SERVICE_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.transformServiceId.secret }}
+              key: {{ .Values.environment.transformServiceId.key }}
+        - name: TRANSFORM_SERVICE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.gatewayUrl.secret }}
+              key: {{ .Values.environment.gatewayUrl.key }}
+        - name: WDP_TEMP_SEC_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.wdpTempSecKey.secret }}
+              key: {{ .Values.environment.wdpTempSecKey.key }}
+{{- else }}
         - name: ALLOWED_SERVICE_IDS
           valueFrom:
             secretKeyRef:
@@ -95,10 +368,8 @@ spec:
             secretKeyRef:
               name: wdp-cloudant-creds
               key: username
-        - name: COMPONENT_ID
-          value: {{ .Values.environment.componentId }}
-        - name: ENABLE_DEBUG
-          value: {{ .Values.environment.enableDebug }}
+        - name: ENABLE_NEWRELIC
+          value: "false"
         - name: ENGINE_SERVICE_URL
           valueFrom:
             configMapKeyRef:
@@ -112,26 +383,27 @@ spec:
               name: wdp-config
               key: host-url
         - name: IAM_URL
-          value: {{ .Values.environment.iamUrl }}
+          value: {{ .Values.environment.iamUrl.value }}
         - name: ICP4D_URL
           valueFrom:
             configMapKeyRef:
               name: wdp-config
               key: icp4d-host-url
-        - name: IGNORE_ENTITLEMENT_CHECK
-          value: {{ .Values.environment.ignoreEntitlementCheck }}
-        - name: PRODUCT_NAME
-          value: {{ .Values.global.ibmProduct }}
         - name: PROFILING_SERVICE_ID
           valueFrom:
             secretKeyRef:
               name: wdp-service-id
               key: service-id
+        - name: REDIS_CERT
+          valueFrom:
+            secretKeyRef:
+              name: redis-ha-cert
+              key: cacertb64.pem
         - name: REDIS_URL
           valueFrom:
             secretKeyRef:
-              name: redis-url
-              key: redis-url.txt
+              name: redis-ha
+              key: redis-url-ssl
         - name: SERVICE_ID
           valueFrom:
             secretKeyRef:
@@ -142,13 +414,12 @@ spec:
             configMapKeyRef:
               name: wdp-config
               key: host-url
-        - name: TRUST_ALL_SSL_CERT
-          value: {{ .Values.environment.trustAllSsl }}
         - name: WDP_TEMP_SEC_KEY
           valueFrom:
             secretKeyRef:
               name: wdp-crypto-secret
               key: wdp-temp-sec-key
+{{- end }}
         resources:
           limits:
             cpu: {{ .Values.resources.limits.cpu }}
@@ -156,6 +427,7 @@ spec:
           requests:
             cpu: {{ .Values.resources.requests.cpu }}
             memory: {{ .Values.resources.requests.memory }}
+{{- if ne .Values.global.deploymentTarget "cloud" }}
         securityContext:
           privileged: false
           allowPrivilegeEscalation: false
@@ -164,8 +436,8 @@ spec:
           capabilities:
             drop:
             - ALL
-{{- if .Values.global.installCerts }}
       volumes:
+      {{- if .Values.global.installCerts }}
       - name: wdp-certs
         projected:
           sources:
@@ -187,6 +459,7 @@ spec:
               - key: cert.pem
                 path: rabbitmq.cert.pem
               optional: true
+      {{- end }}
 {{- end }}
 {{- if .Values.repository.secret.name }}
       imagePullSecrets:

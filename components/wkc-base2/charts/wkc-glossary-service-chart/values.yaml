@@ -4,19 +4,18 @@
 
 global:
   installCerts: true
-  deploymentTarget: ""
+  deploymentTarget: "icp4data"
   dockerRegistryPrefix: ""
-  serviceabilityLabelName: wkc
-  serviceabilityLabelValue: wkc
+  podLabels:
+    icpdsupport/app: "api"
   podAnnotations:
     productName: "IBM Watson Knowledge Catalog for IBM Cloud Pak for Data"
-    productID: "ICP4D-WKCLite-Prod-00000"
-    productVersion: "3.1.0"
+    productID: "37fee7ff6f7c45fcac254d413693017f"
+    productVersion: "3.5.0"
     productMetric: "VIRTUAL_PROCESSOR_CORE"
     productChargedContainers: "All"
     cloudpakName: "IBM Cloud Pak for Data"
     cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
-    cloudpakVersion: "3.0.0"
 preInstall:
   image:
     repository: wkc-init-container
@@ -41,11 +40,11 @@ repository:
     name: ""
 resources:
   limits:
-    cpu: 0
-    memory: 0
+    cpu: 1000m
+    memory: 2000Mi
   requests:
-    cpu: 0
-    memory: 0
+    cpu: 250m
+    memory: 512Mi
 ports:
   targetPort: 9443
   externalPort: 443
@@ -65,7 +64,7 @@ readinessProbe:
 environment:
   BM_APP_NAME: wkc-glossary-service
   BM_APP_VERSION: ${BM_APP_VERSION}
-  TRUST_ALL_SSL_CERT: true
+  TRUST_ALL_SSL_CERT: false
   BM_APP_VERSION_ENDPOINT: v3/glossary_terms/heartbeat
   BG_HEALTH_CHECK_ENDPOINT: v3/glossary_terms/healthcheck
   BG_GLOBAL_SEARCH_SERVICE_URL: $(DOMAIN)
@@ -81,13 +80,12 @@ environment:
   BG_RABBIT_MQ_BG_EXCHANGE_NAME: BusinessGlossaryInternalExchange-icp4d
   BG_ENABLE_EXTERNAL_RABBIT_MQ: true
   BG_RABBIT_MQ_EXTERNAL_QUEUE_NAME: BusinessGlossary-icp4d
-  BG_JWT_AUTHENTICATION_PROVIDER_IMPL: com.ibm.wdp.bg.auth.Icp4dAuthenticationProvider
-  BG_ROLES_AUTHORIZATION_IMPL: com.ibm.wdp.bg.auth.Icp4dAuthorizationProvider
+  BG_JWT_AUTHENTICATION_PROVIDER_IMPL: com.ibm.wdp.bg.auth.Cp4dAuthenticationProvider
   BG_WDP_ROLES_API_BASE_URL: https://$(GATEWAY)/catalog/api/roles
   BG_IMPORT_REPORT_PERSISTENCE: com.ibm.wdp.bg.api.impl.db2.NfsImportReportPersistenceImpl
   BG_SECURITY_BG_ADMINISTRATOR_LIST: 999
   BG_OMRS_ENABLED: true
-  BG_REDIS_ENABLED: true
+  PUBLIC_CLOUD_MODE_ENABLED: false
   BG_LOGGING_REFRESH_SECONDS: 60
   BG_CONFIG_LOCATION: /etc/wdp_logconf
   COMPONENT_ID: wdp-bg
@@ -103,28 +101,39 @@ environment:
   WDP_SERVICE_ID_CREDENTIAL:
     name: WDP_SERVICE_ID_CREDENTIAL
     secret: wdp-service-id
-    key:  service-id-credentials
+    key: service-id-credentials
   BG_DB2_HOST: wdp-db2
   BG_DB2_PORT: 50001
   BG_DB_CONFIG_MAP: wkc-bg-db-config
-  BG_DB2_CONNECTION_POOL_SIZE: 10
+  BG_DB2_CONNECTION_POOL_SIZE: 25
   BG_DB2_SCHEMA_INIT_MODE: never
   BG_DB2_USER: db2inst1
+  BG_DB2_ADMIN_USER: DB2INST1
+  BG_DB2_ADMIN_GROUP: DB2IADM1
   BG_DB2_SSL: true
   BG_DB2_PASSWORD:
-   name: BG_DB2_PASSWORD
-   secret: wdp-db2
-   key: password
-  XMETA_DB2_HOST: $(IS_XMETADOCKER_SERVICE_HOST)
+    name: BG_DB2_PASSWORD
+    secret: wdp-db2
+    key: password
+  GLOBAL_SEARCH_THREAD_COUNT: 4
+  WF_CES_BASE_URL: https://$(GATEWAY)/v3
+  WF_NOTIFICATION_BASE_URL: https://$(GATEWAY)
+  WF_DB_URL: "jdbc:db2://wdp-db2:50001/$(BG_DB2_DATABASE_NAME):currentSchema=WORKFLOW;sslConnection=true;"
+  WF_DB_USERNAME: db2inst1
+  WF_DB_PASSWORD:
+    name: WF_DB_PASSWORD
+    secret: wdp-db2
+    key: password
+  XMETA_DB2_HOST: is-xmetadocker
   XMETA_DB2_PORT: 50000
   XMETA_DB2_DATABASE_NAME: XMETA
   XMETA_DB2_CONNECTION_POOL_SIZE: 10
   XMETA_DB2_USER: xmeta
   XMETA_DB2_SSL: false
   XMETA_DB2_PASSWORD:
-   name: XMETA_DB2_PASSWORD
-   secret: iis-usr-secrets
-   key: xmeta_password
+    name: XMETA_DB2_PASSWORD
+    secret: iis-usr-secrets
+    key: xmeta_password
   serviceId:
     name: SERVICE_ID
     secret: wdp-service-id
@@ -159,5 +168,9 @@ environment:
     key: rabbitmq-url.txt
   BG_REDIS_URL:
     name: BG_REDIS_URL
-    secret: redis-url
-    key: redis-url.txt
+    secret: redis-ha
+    key: redis-url-ssl
+  BG_REDIS_CERTIFICATE:
+    name: BG_REDIS_CERTIFICATE
+    secret: redis-ha-cert
+    key: cacertb64.pem

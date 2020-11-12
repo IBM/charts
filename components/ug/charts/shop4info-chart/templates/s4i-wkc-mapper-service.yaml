@@ -1,0 +1,220 @@
+# Licensed Materials - Property of IBM
+# 5724-Q36
+# Copyright IBM Corp. 2020
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.shop4infoWkcMapper.appName }}
+  labels:
+    app: {{ .Values.shop4infoWkcMapper.appName }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/name: {{ .Values.shop4infoWkcMapper.appName }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  selector:
+    app: {{ .Values.shop4infoWkcMapper.appName }}
+  ports:
+  - name: http
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.shop4infoWkcMapper.appName }}-internal
+  labels:
+    app: {{ .Values.shop4infoWkcMapper.appName }}-internal
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/name: {{ .Values.shop4infoWkcMapper.appName }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ .Values.shop4infoWkcMapper.appName }}
+  ports:
+    - name: actuator
+      protocol: TCP
+      port: 8090
+      targetPort: 8090
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Values.shop4infoWkcMapper.appName }}
+  labels:
+    app: {{ .Values.shop4infoWkcMapper.appName }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/name: {{ .Values.shop4infoWkcMapper.appName }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  serviceName: "{{ .Values.shop4infoWkcMapper.appName }}"
+  replicas: 0
+  selector:
+    matchLabels:
+      app: {{ .Values.shop4infoWkcMapper.appName }}
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.shop4infoWkcMapper.appName }}
+        chart: "{{ .Values.shop4info.chartName }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/name: {{ .Values.shop4infoWkcMapper.appName }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
+      annotations:
+        co.elastic.logs/multiline.pattern: '^\d\d\d\d-\d\d-\d\d'
+        co.elastic.logs/multiline.negate: 'true'
+        co.elastic.logs/multiline.match: after
+        prometheus.io/scrape: 'true'
+        prometheus.io/path:   /actuator/prometheus
+        prometheus.io/port:   '8090'
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      terminationGracePeriodSeconds: 5
+      initContainers:
+      - name: wait
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.global.image.wkcinitcontainer.repository }}:{{ .Values.global.image.wkcinitcontainer.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        command: ['sh', '-c', '--']
+        args: [ "wait_status=1;
+                 while [ $wait_status != 0  ];
+                 do sleep 2;
+                 wait_status=`nc {{ .Values.s4iRegistry.appName }}-internal 8080 < /dev/null; echo $?`;
+                 done;"
+        ]
+        resources:
+          requests:
+            memory: "{{ .Values.shop4infoWkcMapper.initcontainer.requests.memory }}"
+            cpu: "{{ .Values.shop4infoWkcMapper.initcontainer.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.shop4infoWkcMapper.initcontainer.limits.memory }}"
+            cpu: "{{ .Values.shop4infoWkcMapper.initcontainer.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+      containers:
+      - name: {{ .Values.shop4infoWkcMapper.appName }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.shop4infoWkcMapper.repository }}:{{ .Values.shop4infoWkcMapper.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          requests:
+            memory: "{{ .Values.shop4infoWkcMapper.requests.memory }}"
+            cpu: "{{ .Values.shop4infoWkcMapper.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.shop4infoWkcMapper.limits.memory }}"
+            cpu: "{{ .Values.shop4infoWkcMapper.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: WDP_SERVICE_ID_CREDENTIAL
+          valueFrom:
+            secretKeyRef:
+              name: wdp-service-id
+              key: service-id-credentials
+        - name: BASE_URL
+          valueFrom:
+            configMapKeyRef:
+              key: host-url
+              name: wdp-config
+        - name: RABBIT_USER
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-ha
+              key: rabbitmq-username
+        - name: RABBIT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-ha
+              key: rabbitmq-password
+        ports:
+        - containerPort: 8080
+        - containerPort: 8090
+        volumeMounts:
+        - name: config-map
+          mountPath: /app/application.properties
+          subPath: application.properties
+        - name: config-map
+          mountPath: /app/jvm.options
+          subPath: jvm.options
+        - name: app-log
+          mountPath: /app/log
+        - name: secrets
+          mountPath: /app/secrets
+          readOnly: true
+        readinessProbe:
+          httpGet:
+            path: /actuator/ready
+            port: 8090
+          periodSeconds: 20
+          initialDelaySeconds: 20
+          timeoutSeconds: 20
+          failureThreshold: 1
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8090
+          periodSeconds: 20
+          initialDelaySeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 8
+      securityContext:
+        runAsNonRoot: true
+        {{- if .Values.shop4infoWkcMapper.runAsUser }}
+        runAsUser: {{ .Values.shop4infoWkcMapper.runAsUser }}
+        {{- end }}
+        {{- if .Values.shop4infoWkcMapper.fsGroup }}
+        fsGroup: {{ .Values.shop4infoWkcMapper.fsGroup }}
+        {{- end }}
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- end }}
+      {{- include "image-secret" . | indent 6 }}
+      volumes:
+      - name: config-map
+        configMap:
+          name: shop4info-wkc-mappers-config
+      - name: secrets
+        persistentVolumeClaim:
+             claimName: iis-secrets-pv
+      - name: app-log
+        emptyDir: {}

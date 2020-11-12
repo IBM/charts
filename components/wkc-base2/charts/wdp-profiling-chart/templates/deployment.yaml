@@ -12,10 +12,6 @@ metadata:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/name: {{ .Chart.Name }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-  annotations:
-    {{- if .Values.global.podAnnotations }}
-{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
-    {{- end }}
 spec:
   replicas: {{ .Values.minReplicas }}
   selector:
@@ -34,17 +30,17 @@ spec:
         app.kubernetes.io/name: {{ .Chart.Name }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         istier: services
-        icpdsupport/addOnKey: "ugi"
-        icpdsupport/app: "apis"
-        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
-      annotations:
-        productName: "IBM Watson Knowledge Catalog Professional for ICP for Data"
-        productID: "5737-K89"
-        productVersion: "1.0"
-        {{- if .Values.global.podAnnotations }}
-{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
         {{- end }}
+      {{- if eq .Values.global.deploymentTarget "icp4data" }}
+      annotations:
+        {{- if .Values.global.podAnnotations }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+        {{- end }}
+      {{- end }}
     spec:
+      {{- if eq .Values.global.deploymentTarget "icp4data" }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -59,15 +55,18 @@ spec:
       hostIPC: false
       securityContext:
         runAsNonRoot: true
+      {{- end }}
       containers:
       - name: {{ template "wdp-profiling-chart.fullname" . }}
         image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
       {{- if .Values.global.installCerts }}
+        {{- if eq .Values.global.deploymentTarget "icp4data" }}
         volumeMounts:
         - name: wdp-certs
           mountPath: "/etc/wdp_certs"
           readOnly: true
-      {{- end}}
+      {{- end }}
+      {{- end }}
         ports:
         - containerPort: {{ .Values.ports.targetPort }}
           protocol: TCP
@@ -76,6 +75,11 @@ spec:
             path: {{ .Values.environment.BM_APP_VERSION_ENDPOINT }}
             port: {{ .Values.ports.targetPort }}
             scheme: "HTTPS"
+          {{- if eq .Values.global.deploymentTarget "cloud" }}
+            httpHeaders:
+            - name: Host
+              value: "{{ .Values.environment.Host }}"
+          {{- end }}
           initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
           timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
           periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
@@ -86,12 +90,18 @@ spec:
             path: {{ .Values.environment.BM_APP_VERSION_ENDPOINT }}
             port: {{ .Values.ports.targetPort }}
             scheme: "HTTPS"
+          {{- if eq .Values.global.deploymentTarget "cloud" }}
+            httpHeaders:
+            - name: Host
+              value: "{{ .Values.environment.Host }}"
+          {{- end }}
           initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
           timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
           periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
           successThreshold: {{ .Values.readinessProbe.successThreshold }}
           failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
         env:
+          {{- if eq .Values.global.deploymentTarget "icp4data" }}
           {{ if .Values.environment.wdpHostDomain }}
           - name: "GATEWAY_HOST"
             valueFrom:
@@ -104,6 +114,19 @@ spec:
                 name: {{ .Values.environment.wdpHostDomain.configMapName }}
                 key: {{ .Values.environment.wdpHostDomain.icp4dHostKey }}
           {{ end }}
+          - name: "replicaCount"
+            value: "{{ .Values.replicaCount }}"
+          - name: "DEPLOY_TARGET"
+            value: ugi
+          - name: "COMPONENT_ID"
+            value: "{{ .Values.environment.COMPONENT_ID }}"
+          {{- end }}
+          - name: "ENVIRONMENT_NAME"
+            value: "{{ .Values.environment.ENVIRONMENT_NAME }}"
+          - name: "ENVIRONMENT_TYPE"
+            value: "{{ .Values.environment.ENVIRONMENT_TYPE }}"
+          - name: "GATEWAY_URL"
+            value: "{{ .Values.environment.GATEWAY_URL }}"
           - name: "ENGINE_API_BASE_URL"
             value: {{ .Values.environment.ENGINE_API_BASE_URL }}
           - name: "TRUST_ALL_SSL_CERT"
@@ -136,8 +159,6 @@ spec:
             value: "{{ .Values.environment.USE_STATUS_POLLING }}"
           - name: "ENABLE_PROFILE_ENTITLEMENTS"
             value: "{{ .Values.environment.ENABLE_PROFILE_ENTITLEMENTS }}"
-          - name: "COMPONENT_ID"
-            value: {{ .Values.environment.COMPONENT_ID }}
           - name: "ENABLE_PROFILING_UNGOVERNED"
             value: "{{ .Values.environment.ENABLE_PROFILING_UNGOVERNED }}"
           - name: "MAX_RETRY_COUNT"
@@ -170,24 +191,104 @@ spec:
             value: "{{ .Values.environment.MAX_COS_SIZE }}"
           - name: "ENABLE_FULL_ENTITLEMENT"
             value: "{{ .Values.environment.ENABLE_FULL_ENTITLEMENT }}"
-          - name: "SERVICE_SPACE_GUID"
-            value: "{{ .Values.environment.SERVICE_SPACE_GUID }}"
-          - name: "ENVIRONMENT_NAME"
-            value: "{{ .Values.environment.ENVIRONMENT_NAME }}"
-          - name: "ENVIRONMENT_TYPE"
-            value: "{{ .Values.environment.ENVIRONMENT_TYPE }}"
-          - name: "DEPLOY_TARGET"
-            value: "{{ .Values.environment.DEPLOY_TARGET }}"
-          - name: "GATEWAY_URL"
-            value: "{{ .Values.environment.GATEWAY_URL }}"
           - name: "CACHE_TTL"
             value: "{{ .Values.environment.CACHE_TTL }}"
           - name: "ACTIVITY_MAX_POLL_TIME"
             value: "{{ .Values.environment.ACTIVITY_MAX_POLL_TIME }}"
           - name: "ACTIVITY_POLL_SLEEP_TIME"
             value: "{{ .Values.environment.ACTIVITY_POLL_SLEEP_TIME }}"
-          - name: "replicaCount"
-            value: "{{ .Values.replicaCount }}"
+          {{- if eq .Values.global.deploymentTarget "cloud" }}
+          - name: "DEPLOY_TARGET"
+            value: armada
+          - name: "BM_APP_VERSION"
+            value: "{{ .Values.environment.BM_APP_VERSION }}"
+          - name: "BM_APP_VERSION_ENDPOINT"
+            value: "{{ .Values.environment.BM_APP_VERSION_ENDPOINT }}"
+          - name: "BM_API_URL_ENDPOINT"
+            value: "{{ .Values.environment.BM_API_URL_ENDPOINT }}"
+          - name: "BM_APP_HOST"
+            value: "{{ .Values.environment.BM_APP_HOST }}"
+          - name: "BM_APP_NAME"
+            value: "{{ .Values.environment.BM_APP_NAME }}"
+          - name: "BM_DOMAIN"
+            value: "{{ .Values.environment.BM_DOMAIN }}"
+          - name: "CNAME"
+            value: "{{ .Values.environment.CNAME }}"
+          - name: "CTYPE"
+            value: "{{ .Values.environment.CTYPE }}"
+          - name: "DATA_CENTER"
+            value: "{{ .Values.environment.DATA_CENTER }}"
+          - name: "DEPLOYMENT_TARGET"
+            value: "{{ .Values.environment.DEPLOYMENT_TARGET }}"
+          - name: "PRODUCT_NAME"
+            value: "{{ .Values.environment.PRODUCT_NAME }}"
+          - name: "ENABLE_ENTITLEMENTS_TEST_MODE"
+            value: "{{ .Values.environment.ENABLE_ENTITLEMENTS_TEST_MODE }}"
+          - name: "enableETCDV3"
+            value: "{{ .Values.environment.enableETCDV3 }}"
+          - name: "HYPERSYNC_URL"
+            value: "{{ .Values.environment.HYPERSYNC_URL }}"
+          - name: "ENABLE_NEWRELIC"
+            value: "{{ .Values.environment.ENABLE_NEWRELIC }}"
+          - name: "MAX_NUM_OF_CONSUMER_INSTANCES"
+            value: "{{ .Values.environment.MAX_NUM_OF_CONSUMER_INSTANCES }}"
+          - name: "BLUEMIX_REGION"
+            value: "{{ .Values.environment.BLUEMIX_REGION }}"
+          - name: "REGION"
+            value: "{{ .Values.environment.REGION }}"
+          - name: "NEW_RELIC_APP_NAME"
+            value: "{{ .Values.environment.NEW_RELIC_APP_NAME }}"
+          - name: "LOGDNA_SAVE_SERVICE_COPY"
+            value: "{{ .Values.environment.LOGDNA_SAVE_SERVICE_COPY }}"
+          - name: "JAVA_OPTS"
+            value: "{{ .Values.environment.JAVA_OPTS }}"
+          - name: "JVM_ARGS"
+            value: "{{ .Values.environment.JVM_ARGS }}"
+          - name: "WDP_UI_PROXY_URL"
+            value: "{{ .Values.environment.WDP_UI_PROXY_URL }}"
+          - name: "SERVICE_INSTANCE_GUID"
+            value: "{{ .Values.environment.SERVICE_INSTANCE_GUID }}"
+          - name: "ENABLE_MONITORING"
+            value: "{{ .Values.environment.ENABLE_MONITORING }}"
+          - name: "HUMMING_BIRD_URL"
+            value: "{{ .Values.environment.HUMMING_BIRD_URL }}"
+          - name: "HUMMINGBIRD_BASE_URL"
+            value: "{{ .Values.environment.HUMMINGBIRD_BASE_URL }}"
+          - name: "HUMMINGBIRD_JOBS_PER_INSTANCE"
+            value: "{{ .Values.environment.HUMMINGBIRD_JOBS_PER_INSTANCE }}"
+          - name: "HUMMINGBIRD_JOBS_QUEUE_RETRY_INTERVAL"
+            value: "{{ .Values.environment.HUMMINGBIRD_JOBS_QUEUE_RETRY_INTERVAL }}"
+          - name: "HUMMINGBIRD_JOBS_QUEUE_RETRY_COUNT"
+            value: "{{ .Values.environment.HUMMINGBIRD_JOBS_QUEUE_RETRY_COUNT }}"
+          - name: "COMPONENT_ID"
+            value: "{{ .Values.environment.COMPONENT_ID }}"
+          - name: "USE_JOB_MANAGER"
+            value: "{{ .Values.environment.USE_JOB_MANAGER }}"
+          - name: "IA_SERVICES_IMPL"
+            value: "{{ .Values.environment.IA_SERVICES_IMPL }}"
+          - name: "IA_METADATA_ROOT"
+            value: "{{ .Values.environment.IA_METADATA_ROOT }}"
+          {{ if .Values.environment.ACTIVITY_TRACKER_URL }}
+          - name: "ACTIVITY_TRACKER_URL"
+            value: "{{ .Values.environment.ACTIVITY_TRACKER_URL }}"
+          {{- end }}
+          {{ if .Values.environment.ACTIVITY_TRACKER_CRN }}
+          - name: "ACTIVITY_TRACKER_CRN"
+            value: "{{ .Values.environment.ACTIVITY_TRACKER_CRN }}"
+          {{- end }}
+          {{ if .Values.environment.ACTIVITY_TRACKER_INGESTION_KEY }}
+          - name: "ACTIVITY_TRACKER_INGESTION_KEY"
+            value: "{{ .Values.environment.ACTIVITY_TRACKER_INGESTION_KEY }}"
+          {{- end }}
+          {{ if .Values.environment.ACTIVITY_TRACKER_SERVICE_NAME }}
+          - name: "ACTIVITY_TRACKER_SERVICE_NAME"
+            value: "{{ .Values.environment.ACTIVITY_TRACKER_SERVICE_NAME }}"
+          {{- end }}
+          {{ if .Values.environment.ACTIVITY_TRACKER_ENABLED }}
+          - name: "ACTIVITY_TRACKER_ENABLED"
+            value: "{{ .Values.environment.ACTIVITY_TRACKER_ENABLED }}"
+          {{- end }}
+          {{- end }}
           {{ if .Values.environment.mqUrl }}
           - name: {{ .Values.environment.mqUrl.name }}
             valueFrom:
@@ -195,26 +296,12 @@ spec:
                 name: {{ .Values.environment.mqUrl.secret }}
                 key: {{ .Values.environment.mqUrl.key }}
           {{ end }}
-          {{ if .Values.environment.mqSsl }}
-          - name: {{ .Values.environment.mqSsl.name }}
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Values.environment.mqSsl.secret }}
-                key: {{ .Values.environment.mqSsl.key }}
-          {{ end }}
           {{ if .Values.environment.serviceId }}
           - name: {{ .Values.environment.serviceId.name }}
             valueFrom:
               secretKeyRef:
                 name: {{ .Values.environment.serviceId.secret }}
                 key: {{ .Values.environment.serviceId.key }}
-          {{ end }}
-          {{ if .Values.environment.serviceApiKey }}
-          - name: {{ .Values.environment.serviceApiKey.name }}
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Values.environment.serviceApiKey.secret }}
-                key: {{ .Values.environment.serviceApiKey.key }}
           {{ end }}
           {{ if .Values.environment.cloudantUser }}
           - name: {{ .Values.environment.cloudantUser.name }}
@@ -258,6 +345,58 @@ spec:
                 name: {{ .Values.environment.cloudantApiPassword.secret }}
                 key: {{ .Values.environment.cloudantApiPassword.key }}
           {{ end }}
+          {{ if .Values.environment.atAuthToken }}
+          - name: {{ .Values.environment.atAuthToken.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.atAuthToken.secret }}
+                key: {{ .Values.environment.atAuthToken.key }}
+          {{ end }}
+          {{ if .Values.environment.allowedServiceIds }}
+          - name: {{ .Values.environment.allowedServiceIds.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.allowedServiceIds.secret }}
+                key: {{ .Values.environment.allowedServiceIds.key }}
+          {{ end }}
+      {{- if eq .Values.global.deploymentTarget "icp4data" }}
+          {{ if .Values.environment.redisUrl }}
+          - name: {{ .Values.environment.redisUrl.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.redisUrl.secret }}
+                key: {{ .Values.environment.redisUrl.key }}
+          {{ end }}
+          {{ if .Values.environment.redisSsl }}
+          - name: {{ .Values.environment.redisSsl.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.redisSsl.secret }}
+                key: {{ .Values.environment.redisSsl.key }}
+          {{ end }}
+          {{ if .Values.environment.ICP4D_URL }}
+          - name: "ICP4D_URL"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.environment.ICP4D_URL.configMap }}
+                key: {{ .Values.environment.ICP4D_URL.key }}
+          {{ end }}
+      {{- end }}
+          {{- if eq .Values.global.deploymentTarget "cloud" }}
+          {{ if .Values.environment.mqSsl }}
+          - name: {{ .Values.environment.mqSsl.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.mqSsl.secret }}
+                key: {{ .Values.environment.mqSsl.key }}
+          {{ end }}
+          {{ if .Values.environment.serviceApiKey }}
+          - name: {{ .Values.environment.serviceApiKey.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.serviceApiKey.secret }}
+                key: {{ .Values.environment.serviceApiKey.key }}
+          {{ end }}
           {{ if .Values.environment.wdpTempSecKey }}
           - name: {{ .Values.environment.wdpTempSecKey.name }}
             valueFrom:
@@ -265,12 +404,40 @@ spec:
                 name: {{ .Values.environment.wdpTempSecKey.secret }}
                 key: {{ .Values.environment.wdpTempSecKey.key }}
           {{ end }}
-          {{ if .Values.environment.newRelicLicKey }}
-          - name: {{ .Values.environment.newRelicLicKey.name }}
+          {{ if .Values.environment.etcdUrl }}
+          - name: {{ .Values.environment.etcdUrl.name }}
             valueFrom:
               secretKeyRef:
-                name: {{ .Values.environment.newRelicLicKey.secret }}
-                key: {{ .Values.environment.newRelicLicKey.key }}
+                name: {{ .Values.environment.etcdUrl.secret }}
+                key: {{ .Values.environment.etcdUrl.key }}
+          {{ end }}
+          {{ if .Values.environment.etcdSSL }}
+          - name: {{ .Values.environment.etcdSSL.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.etcdSSL.secret }}
+                key: {{ .Values.environment.etcdSSL.key }}
+          {{ end }}
+          {{ if .Values.environment.etcdCert }}
+          - name: {{ .Values.environment.etcdCert.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.etcdCert.secret }}
+                key: {{ .Values.environment.etcdCert.key }}
+          {{ end }}
+          {{ if .Values.environment.etcdv3deploymentId }}
+          - name: {{ .Values.environment.etcdv3deploymentId.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.etcdv3deploymentId.secret }}
+                key: {{ .Values.environment.etcdv3deploymentId.key }}
+          {{ end }}
+          {{ if .Values.environment.kmsiamUrl }}
+          - name: {{ .Values.environment.kmsiamUrl.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.kmsiamUrl.secret }}
+                key: {{ .Values.environment.kmsiamUrl.key }}
           {{ end }}
           {{ if .Values.environment.kmsUrl }}
           - name: {{ .Values.environment.kmsUrl.name }}
@@ -307,12 +474,12 @@ spec:
                 name: {{ .Values.environment.kmsApiKey.secret }}
                 key: {{ .Values.environment.kmsApiKey.key }}
           {{ end }}
-          {{ if .Values.environment.atAuthToken }}
-          - name: {{ .Values.environment.atAuthToken.name }}
+          {{ if .Values.environment.newRelicLicKey }}
+          - name: {{ .Values.environment.newRelicLicKey.name }}
             valueFrom:
               secretKeyRef:
-                name: {{ .Values.environment.atAuthToken.secret }}
-                key: {{ .Values.environment.atAuthToken.key }}
+                name: {{ .Values.environment.newRelicLicKey.secret }}
+                key: {{ .Values.environment.newRelicLicKey.key }}
           {{ end }}
           {{ if .Values.environment.brokerUrl }}
           - name: {{ .Values.environment.brokerUrl.name }}
@@ -335,6 +502,13 @@ spec:
                 name: {{ .Values.environment.brokerPassword.secret }}
                 key: {{ .Values.environment.brokerPassword.key }}
           {{ end }}
+          {{ if .Values.environment.segmentWriteKey }}
+          - name: {{ .Values.environment.segmentWriteKey.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.segmentWriteKey.secret }}
+                key: {{ .Values.environment.segmentWriteKey.key }}
+          {{ end }}
           {{ if .Values.environment.serviceAtName }}
           - name: {{ .Values.environment.serviceAtName.name }}
             valueFrom:
@@ -356,62 +530,28 @@ spec:
                 name: {{ .Values.environment.serviceSpaceGuid.secret }}
                 key: {{ .Values.environment.serviceSpaceGuid.key }}
           {{ end }}
-          {{ if .Values.environment.etcdUrl }}
-          - name: {{ .Values.environment.etcdUrl.name }}
+          {{ if .Values.environment.crnCluster }}
+          - name: {{ .Values.environment.crnCluster.name }}
             valueFrom:
               secretKeyRef:
-                name: {{ .Values.environment.etcdUrl.secret }}
-                key: {{ .Values.environment.etcdUrl.key }}
+                name: {{ .Values.environment.crnCluster.secret }}
+                key: {{ .Values.environment.crnCluster.key }}
           {{ end }}
-          {{ if .Values.environment.etcdSSL }}
-          - name: {{ .Values.environment.etcdSSL.name }}
+          {{ if .Values.environment.logDNASource }}
+          - name: {{ .Values.environment.logDNASource.name }}
             valueFrom:
               secretKeyRef:
-                name: {{ .Values.environment.etcdSSL.secret }}
-                key: {{ .Values.environment.etcdSSL.key }}
+                name: {{ .Values.environment.logDNASource.secret }}
+                key: {{ .Values.environment.logDNASource.key }}
           {{ end }}
-          {{ if .Values.environment.etcdCert }}
-          - name: {{ .Values.environment.etcdCert.name }}
+          {{ if .Values.environment.xApiKey }}
+          - name: {{ .Values.environment.xApiKey.name }}
             valueFrom:
               secretKeyRef:
-                name: {{ .Values.environment.etcdCert.secret }}
-                key: {{ .Values.environment.etcdCert.key }}
+                name: {{ .Values.environment.xApiKey.secret }}
+                key: {{ .Values.environment.xApiKey.key }}
           {{ end }}
-          {{ if .Values.environment.etcdv3deploymentId }}
-          - name: {{ .Values.environment.etcdv3deploymentId.name }}
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Values.environment.etcdv3deploymentId.secret }}
-                key: {{ .Values.environment.etcdv3deploymentId.key }}
-          {{ end }}
-          {{ if .Values.environment.segmentWriteKey }}
-          - name: {{ .Values.environment.segmentWriteKey.name }}
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Values.environment.segmentWriteKey.secret }}
-                key: {{ .Values.environment.segmentWriteKey.key }}
-          {{ end }}
-          {{ if .Values.environment.redisUrl }}
-          - name: {{ .Values.environment.redisUrl.name }}
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Values.environment.redisUrl.secret }}
-                key: {{ .Values.environment.redisUrl.key }}
-          {{ end }}
-          {{ if .Values.environment.allowedServiceIds }}
-          - name: {{ .Values.environment.allowedServiceIds.name }}
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Values.environment.allowedServiceIds.secret }}
-                key: {{ .Values.environment.allowedServiceIds.key }}
-          {{ end }}
-          {{ if .Values.environment.ICP4D_URL }}
-          - name: "ICP4D_URL"
-            valueFrom:
-              configMapKeyRef:
-                name: {{ .Values.environment.ICP4D_URL.configMap }}
-                key: {{ .Values.environment.ICP4D_URL.key }}
-          {{ end }}
+          {{- end }}
           {{ if .Values.app_name }}
           - name: "app_name"
             value: {{ .Values.app_name }}
@@ -439,6 +579,7 @@ spec:
           requests:
             cpu: {{ .Values.resources.requests.cpu }}
             memory: {{ .Values.resources.requests.memory }}
+        {{- if eq .Values.global.deploymentTarget "icp4data" }}
         securityContext:
           privileged: false
           allowPrivilegeEscalation: false
@@ -471,6 +612,7 @@ spec:
                   path: rabbitmq.cert.pem
                 optional: true
     {{- end }}
+      {{- end }}
 {{- if .Values.repository.secret.name }}
       imagePullSecrets:
         - name: {{ .Values.repository.secret.name }}

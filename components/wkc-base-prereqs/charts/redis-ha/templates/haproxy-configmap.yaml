@@ -6,6 +6,7 @@ data:
     global
       log stdout  format raw  local0  notice
       maxconn 10000
+      ssl-default-bind-options force-tlsv12 no-sslv3 
     {{ if eq .Values.haproxy.stats.socket.enable true }}
       stats socket /run/haproxy/admin.sock mode 660 level admin
       stats timeout 2m # Wait up to 2 minutes for input
@@ -18,13 +19,15 @@ data:
     defaults
       log global
       mode tcp
+      option tcplog
       option clitcpka      
       timeout client 5m
-      timeout connect 4s
+      timeout connect 8s
       timeout server 5m
       timeout tunnel 1d
       timeout client-fin 1h
-      timeout check 5s
+      timeout check 8s
+      
 
     resolvers k8s_dns
       parse-resolv-conf
@@ -35,7 +38,7 @@ data:
     frontend http_stats
       mode http
       bind {{ .Values.haproxy.bindAddresses }}:{{ .Values.haproxy.stats.http.port }}
-      acl no_redis_backends nbsrv("bk_master_redis") lt 1
+      acl no_redis_backends nbsrv({{ if .Values.ssl.enabled }}"bk_master_redis_ssl"{{ else }}"bk_master_redis"{{ end }}) lt 1
       monitor-uri   /_haproxy_health
       monitor fail  if no_redis_backends
       
@@ -44,7 +47,6 @@ data:
     backend stats
       mode http
       stats enable
-      stats enable
       stats uri  /
       stats refresh 1s
       stats show-legends
@@ -52,12 +54,11 @@ data:
 
     # Specifies listening socket for accepting client connections using the default
     # REDIS TCP timeout and backend bk_redis TCP health check.
+    {{- if not (and .Values.ssl.enabled .Values.ssl.disableNonSSL) }}
     frontend ft_master_redis
-      bind {{ .Values.haproxy.bindAddresses }}:{{ .Values.haproxy.ports.master }} name master_redis      
+      bind {{ .Values.haproxy.bindAddresses }}:{{ .Values.redis.port }} name master_redis      
       default_backend bk_master_redis
-
-    # Specifies the backend Redis proxy server TCP health settings
-    # Ensure it only forward incoming connections to reach a master.
+    
     backend bk_master_redis
       balance first
        
@@ -74,7 +75,31 @@ data:
       tcp-check send QUIT\r\n
       tcp-check expect string +OK
       {{- template "masters.list" . }}
-   
+    {{- end }}
+    
+    {{- if .Values.ssl.enabled }}  
+    frontend ft_master_redis_ssl
+      bind {{ .Values.haproxy.bindAddresses }}:{{ .Values.ssl.tlsPort }} name master_redis_ssl      
+      default_backend bk_master_redis_ssl
+    
+    # Specifies the backend Redis proxy server TCP health settings
+    # Ensure it only forward incoming connections to reach a master.
+    backend bk_master_redis_ssl
+      balance first
+       
+      option tcp-check
+      {{- if .Values.auth }}
+      tcp-check send AUTH\ "$AUTH"\r\n
+      tcp-check expect string +OK      
+      {{- end }}
+      tcp-check send PING\r\n
+      tcp-check expect string +PONG
+      tcp-check send info\ replication\r\n
+      tcp-check expect string role:master
+      tcp-check send QUIT\r\n
+      tcp-check expect string +OK
+      {{- template "masters.ssl.list" . }}
+    {{- end }}   
 
 metadata:
   name: {{ template "redis-ha.fullname" . }}-haproxy

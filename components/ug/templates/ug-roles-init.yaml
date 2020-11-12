@@ -1,0 +1,107 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "ug-roles-init"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 4 }}
+    {{- end }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "-8"
+    "helm.sh/hook-delete-policy": before-hook-creation
+{{- include "product-metering" . | indent 4 }}
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 360
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
+      annotations:
+      {{- include "product-metering" . | indent 8 }}
+    spec:
+      {{- if eq .Values.global.deploymentTarget "icp4data" }}
+      serviceAccountName: cpd-editor-sa
+      {{- end }}
+      restartPolicy: Never
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      containers:
+      - name: "ug-roles-init"
+        imagePullPolicy: IfNotPresent
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.global.image.wkcinitcontainer.repository }}:{{ .Values.global.image.wkcinitcontainer.tag }}
+        command: ["/bin/sh", "/wkc/init.sh"]
+        volumeMounts:
+          - name: ug-roles-config
+            mountPath: /wkc
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          limits:
+            cpu: {{ .Values.global.image.wkcinitcontainer.resources.limits.cpu }}
+            memory: {{ .Values.global.image.wkcinitcontainer.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.global.image.wkcinitcontainer.resources.requests.cpu }}
+            memory: {{ .Values.global.image.wkcinitcontainer.resources.requests.memory }}
+        env:
+          - name: ICPD_CONTROLPLANE_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+          - name: COUCHDB_USERNAME
+            valueFrom:
+              secretKeyRef:
+                key: couchdb_username
+                name: couchdb-secrets
+                optional: true
+          - name: COUCHDB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: couchdb_password
+                name: couchdb-secrets
+                optional: true
+          - name: ZEN_SERVICE_BROKER_SECRET
+            valueFrom:
+              secretKeyRef:
+                key: token
+                name: zen-service-broker-secret
+                optional: true
+          {{- if .Values.global.ibmProduct }}
+          - name: PRODUCT_NAME
+            value: {{ .Values.global.ibmProduct | quote }}
+          {{- end }}
+      {{- include "image-secret" . | indent 6 }}
+      volumes:
+        - name: ug-roles-config
+          configMap:
+            name: ug-roles-config
+            defaultMode: 0555
+{{- end }}

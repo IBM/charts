@@ -19,11 +19,24 @@ data:
   post-upgrade.sh: |
     echo waiting for xmeta pod to become ready
     kubectl wait --for=condition=ready --timeout=30m pod -l app=iis-xmetarepo -n $NAMESPACE
+    
+    echo deleting the iis-services pod
+    kubectl delete pod -l app=iis-services -n $NAMESPACE
+    
     echo waiting for iis-services pod to become ready
     kubectl wait --for=condition=ready --timeout=30m pod -l app=iis-services -n $NAMESPACE
+    
     echo get iis-services pod
     iis_services_pod=$(kubectl get pod -l app=iis-services -o jsonpath="{.items[0].metadata.name}" -n $NAMESPACE)
+    
     echo iis-services pod: ${iis_services_pod}, execute updateXmetaDbSchema.sh script
     kubectl exec ${iis_services_pod} -- /opt/IBM/InformationServer/initScripts/updateXmetaDbSchema.sh -n $NAMESPACE
+    
+    echo deleting the is-en-conductor-0 pod
+    kubectl delete pod is-en-conductor-0 -n $NAMESPACE
+    
+    echo waiting for is-en-conductor-0 pod to become ready
+    kubectl wait --for=condition=ready --timeout=30m pod is-en-conductor-0 -n $NAMESPACE
+    
     echo done
     exit 0

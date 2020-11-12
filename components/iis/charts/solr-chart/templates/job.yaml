@@ -1,0 +1,311 @@
+#Licensed Materials - Property of IBM
+# 5724-Q36
+# Copyright IBM Corp. 2017, 2018
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: solr-configset-collection
+  namespace: "{{ .Release.Namespace }}"
+  labels:
+    app: solr-configset-collection
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: solr-configset-collection
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": post-install, post-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": "before-hook-creation"
+spec:
+  template:
+    metadata:
+      labels:
+        app: solr-configset-collection
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        app.kubernetes.io/name: solr-configset-collection
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
+      annotations:
+        helm.sh/hook: test-success
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      initContainers:
+      - name: solr-wait
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.global.image.wkcinitcontainer.repository }}:{{ .Values.global.image.wkcinitcontainer.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          requests:
+            memory: "{{ .Values.global.image.wkcinitcontainer.requests.memory }}"
+            cpu: "{{ .Values.global.image.wkcinitcontainer.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.global.image.wkcinitcontainer.limits.memory }}"
+            cpu: "{{ .Values.global.image.wkcinitcontainer.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        command: ['sh', '-c', '--']
+        args: [ "solr_status=1;
+                 while [ $solr_status != 0  ];
+                 do sleep 2;
+                 solr_status=`nc solr 8983 < /dev/null; echo $?`;
+                 done;"
+              ]
+      - name: copy-configsets
+        command: [ "sh", "-c", "--" ]
+        args: [ "cp -rpf /tmp/configsets /configsets;"
+              ]
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.global.image.wkcugconfig.repository }}:{{ .Values.global.image.wkcugconfig.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          requests:
+            memory: "{{ .Values.global.image.wkcugconfig.requests.memory }}"
+            cpu: "{{ .Values.global.image.wkcugconfig.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.global.image.wkcugconfig.limits.memory }}"
+            cpu: "{{ .Values.global.image.wkcugconfig.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /configsets
+          name: configsets-tmpdir
+      containers:
+      - name: solr-init
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.solr.repository }}:{{ .Values.solr.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          requests:
+            memory: "{{ .Values.solrResources.requests.memory }}"
+            cpu: "{{ .Values.solrResources.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.solrResources.limits.memory }}"
+            cpu: "{{ .Values.solrResources.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        command: [ "sh", "-c", "--" ]
+        args: [ " sleep 90;
+                  /usr/bin/configset_collection.sh;
+                "
+              ]
+        env:
+          - name: SOLR_ZOOKEEPER_CONNECT
+            value: "zookeeper:2181/solr"
+          - name: SOLR_HOST
+            value: "solr"
+          - name: IS_INSTALL
+            value: "{{ .Release.IsInstall }}"
+        volumeMounts:
+        - mountPath: /configsets
+          name: configsets-tmpdir
+        - name: config-script
+          mountPath: /usr/bin/configset_collection.sh
+          subPath: configset_collection.sh
+      securityContext:
+        {{- if .Values.solr.runAsUser }}
+        runAsUser: {{ .Values.solr.runAsUser }}
+        {{- end }}
+        {{- if .Values.solr.fsGroup }}
+        fsGroup: {{ .Values.solr.fsGroup }}
+        {{- end }}
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- end }}
+      {{- include "image-secret" . | indent 6 }}
+      volumes:
+        - name: config-script
+          configMap:
+            name: solr-configset-collection
+            defaultMode: 0755
+        - name: configsets-tmpdir
+          emptyDir: {}
+      restartPolicy: Never
+  backoffLimit: 5
+  activeDeadlineSeconds: 1800
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: solr-configset-collection
+  labels:
+    app: solr-configset-collection
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: solr-configset-collection
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": post-install, post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": "before-hook-creation"
+data:
+  configset_collection.sh: |-
+    #!/bin/bash
+    set -o errexit -o pipefail -o noclobber -o nounset
+    if [ "$IS_INSTALL" = "true" ]; then
+      echo 'Install step - Upload configs to zookeeper and create collections';
+      uploadedCollections=$(curl 'http://solr:8983/solr/admin/collections?action=LIST&wt=json')
+      echo uploadedCollections = "${uploadedCollections}"
+      echo "Processing da-datasets configs"
+      daDatasetsCollection=$(echo "${uploadedCollections}" | grep -i \"da-datasets\") || true
+      if [[ -z "${daDatasetsCollection}" ]]
+      then
+        echo "Upload da-datasets_configs configs"
+        solr zk -upconfig -z "${SOLR_ZOOKEEPER_CONNECT}" -n da-datasets_configs -d /configsets/configsets/da-datasets_configs;
+        echo "Creating da-datasets_configs collections"
+        solr create_collection -c da-datasets -shards 2 -replicationFactor 1 -confname da-datasets_configs -confdir /configsets/configsets/da-datasets_configs -p 8983;
+      else
+        echo da-datasets collections already exist, so not uploading them
+      fi
+      echo "da-datasets configs processing done"
+
+      echo "Processing analysis configs"
+      analysisCollection=$(echo "${uploadedCollections}" | grep -i \"analysis\") || true
+      if [[ -z "${analysisCollection}" ]]
+      then
+        echo "Upload analysis configs"
+        solr zk -upconfig -z "${SOLR_ZOOKEEPER_CONNECT}" -n analysis -d /configsets/configsets/analysis;
+        echo "Creating analysis collections"
+        solr create_collection -c analysis -shards 2 -replicationFactor 1 -confname analysis -confdir /configsets/configsets/analysis -p 8983;
+      else
+        echo analysis collections already exist, so not uploading them
+      fi
+      echo "analysis configs processing done"
+
+      echo "Processing featureScoreUpdates configs"
+      featureUpdateCollection=$(echo "${uploadedCollections}" | grep -i \"featureScoreUpdates\") || true
+      if [[ -z "${featureUpdateCollection}" ]]
+      then
+        ## feature_updates configsets are preloaded in zookeeper
+        echo "Upload feature_updates configs"
+        solr create_collection -c featureScoreUpdates -shards 2 -replicationFactor 1 -confname feature_updates -confdir /configsets/configsets/feature_updates -p 8983;
+      else
+        echo featureScoreUpdates collections already exist, so not uploading them
+      fi
+      echo "featureScoreUpdates configs processing done"
+
+      echo "Processing discovery configs"
+      discoveryCollection=$(echo "${uploadedCollections}"  | grep -i \"discovery\") || true
+      if [[ -z "${discoveryCollection}" ]]
+      then
+        echo "Upload discovery configs"
+        solr zk -upconfig -z "${SOLR_ZOOKEEPER_CONNECT}" -n discovery -d /configsets/configsets/discovery;
+        echo "Creating discovery collections"
+        solr create_collection -c discovery -shards 2 -replicationFactor 1 -confname discovery -confdir /configsets/configsets/discovery -p 8983;
+      else
+        echo discovery collections already exist, so not uploading them
+      fi
+      echo "discovery configs processing done"
+
+      echo "Processing ia-analysis configs"
+      iaAnalysisCollection=$(echo "${uploadedCollections}" | grep -i \"ia-analysis\") || true
+      if [[ -z "${iaAnalysisCollection}" ]]
+      then
+        echo "Upload ia-analysis configs"
+        solr zk -upconfig -z "${SOLR_ZOOKEEPER_CONNECT}" -n ia-analysis -d /configsets/configsets/ia-analysis;
+        echo "Creating ia-analysis collections"
+        solr create_collection -c ia-analysis -shards 2 -replicationFactor 1 -confname ia-analysis -confdir /configsets/configsets/ia-analysis -p 8983;
+      else
+        echo ia-analysis collections already exist, so not uploading them
+      fi
+      echo "ia-analysis configs processing done"
+
+      echo "Processing odf configs"
+      odfCollection=$(echo "${uploadedCollections}"  | grep -i \"odf\") || true
+      if [[ -z "${odfCollection}" ]]
+      then
+        echo "Upload odf configs"
+        solr zk -upconfig -z "${SOLR_ZOOKEEPER_CONNECT}" -n odf -d /configsets/configsets/odf;
+        echo "Creating odf collections"
+        solr create_collection -c odf -shards 2 -replicationFactor 1 -confname odf -confdir /configsets/configsets/odf -p 8983;
+      else
+        echo odf collections already exist, so not uploading them
+      fi
+      echo "odf configs processing done"
+    else
+      echo 'Drop da-datasets collection data';
+      curl -H "Content-Type: application/json" -d '{ "delete": {"query":"*:*"} }' http://solr:8983/solr/da-datasets/update?commit=true
+      echo 'Upgrade step - Reload collections';
+      ## new entry for Nootka
+      echo "Upload latest analysis configs to zookeeper during upgrade!"
+      solr zk -upconfig -z "${SOLR_ZOOKEEPER_CONNECT}" -n analysis -d /configsets/configsets/analysis;
+      echo "Reloading analysis collections"
+      curl "http://solr:8983/solr/admin/collections?action=RElOAD&name=analysis&wt=json"
+      echo "Upload latest da-datasets_configs configs to zookeeper during upgrade!"
+      solr zk -upconfig -z "${SOLR_ZOOKEEPER_CONNECT}" -n da-datasets_configs -d /configsets/configsets/da-datasets_configs;
+      echo "Reloading da-datasets collections"
+      curl "http://solr:8983/solr/admin/collections?action=RElOAD&name=da-datasets&wt=json"
+      echo "Upload latest discovery configs to zookeeper during upgrade!"
+      solr zk -upconfig -z "${SOLR_ZOOKEEPER_CONNECT}" -n discovery -d /configsets/configsets/discovery;
+      echo "Reloading discovery collections"
+      curl "http://solr:8983/solr/admin/collections?action=RElOAD&name=discovery&wt=json"
+      echo "Check if ia-analysis collections exists"
+      iaAnalysisColl=$(curl 'http://solr:8983/solr/admin/collections?action=LIST&name=ia-analysis&wt=json' | grep -i ia-analysis) || true
+      if [[ -z "${iaAnalysisColl}" ]]
+      then
+        # ia-analysis does not exist, create it
+        echo "ia-analysis collections does not exist"
+        echo "Upload ia-analysis configs"
+        solr zk -upconfig -z "${SOLR_ZOOKEEPER_CONNECT}" -n ia-analysis -d /configsets/configsets/ia-analysis;
+        echo 'Creating ia-analysis collections';
+        solr create_collection -c ia-analysis -shards 2 -replicationFactor 1 -confname ia-analysis -confdir /configsets/configsets/ia-analysis -p 8983;
+      else
+        # ia-analysis already exists, upload latest configsets and reload it
+        echo "Upload latest ia-analysis configs to zookeeper during upgrade!"
+        solr zk -upconfig -z "${SOLR_ZOOKEEPER_CONNECT}" -n ia-analysis -d /configsets/configsets/ia-analysis;
+        echo 'ia-analysis collections already exists, reloading collections';
+        curl "http://solr:8983/solr/admin/collections?action=RElOAD&name=ia-analysis&wt=json"
+      fi
+      echo "Check if odf collections exists"
+      odfColl=$(curl 'http://solr:8983/solr/admin/collections?action=LIST&name=odf&wt=json' | grep -i odf) || true
+      if [[ -z "${odfColl}" ]]
+      then
+        # odf collections does not exist, create it
+        echo "odf collections does not exist"
+        echo "Upload odf configs"
+        solr zk -upconfig -z "${SOLR_ZOOKEEPER_CONNECT}" -n odf -d /configsets/configsets/odf;
+        echo 'Creating odf collections';
+        solr create_collection -c odf -shards 2 -replicationFactor 1 -confname odf -confdir /configsets/configsets/odf -p 8983;
+      else
+        # odf collections already exists, upload latest configsets and reload it
+        echo "Upload latest odf configs to zookeeper during upgrade!"
+        solr zk -upconfig -z "${SOLR_ZOOKEEPER_CONNECT}" -n odf -d /configsets/configsets/odf;
+        echo 'odf collections already exists, reloading collections';
+        curl "http://solr:8983/solr/admin/collections?action=RElOAD&name=odf&wt=json"
+      fi
+    fi

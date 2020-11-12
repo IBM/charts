@@ -1,0 +1,155 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: is-engine-compute
+  labels:
+    app: iis-en-comp
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: iis-en-comp
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.computeNode.replicas }}
+  serviceName: conductor-0
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: iis-en-comp
+      chart: {{ .Values.computeNode.chartName }}
+      release: "{{ .Release.Name }}"
+      heritage: "{{ .Release.Service }}"
+  template:
+    metadata:
+      labels:
+        app: iis-en-comp
+        chart: {{ .Values.computeNode.chartName }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        app.kubernetes.io/name: iis-en-comp
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        istier: compute
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
+      annotations:
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "image-secret" . | indent 6 }}
+      containers:
+       - name: iis-en-compute
+         image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.release.image.iis.compute.repository }}:{{ .Values.release.image.iis.compute.tag }}
+         securityContext:
+           {{- if .Values.release.image.iis.compute.runAsUser }}
+           runAsUser: {{ .Values.release.image.iis.compute.runAsUser }}
+           {{- end }}
+           {{- if .Values.release.image.iis.compute.fsGroup }}
+           fsGroup: {{ .Values.release.image.iis.compute.fsGroup }}
+           {{- end }}
+           privileged: false
+           allowPrivilegeEscalation: true
+           runAsNonRoot: true
+           readOnlyRootFilesystem: false
+         envFrom:
+         - configMapRef:
+            name: is-en-conductor-0
+         imagePullPolicy: {{ .Values.release.image.pullPolicy }}
+         env:
+         - name: MY_NODE_NAME
+           valueFrom:
+             fieldRef:
+               fieldPath: spec.nodeName
+         - name: MY_POD_NAME
+           valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+         - name: MY_POD_NAMESPACE
+           valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+         - name: ISADMIN_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: isadmin_password
+         - name: XMETA_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: xmeta_password
+         - name: XMETASR_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: xmetasr_password
+         - name: DSADM_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: dsadm_password
+         - name: IAUSER_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: iauser_password
+         - name: DEDICATED_ENGINE_VOLPATH
+           value: "/mnt/dedicated_vol/Engine"
+         - name: ENGINE_HOST
+           value: "is-en-conductor-0"
+         - name: IA_CUSTOM_DATA_CLASSES
+           value: "/opt/ia/custom"
+         livenessProbe:
+            initialDelaySeconds: 130
+            periodSeconds: 60
+            tcpSocket:
+              port: 13502
+         readinessProbe:
+            initialDelaySeconds: 120
+            periodSeconds: 60
+            tcpSocket:
+              port: 13502
+         volumeMounts:
+         - mountPath: "/mnt/dedicated_vol/Engine"
+           name: engine-dedicated-volume
+         - mountPath: /opt/ia/custom
+           name: engine-compute-pv
+           subPath: is-en-conductor-0/ia/custom
+         - mountPath: /user-home/_global_/security/customer-truststores
+           name: user-home-mount
+           subPath: _global_/security/customer-truststores
+           readOnly: true
+         - mountPath: /user-home/_global_/dbdrivers
+           name: user-home-mount
+           subPath: _global_/dbdrivers
+           readOnly: true
+         resources:
+            requests:
+               memory: "{{ .Values.computeResouces.requests.memory }}"
+               cpu: "{{ .Values.computeResouces.requests.cpu }}"
+            limits:
+               memory: "{{ .Values.computeResouces.limits.memory }}"
+               cpu: "{{ .Values.computeResouces.limits.cpu }}"
+      {{- if .Values.release.image.iis.compute.serviceAccountName }}
+      serviceAccountName: {{ .Values.release.image.iis.compute.serviceAccountName }}
+      {{- end }}
+      volumes:
+       - name: engine-dedicated-volume
+         persistentVolumeClaim:
+         {{- if .Values.engineDedicatedVolumeInfo.volumeClaim.existingClaimName }}
+           claimName: {{ .Values.engineDedicatedVolumeInfo.volumeClaim.existingClaimName }}
+         {{- else }}
+           claimName: {{ .Release.Name }}-{{ .Values.engineDedicatedVolumeInfo.volumeClaim.name }}
+         {{- end }}
+       - name: engine-compute-pv
+         emptyDir: {}
+       {{- include "user-home-pvc" .  | indent 7 }}

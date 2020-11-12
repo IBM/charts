@@ -27,11 +27,13 @@ spec:
         app.kubernetes.io/managed-by: {{ .Release.Service }} 
         app.kubernetes.io/name: {{ .Chart.Name }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        icpdsupport/app: "apis"
-        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
+        icpdsupport/podSelector: "catalog-api"
       annotations:
         {{- if .Values.global.podAnnotations }}
-{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
         {{- end }}        
     spec:
       {{- if or .Values.archx86_64 .Values.archppc64le }}
@@ -71,6 +73,10 @@ spec:
               mountPath: "/etc/wdp_certs"
               readOnly: true
 {{- end }}
+            - name: dumps
+              mountPath: /output/dumps
+            - name: logs
+              mountPath: /output/logs  
           ports:
             - containerPort: {{ .Values.ports.containerPort }}
               protocol: {{ .Values.ports.protocol }}
@@ -133,6 +139,8 @@ spec:
                value: "$({{ .Values.env.baseUrl.name }})/v2"
              - name: global_search_index_url
                value: "$({{ .Values.env.baseUrl.name }})/v3/search_index"
+             - name: zen_core_api_url
+               value: "$({{ .Values.env.baseUrl.name }})"
              - name: url_override
 {{- if eq .Values.global.deploymentTarget "icp4data" }}               
                value: "/v2"
@@ -159,6 +167,8 @@ spec:
                value: "$({{ .Values.env.serviceId.name }})"
              - name: accredited_service_editors_01
                value: "$({{ .Values.env.serviceId.name }})"
+             - name: accredited_service_exporters
+               value: "$({{ .Values.env.serviceId.name }})"
              - name: skip_new_owner_check
                value: "$({{ .Values.env.serviceId.name }})"
              - name: accredited_service_viewers_01
@@ -178,7 +188,9 @@ spec:
              - name: dps_skipped_services
                value: "$({{ .Values.env.serviceId.name }})"
              - name: cams_omrs_asset_administrator
-               value: "$({{ .Values.env.serviceId.name }})"                   
+               value: "$({{ .Values.env.serviceId.name }})"
+             - name: accredited_service_impersonators_01
+               value: "$({{ .Values.env.serviceId.name }})" 
 {{- end }}
 {{- if (.Values.env.cloudantUser) }}
              - name: {{ .Values.env.cloudantUser.name }}
@@ -208,6 +220,13 @@ spec:
                     name: {{ .Values.env.icp4dUrl.config }}
                     key: {{ .Values.env.icp4dUrl.key }}
 {{- end }}
+{{- if and (.Values.env.zenServiceBrokerSecret) (ne .Values.global.deploymentTarget "ugi") }}
+             - name: {{ .Values.env.zenServiceBrokerSecret.name }}
+               valueFrom:
+                  secretKeyRef:
+                    name: {{ .Values.env.zenServiceBrokerSecret.secret }}
+                    key: {{ .Values.env.zenServiceBrokerSecret.key }}
+{{- end }}
 {{- if eq .Values.global.deploymentTarget "icp4data" }}  
              - name: {{ .Values.env.icp4dInternalUrl.name }}
                value: {{ .Values.env.icp4dInternalUrl.value }}
@@ -218,6 +237,13 @@ spec:
                   secretKeyRef:
                     name: {{ .Values.env.redisUrl.secret }}
                     key: {{ .Values.env.redisUrl.key }}
+{{- end }}
+{{- if and (.Values.env.redisCert) (eq .Values.properties.enableRedis true) }}
+             - name: {{ .Values.env.redisCert.name }}
+               valueFrom:
+                  secretKeyRef:
+                    name: {{ .Values.env.redisCert.secret }}
+                    key: {{ .Values.env.redisCert.key }}
 {{- end }}
 {{- if eq .Values.global.deploymentTarget "ugi" }} 
              - name: {{ .Values.env.icp4dCAMSUser.name }} 
@@ -278,6 +304,10 @@ spec:
                   path: rabbitmq.cert.pem
                 optional: true
 {{- end }}
+        - name: dumps
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}
 {{- if .Values.imagePullSecrets.name }}
       imagePullSecrets: 
          - name: {{ .Values.imagePullSecrets.name }}

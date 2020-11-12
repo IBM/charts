@@ -18,9 +18,18 @@ metadata:
 data:
   pre-upgrade.sh: |
     echo UG Pre-upgrade pod...
-    echo Adding labels for {{ .Release.Name }}-{{ .Values.omag.volumeClaim.name }}
-    kubectl label pvc {{ .Release.Name }}-{{ .Values.omag.volumeClaim.name }} app.kubernetes.io/name={{ .Chart.Name }}
-    kubectl label pvc {{ .Release.Name }}-{{ .Values.omag.volumeClaim.name }} helm.sh/chart={{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    kubectl label pvc {{ .Release.Name }}-{{ .Values.omag.volumeClaim.name }} app.kubernetes.io/managed-by={{ .Release.Service }}
-    kubectl label pvc {{ .Release.Name }}-{{ .Values.omag.volumeClaim.name }} app.kubernetes.io/instance={{ .Release.Name }}
+    echo cleanup ia-analysis-pre-upgrade config and pod from previous release
+    kubectl delete cm ia-analysis-preupgrade-config
+    kubectl delete pod ia-analysis-preupgrade
+    
+    echo cleanup shop4info-pre-upgrade and shop4info-post-upgrade pods from the previous release
+    kubectl delete pod shop4info-pre-upgrade
+    kubectl delete pod shop4info-post-upgrade
+    
+    echo cleanup ug-pre-upgrade pod from the previous release
+    kubectl delete pod ug-pre-upgrade
+
+    echo update wkc-gov-ui after UG upgrade to add in IIS volume
+    kubectl patch deployment wkc-gov-ui --patch '{"spec":{"template":{"spec":{"containers":[{"name":"wkc-gov-ui","volumeMounts":[{"mountPath":"/mnt/dedicated_vol/Engine","name":"engine-dedicated-volume"}]}],"securityContext":{"supplementalGroups": [1000]},"volumes":[{"name":"engine-dedicated-volume","persistentVolumeClaim":{"claimName":"0072-iis-en-dedicated-pvc"}}]}}}}'
+
     exit 0

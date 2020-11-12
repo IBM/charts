@@ -13,15 +13,15 @@ metadata:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/instance: {{ .Release.Name }}
   annotations:
-    "helm.sh/hook": pre-install
-    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "-15"
     "helm.sh/hook-delete-policy": before-hook-creation
   {{- if .Values.global.podAnnotations }}
-{{ toYaml .Values.global.podAnnotations | trim | indent 4 }}
-  {{- end }}    
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 4 }}
+  {{- end }}  
 spec:
   backoffLimit: 3
-  activeDeadlineSeconds: 120
+  activeDeadlineSeconds: 360
   template:
     metadata: 
       labels:
@@ -33,14 +33,17 @@ spec:
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+      {{- end }}   
       annotations:
       {{- if .Values.global.podAnnotations }}
-{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
       {{- end }}
     spec:
       restartPolicy: Never
-      {{- if .Values.preInstall.serviceAccountName }}
-      serviceAccountName: {{ .Values.preInstall.serviceAccountName }}
+      {{- if .Values.hookJob.serviceAccountName }}
+      serviceAccountName: {{ .Values.hookJob.serviceAccountName }}
       {{- end }}
       hostNetwork: false
       hostPID: false
@@ -52,7 +55,7 @@ spec:
       containers:
       - name: "wkc-base-roles-init"
         imagePullPolicy: IfNotPresent
-        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.preInstall.image.repository }}:{{ .Values.preInstall.image.tag }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.hookJob.image.repository }}:{{ .Values.hookJob.image.tag }}
         command: ["/bin/sh", "/wkc/init.sh"]
         volumeMounts:
           - name: wkc-base-roles-config
@@ -67,23 +70,12 @@ spec:
             - ALL
         resources:
           requests:
-            memory: "{{ .Values.preInstall.image.requests.memory }}"
-            cpu: "{{ .Values.preInstall.image.requests.cpu }}"
+            memory: "{{ .Values.hookJob.resources.requests.memory }}"
+            cpu: "{{ .Values.hookJob.resources.requests.cpu }}"
           limits:
-            memory: "{{ .Values.preInstall.image.limits.memory }}"
-            cpu: "{{ .Values.preInstall.image.limits.cpu }}"
+            memory: "{{ .Values.hookJob.resources.limits.memory }}"
+            cpu: "{{ .Values.hookJob.resources.limits.cpu }}"
         env:
-          - name: ICPD_CONTROLPLANE_NAMESPACE
-            valueFrom:
-              fieldRef:
-                apiVersion: v1
-                fieldPath: metadata.namespace
-          - name: CLOUDANT_URL
-            valueFrom:
-              secretKeyRef:
-                key: cloudant-url.txt
-                name: wdp-cloudant-url
-                optional: true
           - name: COUCHDB_USERNAME
             valueFrom:
               secretKeyRef:
@@ -96,13 +88,19 @@ spec:
                 key: couchdb_password
                 name: couchdb-secrets
                 optional: true
+          - name: ZEN_SERVICE_BROKER_SECRET
+            valueFrom:
+              secretKeyRef:
+                key: token
+                name: zen-service-broker-secret
+                optional: true
           {{- if .Values.global.ibmProduct }}
           - name: PRODUCT_NAME
             value: {{ .Values.global.ibmProduct | quote }}
           {{- end }}
-{{- if .Values.preInstall.image.imagePullSecrets }}
+{{- if .Values.hookJob.image.imagePullSecrets }}
       imagePullSecrets:
-      - name: {{ .Values.preInstall.image.imagePullSecrets }}
+      - name: {{ .Values.hookJob.image.imagePullSecrets }}
 {{- end }}
       volumes:
         - name: wkc-base-roles-config

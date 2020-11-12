@@ -17,6 +17,11 @@ spec:
   selector:
     matchLabels:
       app: {{ template "wdp-policy-service-chart.fullname" . }}
+  {{- if eq .Values.global.deploymentTarget "icp4data" }}
+  strategy:
+    type: Recreate
+    rollingUpdate:
+  {{- end }}
   template:
     metadata:
       labels:
@@ -25,15 +30,16 @@ spec:
         release: "{{ .Release.Name }}"
         heritage: "{{ .Release.Service }}"
         date: "date"
-        icpdsupport/app: "apis"
+{{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+ {{- end }}
         app.kubernetes.io/instance: "{{ .Release.Name }}"
         app.kubernetes.io/managed-by: "{{ .Release.Service }}"
         app.kubernetes.io/name: {{ template "wdp-policy-service-chart.fullname" . }}
         helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
       annotations:
         {{- if .Values.global.podAnnotations }}
-{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
         {{- end }}
         helm.sh/hook: test-success
     spec:
@@ -204,8 +210,15 @@ spec:
           value: {{ .Values.environment.DPS_IAM_PAP_URL }}
 {{- end }}
 {{- if .Values.environment.DPS_SERVICE_ID_WHITELIST }}
+        - name: {{ .Values.environment.DPS_SERVICE_ID_WHITELIST.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.DPS_SERVICE_ID_WHITELIST.secret }}
+              key: {{ .Values.environment.DPS_SERVICE_ID_WHITELIST.key }}
+{{- end }}
+{{- if .Values.environment.DPS_SERVICE_ID_WHITELIST_CLOUD }}
         - name: "DPS_SERVICE_ID_WHITELIST"
-          value: {{ .Values.environment.DPS_SERVICE_ID_WHITELIST }}
+          value: {{ .Values.environment.DPS_SERVICE_ID_WHITELIST_CLOUD }}
 {{- end }}
 {{- if .Values.environment.region }}
         - name: "region"
@@ -271,13 +284,17 @@ spec:
         - name: "TS_FLOW_SERVICE_URI"
           value: {{ .Values.environment.TS_FLOW_SERVICE_URI }}
 {{- end }}
+{{- if .Values.environment.TS_PREVIEW_SERVICE_URI }}
+        - name: "TS_PREVIEW_SERVICE_URI"
+          value: {{ .Values.environment.TS_PREVIEW_SERVICE_URI }}
+{{- end }}
 {{- if .Values.environment.TS_NOTIFICATION_SERVICE_URI }}
         - name: "TS_NOTIFICATION_SERVICE_URI"
           value: {{ .Values.environment.TS_NOTIFICATION_SERVICE_URI }}
 {{- end }}
-{{- if .Values.environment.DPS_CIPHER1_KEY }}
-        - name: "DPS_CIPHER1_KEY"
-          value: {{ .Values.environment.DPS_CIPHER1_KEY }}
+{{- if .Values.environment.TS_USE_SERVICEID_IMPERSONATION }}
+        - name: "TS_USE_SERVICEID_IMPERSONATION"
+          value: {{ .Values.environment.TS_USE_SERVICEID_IMPERSONATION }}
 {{- end }}
 {{- if .Values.environment.DPS_RABBIT_MQ_SERVICE_URI }}
         - name: {{ .Values.environment.DPS_RABBIT_MQ_SERVICE_URI.name }}
@@ -365,6 +382,18 @@ spec:
 {{- if .Values.environment.DPS_INCLUDE_CLASSIFICATION_LHS_TERM }}
         - name: "DPS_INCLUDE_CLASSIFICATION_LHS_TERM"
           value: {{ .Values.environment.DPS_INCLUDE_CLASSIFICATION_LHS_TERM }}
+{{- end }}
+{{- if .Values.environment.DPS_INCLUDE_TIME_PREDICATES_LHS_TERMS }}
+        - name: "DPS_INCLUDE_TIME_PREDICATES_LHS_TERMS"
+          value: {{ .Values.environment.DPS_INCLUDE_TIME_PREDICATES_LHS_TERMS }}
+{{- end }}
+{{- if .Values.environment.DPS_ENABLE_RCR }}
+        - name: "DPS_ENABLE_RCR"
+          value: {{ .Values.environment.DPS_ENABLE_RCR }}
+{{- end }}
+{{- if .Values.environment.DPS_USER_DECISION_EVAL_NO_PRUNING }}
+        - name: "DPS_USER_DECISION_EVAL_NO_PRUNING"
+          value: {{ .Values.environment.DPS_USER_DECISION_EVAL_NO_PRUNING }}
 {{- end }}
 {{- if .Values.environment.DB2_SSL }}
         - name: "DB2_SSL"

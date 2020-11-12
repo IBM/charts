@@ -14,45 +14,26 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
   annotations:
     "helm.sh/hook": pre-install
-    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-weight": "-8"
     "helm.sh/hook-delete-policy": before-hook-creation
 data:
   init.sh: |
     set -e
 
-    if [ "$COUCHDB_PASSWORD" != "" ];
-    then
-      DB_URL=https://$COUCHDB_USERNAME:$COUCHDB_PASSWORD@couchdb-svc
-      ADMIN_UID=1000330999
-      ISADMIN_UID=1000330998
-    else
-      DB_URL=$CLOUDANT_URL
-      ADMIN_UID=999
-      ISADMIN_UID=998
-    fi
-
     echo "Update admin user with wkc roles and permissions"
-    adminUserDoc=$(curl -sS -k $DB_URL/privatecloud-users/admin | python -c "import sys, json; \
-    adminUserJson=json.load(sys.stdin); \
-    adminUserJson['permissions'].append('manage_information_assets'); \
-    adminUserJson['permissions'].append('manage_quality'); \
-    adminUserJson['permissions'].append('manage_discovery'); \
-    adminUserJson['permissions'].append('manage_metadata_import'); \
-    adminUserJson['permissions'].append('manage_categories'); \
-    adminUserJson['permissions'].append('author_governance_artifacts'); \
-    adminUserJson['permissions'].append('manage_governance_workflow'); \
-    adminUserJson['user_roles'].append('Business Analyst'); \
-    adminUserJson['user_roles'].append('Data Steward'); \
-    adminUserJson['user_roles'].append('Data Quality Analyst'); \
-    print (json.dumps(adminUserJson))")
-
-    curl -sS -k -X PUT $DB_URL/privatecloud-users/admin \
-        -H "Content-Type: application/json" \
-        -d "$adminUserDoc"
-
-    echo "Setting up ISF linkage to usermgmt"
-    kubectl set env -n $ICPD_CONTROLPLANE_NAMESPACE deployment usermgmt --containers=usermgmt-container ISF_SERVICE_URL=https://is-servicesdocker:9446
-
-    echo "Restart DC-Main and NLQ"
-    kubectl set env -n $ICPD_CONTROLPLANE_NAMESPACE deployment dc-main ISADMIN_SECRET_ENABLED=true
+    #sleep for 1m to ensure your roles and permissions are fully processed by zen-watcher
+    sleep 1m
+    secret=$ZEN_SERVICE_BROKER_SECRET
+    bearerToken=$(curl -sS -k https://zen-core-api-svc:4444/internal/v1/token -H "secret: ${secret}" | python -c "import sys, json; \
+    response=json.load(sys.stdin); \
+    print(response['token'])")
+    updateUserResp=$(curl -kv --silent --write-out "HTTPSTATUS:%{http_code}" -X PUT https://usermgmt-svc:3443/v1/user/admin?add_roles=true -H "Authorization: Bearer ${bearerToken}" -H "content-type: application/json" -d '{"username": "admin", "user_roles": ["zen_data_engineer_role", "wkc_data_steward_role"]}')
+    status_code=$(echo $updateUserResp | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+    echo $status_code
+    if [ "$status_code" -eq 200 ];
+    then
+       echo "User - admin updated"
+    else
+       echo "User - admin failed to update"
+    fi
   {{- end }}
