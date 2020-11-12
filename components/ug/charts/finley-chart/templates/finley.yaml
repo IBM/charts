@@ -1,0 +1,147 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.finley.app_name }}
+  labels:
+     app: {{ .Values.finley.app_name }}
+     chart: "{{ .Chart.Name }}"
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}"
+     app.kubernetes.io/name: {{ .Values.finley.app_name }}
+     helm.sh/chart: {{ .Chart.Name }}
+     app.kubernetes.io/managed-by: {{ .Release.Service }}
+     app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.finley.app_name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.finley.app_name }}
+        chart: "{{ .Values.finley.chartName }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/name: {{ .Values.finley.app_name }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
+      annotations:
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      hostname: finley
+      initContainers:
+      {{- include "wait-xmeta" . | indent 6 }}
+      containers:
+      - name: {{ .Values.finley.app_name }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.finley.repository }}:{{ .Values.finley.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          requests:
+            memory: "{{ .Values.finley.requests.memory }}"
+            cpu: "{{ .Values.finley.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.finley.limits.memory }}"
+            cpu: "{{ .Values.finley.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: FINLEY_DB_TYPE
+          value: db2
+        - name: IIS_USERNAME_SECRET
+          value: isadmin
+        - name: IIS_PASSWORD_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: isadmin_password
+        - name: XMETA_PASSWORD_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: db2inst1_password
+        - name: DB2INST1_PASSWORD_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: db2inst1_password
+        - name: RMQ_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-ha
+              key: rabbitmq-username
+        - name: RMQ_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-ha
+              key: rabbitmq-password
+        - name: RMQ_CERT
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-ha-cert
+              key: cacert.pem
+        - name: FINLEY_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: finley_token
+        ports:
+        - containerPort: 5000
+          name: rest-api
+        - name: monitoring
+          containerPort: 9000
+        livenessProbe:
+            failureThreshold: 8
+            httpGet:
+              path: /api/finley/health
+              port: rest-api
+              scheme: HTTPS
+            initialDelaySeconds: 180
+            timeoutSeconds: 3
+            periodSeconds: 60
+        readinessProbe:
+            httpGet:
+              path: /api/finley/health
+              port: rest-api
+              scheme: HTTPS
+            initialDelaySeconds: 60
+            timeoutSeconds: 3
+        volumeMounts:
+            - name: config-volume
+              mountPath: /finley/config.ini
+              subPath: config.ini
+            - name: finley-log
+              mountPath: /finley/log
+      securityContext:
+        runAsNonRoot: true
+        {{- if .Values.finley.runAsUser }}
+        runAsUser: {{ .Values.finley.runAsUser }}
+        {{- end }}
+        {{- if .Values.finley.fsGroup }}
+        fsGroup: {{ .Values.finley.fsGroup }}
+        {{- end }}
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- end }}
+      {{- include "image-secret" . | indent 6 }}
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ .Values.finley.app_name }}
+        - name: finley-log
+          emptyDir: {}

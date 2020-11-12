@@ -7,29 +7,30 @@ metadata:
     chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     release: {{ .Release.Name }}
     app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{ .Release.Service }} 
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/name: {{ .Chart.Name }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
 spec:
   replicas: {{ .Values.replicas }}
-  selector: 
+  selector:
     matchLabels:
       app: {{ template "metadata-discovery.fullname" . }}
   template:
-    metadata: 
+    metadata:
       labels:
         app: {{ template "metadata-discovery.fullname" . }}
         chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         release: {{ .Release.Name }}
         app.kubernetes.io/instance: {{ .Release.Name }}
-        app.kubernetes.io/managed-by: {{ .Release.Service }} 
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
         app.kubernetes.io/name: {{ .Chart.Name }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        icpdsupport/app: "apis"
-        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
       annotations:
         {{- if .Values.global.podAnnotations }}
-{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
         {{- end }}
     spec:
       affinity:
@@ -63,16 +64,16 @@ spec:
             timeoutSeconds: 10
             periodSeconds: 60
             successThreshold: 1
-            failureThreshold: 3 
-          readinessProbe: 
+            failureThreshold: 3
+          readinessProbe:
             httpGet:
               path: /v2/heartbeat
               port: 9443
               scheme: HTTPS
             initialDelaySeconds: 60
             timeoutSeconds: 30
-            periodSeconds: 60 
-{{- if .Values.global.installCerts }} 
+            periodSeconds: 60
+{{- if .Values.global.installCerts }}
           volumeMounts:
             - name: wdp-certs
               mountPath: "/etc/wdp_certs"
@@ -81,135 +82,135 @@ spec:
           env:
              - name: cloudant_username
                valueFrom:
-                  secretKeyRef: 
-                     key: {{ .Values.env.cloudantUser.key }}  
-                     name: {{ .Values.env.cloudantUser.secret }}         
+                  secretKeyRef:
+                     key: {{ .Values.env.cloudantUser.key }}
+                     name: {{ .Values.env.cloudantUser.secret }}
              - name: cloudant_password
                valueFrom:
-                  secretKeyRef: 
-                     key: {{ .Values.env.cloudantPassword.key }} 
-                     name: {{ .Values.env.cloudantPassword.secret }}       
+                  secretKeyRef:
+                     key: {{ .Values.env.cloudantPassword.key }}
+                     name: {{ .Values.env.cloudantPassword.secret }}
              - name: cloudant_url
                valueFrom:
-                  secretKeyRef: 
-                     key: {{ .Values.env.cloudantUrl.key }} 
-                     name: {{ .Values.env.cloudantUrl.secret }}                
+                  secretKeyRef:
+                     key: {{ .Values.env.cloudantUrl.key }}
+                     name: {{ .Values.env.cloudantUrl.secret }}
              - name: rabbitmq_uri_1
                valueFrom:
-                  secretKeyRef: 
-                     key: {{ .Values.env.rabbitmqUri.key }} 
-                     name: {{ .Values.env.rabbitmqUri.secret }}     
-{{- if .Values.env.rabbitmqUri_2 }}                          
+                  secretKeyRef:
+                     key: {{ .Values.env.rabbitmqUri.key }}
+                     name: {{ .Values.env.rabbitmqUri.secret }}
+{{- if .Values.env.rabbitmqUri_2 }}
              - name: rabbitmq_uri_2
                valueFrom:
-                  secretKeyRef: 
-                     key: {{ .Values.env.rabbitmqUri_2.key }} 
-                     name: {{ .Values.env.rabbitmqUri_2.secret }}           
-                     optional: true       
-{{- end }}                     
-{{- if .Values.env.rabbitmqCaCert }}    
+                  secretKeyRef:
+                     key: {{ .Values.env.rabbitmqUri_2.key }}
+                     name: {{ .Values.env.rabbitmqUri_2.secret }}
+                     optional: true
+{{- end }}
+{{- if .Values.env.rabbitmqCaCert }}
              - name: rabbitmq_ca_certificate
                valueFrom:
-                  secretKeyRef: 
-                     key: {{ .Values.env.rabbitmqCaCert.key }} 
-                     name: {{ .Values.env.rabbitmqCaCert.secret }}    
-{{- end }}                        
-{{- if .Values.env.etcdUri }}                                                 
+                  secretKeyRef:
+                     key: {{ .Values.env.rabbitmqCaCert.key }}
+                     name: {{ .Values.env.rabbitmqCaCert.secret }}
+{{- end }}
+{{- if .Values.env.etcdUri }}
              - name: etcd_uri_1
                valueFrom:
-                  secretKeyRef: 
-                     key: {{ .Values.env.etcdUri.key }} 
-                     name: {{ .Values.env.etcdUri.secret }}   
-{{- end }}                        
-{{- if .Values.env.etcdUri_2 }}                                                        
+                  secretKeyRef:
+                     key: {{ .Values.env.etcdUri.key }}
+                     name: {{ .Values.env.etcdUri.secret }}
+{{- end }}
+{{- if .Values.env.etcdUri_2 }}
              - name: etcd_uri_2
                valueFrom:
-                  secretKeyRef: 
-                     key: {{ .Values.env.etcdUri_2.key }} 
-                     name: {{ .Values.env.etcdUri_2.secret }}       
+                  secretKeyRef:
+                     key: {{ .Values.env.etcdUri_2.key }}
+                     name: {{ .Values.env.etcdUri_2.secret }}
                      optional: true
-{{- end }}                        
-{{- if .Values.env.etcdCaCert }}                       
+{{- end }}
+{{- if .Values.env.etcdCaCert }}
              - name: etcd_ca_certificate
                valueFrom:
-                  secretKeyRef: 
-                     key: {{ .Values.env.etcdCaCert.key }} 
-                     name: {{ .Values.env.etcdCaCert.secret }}       
-{{- end }}                                              
-{{- if .Values.env.segmentApiKey }}                       
+                  secretKeyRef:
+                     key: {{ .Values.env.etcdCaCert.key }}
+                     name: {{ .Values.env.etcdCaCert.secret }}
+{{- end }}
+{{- if .Values.env.segmentApiKey }}
              - name: segment_api_key
                valueFrom:
-                  secretKeyRef: 
-                     key: {{ .Values.env.segmentApiKey.key }} 
+                  secretKeyRef:
+                     key: {{ .Values.env.segmentApiKey.key }}
                      name: {{ .Values.env.segmentApiKey.secret }}
-{{- end }}                        
-{{- if .Values.env.serviceApiKey }}  
+{{- end }}
+{{- if .Values.env.serviceApiKey }}
              - name: service_api_key
                valueFrom:
-                  secretKeyRef: 
-                     key: {{ .Values.env.serviceApiKey.key }} 
-                     name: {{ .Values.env.serviceApiKey.secret }}       
-{{- end }}                        
-{{- if .Values.env.newrelicLicenseKey }}                       
+                  secretKeyRef:
+                     key: {{ .Values.env.serviceApiKey.key }}
+                     name: {{ .Values.env.serviceApiKey.secret }}
+{{- end }}
+{{- if .Values.env.newrelicLicenseKey }}
              - name: NEW_RELIC_LICENSE_KEY
                valueFrom:
-                  secretKeyRef: 
-                     key: {{ .Values.env.newrelicLicenseKey.key }} 
-                     name: {{ .Values.env.newrelicLicenseKey.secret }}       
-{{- end }}     
-{{- if .Values.env.openwhiskEnabled }}                        
+                  secretKeyRef:
+                     key: {{ .Values.env.newrelicLicenseKey.key }}
+                     name: {{ .Values.env.newrelicLicenseKey.secret }}
+{{- end }}
+{{- if .Values.env.openwhiskEnabled }}
              - name: openwhisk_enabled
-               value: {{ .Values.env.openwhiskEnabled.value | quote }} 
-{{- end }}           
-{{- if .Values.env.openwhiskAuthToken }}                          
+               value: {{ .Values.env.openwhiskEnabled.value | quote }}
+{{- end }}
+{{- if .Values.env.openwhiskAuthToken }}
              - name: openwhisk_auth_token
                valueFrom:
-                  secretKeyRef: 
-                     key: {{ .Values.env.openwhiskAuthToken.key }} 
-                     name: {{ .Values.env.openwhiskAuthToken.secret }}       
-{{- end }}                     
-{{- if .Values.env.openwhiskHost }}                        
+                  secretKeyRef:
+                     key: {{ .Values.env.openwhiskAuthToken.key }}
+                     name: {{ .Values.env.openwhiskAuthToken.secret }}
+{{- end }}
+{{- if .Values.env.openwhiskHost }}
              - name: openwhisk_host
-               value: {{ .Values.env.openwhiskHost.value }} 
-{{- end }}                        
-{{- if .Values.env.openwhiskNamespace }}                  
+               value: {{ .Values.env.openwhiskHost.value }}
+{{- end }}
+{{- if .Values.env.openwhiskNamespace }}
              - name: openwhisk_namespace
                value: {{ .Values.env.openwhiskNamespace.value }}
-{{- end }}                        
-{{- if .Values.env.newrelicAppName }}   
+{{- end }}
+{{- if .Values.env.newrelicAppName }}
              - name: NEW_RELIC_APP_NAME
-               value: {{ .Values.env.newrelicAppName.value | quote }}  
-{{- end }}                                         
+               value: {{ .Values.env.newrelicAppName.value | quote }}
+{{- end }}
              - name: ENABLE_NEWRELIC
-               value: {{ .Values.env.newrelicEnabled.value | quote }}  
-{{- if .Values.env.baseUrl }}                 
+               value: {{ .Values.env.newrelicEnabled.value | quote }}
+{{- if .Values.env.baseUrl }}
              - name: base_url
                valueFrom:
                  configMapKeyRef:
                    name: {{ .Values.env.baseUrl.config }}
                    key: {{ .Values.env.baseUrl.key }}
-{{- end }}                              
+{{- end }}
              - name: catalogs_url
-               value: {{ .Values.env.catalogsUrl.value | quote }} 
-{{- if .Values.env.cfDomain }}                  
+               value: {{ .Values.env.catalogsUrl.value | quote }}
+{{- if .Values.env.cfDomain }}
              - name: cf_domain
-               value: {{ .Values.env.cfDomain.value | quote }} 
-{{- end }}                      
+               value: {{ .Values.env.cfDomain.value | quote }}
+{{- end }}
              - name: connections_url
-               value:  {{ .Values.env.connectionsUrl.value | quote }} 
+               value:  {{ .Values.env.connectionsUrl.value | quote }}
              - name: entitlements_url
-               value:  {{ .Values.env.entitlementsUrl.value | quote }} 
-{{- if .Values.env.dataCenter }}                  
+               value:  {{ .Values.env.entitlementsUrl.value | quote }}
+{{- if .Values.env.dataCenter }}
              - name: data_center
-               value: {{ .Values.env.dataCenter.value | quote }} 
-{{- end }}                    
+               value: {{ .Values.env.dataCenter.value | quote }}
+{{- end }}
              - name: discovery_create_asset
-               value: {{ .Values.env.createAssetTopic.value | quote }} 
+               value: {{ .Values.env.createAssetTopic.value | quote }}
              - name: discovery_runs
-               value: {{ .Values.env.discoveryRunsTopic.value | quote }} 
+               value: {{ .Values.env.discoveryRunsTopic.value | quote }}
              - name: discovery_update_progress
-               value: {{ .Values.env.updateProgressTopic.value | quote }} 
-{{- if .Values.env.createAssetThreadCount }}                  
+               value: {{ .Values.env.updateProgressTopic.value | quote }}
+{{- if .Values.env.createAssetThreadCount }}
              - name: discovery_create_asset_thread_count
                value: {{ .Values.env.createAssetThreadCount.value | quote }}
 {{- end }}
@@ -217,49 +218,49 @@ spec:
                value: {{ template "metadata-discovery.environmentName" . }}
              - name: environment_type
                value: {{ .Values.env.environmentType.value }}
-{{- if .Values.env.hypersyncUrl }}                 
+{{- if .Values.env.hypersyncUrl }}
              - name: hypersync_url
                value: {{ .Values.env.hypersyncUrl.value | quote }}
-{{- end }}                       
+{{- end }}
              - name: notifications_url
                value: {{ .Values.env.notificationsUrl.value | quote }}
-{{- if .Values.env.openwhiskMaxConcurrentInvocation }}                 
+{{- if .Values.env.openwhiskMaxConcurrentInvocation }}
              - name: openwhisk_max_concurrent_invocation
                value: {{ .Values.env.openwhiskMaxConcurrentInvocation.value }}
-{{- end }}                    
+{{- end }}
              - name: projects_url
                value: {{ .Values.env.projectsUrl.value | quote }}
-{{- if .Values.env.versionNumber }}                 
+{{- if .Values.env.versionNumber }}
              - name: version_number
                value: {{ .Values.env.versionNumber.value | quote }}
-{{- end }}                       
+{{- end }}
              - name: monitoring_enabled
                value: {{ .Values.env.monitoringEnabled.value | quote }}
              - name: check_entitlement
                value: {{ .Values.env.checkEntitlements.value | quote }}
-{{- if .Values.env.etcdDeploymentName }}                       
+{{- if .Values.env.etcdDeploymentName }}
              - name: etcd_deployment_name
                value: {{ .Values.env.etcdDeploymentName.value }}
-{{- end }}              
-{{- if .Values.env.activityTrackerEnabled }}                        
+{{- end }}
+{{- if .Values.env.activityTrackerEnabled }}
              - name: activity_tracker_enabled
-               value: {{ .Values.env.activityTrackerEnabled.value | quote }} 
-{{- end }}              
-{{- if .Values.env.activityTrackerCrn }}          
+               value: {{ .Values.env.activityTrackerEnabled.value | quote }}
+{{- end }}
+{{- if .Values.env.activityTrackerCrn }}
              - name: activity_tracker_crn
                value: {{ .Values.env.activityTrackerCrn.value | quote }}
-{{- end }}              
-{{- if .Values.env.activityTrackerUrl }}                  
+{{- end }}
+{{- if .Values.env.activityTrackerUrl }}
              - name: activity_tracker_url
                value: {{ .Values.env.activityTrackerUrl.value | quote }}
-{{- end }}              
-{{- if .Values.env.activityTrackerToken }}                  
+{{- end }}
+{{- if .Values.env.activityTrackerToken }}
              - name: activity_tracker_token
                valueFrom:
-                  secretKeyRef: 
-                     key: {{ .Values.env.activityTrackerToken.key }} 
-                     name: {{ .Values.env.activityTrackerToken.secret }} 
-{{- end }}           
+                  secretKeyRef:
+                     key: {{ .Values.env.activityTrackerToken.key }}
+                     name: {{ .Values.env.activityTrackerToken.secret }}
+{{- end }}
 {{- if (.Values.env.serviceIdCredential) }}
              - name: WDP_SERVICE_ID_CREDENTIAL
                valueFrom:
@@ -272,7 +273,7 @@ spec:
                valueFrom:
                   secretKeyRef:
                     name: {{ .Values.env.serviceId.secret }}
-                    key: {{ .Values.env.serviceId.key }}     
+                    key: {{ .Values.env.serviceId.key }}
 {{- end }}
 {{- if (.Values.env.serviceAccountId) }}
              - name: ICP4D_BSS_ACCOUNT_ID
@@ -301,16 +302,23 @@ spec:
                     key: {{ .Values.env.redisUri.key }}
              - name: cache_service_factory_impl
                value: com.ibm.wdp.discovery.common.redis.OptimisticLockingRedisCacheServiceFactory
-{{- end }}                      
+             {{- if (.Values.env.redisCert) }}
+             - name: redis_cert
+               valueFrom:
+                  secretKeyRef:
+                    name: {{ .Values.env.redisCert.secret }}
+                    key: {{ .Values.env.redisCert.key }}
+             {{- end }}
+{{- end }}
 {{- if (.Values.env.relativeUrl) }}
              - name: relative_url
                value: {{ .Values.env.relativeUrl.value | quote }}
-{{- end }}                      
-          resources: 
-             limits: 
+{{- end }}
+          resources:
+             limits:
                 cpu: {{ .Values.limits.cpu | quote }}
-                memory: {{ .Values.limits.memory | quote }}    
-             requests: 
+                memory: {{ .Values.limits.memory | quote }}
+             requests:
                 cpu: {{ .Values.requests.cpu | quote }}
                 memory: {{ .Values.requests.memory | quote }}
           securityContext:
@@ -344,8 +352,8 @@ spec:
                 - key: cert.pem
                   path: rabbitmq.cert.pem
                 optional: true
-{{- end }}      
-{{- if .Values.imagePullSecrets.name }}                
-      imagePullSecrets: 
+{{- end }}
+{{- if .Values.imagePullSecrets.name }}
+      imagePullSecrets:
         - name: {{ .Values.imagePullSecrets.name }}
 {{- end }}

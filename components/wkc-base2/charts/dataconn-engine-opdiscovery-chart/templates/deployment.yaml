@@ -1,11 +1,17 @@
 ---
-{{- include "sch.config.init" (list . "dataconn-engine-opdiscovery.sch.chart.config.values") -}}
+{{ include "sch.config.init" (list . "dataconn-engine-opdiscovery.sch.chart.config.values") }}
 kind: Deployment
 apiVersion: apps/v1
 metadata:
   name: {{ template "dataconn-engine-opdiscovery.fullname" . }}
   labels:
 {{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+    app: {{ include "sch.names.appName" (list .)  | quote}}
+    chart: {{ .Chart.Name | quote }}
+    heritage: {{ .Release.Service | quote }}
+    {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 4 }}
+    {{- end }}
 spec:
   replicas: {{ .Values.minReplicas }}
   selector:
@@ -14,27 +20,38 @@ spec:
   template:
     metadata:
       labels:
-{{ include "sch.metadata.labels.standard" (list . "" (dict .Values.global.serviceabilityLabelName .Values.global.serviceabilityLabelValue)) | indent 8 }}
-        icpdsupport/app: "apis"
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+        app: {{ include "sch.names.appName" (list .)  | quote}}
+        date: "date"
+        chart: {{ .Chart.Name | quote }}
+        heritage: {{ .Release.Service | quote }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
+
       annotations:
         {{- if .Values.global.podAnnotations }}
-{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
         {{- end }}
     spec:
+      {{- if ne .Values.global.deploymentTarget "cloud" }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
       securityContext:
         runAsNonRoot: true
+      {{- end }}
       containers:
       - name: {{ template "dataconn-engine-opdiscovery.fullname" . }}
         image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+{{- if ne .Values.global.deploymentTarget "cloud" }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
 {{- if .Values.global.installCerts }}
         volumeMounts:
         - name: wdp-certs
           mountPath: "/etc/wdp_certs"
           readOnly: true
+{{- end }}
 {{- end }}
         ports:
         - containerPort: {{ .Values.ports.targetPort }}
@@ -44,9 +61,11 @@ spec:
             path: "v2/dataconn/discovery/version"
             port: {{ .Values.ports.targetPort }}
             scheme: "HTTPS"
+            {{- if .Values.host }}
             httpHeaders:
             - name: Host
-              value: $(GATEWAY_URL)
+              value: {{ .Values.host }}
+            {{- end }}
           initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
           timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
           periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
@@ -57,22 +76,75 @@ spec:
             path: "v2/dataconn/discovery/version"
             port: {{ .Values.ports.targetPort }}
             scheme: "HTTPS"
+            {{- if .Values.host }}
             httpHeaders:
             - name: Host
-              value: $(GATEWAY_URL)
+              value: {{ .Values.host }}
+            {{- end }}
           initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
           timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
           periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
           successThreshold: {{ .Values.readinessProbe.successThreshold }}
           failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
         env:
+        - name: PRODUCT_NAME
+          value: {{ .Values.global.ibmProduct }}
+        {{- if eq .Values.global.deploymentTarget "cloud" }}
+        {{- if .Values.environment.allowedServiceIds.VaultMultiKeys }}
+        - name: ALLOWED_SERVICE_IDS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.allowedServiceIds.secret }}
+              key: {{ .Values.environment.allowedServiceIds.key }}
+        {{- end }}
+        - name: BM_APP_NAME
+          value: dataconn-engine-opdiscovery
+        - name: COMPONENT_ID
+          value: dataconn-engine-opdiscovery
+        - name: DEPLOY_TARGET
+          value: armada
+        - name: ENABLE_NEW_RELIC
+          value: "true"
+        - name: ENVIRONMENT_NAME
+          value: {{ .Values.environment.environmentName }}
+        - name: GATEWAY_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.gatewayUrl.secret }}
+              key: {{ .Values.environment.gatewayUrl.key }}
+        - name: IAM_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.iamUrl.secret }}
+              key: {{ .Values.environment.iamUrl.key }}
+        - name: LOGDNA_LOG_SOURCE_CRN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.logDnaLogSourceCrn.secret }}
+              key: {{ .Values.environment.logDnaLogSourceCrn.key }}
+        - name: LOGDNA_SAVE_SERVICE_COPY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.logDnaSaveServiceCopy.secret }}
+              key: {{ .Values.environment.logDnaSaveServiceCopy.key }}
+        - name: NEW_RELIC_LICENSE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.newRelicLicenseKey.secret }}
+              key: {{ .Values.environment.newRelicLicenseKey.key }}
+        - name: SERVICE_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.environment.serviceId.secret }}
+              key: {{ .Values.environment.serviceId.key }}
+        {{- else }}
         - name: ALLOWED_SERVICE_IDS
           valueFrom:
             secretKeyRef:
               name: wdp-service-id
               key: service-id
         - name: ENABLE_NEW_RELIC
-          value: {{ .Values.environment.enableNewRelic }}
+          value: "false"
         - name: ENVIRONMENT_NAME
           value: {{ .Values.global.deploymentTarget }}
         - name: GATEWAY_URL
@@ -85,13 +157,12 @@ spec:
             configMapKeyRef:
               name: wdp-config
               key: icp4d-host-url
-        - name: PRODUCT_NAME
-          value: {{ .Values.global.ibmProduct }}
         - name: SERVICE_ID
           valueFrom:
             secretKeyRef:
               name: wdp-service-id
               key: service-id-credentials
+        {{- end }}
         resources:
           limits:
             cpu: {{ .Values.resources.limits.cpu }}
@@ -99,6 +170,7 @@ spec:
           requests:
             cpu: {{ .Values.resources.requests.cpu }}
             memory: {{ .Values.resources.requests.memory }}
+{{- if ne .Values.global.deploymentTarget "cloud" }}
         securityContext:
           privileged: false
           allowPrivilegeEscalation: false
@@ -107,8 +179,8 @@ spec:
           capabilities:
             drop:
             - ALL
-{{- if .Values.global.installCerts }}
       volumes:
+      {{- if .Values.global.installCerts }}
       - name: wdp-certs
         projected:
           sources:
@@ -118,6 +190,7 @@ spec:
               - key: certificate.pem
                 path: internal-nginx.cert.pem
               optional: true
+      {{- end }}
 {{- end }}
 {{- if .Values.repository.secret.name }}
       imagePullSecrets:

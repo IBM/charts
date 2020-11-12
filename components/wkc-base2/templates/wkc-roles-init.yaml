@@ -14,8 +14,11 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
   annotations:
     "helm.sh/hook": pre-install
-    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-weight": "-8"
     "helm.sh/hook-delete-policy": before-hook-creation
+    {{- if .Values.global.podAnnotations }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 4 }}
+    {{- end }}
 spec:
   backoffLimit: 3
   activeDeadlineSeconds: 360
@@ -26,9 +29,13 @@ spec:
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         app.kubernetes.io/instance: {{ .Release.Name }}
+        icpdsupport/app: "api"
+      {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+      {{- end }}          
       annotations:
         {{- if .Values.global.podAnnotations }}
-{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
         {{- end }}      
     spec:
       {{- if eq .Values.global.deploymentTarget "icp4data" }}
@@ -71,12 +78,6 @@ spec:
               fieldRef:
                 apiVersion: v1
                 fieldPath: metadata.namespace
-          - name: CLOUDANT_URL
-            valueFrom:
-              secretKeyRef:
-                key: cloudant-url.txt
-                name: wdp-cloudant-url
-                optional: true
           - name: COUCHDB_USERNAME
             valueFrom:
               secretKeyRef:
@@ -89,11 +90,11 @@ spec:
                 key: couchdb_password
                 name: couchdb-secrets
                 optional: true
-          - name: ISADMIN_PASSWORD
+          - name: ZEN_SERVICE_BROKER_SECRET
             valueFrom:
               secretKeyRef:
-                key: isadmin_password
-                name: wkc-user-secrets
+                key: token
+                name: zen-service-broker-secret
                 optional: true
           {{- if .Values.global.ibmProduct }}
           - name: PRODUCT_NAME

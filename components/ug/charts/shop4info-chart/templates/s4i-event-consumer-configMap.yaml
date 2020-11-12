@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.s4iEventConsumer.appName }}-config
+  labels:
+     app: audit-trail-service
+     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}"
+     app.kubernetes.io/name: audit-trail-service
+     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+     app.kubernetes.io/managed-by: {{ .Release.Service }}
+     app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  application.properties: |
+    # -- backend hosts
+    graph.properties.storage.hostname={{ .Values.cassandra.appName }}
+    graph.properties.index.search.solr.zookeeper-url={{ .Values.zookeeper.appName }}:2181/solr
+
+    # default ports
+    server.port=8080
+    management.server.port=8090
+    # type-registry adress and context, warn / at the end is mandatory!
+    typeregistry.baseuri=http://{{ .Values.s4iRegistry.appName }}-internal:8080/ibm/iis/api/type-registry/v1/
+    # -- kafka config
+    # old consumer props
+    eventconsumer.kafkaconfig.zookeeper.connect={{ .Values.zookeeper.appName }}:2181/kafka
+    eventconsumer.kafkaconfig.group.id=KnowledgeGraphConsumerGroup
+    eventconsumer.kafkaconfig.zookeeper.connection.timeout.ms=300000
+    eventconsumer.kafkaconfig.zookeeper.session.timeout.ms=300000
+    eventconsumer.kafkaconfig.zookeeper.sync.time.ms=2000
+    eventconsumer.kafkaconfig.auto.commit.interval.ms=10000
+    # new consumer props
+    eventconsumer.kafkaconfig.bootstrap.servers={{ .Values.kafka.appName }}:9093
+    eventconsumer.kafkaconfig.session.timeout.ms=30000
+    eventconsumer.kafkaconfig.key.deserializer=org.apache.kafka.common.serialization.StringDeserializer
+    eventconsumer.kafkaconfig.value.deserializer=org.apache.kafka.common.serialization.StringDeserializer
+    # custom props
+    eventconsumer.kafkaconfig.consumer.topic.id=igc-kg-bridge-out
+    eventconsumer.kafkaconfig.consumer.thread.pool=1
+    # event consumer's dispatcher
+    dispatcher.thread.pool=30
+    dispatcher.message.buffer=3000
+    dispatcher.special.handling.host=true
+
+    # -- kafka producer
+    spring.kafka.bootstrap-servers={{ .Values.kafka.appName }}:9093
+
+    # -- scheduler
+    #scheduler url
+    scheduler.baseUrl=http://shop4info-scheduler-internal:8080
+    # http connection timeout in milliseconds
+    scheduler.connectionTimeout=5000
+    # http request timeout in milliseconds
+    scheduler.requestTimeout=5000
+    # max queue size for single event type
+    scheduler.maxQueueSize=1000000
+    # max queue size for each event type
+    scheduler.sendThreshold=1000
+    # max wait time in milliseconds before event is sent
+    scheduler.gatherTime=5000
+    # initial delay in milliseconds before events are started to be sent
+    scheduler.initialDelay=5000
+
+    # redis configuration
+    spring.redis.url=${REDIS_URL}
+    redis.enabled = true
+    management.health.redis.enabled=false
+    spring.cache.redis.time-to-live=300000
+    spring.redis.database=0
+
+    # security configuration
+    security.enabled=true
+    jwt.leeway=10
+    jwt.algorithm=RSA256
+    jwt.token.type={{ .Values.tokenType.value }}
+    jwt.publicKeyUrl=${BASE_URL}{{ .Values.keyProvider.value }}
+    jwt.issuer={{ .Values.issuer.value }}
+    jwt.accept.all.ssl={{ .Values.acceptAllSSL.value }}
+  jvm.options: |
+    -XX:+PrintCommandLineFlags
+    #warning: there HAVE to be a new line at the end

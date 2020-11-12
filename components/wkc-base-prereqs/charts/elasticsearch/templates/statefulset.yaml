@@ -58,16 +58,20 @@ spec:
         release: {{ .Release.Name | quote }}
         chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
         app: "{{ template "uname" . }}"
-        icpdsupport/app: "apis"
-        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }} 
         app.kubernetes.io/name: {{ .Chart.Name }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
       annotations:
         {{- range $key, $value := .Values.podAnnotations }}
         {{ $key }}: {{ $value | quote }}
         {{- end }}
+        {{- if .Values.global.podAnnotations }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+        {{- end }}        
         {{/* This forces a restart if the configmap has changed */}}
         {{- if .Values.esConfig }}
         configchecksum: {{ include (print .Template.BasePath "/configmap.yaml") . | sha256sum | trunc 63 }}
@@ -260,11 +264,20 @@ spec:
         - |
           set -e;
           
-          publishPort="970${HOSTNAME:21}"
+          publishPort="970${HOSTNAME##*-}"
           echo "publish port: ${publishPort}"
           
+          echo "Removing node.lock";
+          rm -f /usr/share/elasticsearch/data/nodes/*/node.lock;
+          find /usr/share/elasticsearch/data/nodes/* -name write.lock -type f -delete || true;
+          
           env transport.publish_port=${publishPort} /usr/local/bin/docker-entrypoint.sh;      
-        {{- end }}               
+        {{- end }}    
+        livenessProbe:
+{{ toYaml .Values.livenessProbe | indent 10 }}
+          httpGet:
+            path: /_cluster/health?local=true
+            port: {{ .Values.httpPort }}           
         readinessProbe:
 {{ toYaml .Values.readinessProbe | indent 10 }}
           exec:

@@ -1,0 +1,79 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "ug-post-upgrade-refresh-users"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+  {{- include "product-metering" . | indent 4 }}
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 21600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
+      annotations:
+        {{- include "product-metering" . | indent 8 }}
+    spec:
+      serviceAccountName: cpd-editor-sa
+      restartPolicy: Never
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      containers:
+      - name: "ug-post-upgrade-refresh-users"
+        imagePullPolicy: IfNotPresent
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.global.image.wkcinitcontainer.repository }}:{{ .Values.global.image.wkcinitcontainer.tag }}
+        command: ["python", "/refresh-users.py"]
+        volumeMounts:
+          - name: ug-post-upgrade-refresh-users-config
+            mountPath: /refresh-users.py
+            subPath: script.py
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 1000321000
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          limits:
+            cpu: {{ .Values.global.image.wkcinitcontainer.resources.limits.cpu }}
+            memory: {{ .Values.global.image.wkcinitcontainer.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.global.image.wkcinitcontainer.resources.requests.cpu }}
+            memory: {{ .Values.global.image.wkcinitcontainer.resources.requests.memory }}
+        env:
+          - name: ZEN_SERVICE_BROKER_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: zen-service-broker-secret
+                key: token
+      volumes:
+        - name: ug-post-upgrade-refresh-users-config
+          configMap:
+            name: ug-post-upgrade-refresh-users-config
+            defaultMode: 0555

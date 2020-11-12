@@ -1,0 +1,151 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Values.s4iScheduler.appName }}
+  labels:
+    app: {{ .Values.s4iScheduler.appName }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/name: {{ .Values.s4iScheduler.appName }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  serviceName: "{{ .Values.s4iScheduler.appName }}"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.s4iScheduler.appName }}
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.s4iScheduler.appName }}
+        chart: "{{ .Values.shop4info.chartName }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/name: {{ .Values.s4iScheduler.appName }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/path:   /actuator/prometheus
+        prometheus.io/port:   '8090'
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      terminationGracePeriodSeconds: 5
+      initContainers:
+      - name: type-registry-wait
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.global.image.wkcinitcontainer.repository }}:{{ .Values.global.image.wkcinitcontainer.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        command: ['sh', '-c', '--']
+        args: [ "type_reg_status=1;
+                 while [ $type_reg_status != 0  ];
+                 do sleep 2;
+                 type_reg_status=`nc {{ .Values.s4iRegistry.appName }}-internal 8080 < /dev/null; echo $?`;
+                 done;"
+              ]
+        resources:
+          requests:
+            memory: "{{ .Values.s4iScheduler.initcontainer.requests.memory }}"
+            cpu: "{{ .Values.s4iScheduler.initcontainer.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.s4iScheduler.initcontainer.limits.memory }}"
+            cpu: "{{ .Values.s4iScheduler.initcontainer.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+      containers:
+        - name: {{ .Values.s4iScheduler.appName }}
+          image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.s4iScheduler.repository }}:{{ .Values.s4iScheduler.tag }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          resources:
+            requests:
+              memory: "{{ .Values.s4iScheduler.requests.memory }}"
+              cpu: "{{ .Values.s4iScheduler.requests.cpu }}"
+            limits:
+              memory: "{{ .Values.s4iScheduler.limits.memory }}"
+              cpu: "{{ .Values.s4iScheduler.limits.cpu }}"
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+              - ALL
+          ports:
+            - containerPort: 8080
+            - containerPort: 8090
+          volumeMounts:
+            - name: config-map
+              mountPath: /app/application.properties
+              subPath: application.properties
+            - name: config-map
+              mountPath: /app/jvm.options
+              subPath: jvm.options
+            - name: app-log
+              mountPath: /app/log
+            - name: secrets
+              mountPath: /app/secrets
+              readOnly: true
+            - name: zk-probe
+              mountPath: /opt/zk-probe.sh
+              subPath: zk-probe.sh
+          readinessProbe:
+            httpGet:
+              path: /actuator/ready
+              port: 8090
+            periodSeconds: 20
+            initialDelaySeconds: 30
+            timeoutSeconds: 20
+            failureThreshold: 1
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8090
+            periodSeconds: 20
+            initialDelaySeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 10
+      securityContext:
+        runAsNonRoot: true
+        {{- if .Values.s4iScheduler.runAsUser }}
+        runAsUser: {{ .Values.s4iScheduler.runAsUser }}
+        {{- end }}
+        {{- if .Values.s4iScheduler.fsGroup }}
+        fsGroup: {{ .Values.s4iScheduler.fsGroup }}
+        {{- end }}
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- end }}
+      {{- include "image-secret" . | indent 6 }}
+      volumes:
+        - name: config-map
+          configMap:
+            name: {{ .Values.s4iScheduler.appName }}-config
+        - name: zk-probe
+          configMap:
+            name: zk-probe-configmap
+            defaultMode: 0755
+        - name: secrets
+          persistentVolumeClaim:
+             claimName: iis-secrets-pv
+        - name: app-log
+          emptyDir: {}

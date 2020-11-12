@@ -30,10 +30,12 @@ spec:
         app.kubernetes.io/name: {{ .Chart.Name }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         icpdsupport/app: "ui"
-        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim  | indent 8 }}
+        {{- end }}
       annotations:
-      {{- if .Values.global.annotations }}
-{{ toYaml .Values.global.annotations | trim  | indent 8 }}
+      {{- if .Values.global.podAnnotations }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim  | indent 8 }}
       {{- end }}
     spec:
       {{- if eq .Values.global.deploymentTarget "icp4data" }}
@@ -195,6 +197,30 @@ spec:
                    key: YP_PROFILE_NEXT_CLIENT_SECRET
                    name: portal-catalog-secret
                    optional: true
+           - name: auth__redisCacheServer__url
+           {{- if eq .Values.env.DEPLOYMENT_TARGET "cloud" }}
+             valueFrom:
+               secretKeyRef:
+                  key: auth__redisCacheServer__url
+                  name: portal-catalog-secret
+           {{- else}}
+             valueFrom:
+               secretKeyRef:
+                  key: redis-url.txt
+                  name: redis-url
+           {{- end}}
+           - name: auth__redisCacheServer__tlsServer
+             valueFrom:
+               secretKeyRef:
+                  key: auth__redisCacheServer__tlsServer
+                  name: portal-catalog-secret
+                  optional: true
+           - name: auth__redisCacheServer__certificate
+             valueFrom:
+               secretKeyRef:
+                  key: auth__redisCacheServer__certificate
+                  name: portal-catalog-secret
+                  optional: true
            - name: config__composeRedis__cryptoPassword
              valueFrom:
                 secretKeyRef:
@@ -209,21 +235,35 @@ spec:
            {{- else}}
              valueFrom:
                secretKeyRef:
-                   key: redis-url.txt
-                   name: redis-url
+                 key: redis-url-ssl
+                 name: redis-ha
            {{- end}}
            - name: config__composeRedis__tlsServer
+           {{- if eq .Values.env.DEPLOYMENT_TARGET "cloud" }}
              valueFrom:
-                secretKeyRef:
-                   key: config__composeRedis__tlsServer
-                   name: portal-catalog-secret
-                   optional: true
+               secretKeyRef:
+                  key: config__composeRedis__tlsServer
+                  name: portal-catalog-secret
+                  optional: true
+           {{- else}}
+             valueFrom:
+               secretKeyRef:
+                 key: redis-host
+                 name: redis-ha-secret-host-and-port
+           {{- end}}
            - name: config__composeRedis__certificate
+           {{- if eq .Values.env.DEPLOYMENT_TARGET "cloud" }}
              valueFrom:
                 secretKeyRef:
                    key: config__composeRedis__certificate
                    name: portal-catalog-secret
                    optional: true
+           {{- else}}
+             valueFrom:
+               secretKeyRef:
+                 key: cacertb64.pem
+                 name: redis-ha-cert
+           {{- end}}
            - name: config__session__secret
              valueFrom:
                 secretKeyRef:
@@ -253,6 +293,12 @@ spec:
                    key: rabbitmq-url.txt
                    name: rabbitmq-url
            {{- end}}
+           - name: rabbitmq__certificate
+             valueFrom:
+               secretKeyRef:
+                 key: rabbitmq__certificate
+                 name: portal-catalog-secret
+                 optional: true
            - name: WDP_SERVICE_ID_CREDENTIAL
              valueFrom:
                 secretKeyRef:
@@ -279,6 +325,9 @@ spec:
            {{- if eq .Values.global.deploymentTarget "icp4data" }}
            - name: NODE_EXTRA_CA_CERTS
              value: /etc/certificate/certificate.pem
+           {{- else if ne .Values.global.deploymentTarget "cloud" }}
+           - name: NODE_TLS_REJECT_UNAUTHORIZED
+             value: "0"
            {{- end }}
            - name: APP_ENV_ENABLE_METRIC_REPORTING
              value: {{ .Values.env.APP_ENV_ENABLE_METRIC_REPORTING | default false | quote }}
@@ -293,11 +342,7 @@ spec:
            - name: DEPLOY_TIMESTAMP
              value: {{ now | date "Mon Jan/02/2006-3:04:05 PM" }}
            - name: APP_NAME
-             {{- if .Values.image.branch }}
-             value: "CatalogUI-{{ .Values.image.version }}"
-             {{- else }}
-             value: "CatalogUI-{{ .Values.image.tag }}"
-             {{- end }}
+             value: "CatalogUI"
            - name: DOMAIN
              value: {{ .Values.env.DOMAIN | quote }}
            - name: EXT_DOMAIN
@@ -311,7 +356,7 @@ spec:
            - name: NODE_MODULES_CACHE
              value: "false"
            - name: PRODUCTION
-             value: "true"
+             value: {{ .Values.env.PRODUCTION | default true | quote }}
            - name: STAGE
              value: {{ .Values.env.STAGE | quote }}
            - name: auth__COSObjectStorage__endpoint
@@ -328,8 +373,6 @@ spec:
              value: "datacatalog"
            - name: config__entitlements
              value: {{ .Values.env.config__entitlements | default true | quote }}
-           - name: IS_ADV_SEARCH_ENABLED
-             value: {{ .Values.env.IS_ADV_SEARCH_ENABLED | default true | quote }}
            - name: rabbitmq__enabled
              value: {{ .Values.env.config__rabbitmq | default true | quote }}
            - name: auth__activityTracker__region
@@ -341,7 +384,11 @@ spec:
            - name: DEPLOYMENT_TARGET
              value: {{ .Values.env.DEPLOYMENT_TARGET | default "cloud" | quote }}
            - name: PRODUCT_VERSION
-             value: {{ .Values.env.PRODUCT_VERSION | quote }}
+             {{- if .Values.image.branch }}
+             value: {{ .Values.image.version }}
+             {{- else }}
+             value: {{ .Values.image.tag }}
+             {{- end }}
            - name: DOC_URL
              {{- if eq .Values.env.DEPLOYMENT_TARGET "cloud" }}
              value: "https://dataplatform.cloud.ibm.com/docs/content"
@@ -376,6 +423,12 @@ spec:
              valueFrom:
                secretKeyRef:
                  key: config__sendGrid__apiKey
+                 name: portal-catalog-secret
+                 optional: true
+           - name: config__segment__key
+             valueFrom:
+               secretKeyRef:
+                 key: config__segment__key
                  name: portal-catalog-secret
                  optional: true
       {{- if .Values.image.pullSecret }}
