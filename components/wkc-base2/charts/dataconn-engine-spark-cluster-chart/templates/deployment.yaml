@@ -1,11 +1,17 @@
 ---
-{{- include "sch.config.init" (list . "engine-spark.sch.chart.config.values") -}}
+{{ include "sch.config.init" (list . "engine-spark.sch.chart.config.values") }}
 kind: Deployment
 apiVersion: apps/v1
 metadata:
   name: {{ template "dataconn-engine-spark-cluster.fullname" . }}
   labels:
 {{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+    app: {{ include "sch.names.appName" (list .)  | quote}}
+    chart: {{ .Chart.Name | quote }}
+    heritage: {{ .Release.Service | quote }}
+    {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 4 }}
+    {{- end }}
 spec:
   replicas: {{ .Values.minReplicas }}
   selector:
@@ -14,11 +20,17 @@ spec:
   template:
     metadata:
       labels:
-        icpdsupport/app: "apis"
-{{ include "sch.metadata.labels.standard" (list . "" (dict .Values.global.serviceabilityLabelName .Values.global.serviceabilityLabelValue)) | indent 8 }}
+        app: {{ include "sch.names.appName" (list .)  | quote}}
+        date: "date"
+        chart: {{ .Chart.Name | quote }}
+        heritage: {{ .Release.Service | quote }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
       annotations:
         {{- if .Values.global.podAnnotations }}
-{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
         {{- end }}
     spec:
       hostNetwork: false
@@ -92,11 +104,16 @@ spec:
           value: {{ .Values.global.ibmProduct }}
         - name: R_LIBS
           value: "/usr/local/src/spark/R/libs"
+        - name: REDIS_CERT
+          valueFrom:
+            secretKeyRef:
+              name: redis-ha-cert
+              key: cacertb64.pem
         - name: REDIS_URL
           valueFrom:
             secretKeyRef:
-              name: redis-url
-              key: redis-url.txt
+              name: redis-ha
+              key: redis-url-ssl
         - name: SPARK_ACCESS_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -121,8 +138,8 @@ spec:
           capabilities:
             drop:
             - ALL
-{{- if .Values.global.installCerts }}
       volumes:
+{{- if .Values.global.installCerts }}
       - name: wdp-certs
         projected:
           sources:

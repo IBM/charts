@@ -1,0 +1,45 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: ug-roles-config
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "-8"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  init.sh: |
+    set -e
+
+    echo "Update admin user with wkc roles and permissions"
+    #sleep for 1m to ensure your roles and permissions are fully processed by zen-watcher
+    sleep 1m
+    secret=$ZEN_SERVICE_BROKER_SECRET
+    bearerToken=$(curl -sS -k https://zen-core-api-svc:4444/internal/v1/token -H "secret: ${secret}" | python -c "import sys, json; \
+    response=json.load(sys.stdin); \
+    print(response['token'])")
+    updateUserResp=$(curl -kv --silent --write-out "HTTPSTATUS:%{http_code}" -X PUT https://usermgmt-svc:3443/v1/user/admin?add_roles=true -H "Authorization: Bearer ${bearerToken}" -H "content-type: application/json" -d '{"username": "admin", "user_roles": ["wkc_business_analyst_role", "wkc_data_quality_analyst_role"]}')
+    status_code=$(echo $updateUserResp | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+    echo $status_code
+    if [ "$status_code" -eq 200 ];
+    then
+       echo "User - admin updated"
+    else
+       echo "User - admin failed to update"
+    fi
+
+    echo "Setting up ISF linkage to usermgmt"
+    kubectl set env -n $ICPD_CONTROLPLANE_NAMESPACE deployment usermgmt --containers=usermgmt-container ISF_SERVICE_URL=https://is-servicesdocker:9446
+    
+    echo "Restart DC-Main and NLQ"
+    kubectl set env -n $ICPD_CONTROLPLANE_NAMESPACE deployment dc-main ISADMIN_SECRET_ENABLED=true
+  {{- end }}

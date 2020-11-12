@@ -1,0 +1,90 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "wkc-extensions-translations-init"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": post-upgrade, post-install
+    "helm.sh/hook-weight": "-3"
+    "helm.sh/hook-delete-policy": before-hook-creation
+  {{- if .Values.global.podAnnotations }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 4 }}
+  {{- end }}  
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  template:
+    metadata: 
+      labels:
+        app: {{ .Chart.Name }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+      {{- end }}   
+      annotations:
+      {{- if .Values.global.podAnnotations }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+      {{- end }}
+    spec:
+      restartPolicy: Never
+      {{- if .Values.hookJob.serviceAccountName }}
+      serviceAccountName: {{ .Values.hookJob.serviceAccountName }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      affinity:
+      {{- include "wkcbase.nodeAffinity" . | indent 6 }}  
+      containers:
+      - name: "wkc-extensions-translations-init"
+        imagePullPolicy: IfNotPresent
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ index .Values "dc-main" "image" "repository" }}:{{ index .Values "dc-main" "image" "tag" }}
+        command: ["/bin/sh", "/wkc/translations.sh"]
+        volumeMounts:
+          - name: wkc-extension-translations-config
+            mountPath: /wkc
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "{{ .Values.hookJob.resources.requests.memory }}"
+            cpu: "{{ .Values.hookJob.resources.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.hookJob.resources.limits.memory }}"
+            cpu: "{{ .Values.hookJob.resources.limits.cpu }}"
+        env:
+          - name: ZEN_SERVICE_BROKER_SECRET
+            valueFrom:
+              secretKeyRef:
+                key: token
+                name: zen-service-broker-secret
+                optional: true
+      volumes:
+        - name: wkc-extension-translations-config
+          configMap:
+            name: wkc-extension-translations-config
+            defaultMode: 0555
+{{- end }}

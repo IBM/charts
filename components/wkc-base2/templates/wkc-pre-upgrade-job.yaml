@@ -1,0 +1,89 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "wkc-pre-upgrade-job"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    cpd-delete-hook: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": "pre-upgrade"
+    "helm.sh/hook-weight": "-99"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    {{- if .Values.global.podAnnotations }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 4 }}
+    {{- end }}
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 1200
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        icpdsupport/app: "api"
+      {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+      {{- end }}          
+      annotations:
+      {{- if .Values.global.podAnnotations }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+      {{- end }}
+    spec:
+      containers:
+      - name: wkc-pre-upgrade
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.preInstall.image.repository }}:{{ .Values.preInstall.image.tag }}
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/sh"]
+        args: ["/wkc-pre-upgrade-scripts/pre-upgrade.sh"]
+        volumeMounts:
+        - mountPath: /wkc-pre-upgrade-scripts
+          name: wkc-pre-upgrade-scripts
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          limits:
+            cpu: {{ .Values.preInstall.resources.limits.cpu }}
+            memory: {{ .Values.preInstall.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.preInstall.resources.requests.cpu }}
+            memory: {{ .Values.preInstall.resources.requests.memory }}
+        env:
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+      restartPolicy: Never
+      volumes:
+      - name: wkc-pre-upgrade-scripts
+        configMap:
+          name: wkc-pre-upgrade-config
+      serviceAccountName: {{ .Values.postDelete.serviceAccountName }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      affinity:
+      {{- include "wkcbase2.nodeAffinity" . | indent 6 }}
+      terminationGracePeriodSeconds: 0
+    {{- if .Values.preInstall.image.imagePullSecrets }}
+      imagePullSecrets:
+      - name: {{ .Values.preInstall.image.imagePullSecrets }}
+    {{- end }}
+{{- end }}

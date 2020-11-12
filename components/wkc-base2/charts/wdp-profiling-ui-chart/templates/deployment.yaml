@@ -12,10 +12,6 @@ metadata:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/name: {{ .Chart.Name }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-  annotations:
-    {{- if .Values.global.podAnnotations }}
-{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
-    {{- end }}
 spec:
   replicas: {{ .Values.minReplicas }}
   selector:
@@ -34,17 +30,17 @@ spec:
         app.kubernetes.io/name: {{ .Chart.Name }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         istier: services
-        icpdsupport/addOnKey: "ugi"
-        icpdsupport/app: "ui"
-        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
-      annotations:
-        productName: "IBM Watson Knowledge Catalog Professional for ICP for Data"
-        productID: "5737-K89"
-        productVersion: "1.0"
-        {{- if .Values.global.podAnnotations }}
-{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
         {{- end }}
+      annotations:
+      {{- if eq .Values.global.deploymentTarget "icp4data" }}
+        {{- if .Values.global.podAnnotations }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+        {{- end }}
+      {{- end }}
     spec:
+      {{- if eq .Values.global.deploymentTarget "icp4data" }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -59,6 +55,7 @@ spec:
       hostIPC: false
       securityContext:
         runAsNonRoot: true
+      {{- end }}
       containers:
       - name: {{ template "wdp-profiling-ui-chart.fullname" . }}
         image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
@@ -86,18 +83,34 @@ spec:
           successThreshold: {{ .Values.readinessProbe.successThreshold }}
           failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
         env:
-          - name: "WDP_PROFILING_UI_URL"
-            value: {{ .Values.environment.WDP_PROFILING_UI_URL }}
+      {{- if eq .Values.global.deploymentTarget "icp4data" }}
+          - name: "K8S"
+            value: "{{ .Values.environment.K8S }}"
           - name: "DUMMY_ENV"
             value: "{{ .Values.environment.DUMMY_ENV }}"
+      {{- end }}
+          - name: "BM_DOMAIN"
+            value: "{{ .Values.environment.BM_DOMAIN }}"
+          - name: "DEPLOYMENT_TARGET"
+            value: "{{ .Values.environment.DEPLOYMENT_TARGET }}"
+          - name: "DEPLOY_TARGET"
+            value: "{{ .Values.environment.DEPLOY_TARGET }}"
+          - name: "BM_APP_VERSION_ENDPOINT"
+            value: "{{ .Values.environment.BM_APP_VERSION_ENDPOINT }}"
+          - name: "GATEWAY_URL"
+            value: "{{ .Values.environment.GATEWAY_URL }}"
+          - name: "BM_APP_HOST"
+            value: "{{ .Values.environment.BM_APP_HOST }}"
+          - name: "WDP_PROFILING_UI_URL"
+            value: "{{ .Values.environment.WDP_PROFILING_UI_URL }}"
           - name: "CF_DOMAIN"
-            value: {{ .Values.environment.CF_DOMAIN }}
+            value: "{{ .Values.environment.CF_DOMAIN }}"
           - name: "ENTRY"
-            value: {{ .Values.environment.ENTRY }}
+            value: "{{ .Values.environment.ENTRY }}"
           - name: "STAGE"
-            value: {{ .Values.environment.STAGE }}
+            value: "{{ .Values.environment.STAGE }}"
           - name: "NODE_ENV"
-            value: {{ .Values.environment.NODE_ENV }}
+            value: "{{ .Values.environment.NODE_ENV }}"
           - name: "NODE_MODULES_CACHE"
             value: "{{ .Values.environment.NODE_MODULES_CACHE }}"
           - name: "ENABLE_MONITORING"
@@ -108,22 +121,103 @@ spec:
             value: "{{ .Values.environment.ENABLE_NOTCLASSIFIED }}"
           - name: "CF_STAGING_TIMEOUT"
             value: "{{ .Values.environment.CF_STAGING_TIMEOUT }}"
-          - name: "DEPLOYMENT_TARGET"
-            value: "{{ .Values.environment.DEPLOYMENT_TARGET }}"
-          - name: "BM_APP_HOST"
-            value: "{{ .Values.environment.BM_APP_HOST }}"
-          - name: "BM_APP_VERSION_ENDPOINT"
-            value: "{{ .Values.environment.BM_APP_VERSION_ENDPOINT }}"
           - name: "config__session__key"
             value: "{{ .Values.environment.config__session__key }}"
-          - name: "K8S"
-            value: "{{ .Values.environment.K8S }}"
-          - name: "BM_DOMAIN"
-            value: "{{ .Values.environment.BM_DOMAIN }}"
-          - name: "GATEWAY_URL"
-            value: "{{ .Values.environment.GATEWAY_URL }}"
-          - name: "replicaCount"
-            value: "{{ .Values.replicaCount }}"
+          {{- if eq .Values.global.deploymentTarget "cloud" }}
+          - name: "DOMAIN"
+            value: "{{ .Values.environment.DOMAIN }}"
+          - name: "COMPONENT_ID"
+            value: "{{ .Values.environment.COMPONENT_ID }}"
+          - name: "PRODUCTION"
+            value: "{{ .Values.environment.PRODUCTION }}"
+          - name: "auth__iamId__clientId"
+            value: "{{ .Values.environment.auth__iamId__clientId }}"
+          - name: "auth__UAA__clientId"
+            value: "{{ .Values.environment.auth__UAA__clientId }}"
+          - name: "BM_API_URL_ENDPOINT"
+            value: "{{ .Values.environment.BM_API_URL_ENDPOINT }}"
+          - name: "DATA_CENTER"
+            value: "{{ .Values.environment.DATA_CENTER }}"
+          - name: "ENVIRONMENT_TYPE"
+            value: "{{ .Values.environment.ENVIRONMENT_TYPE }}"
+          - name: "IAM_URL"
+            value: "{{ .Values.environment.IAM_URL }}"
+          - name: "REGION"
+            value: "{{ .Values.environment.REGION }}"
+          - name: "SERVICE_INSTANCE_GUID"
+            value: "{{ .Values.environment.SERVICE_INSTANCE_GUID }}"
+          - name: "WDP_UI_PROXY_URL"
+            value: "{{ .Values.environment.WDP_UI_PROXY_URL }}"
+          - name: "PRODUCT_NAME"
+            value: "{{ .Values.environment.PRODUCT_NAME }}"
+          - name: "NEW_RELIC_APP_NAME"
+            value: "{{ .Values.environment.NEW_RELIC_APP_NAME }}"
+          - name: "JVM_ARGS"
+            value: "{{ .Values.environment.JVM_ARGS }}"
+          {{ if .Values.environment.shaperClientSecret }}
+          - name: {{ .Values.environment.shaperClientSecret.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.shaperClientSecret.secret }}
+                key: {{ .Values.environment.shaperClientSecret.key }}
+          {{ end }}
+          {{ if .Values.environment.shaperUaaClientSecret }}
+          - name: {{ .Values.environment.shaperUaaClientSecret.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.shaperUaaClientSecret.secret }}
+                key: {{ .Values.environment.shaperUaaClientSecret.key }}
+          {{ end }}
+          {{ if .Values.environment.serviceIdApikey }}
+          - name: {{ .Values.environment.serviceIdApikey.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.serviceIdApikey.secret }}
+                key: {{ .Values.environment.serviceIdApikey.key }}
+          {{ end }}
+          {{ if .Values.environment.shaperSessionSecret }}
+          - name: {{ .Values.environment.shaperSessionSecret.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.shaperSessionSecret.secret }}
+                key: {{ .Values.environment.shaperSessionSecret.key }}
+          {{ end }}
+          {{ if .Values.environment.shaperRedisEncryptionKey }}
+          - name: {{ .Values.environment.shaperRedisEncryptionKey.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.shaperRedisEncryptionKey.secret }}
+                key: {{ .Values.environment.shaperRedisEncryptionKey.key }}
+          {{ end }}
+          {{ if .Values.environment.shaperRedisTlsServer }}
+          - name: {{ .Values.environment.shaperRedisTlsServer.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.shaperRedisTlsServer.secret }}
+                key: {{ .Values.environment.shaperRedisTlsServer.key }}
+          {{ end }}
+          {{ if .Values.environment.shaperRedisCert }}
+          - name: {{ .Values.environment.shaperRedisCert.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.shaperRedisCert.secret }}
+                key: {{ .Values.environment.shaperRedisCert.key }}
+          {{ end }}
+          {{ if .Values.environment.newRelicLicenseKey }}
+          - name: {{ .Values.environment.newRelicLicenseKey.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.newRelicLicenseKey.secret }}
+                key: {{ .Values.environment.newRelicLicenseKey.key }}
+          {{ end }}
+          {{ if .Values.environment.logSourceDna }}
+          - name: {{ .Values.environment.logSourceDna.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.logSourceDna.secret }}
+                key: {{ .Values.environment.logSourceDna.key }}
+          {{ end }}
+          {{- end }}
           {{ if .Values.environment.redisUrl }}
           - name: {{ .Values.environment.redisUrl.name }}
             valueFrom:
@@ -151,6 +245,21 @@ spec:
           - name: "secret_object_name"
             value: {{ .Values.secret_object_name }}
           {{ end }}
+      {{- if eq .Values.global.deploymentTarget "icp4data" }}
+          {{ if .Values.environment.redisSsl }}
+          - name: {{ .Values.environment.redisSsl.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.redisSsl.secret }}
+                key: {{ .Values.environment.redisSsl.key }}
+          {{ end }}
+          {{ if .Values.environment.redisHost }}
+          - name: {{ .Values.environment.redisHost.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.redisHost.secret }}
+                key: {{ .Values.environment.redisHost.key }}
+          {{ end }}
           - name: CUSTOM_DOMAIN
             valueFrom:
               configMapKeyRef:
@@ -166,6 +275,7 @@ spec:
               configMapKeyRef:
                 name: wdp-config
                 key: host
+      {{- end }}
         resources:
           limits:
             cpu: {{ .Values.resources.limits.cpu }}
@@ -173,6 +283,7 @@ spec:
           requests:
             cpu: {{ .Values.resources.requests.cpu }}
             memory: {{ .Values.resources.requests.memory }}
+        {{- if eq .Values.global.deploymentTarget "icp4data" }}
         securityContext:
           privileged: false
           allowPrivilegeEscalation: false
@@ -181,6 +292,7 @@ spec:
           capabilities:
             drop:
             - ALL
+      {{- end }}
 {{- if .Values.repository.secret.name }}
       imagePullSecrets:
         - name: {{ .Values.repository.secret.name }}

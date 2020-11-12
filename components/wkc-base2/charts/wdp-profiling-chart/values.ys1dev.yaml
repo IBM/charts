@@ -1,24 +1,35 @@
-minReplicas: ${CONTAINER_REPLICAS}
-maxReplicas: ${CONTAINER_REPLICAS}
-app_name: ${BM_APP_NAME}
-secret_object_name: secret-${BM_APP_NAME}
+# Default values for wdp-Profiling-chart.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+global:
+  installCerts: true
+  deploymentTarget: "cloud"
+  serviceabilityLabelName: wkc
+  serviceabilityLabelValue: wkc
+fullnameOverride: wdp-profiling
+minReplicas: 3
+maxReplicas: 9
+secret_object_name: secret-wdp-profiling
+microservice:
+  app_name: "wdp-profiling"
 image:
-  repository: ${DOCKER_REGISTRY}/${BM_APP_NAME}
+  repository: "dataconn-docker-local.artifactory.swg-devops.com/ubi/wdp-profiling"
   tag: ${BM_APP_VERSION}
 repository:
   secret:
-    name: ${DOCKER_REGISTRY_CREDENTIALS}
+    name: dr-docker-registry-cred
 resources:
   limits:
-    cpu: ${CONTAINER_CPU_LIMIT}
-    memory: ${CONTAINER_MEMORY_LIMIT}
+    cpu: 1
+    memory: 4Gi
   requests:
-    cpu: ${CONTAINER_CPU}
-    memory: ${CONTAINER_MEMORY}
-host: ${GATEWAY_URL}
+    cpu: 500m
+    memory: 2Gi
 ports:
-  targetPort: ${CONTAINER_PORT}
+  targetPort: 9443
   externalPort: 443
+  protocol: TCP
 livenessProbe:
   initialDelaySeconds: 180
   timeoutSeconds: 15
@@ -30,16 +41,18 @@ readinessProbe:
   timeoutSeconds: 15
   periodSeconds: 60
   successThreshold: 1
-  failureThreshold: 10
+  failureThreshold: 100
 environment:
-  ENGINE_API_BASE_URL: ${WDP_DATACONN_ENGINE_URL}
-  BG_API_BASE_URL: ${GATEWAY_URL}
-  MQ_CATALOG_BINDING_KEY: v2.#.catalogs.POST,v2.account.*.catalogs.*.assets.*.attachments.*.complete.POST,v2.account.*.catalogs.*.assets.*.attachments.POST,v2.account.*.catalogs.*.assets.*.publish.POST,v2.data_profiles.create.attachment.republish,v2.data_profiles.publish.asset.republish,v2.account.*.catalogs.*.assets.*.clone.POST
+  GATEWAY_URL: https://api.dataplatform.dev.cloud.ibm.com
+  Host: api.dataplatform.dev.cloud.ibm.com
+  ENGINE_API_BASE_URL: https://api.dataplatform.dev.cloud.ibm.com
+  BG_API_BASE_URL: https://api.dataplatform.dev.cloud.ibm.com
+  MQ_CATALOG_BINDING_KEY: /v2/projects/*,v2.account.*.catalogs.*.DELETE,v2.account.*.catalogs.*.trashed_assets.*.DELETE,v2.#.catalogs.POST,v2.account.*.catalogs.*.assets.*.attachments.*.complete.POST,v2.account.*.catalogs.*.assets.*.attachments.POST,v2.account.*.catalogs.*.assets.*.publish.POST,v2.data_profiles.create.attachment.republish,v2.data_profiles.publish.asset.republish,v2.account.*.catalogs.*.assets.*.clone.POST
   MQ_ACTIVITIES_BINDING_KEY: v2.activities.*.activityruns.*,v2.data_flows.*.runs.*
   MQ_BINDINGKEY: v2.account.*.catalogs.*.assets.*.attachments.*.complete.POST,v2.account.*.catalogs.*.assets.*.attachments.POST,v2.account.*.catalogs.*.assets.*.publish.POST
-  MQ_DATAPROFILE_QUEUE: wdpprofiling-queue-ys1dev
+  MQ_DATAPROFILE_QUEUE: wdp_profiling_queue_ys1dev_staging
   MQ_CATALOG_EXCHANGE_NAME: CatalogServiceMessageHub
-  IAM_URL: ${IAM_URL}
+  IAM_URL: https://iam.stage1.ng.bluemix.net
   ACTIVITY_MAX_POLL_TIME: 36000
   ACTIVITY_POLL_SLEEP_TIME: 10
   LOAD_DESIGN_DOCS: true
@@ -49,11 +62,11 @@ environment:
   USE_STATUS_POLLING: false
   ENABLE_PROFILE_ENTITLEMENTS: true
   ENABLE_ENTITLEMENTS_TEST_MODE: false
-  ALLOWED_SERVICE_IDS: ${PROFILING_SERVICE_ID},${DPS_SERVICE_ID},${BG_SERVICE_ID}
-  COMPONENT_ID: WDP-Profiling
   ENABLE_PROFILING_UNGOVERNED: false
   enableETCDV3: true
   MAX_RETRY_COUNT: 3
+  ENVIRONMENT_NAME: ys1dev
+  ENVIRONMENT_TYPE: ys1
   RETRY_SLEEP_TIME: 5
   ENABLE_INSTRUMENTATION: true
   HYPERSYNC_URL: https://hypersync.stage1.ng.bluemix.net
@@ -65,9 +78,8 @@ environment:
   CLASSIFIER_VERIFY_BG_TERM_ASSOCIATIONS: true
   ENABLE_PROFILING_ALL_ROWS: false
   VALUE_LIST_MAX_FILE_SIZE: 10
-  CRN: ${CRN}
-  BLUEMIX_REGION: ${BLUEMIX_REGION}
-  REGION: ${REGION}
+  BLUEMIX_REGION: ng
+  REGION: us-south
   LOG_AT_EVENTS: true
   SLEEP_TIME_CAMS_QUERY_THREAD: 21600000
   ENABLE_DATAFLOW: true
@@ -75,22 +87,53 @@ environment:
   MAX_COS_SIZE: 3
   ENABLE_FULL_ENTITLEMENT: true
   CACHE_TTL: "5"
+  WDP_UI_PROXY_URL: dataplatform.dev.cloud.ibm.com
+  SERVICE_INSTANCE_GUID: wdp-profiling-ys1dev
+  ENABLE_MONITORING: true
+  BM_APP_VERSION: ${BM_APP_VERSION}
+  BM_APP_VERSION_ENDPOINT: v2/data_profiles/version
+  BM_API_URL_ENDPOINT: https://api.stage1.ng.bluemix.net
+  BM_APP_HOST: wdp-profiling-ys1dev 
+  BM_APP_NAME: wdp-profiling
+  BM_DOMAIN: ng.bluemix.net
+  CNAME: bluemix
+  COMPONENT_ID: wdp-profiling
+  CTYPE: public
+  DATA_CENTER: dallas
+  DEPLOYMENT_TARGET: cloud
+  PRODUCT_NAME: dataconnect
+  IA_SERVICES_IMPL: profiling
+  LOGDNA_SAVE_SERVICE_COPY: true
+  NEW_RELIC_APP_NAME: wdp-profiling-ys1dev-k8s
+  JAVA_OPTS: -javaagent:/home/vcap/app/wlp/usr/servers/defaultServer/apps/wdp-profiling.war/resources/newrelic/newrelic.jar -javaagent:/home/vcap/app/wlp/usr/servers/defaultServer/apps/wdp-profiling.war/resources/wdp-monitoring-jmxtrans-agent.jar=/home/vcap/app/wlp/usr/servers/defaultServer/apps/wdp-profiling.war/resources/jmxagent-config.xml
+  JVM_ARGS: -Dnewrelic.config.extensions.dir=/home/vcap/app/wlp/usr/servers/defaultServer/apps/wdp-profiling.war/resources/newrelic/extensions
+  HUMMING_BIRD_URL: https://spark-ys1-dev.us-south.ae.cloud.ibm.com/ae/655c3c0a499a498bb777cc4f7e5e223f/v2/jobs/
+  HUMMINGBIRD_BASE_URL: https://spark-ys1-dev.us-south.ae.cloud.ibm.com
+  HUMMINGBIRD_JOBS_PER_INSTANCE: 10
+  HUMMINGBIRD_JOBS_QUEUE_RETRY_INTERVAL: 60
+  HUMMINGBIRD_JOBS_QUEUE_RETRY_COUNT: 10
+  IA_METADATA_ROOT: profiling
   mqUrl:
     name: MQ_URL
     secret: secret-wdp-profiling
-    key: CLOUDAMQP_URL
+    key: PROFILING_ICD_CLOUDAMQP_URL
   mqSsl:
     name: MQ_SSL
     secret: secret-wdp-profiling
-    key: CLOUDAMQP_SSL
+    key: ICD_CLOUDAMQP_SSL
   serviceId:
     name: SERVICE_ID
     secret: secret-wdp-profiling
-    key: WDP_SERVICE_ID_CREDENTIAL 
+    key: PROFILING_SERVICE_ID
   serviceApiKey:
     name: SERVICE_API_KEY
     secret: secret-wdp-profiling
     key: PROFILING_SERVICE_APIKEY
+  allowedServiceIds:
+    name: ALLOWED_SERVICE_IDS
+    secret: secret-wdp-profiling
+    key: ALLOWED_SERVICE_IDS
+    VaultMultiKeys: "${PROFILING_SERVICE_ID},${DPS_SERVICE_ID},${BG_SERVICE_ID},${FINLEY_SERVICE_ID}"
   cloudantApiPassword:
     name: CLOUDANT_APIKEY_PASSWORD
     secret: secret-wdp-profiling
@@ -126,39 +169,39 @@ environment:
   kmsUrl:
     name: KMS_URL
     secret: secret-wdp-profiling
-    key: KMS_URL
+    key: KMS_URL_DEV
   kmsInstanceId:
     name: KMS_INSTANCE_ID
     secret: secret-wdp-profiling
-    key: KMS_INSTANCE_ID
+    key: KMS_INSTANCE_ID_DEV
   kmsRootKeyId:
     name: KMS_ROOT_KEY_ID
     secret: secret-wdp-profiling
-    key: KMS_ROOT_KEY_ID
+    key: KMS_ROOT_KEY_ID_DEV
   kmsServiceId:
     name: KMS_SERVICE_ID
     secret: secret-wdp-profiling
-    key: KMS_SERVICE_ID
+    key: KMS_SERVICE_ID_DEV
   kmsApiKey:
     name: KMS_API_KEY
     secret: secret-wdp-profiling
-    key: KMS_API_KEY
+    key: KMS_API_KEY_DEV
   atAuthToken:
     name: AT_AUTH_TOKEN
     secret: secret-wdp-profiling
-    key: AT_AUTH_TOKEN_VALUE
+    key: AT_AUTH_TOKEN_VALUE_YS1
   brokerUrl:
     name: BROKER_URL
-    secret: DC_BROKER_URL
-    key: PROFILING_SERVICE_APIKEY
+    secret: secret-wdp-profiling
+    key: DC_BROKER_URL
   brokerUserName:
     name: BROKER_USERNAME
     secret: secret-wdp-profiling
-    key: BROKER_USERNAME
+    key: BROKER_YS1PROD_USERNAME
   brokerPassword:
     name: BROKER_PASSWORD
     secret: secret-wdp-profiling
-    key: BROKER_PASSWORD
+    key: BROKER_YS1PROD_PASSWORD
   serviceAtName:
     name: SERVICE_AT_NAME
     secret: secret-wdp-profiling
@@ -191,3 +234,17 @@ environment:
     name: SEGMENT_WRITE_KEY
     secret: secret-wdp-profiling
     key: REFINERY_SEGMENT_WRITE_KEY
+  crnCluster:
+    name: CRN
+    secret: secret-wdp-profiling
+    key: CRN
+    VaultMultiKeys: "crn:v1:${CNAME}:${CTYPE}:${SERVICE_NAME}:${REGION}:a/${BLUEMIX_ACCOUNT_ID}:${ARMADA_CLUSTER_ID}:deployment:wdp-profiling"
+  logDNASource:
+    name: LOGDNA_LOG_SOURCE_CRN
+    secret: secret-wdp-profiling
+    key: LOGDNA_LOG_SOURCE_CRN
+  xApiKey:
+    name: X-Api-Key
+    secret: secret-wdp-profiling
+    key: TEMP_PROFILING_HB_APIKEY
+  

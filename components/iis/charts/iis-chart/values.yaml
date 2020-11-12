@@ -1,0 +1,230 @@
+###############################################################################
+########## IBM InfoSphere Information Server Enterprise #############
+###############################################################################
+
+arch:
+  amd64: "3 - Most preferred"
+
+###############################################################################
+## global persistence settings
+###############################################################################
+
+global:
+  ibmProduct: zen
+  dockerRegistryPrefix: ""
+  podLabels:
+    icpdsupport/app: "api"
+    icpdsupport/addOnId: "wkc"
+  podAnnotations:
+    productID: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    productName: "IBM Watson Knowledge Catalog for IBM Cloud Pak for Data"
+    productVersion: "3.5.1"
+    productMetric: "VIRTUAL_PROCESSOR_CORE"
+    productChargedContainers: "All"
+    cloudpakName: "IBM Cloud Pak for Data"
+    cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    cloudpakInstanceId: "{{ .Values.global.cloudpakInstanceId }}"
+    productCloudpakRatio: "1:1"
+  persistence:
+    enabled: true
+    useDynamicProvisioning: false
+    storageClassName: ""
+  image:
+    wkcinitcontainer:
+      repository: wkc-init-container
+      tag: 1.0.107
+      requests:
+        cpu: 100m
+        memory: 128M
+      limits:
+        cpu: 500m
+        memory: 256M
+    wkcugconfig:
+      repository: wkc-ugconfig
+      tag: 3.5.22
+      runAsUser:
+      fsGroup:
+
+
+###############################################################################
+## Common image variables
+###############################################################################
+#placeHolderSecrets:
+  #replaceSec stage: hyc-ug-staging-docker-registry-secret
+  #replaceSec acs: hyc-acs-docker-local-registry-secret
+  #replaceSec shop4info: iig-ug-shop4info-docker-staging-secret
+  #replaceSec release: hyc-ug-releases-docker-registry-secret
+  #replaceSec finley: hyc-finley-docker-local-secret
+  #replaceSec drcreds: dr-docker-registry-cred
+
+# secret generation
+secretGeneration:
+  serviceAccountName: ""
+
+release:
+  ingress: false
+  image:
+    pullPolicy: IfNotPresent
+    iis:
+      services:
+        repository: is-services-image
+        tag: b164-CP4D-3_5_0-b71
+        runAsUser: 10032
+        fsGroup:
+        serviceAccountName: ""
+        supplementalGroups: ""
+      xmetarepo:
+        repository: is-db2xmeta-image
+        tag: b164-CP4D-3_5_0-b71
+        runAsUser: 1000
+        fsGroup:
+        container:
+          runAsUser:
+          fsGroup:
+      engine:
+        repository: is-engine-image
+        tag: b164-CP4D-3_5_0-b71
+        runAsUser: 10032
+        fsGroup:
+        serviceAccountName: ""
+        qsmDisableDistributeComponent: 1
+      compute:
+        repository: is-en-compute-image
+        tag: b164-CP4D-3_5_0-b71
+        runAsUser: 10032
+        fsGroup:
+        serviceAccountName: ""
+
+###############################################################################
+## IIS container variables
+###############################################################################
+iisService:
+  volumeClaim:
+    name: "iis-secrets-pv"
+    size: 1Mi
+    existingClaimName: ""
+    overrideStorageClass: false
+    storageClassName: ""
+    accessMode: ReadWriteMany
+sampleData:
+  volumeClaim:
+    name: "sampledata-pvc"
+    size: 100Mi
+    existingClaimName: ""
+    accessMode: ReadWriteMany
+    overrideStorageClass: false
+    storageClassName: ""
+
+#servicesPort:
+   #nodePort: 32501
+serviceResources:
+      requests:
+        cpu: 2000m
+        memory: 3000Mi
+      limits:
+        cpu: 4000m
+        memory: 8192Mi
+serviceVolumeInfo:
+      volumeClaim:
+       name: "dedicatedservices-pvc"
+       size: 20Gi
+       existingClaimName: ""
+       accessMode: ReadWriteOnce
+       overrideStorageClass: false
+       storageClassName: ""
+
+xmetarepoResources:
+      requests:
+        cpu: 1000m
+        memory: 5000Mi
+      limits:
+        cpu: 2000m
+        memory: 20000Mi
+      initContainer:
+        requests:
+          cpu: 400m
+          memory: 5000Mi
+        limits:
+          cpu: 2000m
+          memory: 20000Mi
+xmetarepoVolumeInfo:
+     volumeClaim:
+       name: "xmeta-pvc"
+       size: 100Gi
+       existingClaimName: ""
+       accessMode: ReadWriteOnce
+       storageClassName: ""
+       overrideStorageClass: false
+     support4kDevice: false
+
+engineResources:
+      requests:
+        cpu: 2000m
+        memory: 3000Mi
+      limits:
+        cpu: 6000m
+        memory: 12288Mi
+      initContainer:
+        requests:
+          cpu: 50m
+          memory: 100Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+
+sampleDataResources:
+      requests:
+        cpu: 0
+        memory: 0
+      limits:
+        cpu: 0
+        memory: 0
+
+engineDedicatedVolumeInfo:
+      volumeClaim:
+       name: "en-dedicated-pvc"
+       size: 40Gi
+       existingClaimName: ""
+       accessMode: ReadWriteMany
+       storageClassName: ""
+       overrideStorageClass: false
+
+computeResouces:
+      requests:
+        cpu: 400m
+        memory: 1500Mi
+      limits:
+        cpu: 2000m
+        memory: 6144Mi
+computeNode:
+   replicas: 1
+   chartName: iis
+
+serviceId:
+  name: WDP_SERVICE_ID_CREDENTIAL
+  secret: wdp-service-id
+  key: service-id-credentials
+
+##############################################################################
+## Resources for TPR subchart
+##############################################################################
+
+serviceAccountName: ""
+
+xmetarepo:
+  serviceAccountName: ""
+
+environment:
+  RABBITMQ_PRIMARY_URI:
+    secret: rabbitmq-url
+    key: rabbitmq-url.txt
+  RABBITMQ_BACKUP_URI:
+    secret: rabbitmq-url
+    key: rabbitmq-url.txt
+  RABBITMQ_CA_CERTIFICATE:
+    secret: rabbitmq-ha-cert
+    key: cacertb64.pem
+
+nodeLabel: wkc-privileged-node
+archx86_64: amd64
+archppc64le: ppc64le

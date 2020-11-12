@@ -85,8 +85,40 @@ Create HAProxy master backends list
 {{- $conns := ( required "A valid Redis maxConnections entry required!" .Values.haproxy.redis.maxConnections | int) -}}
 {{- $chksec := ( required "A valid Redis checkSeconds entry required!" .Values.haproxy.redis.checkSeconds | int) -}}
 {{- range $i, $e := until ( required "A valid Redis replicaCount entry required!" .Values.replicas | int ) }}
-      {{ printf "server master-%d %s-server-%d.%s.%s.svc.%s:%d maxconn %d check inter %ds on-marked-down shutdown-sessions init-addr none resolvers k8s_dns" $i $name $i $serviceName $namespace $clusterDomain $port $conns $chksec}}
+      {{ printf "server master-%d %s-server-%d.%s.%s.svc.%s:%d maxconn %d check inter %ds on-marked-down shutdown-sessions init-addr none resolvers k8s_dns" $i $name $i $serviceName $namespace $clusterDomain $port $conns $chksec }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Create HAProxy master backends list
+*/}}
+{{- define "masters.ssl.list" -}}
+{{- $name := include "redis-ha.fullname" . -}}
+{{- $namespace := .Release.Namespace -}}
+{{- $serviceName := include "redis-ha.fullname" . -}}
+{{- $clusterDomain := .Values.clusterDomain -}}
+{{- $cert := "" -}}
+{{- $port := ( required "A valid Redis port entry required!" .Values.ssl.tlsPort | int ) -}}
+{{- $conns := ( required "A valid Redis maxConnections entry required!" .Values.haproxy.redis.maxConnections | int) -}}
+{{- $chksec := ( required "A valid Redis checkSeconds entry required!" .Values.haproxy.redis.checkSeconds | int) -}}
+{{- range $i, $e := until ( required "A valid Redis replicaCount entry required!" .Values.replicas | int ) }}
+      {{ printf "server master-%d %s-server-%d.%s.%s.svc.%s:%d maxconn %d check check-ssl verify none no-tls-tickets inter %ds on-marked-down shutdown-sessions rise 1 fall 2 init-addr none resolvers k8s_dns" $i $name $i $serviceName $namespace $clusterDomain $port $conns $chksec }}
 {{- end -}}
 {{- end -}}
 
 
+{{- define "redis-ha.sentinelPort" -}}
+{{- if .Values.ssl.enabled -}}
+{{- .Values.ssl.tlsSentinelPort -}} 
+{{- else -}}
+{{- .Values.sentinel.port -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "redis-ha.redisPort" -}}
+{{- if .Values.ssl.enabled -}}
+{{- .Values.ssl.tlsPort -}} 
+{{- else -}}
+{{- .Values.redis.port -}}
+{{- end -}}
+{{- end -}}

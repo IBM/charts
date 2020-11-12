@@ -12,10 +12,6 @@ metadata:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/name: {{ .Chart.Name }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-  annotations:
-    {{- if .Values.global.podAnnotations }}
-{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
-    {{- end }}
 spec:
   replicas: {{ .Values.minReplicas }}
   selector:
@@ -34,17 +30,17 @@ spec:
         app.kubernetes.io/name: {{ .Chart.Name }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         istier: services
-        icpdsupport/addOnKey: "ugi"
-        icpdsupport/app: "apis"
-        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
-      annotations:
-        productName: "IBM Watson Knowledge Catalog Professional for ICP for Data"
-        productID: "5737-K89"
-        productVersion: "1.0"
-        {{- if .Values.global.podAnnotations }}
-{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
         {{- end }}
+      annotations:
+      {{- if eq .Values.global.deploymentTarget "icp4data" }}
+        {{- if .Values.global.podAnnotations }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+        {{- end }}
+      {{- end }}
     spec:
+      {{- if eq .Values.global.deploymentTarget "icp4data" }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -59,14 +55,17 @@ spec:
       hostIPC: false
       securityContext:
         runAsNonRoot: true
+      {{- end }}
       containers:
       - name: {{ template "wdp-profiling-messaging-chart.fullname" . }}
         image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
       {{- if .Values.global.installCerts }}
+        {{- if eq .Values.global.deploymentTarget "icp4data" }}
         volumeMounts:
         - name: wdp-certs
           mountPath: "/etc/wdp_certs"
           readOnly: true
+      {{- end }}
       {{- end}}
         ports:
         - containerPort: {{ .Values.ports.targetPort }}
@@ -92,6 +91,7 @@ spec:
           successThreshold: {{ .Values.readinessProbe.successThreshold }}
           failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
         env:
+          {{- if eq .Values.global.deploymentTarget "icp4data" }}
           {{ if .Values.environment.wdpHostDomain }}
           - name: "GATEWAY_HOST"
             valueFrom:
@@ -104,6 +104,7 @@ spec:
                 name: {{ .Values.environment.wdpHostDomain.configMapName }}
                 key: {{ .Values.environment.wdpHostDomain.icp4dHostKey }}
           {{ end }}
+          {{- end }}
           - name: "MQ_CATALOG_BINDING_KEY"
             value: {{ .Values.environment.MQ_CATALOG_BINDING_KEY }}
           - name: "MQ_DATAPROFILE_MESSAGING_QUEUE"
@@ -138,6 +139,32 @@ spec:
             value: "{{ .Values.environment.DEPLOY_TARGET }}"
           - name: "replicaCount"
             value: "{{ .Values.replicaCount }}"
+          {{- if eq .Values.global.deploymentTarget "cloud" }}
+          - name: "NEW_RELIC_APP_NAME"
+            value: "{{ .Values.environment.NEW_RELIC_APP_NAME }}"
+          - name: "COMPONENT_ID"
+            value: "{{ .Values.environment.COMPONENT_ID }}"
+          - name: "JAVA_OPTS"
+            value: "{{ .Values.environment.JAVA_OPTS }}"
+          - name: "JVM_ARGS"
+            value: "{{ .Values.environment.JVM_ARGS }}"
+          - name: "LOGDNA_SAVE_SERVICE_COPY"
+            value: "{{ .Values.environment.LOGDNA_SAVE_SERVICE_COPY }}"
+          {{ if .Values.environment.crnCluster }}
+          - name: {{ .Values.environment.crnCluster.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.crnCluster.secret }}
+                key: {{ .Values.environment.crnCluster.key }}
+          {{ end }}
+          {{ if .Values.environment.logDNASource }}
+          - name: {{ .Values.environment.logDNASource.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.logDNASource.secret }}
+                key: {{ .Values.environment.logDNASource.key }}
+          {{ end }}
+          {{- end }}
           {{ if .Values.environment.mqUrl }}
           - name: {{ .Values.environment.mqUrl.name }}
             valueFrom:
@@ -145,12 +172,13 @@ spec:
                 name: {{ .Values.environment.mqUrl.secret }}
                 key: {{ .Values.environment.mqUrl.key }}
           {{ end }}
-          {{ if (.Values.environment.serviceId) }}
-          - name: {{ .Values.environment.serviceId.name }}
+          {{- if eq .Values.global.deploymentTarget "cloud" }}
+          {{ if .Values.environment.mqSsl }}
+          - name: {{ .Values.environment.mqSsl.name }}
             valueFrom:
               secretKeyRef:
-                name: {{ .Values.environment.serviceId.secret }}
-                key: {{ .Values.environment.serviceId.key }}
+                name: {{ .Values.environment.mqSsl.secret }}
+                key: {{ .Values.environment.mqSsl.key }}
           {{ end }}
           {{ if .Values.environment.serviceApiKey }}
           - name: {{ .Values.environment.serviceApiKey.name }}
@@ -158,6 +186,21 @@ spec:
               secretKeyRef:
                 name: {{ .Values.environment.serviceApiKey.secret }}
                 key: {{ .Values.environment.serviceApiKey.key }}
+          {{ end }}
+          {{ if .Values.environment.newRelicLicKey }}
+          - name: {{ .Values.environment.newRelicLicKey.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.newRelicLicKey.secret }}
+                key: {{ .Values.environment.newRelicLicKey.key }}
+          {{ end }}
+          {{ end }}
+          {{ if (.Values.environment.serviceId) }}
+          - name: {{ .Values.environment.serviceId.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.serviceId.secret }}
+                key: {{ .Values.environment.serviceId.key }}
           {{ end }}
           {{ if (.Values.environment.cloudantUser) }}
           - name: {{ .Values.environment.cloudantUser.name }}
@@ -201,13 +244,7 @@ spec:
                 name: {{ .Values.environment.cloudantApiPassword.secret }}
                 key: {{ .Values.environment.cloudantApiPassword.key }}
           {{ end }}
-          {{ if .Values.environment.newRelicLicKey }}
-          - name: {{ .Values.environment.newRelicLicKey.name }}
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Values.environment.newRelicLicKey.secret }}
-                key: {{ .Values.environment.newRelicLicKey.key }}
-          {{ end }}
+          {{- if eq .Values.global.deploymentTarget "icp4data" }}
           {{ if .Values.environment.allowedServiceIds }}
           - name: {{ .Values.environment.allowedServiceIds.name }}
             valueFrom:
@@ -215,6 +252,7 @@ spec:
                 name: {{ .Values.environment.allowedServiceIds.secret }}
                 key: {{ .Values.environment.allowedServiceIds.key }}
           {{ end }}
+          {{- end }}
           {{ if .Values.app_name }}
           - name: "app_name"
             value: {{ .Values.app_name }}
@@ -242,6 +280,7 @@ spec:
           requests:
             cpu: {{ .Values.resources.requests.cpu }}
             memory: {{ .Values.resources.requests.memory }}
+        {{- if eq .Values.global.deploymentTarget "icp4data" }}
         securityContext:
           privileged: false
           allowPrivilegeEscalation: false
@@ -274,6 +313,7 @@ spec:
                   path: rabbitmq.cert.pem
                 optional: true
     {{- end }}
+      {{- end }}
 {{- if .Values.repository.secret.name }}
       imagePullSecrets:
         - name: {{ .Values.repository.secret.name }}

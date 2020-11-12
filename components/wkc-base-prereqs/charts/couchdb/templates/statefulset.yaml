@@ -25,13 +25,17 @@ spec:
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         app.kubernetes.io/name: {{ .Chart.Name }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        icpdsupport/app: "apis"
-        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
 {{ include "couchdb.ss.selector" . | indent 8 }}
       annotations:
 {{- if .Values.podAnnotations }}
-{{ toYaml .Values.podAnnotations | indent 8 }}
-{{- end }}
+{{ tpl (toYaml .Values.podAnnotations) . | indent 8 }}
+{{- end }}      
+{{- if .Values.global.podAnnotations }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+{{- end }}      
     spec:
       {{- if .Values.schedulerName }}
       schedulerName: "{{ .Values.schedulerName }}"
@@ -107,6 +111,10 @@ spec:
             if ! grep -Pzoqr "\[couchdb\]\nuuid =" /local.d/*.ini; then
               printf "\n[couchdb]\nuuid = %s\n" "$COUCHDB_UUID" >> /local.d/docker.ini
             fi
+            
+            # clear any left over locks, dont fail if nothing found
+            find /opt/couchdb/data/search_indexes/shards/* -name write.lock -type f -delete || true;
+            
           securityContext:
             privileged: false
             allowPrivilegeEscalation: false
@@ -151,6 +159,8 @@ spec:
             mountPath: /default.d
           - name: config-storage2
             mountPath: /local.d
+          - name: database-storage
+            mountPath: /opt/couchdb/data
       containers:
         - name: couchdb
           image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
