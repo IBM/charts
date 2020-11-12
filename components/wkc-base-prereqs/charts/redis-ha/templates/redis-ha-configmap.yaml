@@ -24,6 +24,17 @@ data:
     requirepass replace-default-auth
     masterauth replace-default-auth
 {{- end }}
+{{- if .Values.ssl.enabled }}
+    port {{ if .Values.ssl.disableNonSSL }}0{{ else }}{{ .Values.redis.port }}{{ end }}
+    tls-port {{ .Values.ssl.tlsPort }} 
+    tls-replication {{ .Values.ssl.tlsReplication }}  
+    tls-protocols {{ .Values.ssl.tlsProtocols }} 
+    tls-cert-file {{ .Values.ssl.tlsCertFile }} 
+    tls-key-file {{ .Values.ssl.tlsKeyFile }}
+    tls-ca-cert-file {{ .Values.ssl.tlsCaCertFile }}
+    tls-auth-clients no
+    tls-protocols "TLSv1.2"
+{{- end }}
 {{- end }}
 
   sentinel.conf: |
@@ -38,18 +49,29 @@ data:
 {{- if .Values.auth }}
     sentinel auth-pass {{ .Values.redis.masterGroupName }} replace-default-auth
 {{- end }}
+{{- if .Values.ssl.enabled }}
+    port {{ if .Values.ssl.disableNonSSL }}0{{ else }}{{ .Values.sentinel.port }}{{ end }}
+    tls-port {{ .Values.ssl.tlsSentinelPort }} 
+    tls-replication {{ .Values.ssl.tlsReplication }}  
+    tls-protocols {{ .Values.ssl.tlsProtocols }} 
+    tls-cert-file {{ .Values.ssl.tlsCertFile }} 
+    tls-key-file {{ .Values.ssl.tlsKeyFile }}
+    tls-ca-cert-file {{ .Values.ssl.tlsCaCertFile }}
+    tls-auth-clients no
+    tls-protocols "TLSv1.2"
+{{- end }}
 {{- end }}
 
   init.sh: |
     HOSTNAME="$(hostname)"
     INDEX="${HOSTNAME##*-}"
-    MASTER="$(redis-cli -h {{ template "redis-ha.fullname" . }} -p {{ .Values.sentinel.port }} sentinel get-master-addr-by-name {{ .Values.redis.masterGroupName }} | grep -E '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}')"
+    MASTER="$(redis-cli -h {{ template "redis-ha.fullname" . }} -p {{ template "redis-ha.sentinelPort" . }} {{ if .Values.ssl.enabled }} --tls --cert {{ .Values.ssl.tlsCertFile }} --key {{ .Values.ssl.tlsKeyFile }} --cacert {{ .Values.ssl.tlsCaCertFile }}{{ end }} sentinel get-master-addr-by-name {{ .Values.redis.masterGroupName }} | grep -E '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}')"
     MASTER_GROUP="{{ .Values.redis.masterGroupName }}"
     QUORUM="{{ .Values.sentinel.quorum }}"
     REDIS_CONF=/data/conf/redis.conf
-    REDIS_PORT={{ .Values.redis.port }}
+    REDIS_PORT={{ template "redis-ha.redisPort" . }}
     SENTINEL_CONF=/data/conf/sentinel.conf
-    SENTINEL_PORT={{ .Values.sentinel.port }}
+    SENTINEL_PORT={{ template "redis-ha.sentinelPort" . }}
     SERVICE={{ template "redis-ha.fullname" . }}
     set -eu
 
@@ -95,14 +117,14 @@ data:
 
     find_master() {
         echo "Attempting to find master"
-        if [ "$(redis-cli -h "$MASTER"{{ if .Values.auth }} -a "$AUTH"{{ end }} ping)" != "PONG" ]; then
+        if [ "$(redis-cli -h "$MASTER" -p "$REDIS_PORT"{{ if .Values.auth }} -a "$AUTH"{{ end }} {{ if .Values.ssl.enabled }} --tls --cert {{ .Values.ssl.tlsCertFile }} --key {{ .Values.ssl.tlsKeyFile }} --cacert {{ .Values.ssl.tlsCaCertFile }}{{ end }} ping)" != "PONG" ]; then
            echo "Can't ping master, attempting to force failover"
-           if redis-cli -h "$SERVICE" -p "$SENTINEL_PORT" sentinel failover "$MASTER_GROUP" | grep -q 'NOGOODSLAVE' ; then 
+           if redis-cli -h "$SERVICE" -p "$SENTINEL_PORT" {{ if .Values.ssl.enabled }} --tls --cert {{ .Values.ssl.tlsCertFile }} --key {{ .Values.ssl.tlsKeyFile }} --cacert {{ .Values.ssl.tlsCaCertFile }}{{ end }} sentinel failover "$MASTER_GROUP" | grep -q 'NOGOODSLAVE' ; then 
                setup_defaults
                return 0
            fi
            sleep 10
-           MASTER="$(redis-cli -h $SERVICE -p $SENTINEL_PORT sentinel get-master-addr-by-name $MASTER_GROUP | grep -E '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}')"
+           MASTER="$(redis-cli -h $SERVICE -p $SENTINEL_PORT {{ if .Values.ssl.enabled }} --tls --cert {{ .Values.ssl.tlsCertFile }} --key {{ .Values.ssl.tlsKeyFile }} --cacert {{ .Values.ssl.tlsCaCertFile }}{{ end }} sentinel get-master-addr-by-name $MASTER_GROUP | grep -E '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}')"
            if [ "$MASTER" ]; then
                sentinel_update "$MASTER"
                redis_update "$MASTER"
@@ -140,4 +162,4 @@ data:
 
     echo "Ready..."
     
-  redis-url: redis://{{ template "redis-ha.fullname" . }}-master-svc:6379
+  redis-url: redis://{{ template "redis-ha.fullname" . }}-master-svc:{{ .Values.redis.port }}

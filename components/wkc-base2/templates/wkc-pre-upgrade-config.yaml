@@ -1,0 +1,41 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wkc-pre-upgrade-config
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "-100"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  pre-upgrade.sh: |
+    # nlq-search-extractor is removed in 3.5.0 release
+    echo deleting the nlq-search-extractor deployment
+    kubectl delete deploy nlq-search-extractor -n $NAMESPACE --timeout=3m
+        
+    echo deleting the nlq-search-extractor service
+    kubectl delete service nlq-search-extractor -n $NAMESPACE --timeout=3m
+    
+    # delete the wkc-pre-upgrade pod from previous release
+    kubectl delete pod wkc-pre-upgrade -n $NAMESPACE --timeout=3m
+    
+    # delete the wkc-db-upgrade-config cm from previous release
+    kubectl delete cm wkc-db-upgrade-config -n $NAMESPACE --timeout=3m
+    
+    # delete the glossary-service-sync cron job
+    kubectl delete cronjob wkc-glossary-service-sync-cronjob -n $NAMESPACE --timeout=3m
+    
+    # delete the glossary-service-sync cron job pods if any
+    kubectl delete pods -l app=wkc-glossary-service-sync-cronjob -n $NAMESPACE --timeout=3m
+    
+    exit 0
+{{- end }}

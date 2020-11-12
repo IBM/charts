@@ -15,6 +15,7 @@ spec:
       app: {{ template "redis-ha.name" . }}
       chart: {{ .Chart.Name }}
       heritage: {{ .Release.Service | quote }}
+      redis: "true"
   serviceName: {{ template "redis-ha.fullname" . }}
   replicas: {{ .Values.replicas }}
   podManagementPolicy: OrderedReady
@@ -26,19 +27,24 @@ spec:
         checksum/init-config: {{ include (print $.Template.BasePath "/redis-ha-configmap.yaml") . | sha256sum }}
         checksum/probe-config: {{ include (print $.Template.BasePath "/redis-ha-healthchecks.yaml") . | sha256sum }}
       {{- if .Values.podAnnotations }}
-{{ toYaml .Values.podAnnotations | indent 8 }}
-      {{- end }}
+{{ tpl (toYaml .Values.podAnnotations) . | indent 8 }}
+      {{- end }}        
+        {{- if .Values.global.podAnnotations }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+        {{- end }}
       labels:
         release: {{ .Release.Name }}
         chart: {{ .Chart.Name }}
         heritage: {{ .Release.Service | quote }}
         app: {{ template "redis-ha.name" . }}
+        redis: "true"
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         app.kubernetes.io/name: {{ .Chart.Name }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        icpdsupport/app: "apis"
-        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
         {{- range $key, $value := .Values.labels }}
         {{ $key }}: {{ $value }}
         {{- end }}
@@ -150,6 +156,10 @@ spec:
           readOnly: true
         - name: data
           mountPath: /data
+        {{- if .Values.ssl.enabled }}
+        - name: cert
+          mountPath: /etc/ssl/certs
+        {{- end }}
       containers:
       - name: redis
         image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
@@ -172,13 +182,13 @@ spec:
 {{- end }}
         livenessProbe:
           exec:
-            command: [ "sh", "/probes/readiness.sh", "{{ .Values.redis.port }}"]
+            command: [ "sh", "/probes/readiness.sh", "{{ template "redis-ha.redisPort" . }}"]
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 15
         readinessProbe:
           exec:
-            command: ["sh", "/probes/readiness.sh", "{{ .Values.redis.port }}"]
+            command: ["sh", "/probes/readiness.sh", "{{ template "redis-ha.redisPort" . }}"]
           initialDelaySeconds: 15
           periodSeconds: 10
           timeoutSeconds: 15
@@ -193,13 +203,23 @@ spec:
         resources:
 {{ toYaml .Values.redis.resources | indent 10 }}
         ports:
+        {{- if not (and .Values.ssl.enabled .Values.ssl.disableNonSSL) }}       
         - name: redis
           containerPort: {{ .Values.redis.port }}
+        {{- end }}
+        {{- if .Values.ssl.enabled }}  
+        - name: redisssl
+          containerPort: {{ .Values.ssl.tlsPort }}
+        {{- end }}
         volumeMounts:
         - mountPath: /data
           name: data
         - mountPath: /probes
           name: probes
+        {{- if .Values.ssl.enabled }}
+        - name: cert
+          mountPath: /etc/ssl/certs
+        {{- end }}
       - name: sentinel
         image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -221,13 +241,13 @@ spec:
 {{- end }}
         livenessProbe:
           exec:
-            command: [ "sh", "/probes/readiness.sh", "{{ .Values.sentinel.port }}"]
+            command: [ "sh", "/probes/readiness.sh", "{{ template "redis-ha.sentinelPort" . }}"]
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 15
         readinessProbe:
           exec:
-            command: ["sh", "/probes/readiness.sh", "{{ .Values.sentinel.port }}"]
+            command: ["sh", "/probes/readiness.sh", "{{ template "redis-ha.sentinelPort" . }}"]
           initialDelaySeconds: 15
           periodSeconds: 5
           timeoutSeconds: 15
@@ -242,13 +262,23 @@ spec:
         resources:
 {{ toYaml .Values.sentinel.resources | indent 10 }}
         ports:
+        {{- if not (and .Values.ssl.enabled .Values.ssl.disableNonSSL) }}       
           - name: sentinel
             containerPort: {{ .Values.sentinel.port }}
+        {{- end }} 
+        {{- if .Values.ssl.enabled }}     
+          - name: sentinelssl
+            containerPort: {{ .Values.ssl.tlsSentinelPort }}
+        {{- end }}    
         volumeMounts:
         - mountPath: /data
           name: data
         - mountPath: /probes
           name: probes
+        {{- if .Values.ssl.enabled }}
+        - name: cert
+          mountPath: /etc/ssl/certs
+        {{- end }}
       {{- if .Values.image.pullSecret }}
       imagePullSecrets:
       - name: {{ .Values.image.pullSecret }}
@@ -260,6 +290,12 @@ spec:
       - name: probes
         configMap:
           name: {{ template "redis-ha.fullname" . }}-probes
+      {{- if .Values.ssl.enabled }}
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: {{ template "redis-ha.fullname" . }}-cert
+      {{- end }}
 {{- if .Values.persistentVolume.enabled }}
   volumeClaimTemplates:
   - metadata:

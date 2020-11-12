@@ -1,0 +1,1594 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: iis-server
+  labels:
+     app: iis-server
+     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}"
+     app.kubernetes.io/name: iis-server
+     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+     app.kubernetes.io/managed-by: {{ .Release.Service }}
+     app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  ug-setup-engine.sh: |
+    #!/bin/sh
+
+    set -x #echo on
+    basedir=$(dirname `which $0`)
+
+    IIS_HOME=/opt/IBM/InformationServer
+    ASBNODE_HOME=${IIS_HOME}/ASBNode
+    ASBSERVER_HOME=${IIS_HOME}/ASBServer
+    IS_SERVER=is-servicesdocker
+    DS_ENGINE=is-en-conductor-0.en-cond
+    IADB_HOST=IS-EN-CONDUCTOR-0.EN-COND
+    IS_PORT=9446
+    IS_ADMIN=isadmin
+    misName=${DS_ENGINE}
+    scriptDir=${basedir}
+    DSADM=dsadm
+    IAUSER=iauser
+    XMETA_SERVER=is-xmetadocker
+    XMETA_PORT=50000
+    IA_DEFAULT_APT=${IIS_HOME}/Server/Configurations/ia.apt
+    IA_DYNAMIC_1COMPUTE_APT=${IIS_HOME}/Server/Configurations/IA_Dynamic_1Compute.apt
+
+    set +x #echo off
+    IS_ADMIN_PSW=$ISADMIN_PASSWORD
+    DSADM_PSW=$DSADM_PASSWORD
+    IAUSER_PSW=$IAUSER_PASSWORD
+    DB2INST1_PSW=$DB2INST1_PASSWORD
+    DSODB_PSW=$DSODB_PASSWORD
+    set -x #echo on
+
+    sed -i "s/tail -f/#tail -f/g" ${IIS_HOME}/initScripts/startcontainer.sh;
+    sed -i "s/wait/#wait/g" ${IIS_HOME}/initScripts/startcontainer.sh;
+    sed -i "s/IS_USER/${IS_ADMIN}/g" ${IIS_HOME}/initScripts/readiness_probe.sh;
+    sed -i "s/IS_PWD/${IS_ADMIN_PSW}/g" ${IIS_HOME}/initScripts/readiness_probe.sh;
+    sed -i "s/IS_PORT/${IS_PORT}/g" ${IIS_HOME}/initScripts/readiness_probe.sh;
+
+    sed -i "s/<Parameter name=\"MemoryCap\"\(.*\)\/>/<Parameter name=\"MemoryCap\" value=\"80\" \/>/g" /mnt/dedicated_vol/Engine/is-en-conductor-0/DSWLM/dist/lib/wlm.config.xml;
+    sed -i "s/<Resource name=\"JobCount\"\(.*\)\/>/<Resource name=\"JobCount\" value=\"10\" \/>/g" /mnt/dedicated_vol/Engine/is-en-conductor-0/DSWLM/dist/lib/wlm.config.xml;
+    sed -i "s/<Resource name=\"StartJob\"\(.*\)\/>/<Resource name=\"StartJob\" value=\"20\" timeFrame=\"10\" \/>/g" /mnt/dedicated_vol/Engine/is-en-conductor-0/DSWLM/dist/lib/wlm.config.xml;
+    sed -i 's@<Parameter name=\"metricsEnabled\" value=\"false\" />@<Parameter name=\"metricsEnabled\" value=\"true\" />@' /opt/IBM/InformationServer/Server/DSWLM/dist/lib/wlm.config.xml;
+
+    sed -i "s/InforrmationServer/InformationServer/g" /mnt/dedicated_vol/Engine/is-en-conductor-0/DSEngine/isjdbc.config;
+    #Agent output is also redirected to console
+    sed -i "s/#handlers/handlers/g" ${ASBNODE_HOME}/conf/asbagent-logging.properties;
+    sed -i "s/handlers=java.util.logging.FileHandler/#handlers=java.util.logging.FileHandler/g" ${ASBNODE_HOME}/conf/asbagent-logging.properties;
+    sed -i "s/#java/java/g" ${ASBNODE_HOME}/conf/asbagent-logging.properties;
+    sed -i "s/java.util.logging.ConsoleHandler.level=INFO/java.util.logging.ConsoleHandler.level=ALL/g" ${ASBNODE_HOME}/conf/asbagent-logging.properties;
+    
+
+    set +x #echo off
+    su - ${IAUSER} -c "echo -e \"isadmin\n${IAUSER_PSW}\n${IAUSER_PSW}\" | /usr/bin/passwd"
+    echo -e "isadmin\n${DSADM_PSW}\n${DSADM_PSW}" | /usr/bin/passwd
+   
+    set -x #echo on
+    ${IIS_HOME}/initScripts/startcontainer.sh;
+
+    #Adding below sed command to fix issue 1006
+    sed -i 's@^set +u@set +u\nAPT_USE_REMOTE_APP=1\nexport APT_USE_REMOTE_APP@' --follow-symlinks ${IIS_HOME}/Server/DSEngine/dsenv
+
+    # create tablespaces in IADB
+    set +x #echo off
+    ${IIS_HOME}/jdk/bin/java -cp ${ASBNODE_HOME}/lib/java/ia-common.jar:${ASBNODE_HOME}/lib/java/db2jcc.jar:${ASBNODE_HOME}/lib/java/db2jcc_license_cu.jar com.ascential.investigate.utils.dbutils.CreateTableSpacesInIADB ${DB2INST1_PSW}
+
+    #Import the IIS services certificate into the trust store.
+    set +x #echo off
+    ${ASBNODE_HOME}/bin/UpdateSignerCerts.sh -url https://${IS_SERVER}:${IS_PORT} -user isadmin -password ${IS_ADMIN_PSW} -silent
+    set -x #echo on
+    echo "${ASBNODE_HOME}/bin/UpdateSignerCerts.sh -url https://${IS_SERVER}:${IS_PORT} -user isadmin -password **** -silent"
+
+    #Make sure the registered engine node public key is in sync with the engine private key.
+    set +x #echo off
+    ${ASBNODE_HOME}/bin/AgentConfig.sh -user isadmin -password ${IS_ADMIN_PSW} -syncKeys
+    set -x #echo on
+    echo "${ASBNODE_HOME}/bin/AgentConfig.sh -user isadmin -password **** -syncKeys"
+
+    su - dsadm -c "source ${IIS_HOME}/Server/DSEngine/dsenv; ${IIS_HOME}/Server/DSODB/bin/DSAppWatcher.sh -stop";
+    set +x #echo off
+    ${ASBNODE_HOME}/bin/RegistrationCommand.sh -user isadmin -password ${IS_ADMIN_PSW} -gcf -repository dsodb -cf ${IIS_HOME}/Server/DSODB/DSODBConnect.tmpl -results ${IIS_HOME}/Server/DSODB/DSODBConnect.cfg;
+    set -x #echo on
+    echo "${ASBNODE_HOME}/bin/RegistrationCommand.sh -user isadmin -password ****  -gcf -repository dsodb -cf ${IIS_HOME}/Server/DSODB/DSODBConnect.tmpl -results ${IIS_HOME}/Server/DSODB/DSODBConnect.cfg"
+    su - dsadm -c "source ${IIS_HOME}/Server/DSEngine/dsenv; ${IIS_HOME}/Server/DSODB/bin/DSAppWatcher.sh -start";
+
+    #Create a new configuration file IA_Dynamic_1Compute.apt file to use it exclusively for IA/Auto Discovery jobs
+    if ! test -f ${IA_DYNAMIC_1COMPUTE_APT}; then
+    echo { > ${IA_DYNAMIC_1COMPUTE_APT}
+    echo \ \ \ \ node \"node1\" >> ${IA_DYNAMIC_1COMPUTE_APT}
+    echo \ \ \ \ { >> ${IA_DYNAMIC_1COMPUTE_APT}
+    echo \ \ \ \ \ \ \ \ fastname \"is-en-conductor-0.en-cond\" >> ${IA_DYNAMIC_1COMPUTE_APT}
+    echo \ \ \ \ \ \ \ \ pools \"conductor\" >> ${IA_DYNAMIC_1COMPUTE_APT}
+    echo \ \ \ \ \ \ \ \ resource disk \"/opt/IBM/InformationServer/Server/Datasets\" {pools \"\"} >> ${IA_DYNAMIC_1COMPUTE_APT}
+    echo \ \ \ \ \ \ \ \ resource scratchdisk \"/opt/IBM/InformationServer/Server/Scratch\" {pools \"\"} >> ${IA_DYNAMIC_1COMPUTE_APT}
+    echo \ \ \ \ } >> ${IA_DYNAMIC_1COMPUTE_APT}
+    echo \ \ \ \ node \"node2\" >> ${IA_DYNAMIC_1COMPUTE_APT}
+    echo \ \ \ \ { >> ${IA_DYNAMIC_1COMPUTE_APT}
+    echo \ \ \ \ \ \ \ \ fastname \"\$iapod\" >> ${IA_DYNAMIC_1COMPUTE_APT}
+    echo \ \ \ \ \ \ \ \ pools \"\" >> ${IA_DYNAMIC_1COMPUTE_APT}
+    echo \ \ \ \ \ \ \ \ resource disk \"/opt/IBM/InformationServer/Server/Datasets\" {pools \"\"} >> ${IA_DYNAMIC_1COMPUTE_APT}
+    echo \ \ \ \ \ \ \ \ resource scratchdisk \"/opt/IBM/InformationServer/Server/Scratch\" {pools \"\"} >> ${IA_DYNAMIC_1COMPUTE_APT}
+    echo \ \ \ \ } >> ${IA_DYNAMIC_1COMPUTE_APT}
+    echo } >> ${IA_DYNAMIC_1COMPUTE_APT}
+    su - dsadm -c "chmod 755 ${IA_DYNAMIC_1COMPUTE_APT};";
+    fi
+
+    if ! test -f "${IA_DEFAULT_APT}"; then
+    cp "${IIS_HOME}/Server/Configurations/default.apt" "${IA_DEFAULT_APT}"
+    su - dsadm -c "chmod 755 ${IA_DEFAULT_APT}; source ${IIS_HOME}/Server/DSEngine/dsenv; ${IIS_HOME}/Server/DSEngine/bin/dsadmin -envset APT_CONFIG_FILE -value ${IA_DEFAULT_APT} ANALYZERPROJECT; ${IIS_HOME}/Server/DSEngine/bin/dsadmin -envadd  APT_USE_REMOTE_APP -type STRING -prompt CC_MSG_LEVEL -value 1 ANALYZERPROJECT";
+    else
+    su - dsadm -c "source ${IIS_HOME}/Server/DSEngine/dsenv; ${IIS_HOME}/Server/DSEngine/bin/dsadmin -envadd  APT_USE_REMOTE_APP -type STRING -prompt CC_MSG_LEVEL -value 1 ANALYZERPROJECT";
+    fi
+
+    #Prerequisite user config steps
+    set +x #echo off
+    ${ASBNODE_HOME}/bin/DirectoryCommand.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -datastage_server ${DS_ENGINE}  -set_default_ds_credentials ${DSADM}~${DSADM_PSW}
+    set -x #echo on
+    echo "${ASBNODE_HOME}/bin/DirectoryCommand.sh -user ${IS_ADMIN} -password ***** -url https://${IS_SERVER}:${IS_PORT} -datastage_server ${DS_ENGINE}  -set_default_ds_credentials ${DSADM}~*****"
+    set +x #echo off
+    ${ASBNODE_HOME}/bin/DirectoryCommand.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -datastage_server ${DS_ENGINE} -add_ds_credentials ${IS_ADMIN}\$!~\!
+    set -x #echo on
+    echo "${ASBNODE_HOME}/bin/DirectoryCommand.sh -user ${IS_ADMIN} -password ***** -url https://${IS_SERVER}:${IS_PORT} -datastage_server ${DS_ENGINE} -add_ds_credentials ${IS_ADMIN}\$!~\!"
+
+    #Prerequisite IA config for analysis database (IADB)
+    # IA actions start here
+    set +x #echo off
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -setDSParams -dsHost ${DS_ENGINE} -dsProject ANALYZERPROJECT -dsPort 31538 -useCredentialMapping TRUE
+
+    set -x #echo on
+    echo "${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password *****  -url https://${IS_SERVER}:${IS_PORT} -setDSParams -dsHost ${DS_ENGINE} -dsProject ANALYZERPROJECT -dsPort 31538 -useCredentialMapping TRUE"
+    set +x #echo off
+    # deploy predefined-rules
+    ${ASBNODE_HOME}/bin/IAAdmin.sh  -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -installPredefinedRules ${ASBNODE_HOME}/lib/java/ia-GeneralRules.jar
+    ${ASBNODE_HOME}/bin/IAAdmin.sh  -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -installPredefinedRules ${ASBNODE_HOME}/lib/java/ia-USStanRules.jar
+    set -x #echo on
+    echo "${ASBNODE_HOME}/bin/IAAdmin.sh  -user ${IS_ADMIN} -password ***** -url https://${IS_SERVER}:${IS_PORT} -installPredefinedRules ${ASBNODE_HOME}/lib/java/ia-GeneralRules.jar"
+    echo "${ASBNODE_HOME}/bin/IAAdmin.sh  -user ${IS_ADMIN} -password ***** -url https://${IS_SERVER}:${IS_PORT} -installPredefinedRules ${ASBNODE_HOME}/lib/java/ia-USStanRules.jar"
+    # create and configure UGDefaultWorkspace
+    set +x #echo off
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -create -projectContent ${scriptDir}/UGDefaultWorkspace.xml
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -setDataQualityConfig -projectName UGDefaultWorkspace -content ${scriptDir}/useAutomaticConfiguration.json
+    set -x #echo on
+    echo "${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ***** -url https://${IS_SERVER}:${IS_PORT} -create -projectContent ${scriptDir}/UGDefaultWorkspace.xml
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ***** -url https://${IS_SERVER}:${IS_PORT} -setDataQualityConfig -projectName UGDefaultWorkspace -content ${scriptDir}/useAutomaticConfiguration.json"
+    echo curl -k -c /tmp/is-cookie -u ${IS_ADMIN}:***** -H "Content-Type: application/json" -X POST -d '{"users":[{"id":"admin","role":"SorcererBusinessAnalyst,SorcererOperator"}]}' https://${IS_SERVER}:${IS_PORT}/ibm/iis/ia/api/configuration/project/UGDefaultWorkspace/addUser
+
+    # create and configure PIIWorkspace
+    set +x #echo off
+    curl -k -c /tmp/is-cookie -u ${IS_ADMIN}:${IS_ADMIN_PSW} -H "Content-Type: application/json" -X POST -d '{"users":[{"id":"admin","role":"SorcererBusinessAnalyst,SorcererOperator"}]}' https://${IS_SERVER}:${IS_PORT}/ibm/iis/ia/api/configuration/project/UGDefaultWorkspace/addUser
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -create -projectContent ${scriptDir}/PIIWorkspace.xml
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -setDataQualityConfig -projectName PIIWorkspace -content ${scriptDir}/PIIDQConfiguration.json
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -setColumnAnalysisConfig -projectName PIIWorkspace -content ${scriptDir}/PIICAConfiguration.json
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -setSampleOptions -projectName PIIWorkspace -useSample TRUE -size 10000 -sampleType SEQUENTIAL
+    set -x #echo on
+    echo "${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ***** -url https://${IS_SERVER}:${IS_PORT} -create -projectContent ${scriptDir}/PIIWorkspace.xml
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password **** -url https://${IS_SERVER}:${IS_PORT} -setDataQualityConfig -projectName PIIWorkspace -content ${scriptDir}/PIIDQConfiguration.json
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ***** -url https://${IS_SERVER}:${IS_PORT} -setColumnAnalysisConfig -projectName PIIWorkspace -content ${scriptDir}/PIICAConfiguration.json
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password *****  -url https://${IS_SERVER}:${IS_PORT} -setSampleOptions -projectName PIIWorkspace -useSample TRUE -size 10000 -sampleType SEQUENTIAL"
+    echo curl -k -b /tmp/is-cookie -H "Content-Type: application/json" -X POST -d '{"users":[{"id":"admin","role":"SorcererBusinessAnalyst,SorcererOperator"}]}' https://${IS_SERVER}:${IS_PORT}/ibm/iis/ia/api/configuration/project/PIIWorkspace/addUser
+
+    # create and configure DataLakeWorkspace
+    set +x #echo off
+    curl -k -b /tmp/is-cookie -H "Content-Type: application/json" -X POST -d '{"users":[{"id":"admin","role":"SorcererBusinessAnalyst,SorcererOperator"}]}' https://${IS_SERVER}:${IS_PORT}/ibm/iis/ia/api/configuration/project/PIIWorkspace/addUser
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -create -projectContent ${scriptDir}/DataLakeWorkspace.xml
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -setDataQualityConfig -projectName DataLakeWorkspace -content ${scriptDir}/DataLakeDQConfiguration.json
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -setColumnAnalysisConfig -projectName DataLakeWorkspace -content ${scriptDir}/DataLakeCAConfiguration.json
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -setSampleOptions -projectName DataLakeWorkspace -useSample TRUE -size 10000 -sampleType SEQUENTIAL
+    set -x #echo on
+    echo "${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ***** -url https://${IS_SERVER}:${IS_PORT} -create -projectContent ${scriptDir}/DataLakeWorkspace.xml
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ***** -url https://${IS_SERVER}:${IS_PORT} -setDataQualityConfig -projectName DataLakeWorkspace -content ${scriptDir}/DataLakeDQConfiguration.json
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ***** -url https://${IS_SERVER}:${IS_PORT} -setColumnAnalysisConfig -projectName DataLakeWorkspace -content ${scriptDir}/DataLakeCAConfiguration.json
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ***** -url https://${IS_SERVER}:${IS_PORT} -setSampleOptions -projectName DataLakeWorkspace -useSample TRUE -size 10000 -sampleType SEQUENTIAL"
+    echo curl -k -b /tmp/is-cookie -H "Content-Type: application/json" -X POST -d '{"users":[{"id":"admin","role":"SorcererBusinessAnalyst,SorcererOperator"}]}' https://${IS_SERVER}:${IS_PORT}/ibm/iis/ia/api/configuration/project/DataLakeWorkspace/addUser
+
+    # create and configure InDepthAnalysisWorkspace
+    set +x #echo off
+    curl -k -b /tmp/is-cookie -H "Content-Type: application/json" -X POST -d '{"users":[{"id":"admin","role":"SorcererBusinessAnalyst,SorcererOperator"}]}' https://${IS_SERVER}:${IS_PORT}/ibm/iis/ia/api/configuration/project/DataLakeWorkspace/addUser
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -create -projectContent ${scriptDir}/InDepthAnalysisWorkspace.xml
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -setDataQualityConfig -projectName InDepthAnalysisWorkspace -content ${scriptDir}/InDepthAnalysisDQConfiguration.json
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -setColumnAnalysisConfig -projectName InDepthAnalysisWorkspace -content ${scriptDir}/InDepthAnalysisCAConfiguration.json
+    curl -k -b /tmp/is-cookie -H "Content-Type: application/json" -X POST -d '{"users":[{"id":"admin","role":"SorcererBusinessAnalyst,SorcererOperator"}]}' https://${IS_SERVER}:${IS_PORT}/ibm/iis/ia/api/configuration/project/InDepthAnalysisWorkspace/addUser
+    set -x #echo on
+    echo "${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ***** -url https://${IS_SERVER}:${IS_PORT} -create -projectContent ${scriptDir}/InDepthAnalysisWorkspace.xml
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ***** -url https://${IS_SERVER}:${IS_PORT} -setDataQualityConfig -projectName InDepthAnalysisWorkspace -content ${scriptDir}/InDepthAnalysisDQConfiguration.json
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ***** -url https://${IS_SERVER}:${IS_PORT} -setColumnAnalysisConfig -projectName InDepthAnalysisWorkspace -content ${scriptDir}/InDepthAnalysisCAConfiguration.json"
+    echo curl -k -b /tmp/is-cookie -H "Content-Type: application/json" -X POST -d '{"users":[{"id":"admin","role":"SorcererBusinessAnalyst,SorcererOperator"}]}' https://${IS_SERVER}:${IS_PORT}/ibm/iis/ia/api/configuration/project/InDepthAnalysisWorkspace/addUser
+
+    set +x #echo off
+    ${ASBNODE_HOME}/bin/imam.sh --username ${IS_ADMIN} --password ${IS_ADMIN_PSW} --server ${IS_SERVER} --port ${IS_PORT} --importArea iadb --misName ${misName} --paramsFile ${scriptDir}/iadb-db2-connector-imam-import-params.xml --action import -dcu iauser -dcw ${IAUSER_PSW} -sdc
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -setIADBParams -iaDBHost ${IADB_HOST} -iaDBDataConnection iadb -iaDataSource jdbc/IADB
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -setIADBParams -iaDBHost ${IADB_HOST} -iaDBDataConnection iadb -iaDataSource jdbc/IADB -fdOutputType CAPTURENONE -projectName PIIWorkspace
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -url https://${IS_SERVER}:${IS_PORT} -setIADBParams -iaDBHost ${IADB_HOST} -iaDBDataConnection iadb -iaDataSource jdbc/IADB -fdOutputType CAPTUREN -minFDRecords 500 -maxFDRecords 1000 -projectName InDepthAnalysisWorkspace
+    curl -k -b /tmp/is-cookie -H "Content-Type: application/json" -X PUT -d '{"updateExistingTables":false,"isDefault":false,"datasource":"jdbc/IADB","registerUserDefinedTables":false,"host":"IS-EN-CONDUCTOR-0.EN-COND","fdOutputType":"CAPTURENONE","dataConnection":"iadb"}' https://${IS_SERVER}:${IS_PORT}/ibm/iis/ia/api/configuration/project/DataLakeWorkspace/iadb
+
+    set -x #echo on
+    echo "${ASBNODE_HOME}/bin/imam.sh --username ${IS_ADMIN} --password ***** --server ${IS_SERVER} --port ${IS_PORT} --importArea iadb --misName ${misName} --paramsFile ${scriptDir}/iadb-db2-connector-imam-import-params.xml --action import -dcu iauser -dcw **** -sdc
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ***** -url https://${IS_SERVER}:${IS_PORT} -setIADBParams -iaDBHost ${IADB_HOST} -iaDBDataConnection IADB -iaDataSource jdbc/IADB
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ***** -url https://${IS_SERVER}:${IS_PORT} -setIADBParams -iaDBHost ${IADB_HOST} -iaDBDataConnection iadb -iaDataSource jdbc/IADB -fdOutputType CAPTURENONE -projectName PIIWorkspace
+    ${ASBNODE_HOME}/bin/IAAdmin.sh -user ${IS_ADMIN} -password ***** -url https://${IS_SERVER}:${IS_PORT} -setIADBParams -iaDBHost ${IADB_HOST} -iaDBDataConnection iadb -iaDataSource jdbc/IADB -fdOutputType CAPTUREN -minFDRecords 500 -maxFDRecords 1000 -projectName InDepthAnalysisWorkspace"
+    echo curl -k -b /tmp/is-cookie -H "Content-Type: application/json" -X PUT -d '{"updateExistingTables":false,"isDefault":false,"datasource":"jdbc/IADB","registerUserDefinedTables":false,"host":"IS-EN-CONDUCTOR-0.EN-COND","fdOutputType":"CAPTURENONE","dataConnection":"iadb"}' https://${IS_SERVER}:${IS_PORT}/ibm/iis/ia/api/configuration/project/DataLakeWorkspace/iadb
+
+    # logout
+    curl -X GET -k -b /tmp/is-cookie https://${IS_SERVER}:${IS_PORT}/ibm/iis/ia/api/logout
+    rm -f /tmp/is-cookie
+
+    # IA actions end here
+
+    set -x #echo on
+    echo "${ASBNODE_HOME}/odf/updateZKConnectString.sh "${IS_ADMIN}" "*****" "${IS_SERVER}" ${IS_PORT}"
+
+    set +x #echo off
+    ${ASBNODE_HOME}/odf/updateZKConnectString.sh "${IS_ADMIN}" "${IS_ADMIN_PSW}" "${IS_SERVER}" ${IS_PORT}
+
+    grep -q "com.ibm.iis.odf.datastage.max.concurrent.requests=" ${ASBNODE_HOME}/conf/odf.properties
+    if [ $? -eq 1 ]; then
+       sed -i "\$acom.ibm.iis.odf.datastage.max.concurrent.requests=4" ${ASBNODE_HOME}/conf/odf.properties
+    fi
+    
+    service ODFEngine start
+
+
+  ug-setup-services.sh: |
+    #!/bin/sh
+
+    set -x #echo on
+    basedir=$(dirname `which $0`)
+
+    IIS_HOME=/opt/IBM/InformationServer
+    ASBNODE_HOME=${IIS_HOME}/ASBNode
+    ASBSERVER_HOME=${IIS_HOME}/ASBServer
+    IS_SERVER=is-servicesdocker
+    DS_ENGINE=is-en-conductor-0.en-cond
+    IS_PORT=9446
+    IS_ADMIN=isadmin
+    misName=${DS_ENGINE}
+    scriptDir=${basedir}
+    DSADM=dsadm
+    IAUSER=iauser
+    XMETA_SERVER=is-xmetadocker
+    XMETA_PORT=50000
+    hostNameFull=$(hostname -f)
+
+    set +x #echo off
+    IS_ADMIN_PSW=$ISADMIN_PASSWORD
+    DSADM_PSW=$DSADM_PASSWORD
+    IAUSER_PSW=$IAUSER_PASSWORD
+    DSODB_PSW=$DSODB_PASSWORD
+    set -x #echo on
+
+    # Change the user registry from Internal to CP4D
+    sed -i "s/tail -f/#tail -f/g" ${IIS_HOME}/initScripts/startcontainer.sh;
+    sed -i "s/wait/#wait/g" ${IIS_HOME}/initScripts/startcontainer.sh;
+    sed -i "s/<webAppSecurity ssoRequiresSSL=\"true\"\/>/<webAppSecurity ssoRequiresSSL=\"true\" ssoCookieName=\"IIS-LtpaToken2\"\/>/g" ${IIS_HOME}/wlp/usr/servers/iis/server.xml
+    sed -i -e "s/cookieName=\"JSESSIONID\"/cookieName=\"IIS-JSESSIONID\"/g" -e "s/expiration=\"760m\"/expiration=\"795m\"/g" ${IIS_HOME}/wlp/usr/servers/iis/server.xml
+    sed -i -e 's/usr_iisRegistry dataSourceRef="DataSource_ASBDataSource"/usr_iisRegistry dataSourceRef="DataSource_ASBDataSource" customRegistryClassName="com.ibm.iis.isf.j2ee.impl.common.security.ICP4DCustomUserRegistry"/g' ${IIS_HOME}/wlp/usr/servers/iis/server.xml
+    sed -i -e 's/logging maxFileSize="5" maxFiles="40" suppressSensitiveTrace="true"/logging maxFileSize="5" maxFiles="40" suppressSensitiveTrace="true" traceSpecification="com.ibm.xmeta.service.InitializationSupport=off"/g' ${IIS_HOME}/wlp/usr/servers/iis/server.xml
+    set +x #echo off
+    ${IIS_HOME}/initScripts/chUserPasswd.sh -user ${IAUSER} -password ${IAUSER_PSW}
+    set -x #echo on
+    echo "${IIS_HOME}/initScripts/chUserPasswd.sh -user ${IAUSER} -password *****"
+
+    #If the token services keystore or public key file does not exist in the volume mount, then create them and copy to local
+    KEYSTORE_FILE=${IIS_HOME}/wlp/usr/servers/iis/lib/iis/tknproperties/secrets/tokenservice.keystore
+    PUBKEY_FILE=${IIS_HOME}/wlp/usr/servers/iis/lib/iis/tknproperties/secrets/jwtkey.cer
+    if [ ! -f $KEYSTORE_FILE ] || [ ! -f $PUBKEY_FILE ]; then
+        set +x #echo off
+        echo "Generating new IIS token service key pair"
+        rm -f ${KEYSTORE_FILE}
+        rm -f ${PUBKEY_FILE}
+        ${IIS_HOME}/jdk/bin/keytool -genkeypair -alias jwtkey -keyalg RSA -dname "CN=IIS-TKN,OU=Software Group,O=IBM,C=US" -keypass passw0rd -storepass passw0rd -keystore ${KEYSTORE_FILE}
+        ${IIS_HOME}/jdk/bin/keytool -exportcert -keystore ${KEYSTORE_FILE} -alias jwtkey -file ${PUBKEY_FILE} -storepass passw0rd
+        set -x #echo on
+    fi
+    cp ${KEYSTORE_FILE} ${IIS_HOME}/wlp/usr/servers/iis/lib/iis/tknproperties/tokenservice.keystore
+    cp ${PUBKEY_FILE} ${IIS_HOME}/wlp/usr/servers/iis/lib/iis/tknproperties/tokenservicepublic.cer
+
+    #Change xmeta and xmetasr password
+    set +x #echo off
+    ${ASBSERVER_HOME}/bin/AppServerAdmin.sh -db -user xmeta -password $XMETA_PASSWORD
+    ${ASBSERVER_HOME}/bin/AppServerAdmin.sh -dbs -user xmetasr -password $XMETASR_PASSWORD
+    ${ASBSERVER_HOME}/bin/AppServerAdmin.sh -was -file ${IIS_HOME}/wlp/usr/servers/iis/bootstrap.properties -key ia.db.password -value ${IAUSER_PSW}
+    ${ASBSERVER_HOME}/bin/RepositoryAdmin.sh -updateRepositoryConnection -connectionName dsodb -reposName dsodb -connectionPassword ${DSODB_PSW}
+    set -x #echo on
+    echo "${ASBSERVER_HOME}/bin/AppServerAdmin.sh -db -user xmeta -password *****"
+    echo "${ASBSERVER_HOME}/bin/AppServerAdmin.sh -dbs -user xmetasr -password *****"
+    echo "${ASBSERVER_HOME}/bin/AppServerAdmin.sh -was -file ${IIS_HOME}/wlp/usr/servers/iis/bootstrap.properties -key ia.db.password -value ******"
+    echo "${ASBSERVER_HOME}/bin/RepositoryAdmin.sh -updateRepositoryConnection -connectionName dsodb -reposName dsodb -connectionPassword *****"
+
+    ADMIN_UID=1000330999
+    
+    #Prerequisite UG config
+    ${ASBSERVER_HOME}/bin/iisAdmin.sh -load ${scriptDir}/services-config.properties;
+    ${ASBSERVER_HOME}/bin/iisAdmin.sh -set -key com.ibm.iis.isf.security.directory.icp4d.AdminUid -value ${ADMIN_UID};
+    ${ASBSERVER_HOME}/bin/iisAdmin.sh -set -key com.ibm.iis.ug.host.name -value "${hostNameFull}";
+
+    #QS changes - this is enabled depending what ds assembly is used - ds-ent no QS ds enables QS
+    ## so disable this flag at services pod startup
+    #${ASBSERVER_HOME}/bin/iisAdmin.sh -set -key com.ibm.iis.datastage.license.option.qualitystage -value 1
+
+    #Prune CEF for WKC
+    ${ASBSERVER_HOME}/bin/iisAdmin.sh -unset -key com.ibm.iis.launchpad.application.CEF.icon -key com.ibm.iis.launchpad.application.CEF.url -key com.ibm.iis.launchpad.application.CEF.name;
+    set +x #echo off
+    ${ASBSERVER_HOME}/bin/iisAdmin.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -undeploy -warName common_event_rest_api -warModule common_event;
+    ${ASBSERVER_HOME}/bin/iisAdmin.sh -user ${IS_ADMIN} -password ${IS_ADMIN_PSW} -undeploy -warName common_event_web_ui -warModule common_event;
+    set -x #echo on
+    echo "${ASBSERVER_HOME}/bin/iisAdmin.sh -user ${IS_ADMIN} -password *****  -undeploy -warName common_event_rest_api -warModule common_event;
+    ${ASBSERVER_HOME}/bin/iisAdmin.sh -user ${IS_ADMIN} -password *****  -undeploy -warName common_event_web_ui -warModule common_event;"
+
+    #Configure the map between CP4D user attributes and IIS user attributes
+    ${ASBSERVER_HOME}/bin/DirectoryAdmin.sh -sp J2EE
+    ${ASBSERVER_HOME}/bin/DirectoryAdmin.sh -sam -um "mail=mail,firstName=firstName,lastName=lastName";
+
+    #Start the container
+    ${IIS_HOME}/initScripts/startcontainer.sh;
+
+    set +x #echo off
+    attributeExists=`curl -k -u ${IS_ADMIN}:${IS_ADMIN_PSW} -X GET https://${IS_SERVER}:${IS_PORT}/ibm/iis/igc-rest/v1/administration/attributes`
+    if [[ "$attributeExists" != *"countrylocationname"* ]];
+    then
+    curl -k -u ${IS_ADMIN}:${IS_ADMIN_PSW} -X POST -H "Content-Type: application/json" -d @/opt/countryattribute.json https://${IS_SERVER}:${IS_PORT}/ibm/iis/igc-rest/v1/administration/attributes
+    set -x #echo on
+    echo curl -k -u ${IS_ADMIN}:***** -X POST -H "Content-Type: application/json" -d @/opt/countryattribute.json https://${IS_SERVER}:${IS_PORT}/ibm/iis/igc-rest/v1/administration/attributes
+    set +x #echo off
+    fi;
+
+    curl -k -c /tmp/is-cookie 'https://localhost:9446/ibm/iis/igc/j_security_check' -H 'Content-Type: application/x-www-form-urlencoded' --data "j_username=isadmin&j_password=${IS_ADMIN_PSW}"
+    set -x #echo on
+    echo curl -k -c /tmp/is-cookie 'https://localhost:9446/ibm/iis/igc/j_security_check' -H 'Content-Type: application/x-www-form-urlencoded' --data "j_username=isadmin&j_password=*****"
+    curl -k -b /tmp/is-cookie 'https://localhost:9446/ibm/iis/igc/services' -H 'Content-Type: application/x-www-form-urlencoded' --data 'service=com.ibm.is.bg.services.NotificationResource&method=enableNotification&params=%5Btrue%5D&context=%7B%22client%22%3A%22BGWebUI%22%2C%22version%22%3A%221.0%22%2C%22properties%22%3A%7B%22buildVersion%22%3A%2211.7.0.2%22%2C%22userVersion%22%3A%2211.7.0.2%22%2C%22workflowPerspective%22%3A%22NONE%22%7D%7D'
+
+  iadb-db2-connector-imam-import-params.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <ImportParameters bridgeDisplayName="JDBC Connector" bridgeId="CAS/JDBCConnector__1.0" bridgeVersion="1.0_1.0" release="11.7.0.0">
+      <CompositeParameter isRequired="true" displayName="Data connection" id="DataConnection" type="DATA_CONNECTION">
+        <Parameter isRequired="true" displayName="Name" id="dcName_">
+          <value>iadb</value>
+        </Parameter>
+        <Parameter displayName="Description" id="dcDescription_">
+          <value>Information Analyzer Analysis Database</value>
+        </Parameter>
+        <Parameter isRequired="true" displayName="URL" id="URL">
+        <value>jdbc:db2://is-xmetadocker:50000/IADB</value>
+        </Parameter>
+        <Parameter displayName="Attributes" id="Attributes">
+        <value></value>
+        </Parameter>
+      </CompositeParameter>
+      <Parameter displayName="Include tables" id="includeTables" type="BOOLEAN">
+        <value>False</value>
+      </Parameter>
+      <Parameter displayName="Include views" id="includeViews" type="BOOLEAN">
+        <value>False</value>
+      </Parameter>
+      <Parameter displayName="Include other objects" id="includeOthers" type="BOOLEAN">
+       <value>False</value>
+      </Parameter>
+      <Parameter displayName="Generate all columns as Unicode" id="GenerateAllColumnsAsUnicode" type="BOOLEAN">
+       <value>False</value>
+      </Parameter>
+      <Parameter displayName="Use regular expression in schema&#xa;name filter" id="UseRegexInSchemaNameFilter" type="BOOLEAN">
+       <value>False</value>
+      </Parameter>
+      <Parameter displayName="Include system objects" id="IncludeSystemObjects" type="BOOLEAN">
+        <value>False</value>
+      </Parameter>
+      <Parameter displayName="Schema name filter" id="SchemaNameFilter">
+        <value></value>
+      </Parameter>
+      <Parameter displayName="Table name filter" id="TableNameFilter">
+        <value></value>
+      </Parameter>
+      <Parameter displayName="Assets to import" id="AssetsToImport">
+        <value></value>
+      </Parameter>
+      <Parameter displayName="Ignore table access&#xa;errors" id="IgnoreTableAccessErrors" type="BOOLEAN">
+        <value>False</value>
+      </Parameter>
+      <Parameter isRequired="true" displayName="Host system name" id="AP_Host system name">
+        <value>is-en-conductor-0.en-cond</value>
+      </Parameter>
+      <Parameter displayName="Database name" id="AP_Database name">
+        <value>IADB</value>
+      </Parameter>
+    </ImportParameters>
+  countryattribute.json: |
+    {
+       "name" : "countrylocationname",
+       "description" : "custom attribute description",
+       "appliesTo" : [
+          "host"
+       ],
+       "attributeType" : "Enumerated",
+       "validValues" : [
+          {
+             "name" : "Afghanistan",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Albania",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Algeria",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Andorra",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Angola",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Antigua and Barbuda",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Argentina",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Armenia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Aruba",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Australia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Austria",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Azerbaijan",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Bahamas, The",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Bahrain",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Bangladesh",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Barbados",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Belarus",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Belgium",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Belize",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Benin",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Bhutan",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Bolivia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Bosnia and Herzegovina",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Botswana",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Brazil",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Brunei",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Bulgaria",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Burkina Faso",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Burma",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Burundi",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Cambodia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Cameroon",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Canada",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Cabo Verde",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Central African Republic",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Chad",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Chile",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "China",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Colombia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Comoros",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Congo, Democratic Republic of the",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Congo, Republic of the",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Costa Rica",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Cote d'Ivoire",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Croatia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Cuba",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Curacao",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Cyprus",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Czechia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Denmark",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Djibouti",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Dominica",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Dominican Republic",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "East Timor",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Ecuador",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Egypt",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "El Salvador",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Equatorial Guinea",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Eritrea",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Estonia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Eswatini",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Ethiopia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Fiji",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Finland",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "France",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Gabon",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Gambia, The",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Georgia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Germany",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Ghana",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Greece",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Grenada",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Guatemala",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Guinea",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Guinea-Bissau",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Guyana",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Haiti",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Holy See",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Honduras",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Hong Kong",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Hungary",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Iceland",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "India",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Indonesia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Iran",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Iraq",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Ireland",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Israel",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Italy",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Jamaica",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Japan",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Jordan",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Kazakhstan",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Kenya",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Kiribati",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Korea, North",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Korea, South",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Kosovo",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Kuwait",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Kyrgyzstan",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Laos",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Latvia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Lebanon",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Lesotho",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Liberia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Libya",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Liechtenstein",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Lithuania",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Luxembourg",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Macau",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Macedonia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Madagascar",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Malawi",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Malaysia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Maldives",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Mali",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Malta",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Marshall Islands",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Mauritania",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Mauritius",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Mexico",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Micronesia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Moldova",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Monaco",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Mongolia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Montenegro",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Morocco",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Mozambique",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Namibia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Nauru",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Nepal",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Netherlands",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "New Zealand",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Nicaragua",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Niger",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Nigeria",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "North Korea",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Norway",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Oman",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Pakistan",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Palau",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Palestinian Territories",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Panama",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Papua New Guinea",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Paraguay",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Peru",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Philippines",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Poland",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Portugal",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Qatar",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Romania",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Russia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Rwanda",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Saint Kitts and Nevis",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Saint Lucia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Saint Vincent and the Grenadines",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Samoa",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "San Marino",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Sao Tome and Principe",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Saudi Arabia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Senegal",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Serbia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Seychelles",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Sierra Leone",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Singapore",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Sint Maarten",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Slovakia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Slovenia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Solomon Islands",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Somalia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "South Africa",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "South Korea",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "South Sudan",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Spain",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Sri Lanka",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Sudan",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Suriname",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Swaziland",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Sweden",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Switzerland",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Syria",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Taiwan",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Tajikistan",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Tanzania",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Thailand",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Timor-Leste",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Togo",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Tonga",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Trinidad and Tobago",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Tunisia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Turkey",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Turkmenistan",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Tuvalu",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Uganda",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Ukraine",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "United Arab Emirates",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "United Kingdom",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Uruguay",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "United States of America",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Uzbekistan",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Vanuatu",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Venezuela",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Vietnam",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Yemen",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Zambia",
+             "description" : "Country"
+          }
+          ,{
+             "name" : "Zimbabwe",
+             "description" : "Country"
+          }
+       ],
+       "multiValued" : false,
+       "visibleInContainedObject" : true
+    }
+  UGDefaultWorkspace.xml: |-
+    <?xml version="1.0" encoding="UTF-8"?>
+    <iaapi:Project xmlns:iaapi="http://www.ibm.com/investigate/api/iaapi" name="UGDefaultWorkspace">
+      <description>UG Demo Workspace</description>
+     </iaapi:Project>
+  useAutomaticConfiguration.json: |-
+    {"useAutomaticConfiguration":true,"qualityThreshold":0.8,
+     "dataQualityDimensions":[
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"DataTypeViolation",
+                        "name":"Data Type Violations",
+                        "description":"Data Type Violations"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"ValueRangeViolation",
+                        "name":"Value Range Violations",
+                        "description":"Value Range Violations"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"FormatViolation",
+                        "name":"Format Violations",
+                        "description":"Format Violations"
+                },
+                {
+                        "ignored":true,
+                        "dataQualityProblemType":"SuspectCorrelatedValue",
+                        "name":"Suspect Values (Correlation Violations)",
+                        "description":"Suspect Values (Correlation Violations)"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"NonStandardMissingValue",
+                        "name":"Inconsistent missing value representation",
+                        "description":"Inconsistent missing value representation"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"CaseViolation",
+                        "name":"Inconsistent usage of upper and lower cases.",
+                        "description":"Inconsistent usage of upper and lower cases."
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"SuspectValues",
+                        "name":"Suspect Values",
+                        "description":"Suspect Values"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"DataClassViolation",
+                        "name":"Data Class Violations",
+                        "description":"Data Class Violations"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"UniquenessViolation",
+                        "name":"Duplicate values",
+                        "description":"Duplicate values"
+                }]
+    }
+  PIIWorkspace.xml: |-
+    <iaapi:Project xmlns:iaapi="http://www.ibm.com/investigate/api/iaapi" name="PIIWorkspace">
+      <description>Workspace with optimal settings for PII search.</description>
+    </iaapi:Project>
+  PIIDQConfiguration.json: |-
+    {
+        "additionalProperties":
+                {
+                                "loadQualityProblemResults":false
+                },
+        "useAutomaticConfiguration":true,
+        "dataQualityDimensions":[
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"DataTypeViolation",
+                        "name":"Data Type Violations",
+                        "description":"Data Type Violations"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"ValueRangeViolation",
+                        "name":"Value Range Violations",
+                        "description":"Value Range Violations"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"FormatViolation",
+                        "name":"Format Violations",
+                        "description":"Format Violations"
+                },
+                {
+                        "ignored":true,
+                        "dataQualityProblemType":"SuspectCorrelatedValue",
+                        "name":"Suspect Values (Correlation Violations)",
+                        "description":"Suspect Values (Correlation Violations)"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"NonStandardMissingValue",
+                        "name":"Inconsistent missing value representation",
+                        "description":"Inconsistent missing value representation"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"CaseViolation",
+                        "name":"Inconsistent usage of upper and lower cases.",
+                        "description":"Inconsistent usage of upper and lower cases."
+                },
+                {
+                        "ignored":true,
+                        "dataQualityProblemType":"SuspectValues",
+                        "name":"Suspect Values",
+                        "description":"Suspect Values"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"MissingValue",
+                        "name":"Missing Values",
+                        "description":"Missing Values"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"DataClassViolation",
+                        "name":"Data Class Violations",
+                        "description":"Data Class Violations"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"UniquenessViolation",
+                        "name":"Duplicate values",
+                        "description":"Duplicate values"
+                }]
+         }
+  PIICAConfiguration.json: |-
+    {
+        "nullThreshold":1,
+        "uniquenessThreshold":99,
+        "constantThreshold":99,
+        "updateExistingTables": false,
+        "captureFDType": "CAPTURENONE"
+    }
+  DataLakeWorkspace.xml: |-
+    <iaapi:Project xmlns:iaapi="http://www.ibm.com/investigate/api/iaapi" name="DataLakeWorkspace">
+      <description>Workspace with optimal settings to run a quick analysis on large number of data sets.</description>
+    </iaapi:Project>
+  DataLakeDQConfiguration.json: |-
+    {
+
+        "additionalProperties":
+                {
+                                "loadQualityProblemResults":false
+                },
+        "useAutomaticConfiguration":true,
+        "dataQualityDimensions":[
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"DataTypeViolation",
+                        "name":"Data Type Violations",
+                        "description":"Data Type Violations"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"ValueRangeViolation",
+                        "name":"Value Range Violations",
+                        "description":"Value Range Violations"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"FormatViolation",
+                        "name":"Format Violations",
+                        "description":"Format Violations"
+                },
+                {
+                        "ignored":true,
+                        "dataQualityProblemType":"SuspectCorrelatedValue",
+                        "name":"Suspect Values (Correlation Violations)",
+                        "description":"Suspect Values (Correlation Violations)"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"NonStandardMissingValue",
+                        "name":"Inconsistent missing value representation",
+                        "description":"Inconsistent missing value representation"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"CaseViolation",
+                        "name":"Inconsistent usage of upper and lower cases.",
+                        "description":"Inconsistent usage of upper and lower cases."
+                },
+                {
+                        "ignored":true,
+                        "dataQualityProblemType":"SuspectValues",
+                        "name":"Suspect Values",
+                        "description":"Suspect Values"
+                },
+
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"MissingValue",
+                        "name":"Missing Values",
+                        "description":"Missing Values"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"DataClassViolation",
+                        "name":"Data Class Violations",
+                        "description":"Data Class Violations"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"UniquenessViolation",
+                        "name":"Duplicate values",
+                        "description":"Duplicate values"
+                }]
+           }
+  DataLakeCAConfiguration.json: |-
+    {
+        "nullThreshold":1,
+        "uniquenessThreshold":99,
+        "constantThreshold":99,
+        "updateExistingTables": false,
+        "captureFDType": "CAPTURENONE"
+    }
+  InDepthAnalysisWorkspace.xml: |-
+    <iaapi:Project xmlns:iaapi="http://www.ibm.com/investigate/api/iaapi" name="InDepthAnalysisWorkspace">
+      <description>Workspace with optimal settings to run in depth analysis on small number of data sets.</description>
+    </iaapi:Project>
+  InDepthAnalysisDQConfiguration.json: |-
+    {
+        "useAutomaticConfiguration":true,
+        "dataQualityDimensions":[
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"DataTypeViolation",
+                        "name":"Data Type Violations",
+                        "description":"Data Type Violations"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"ValueRangeViolation",
+                        "name":"Value Range Violations",
+                        "description":"Value Range Violations"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"FormatViolation",
+                        "name":"Format Violations",
+                        "description":"Format Violations"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"SuspectCorrelatedValue",
+                        "name":"Suspect Values (Correlation Violations)",
+                        "description":"Suspect Values (Correlation Violations)"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"NonStandardMissingValue",
+                        "name":"Inconsistent missing value representation",
+                        "description":"Inconsistent missing value representation"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"CaseViolation",
+                        "name":"Inconsistent usage of upper and lower cases.",
+                        "description":"Inconsistent usage of upper and lower cases."
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"SuspectValues",
+                        "name":"Suspect Values",
+                        "description":"Suspect Values"
+                },
+
+
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"MissingValue",
+                        "name":"Missing Values",
+                        "description":"Missing Values"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"DataClassViolation",
+                        "name":"Data Class Violations",
+                        "description":"Data Class Violations"
+                },
+                {
+                        "ignored":false,
+                        "dataQualityProblemType":"UniquenessViolation",
+                        "name":"Duplicate values",
+                        "description":"Duplicate values"
+                }]
+      }
+  InDepthAnalysisCAConfiguration.json: |-
+    {
+        "nullThreshold":1,
+        "uniquenessThreshold":99,
+        "constantThreshold":99,
+        "updateExistingTables": false,
+        "captureFDType": "CAPTUREN",
+        "maxFDCaptureSize": 1000
+    }
+  services-config.properties: |-
+    com.ibm.iis.ug11_7.autoclassification.enabled=false
+    com.ibm.iis.ug11_7.autoclassification.dopublish=true
+    com.ibm.iis.ia.server.jobs.results.bridge=odf
+    com.ibm.iis.ug.11_7_da_datasets_index_schema=true
+    com.ibm.iis.odf.autoclassification.configuration=CA,TM,DQ
+    com.ibm.iis.gov.events.KnowledgeGraph.enabled=true
+    com.ibm.iis.gov.events.KnowledgeGraph.topic=IgcUnifiedGovEvents
+    com.ibm.iis.sdp.zookeeper.connect=zookeeper:2181/kafka
+    com.ibm.iis.solr.search.connect=http://solr:8983/solr
+    com.ibm.iis.sdp.kafka.bootstrap.servers=kafka:9093
+    com.ibm.iis.sos.mode=remote
+    com.ibm.iis.sos.acceptAllCertificates=true
+    com.ibm.iis.isf.security.ZenTokenAuthenticationEnabled=true
+    com.ibm.iis.isf.security.ZenTokenAuthenticationURIs=/ibm/iis/console/common/*,/ibm/iis/ds/console,/ibm/iis/igc/services,/ibm/iis/igcui/*,/ibm/iis/igc-rest/*
+    com.ibm.iis.isf.security.SessionMaxIdleTime=46800
+    com.ibm.iis.ug.masking.disabled=true
+    com.ibm.iis.igc.catalog.host.name=is-servicesdocker:9446
+    com.ibm.iis.datamasking.host.name=data-masking-lite-service:9077
+    cas.agent.timeout=30000
+    com.ibm.iis.ug.ia.pod.name=ia-analysis
+    com.ibm.iis.isf.security.directory.DirectoryUpdateSynchronized=true
+    com.ibm.iis.events.cef.enabled=false
+    com.ibm.iis.gov.vr.setting.enableWKCSynchronization=true
+    com.ibm.iis.ug.microservice.indexing.isEnabled=true
+  jvm.options: |-
+    # 64 bits JVM memory settings
+    -Xms1280m
+    -Xmx8192m
+
+    # Unix JVM settings
+    -Djava.awt.headless=true
+
+    # Windows JVM settings
+    #-Djava.awt.headless=false
+
+    # SUNOS JVM settings
+    #-XX:MaxPermSize=768M
+
+    # IBM JVM settings (all OS except SOLARIS and HPUX)
+    -Xdisableexplicitgc
+
+    # Force the JVM locale to language selected at installation time
+    -Duser.language=en
+    -Duser.country=US
+
+    # XMeta custom EMF registry
+    -Dorg.eclipse.emf.ecore.EPackage.Registry.INSTANCE=com.ibm.xmeta.emf.util.PackageRegistry
+
+    # EMF custom archive schemes required within Liberty
+    -Dorg.eclipse.emf.common.util.URI.archiveSchemes=wsjar wszip jar zip
+
+    -Dnetworkaddress.cache.ttl=60
+    -Dnetworkaddress.cache.negative.ttl=60

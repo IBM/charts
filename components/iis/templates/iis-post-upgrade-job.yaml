@@ -18,7 +18,7 @@ metadata:
 {{- include "product-metering" . | indent 4 }}
 spec:
   backoffLimit: 3
-  activeDeadlineSeconds: 5400
+  activeDeadlineSeconds: 6000
   template:
     metadata:
       labels:
@@ -30,6 +30,9 @@ spec:
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}          
       annotations:
       {{- include "product-metering" . | indent 8 }}
     spec:
@@ -40,7 +43,7 @@ spec:
       containers:
       - name: "iis-post-upgrade-pod"
         imagePullPolicy: IfNotPresent
-        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.release.image.wkcinitcontainer.repository }}:{{ .Values.release.image.wkcinitcontainer.tag }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.global.image.wkcinitcontainer.repository }}:{{ .Values.global.image.wkcinitcontainer.tag }}
         command: ["/bin/sh", "/iis-post-upgrade-scripts/post-upgrade.sh"]
         volumeMounts:
         - mountPath: /iis-post-upgrade-scripts
@@ -55,11 +58,11 @@ spec:
             - ALL
         resources:
           limits:
-            cpu: {{ .Values.release.image.wkcinitcontainer.limits.cpu }}
-            memory: {{ .Values.release.image.wkcinitcontainer.limits.memory }}
+            cpu: {{ .Values.global.image.wkcinitcontainer.limits.cpu }}
+            memory: {{ .Values.global.image.wkcinitcontainer.limits.memory }}
           requests:
-            cpu: {{ .Values.release.image.wkcinitcontainer.requests.cpu }}
-            memory: {{ .Values.release.image.wkcinitcontainer.requests.memory }}
+            cpu: {{ .Values.global.image.wkcinitcontainer.requests.cpu }}
+            memory: {{ .Values.global.image.wkcinitcontainer.requests.memory }}
         env:
           - name: NAMESPACE
             valueFrom:

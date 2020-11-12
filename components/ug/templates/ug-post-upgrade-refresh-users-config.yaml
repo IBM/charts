@@ -1,0 +1,123 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: ug-post-upgrade-refresh-users-config
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  script.py: |
+    import json
+    import os
+    import requests
+    import sys
+    #include extension_name(s) of all the roles that have been modified in your charts for the current release
+    #below is an example where I want to refresh the Data Steward and the User roles. This is a list so you can include multiple role extension names.
+    modified_role_extension_names = ['wkc_business_analyst_role', 'wkc_data_quality_analyst_role', 'wkc_data_steward_role', 'zen_data_engineer_role', 'zen_administrator_role']
+    service_broker_secret = None
+    #update the below environment variable to match how you mount the service broker secret in your chart .yaml file
+    if os.environ.get('ZEN_SERVICE_BROKER_SECRET') is not None:
+        service_broker_secret = os.environ.get('ZEN_SERVICE_BROKER_SECRET')
+    else:
+        sys.exit('could not find zen-service-broker-secret environment variable')
+    def get_internal_service_token():
+        print('>> Requesting internal-service-token from zen-core-api-svc...')
+        url = 'https://zen-core-api-svc:4444/internal/v1/service_token'
+        headers = {
+            'secret': service_broker_secret
+        }
+        #include `verify=False` as the final argument to by-pass certificate verification
+        r = requests.get(url, headers=headers, verify=False)
+        if r.status_code != 200:
+            print('>> Error requesting internal_service_token - status_code - ' + str(r.status_code))
+            try:
+                print(r.json())
+            except Exception:
+                print(r.text)
+            sys.exit('request to retrieve internal_service_token failed')
+        else:
+            print('>> Successfully requested internal_service_token - status_code - 200')
+            try:
+                resp = r.json()
+                if resp['token']:
+                    return 'Bearer ' + resp['token']
+                else:
+                    sys.exit('could not parse internal_service_token from the response')
+            except Exception:
+                sys.exit('could not parse internal_service_token from the response')
+    def get_platform_roles(token):
+        print('>> Requesting platform-roles from usermgmt-svc...')
+        url = 'https://usermgmt-svc:3443/v1/roles'
+        headers = {
+            'Authorization': token
+        }
+        #include `verify=False` as the final argument to by-pass certificate verification
+        r = requests.get(url, headers=headers, verify=False)
+        if r.status_code != 200:
+            print('>> Error retrieving all platform-roles - status_code - ' + str(r.status_code))
+            try:
+                print(r.json())
+            except Exception:
+                print(r.text)
+            sys.exit('request to retrieve roles failed')
+        else:
+            print('>> Successfully retrieved all platform-roles - status_code - 200')
+            try:
+                resp = r.json()
+                if resp['rows']:
+                    print(resp['rows'])
+                    return resp['rows']
+                else:
+                    sys.exit('could not parse roles from the response')
+            except Exception:
+                sys.exit('could not parse roles from the response')
+    def refresh_user_permissions(token, roles_list):
+        print('>> Requesting for a refresh of roles from usermgmt-svc...')
+        for role_obj in roles_list:
+            if role_obj and type(role_obj) is dict and \
+                role_obj['id'] is not None and \
+                role_obj['id'] in modified_role_extension_names and \
+                role_obj['doc'] and type(role_obj) is dict and \
+                role_obj['doc']['role_name'] is not None and \
+                role_obj['doc']['permissions'] and type(role_obj['doc']['permissions']) is list and len(role_obj['doc']['permissions']) > 0:
+                print('>> Found role that needs to be refreshed - ' + role_obj['id'])
+                url = 'https://usermgmt-svc:3443/v1/role/' + role_obj['id']
+                headers = {
+                    'Authorization': token,
+                    'Content-Type': 'application/json'
+                }
+                payload_data = {
+                    'role_name': role_obj['doc']['role_name'],
+                    'description': role_obj['doc']['description'] or '',
+                    'permissions': role_obj['doc']['permissions']
+                }
+                #include verify=False as the final argument to by-pass certificate verification
+                r = requests.put(url, headers=headers, data=json.dumps(payload_data), verify=False)
+                if r.status_code != 200:
+                    print('>> Error refreshing role with extension_name - ' + role_obj['id'] + ' - status_code - ' + str(r.status_code))
+                    try:
+                        print(r.json())
+                    except Exception:
+                        print(r.text)
+                else:
+                    print('>> Successfully refreshed role with extension_name - ' + role_obj['id'] + ' - status_code - 200')
+            else:
+                continue
+        return
+    def main():
+        bearer_token = get_internal_service_token()
+        role_extensions = get_platform_roles(bearer_token)
+        refresh_user_permissions(bearer_token, role_extensions)
+    if __name__ == '__main__':
+        print("========== Refresh user-profiles with roles that contain modified permissions ==========")
+        main()

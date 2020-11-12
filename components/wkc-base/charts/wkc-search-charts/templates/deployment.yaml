@@ -27,11 +27,12 @@ spec:
         app.kubernetes.io/managed-by: {{ .Release.Service }} 
         app.kubernetes.io/name: {{ .Chart.Name }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        icpdsupport/app: "apis"
-        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
       annotations:  
         {{- if .Values.global.podAnnotations }}
-{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
         {{- end }}
     spec:
       {{- if or .Values.archx86_64 .Values.archppc64le }}
@@ -98,10 +99,26 @@ spec:
                value: {{ .Values.env.access_control_enabled.value | quote }}
              - name: {{ .Values.env.cams_api_url_config.name }}
                value: {{ .Values.env.cams_api_url_config.value | quote }}
+             - name: {{ .Values.env.cloud_permissions_url.name }}
+               value: {{ .Values.env.cloud_permissions_url.value | quote }}               
              - name: {{ .Values.env.projects_api_url_config.name }}
                value: {{ .Values.env.projects_api_url_config.value | quote }}
+             - name: {{ .Values.env.dps_api_url_config.name }}
+               value: {{ .Values.env.dps_api_url_config.value | quote }}
+             - name: {{ .Values.env.entitlements_api_url_config.name }}
+               value: {{ .Values.env.entitlements_api_url_config.value | quote }}
              - name: {{ .Values.env.elasticsearch_uri_config.name }}
                value: {{ .Values.env.elasticsearch_uri_config.value | quote }}
+             - name: {{ .Values.env.platform_type.name }}
+               value: {{ .Values.env.platform_type.value | quote }}
+             - name: {{ .Values.env.platform_name.name }}
+               value: {{ .Values.env.platform_name.value | quote }}
+             - name: {{ .Values.env.logdna_log_source_crn.name}}
+               value: {{ .Values.env.logdna_log_source_crn.value | quote }}
+             - name: {{ .Values.env.logdna_save_service_copy.name}}
+               value: {{ .Values.env.logdna_save_service_copy.value | quote }}
+             - name: {{ .Values.env.cloud_usermgmt_url.name}}
+               value: {{ .Values.env.cloud_usermgmt_url.value | quote}}
              - name: {{ .Values.env.elasticsearch_uid_config.name }}
                valueFrom:
                   secretKeyRef:
@@ -111,8 +128,18 @@ spec:
                valueFrom:
                   secretKeyRef:
                     name: {{ .Values.env.elasticsearch_pwd_config.secret }}
-                    key: {{ .Values.env.elasticsearch_pwd_config.key }}             
+                    key: {{ .Values.env.elasticsearch_pwd_config.key }}            
+             - name: {{ .Values.env.feature_toggle_zones_enabled.name }}
+               value: {{ .Values.env.feature_toggle_zones_enabled.value | quote }}
 {{- if eq .Values.envType "cloud" }}
+             - name: {{ .Values.env.iam_identity_token_url.name }}
+               value: {{ .Values.env.iam_identity_token_url.value | quote }}
+             - name: {{ .Values.env.iam_identity_public_keys_url.name }}
+               value: {{ .Values.env.iam_identity_public_keys_url.value | quote }}
+             - name: {{ .Values.env.iam_identity_api_keys_url.name }}
+               value: {{ .Values.env.iam_identity_api_keys_url.value | quote }}
+             - name: {{ .Values.env.elasticsearch_http_protocol.name }}
+               value: {{ .Values.env.elasticsearch_http_protocol.value | quote }}
              - name: {{ .Values.env.elasticsearch_ca_base64_cert_config.name }}
                valueFrom:
                   secretKeyRef:
@@ -147,6 +174,18 @@ spec:
                   secretKeyRef:
                     name: {{ .Values.env.serviceId.secret }}
                     key: {{ .Values.env.serviceId.key }}
+{{- end }}
+{{- if (.Values.env.enableNewRelic) }}
+             - name: {{ .Values.env.enableNewRelic.name }}
+               value: {{ .Values.env.enableNewRelic.value | quote }}
+{{- end }}
+{{- if (.Values.env.newRelicApp) }}
+             - name: {{ .Values.env.newRelicApp.name }}
+               value: {{ .Values.env.newRelicApp.value | quote }}
+{{- end }}
+{{- if (.Values.env.newRelicKey) }}
+             - name: {{ .Values.env.newRelicKey.name }}
+               value: {{ .Values.env.newRelicKey.value | quote }}
 {{- end }}
           resources:
              limits:

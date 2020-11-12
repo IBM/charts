@@ -1,0 +1,226 @@
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ .Values.app_name }}
+  labels:
+    app: {{ .Values.app_name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}
+spec:
+  replicas: {{ .Values.replicas }}
+  strategy: # specifies the strategy used to replace old Pods by new ones
+    type: {{ .Values.strategy.type | quote }}
+    rollingUpdate:
+      maxSurge: {{ .Values.strategy.maxSurge }}
+      maxUnavailable: {{ .Values.strategy.maxUnavailable }}
+  selector:
+    matchLabels:
+      app: {{ .Values.app_name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.app_name }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        helm.sh/chart: {{ .Chart.Name }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
+      {{- if eq .Values.global.deploymentTarget "icp4data" }}
+      annotations:
+        {{- if .Values.global.podAnnotations }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+        {{- end }}
+      {{- end }}
+    spec:
+      {{- if .Values.repository.secret.name }}
+      imagePullSecrets:
+      - name: {{ .Values.repository.secret.name }}
+      {{- end }}
+      {{- if eq .Values.global.deploymentTarget "icp4data" }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+                - ppc64le
+      {{- end }}
+      {{- if eq .Values.global.deploymentTarget "icp4data" }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+        {{- if .Values.securityContext.runAsUser }}
+        runAsUser: {{ .Values.securityContext.runAsUser }}
+        {{- end }}
+      volumes:
+        - name: certificate
+          secret:
+            secretName: ca-certificate-chain-trust
+      {{- end }}
+      containers:
+      - name: {{ .Values.app_name }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+        {{- if eq .Values.global.deploymentTarget "icp4data" }}
+        volumeMounts:
+        - name: certificate
+          mountPath: /etc/certificate
+        {{- end }}
+        ports:
+        - containerPort: {{ .Values.ports.targetPort }}
+          protocol: TCP
+        resources:
+          limits:
+            cpu: {{ .Values.resources.limits.cpu }}
+            memory: {{ .Values.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.resources.requests.cpu }}
+            memory: {{ .Values.resources.requests.memory }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.environment.MONITOR_ENDPOINT }}
+            port: {{ .Values.ports.targetPort }}
+            scheme: "HTTPS"
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.environment.MONITOR_ENDPOINT }}
+            port: {{ .Values.ports.targetPort }}
+            scheme: "HTTPS"
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+        {{- if eq .Values.global.deploymentTarget "icp4data" }}
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+          {{- if .Values.securityContext.runAsUser }}
+          runAsUser: {{ .Values.securityContext.runAsUser }}
+          {{- end }}
+          capabilities:
+            drop:
+            - ALL
+        {{- end }}
+        env:
+          - name: K8S
+            value: {{ true | quote }}
+          - name: "DEPLOYMENT_TARGET"
+            value: {{ .Values.environment.DEPLOYMENT_TARGET }}
+          - name: "NODE_ENV"
+            value: {{ .Values.environment.NODE_ENV }}
+          - name: "PRODUCTION"
+            value: "{{ .Values.environment.PRODUCTION }}"
+          {{- if eq .Values.global.deploymentTarget "icp4data" }}
+          - name: NODE_EXTRA_CA_CERTS
+            value: {{ .Values.environment.NODE_EXTRA_CA_CERTS }}
+          - name: "CUSTOM_DOMAIN"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.environment.wdpHostDomain.configMapName }}
+                key: {{ .Values.environment.wdpHostDomain.hostKey }}
+          - name: "ZEN_DOMAIN"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.environment.wdpHostDomain.configMapName }}
+                key: {{ .Values.environment.wdpHostDomain.icp4dHostKey }}
+          {{- end }}
+          - name: "{{ .Values.environment.auth__certs__selfSignedCert.name }}"
+            valueFrom:
+              secretKeyRef:
+                name: "{{ .Values.environment.auth__certs__selfSignedCert.secret }}"
+                key: "{{ .Values.environment.auth__certs__selfSignedCert.key }}"
+          - name: "{{ .Values.environment.auth__certs__selfSignedKey.name }}"
+            valueFrom:
+              secretKeyRef:
+                name: "{{ .Values.environment.auth__certs__selfSignedKey.secret }}"
+                key: "{{ .Values.environment.auth__certs__selfSignedKey.key }}"
+          - name: "{{ .Values.environment.config__session__key.name }}"
+            valueFrom:
+              secretKeyRef:
+                name: "{{ .Values.environment.config__session__key.secret }}"
+                key: "{{ .Values.environment.config__session__key.key }}"
+          - name: "{{ .Values.environment.config__session__secret.name }}"
+            valueFrom:
+              secretKeyRef:
+                name: "{{ .Values.environment.config__session__secret.secret }}"
+                key: "{{ .Values.environment.config__session__secret.key }}"
+          - name: "{{ .Values.environment.config__composeRedis__url.name }}"
+            valueFrom:
+              secretKeyRef:
+                name: "{{ .Values.environment.config__composeRedis__url.secret }}"
+                key: "{{ .Values.environment.config__composeRedis__url.key }}"
+          - name: "{{ .Values.environment.config__composeRedis__encryptionKey.name }}"
+            valueFrom:
+              secretKeyRef:
+                name: "{{ .Values.environment.config__composeRedis__encryptionKey.secret }}"
+                key: "{{ .Values.environment.config__composeRedis__encryptionKey.key }}"
+          {{- if .Values.environment.config__composeRedis__tlsServerHost }}
+          - name: "{{ .Values.environment.config__composeRedis__tlsServerHost.name }}"
+            valueFrom:
+              secretKeyRef:
+                name: "{{ .Values.environment.config__composeRedis__tlsServerHost.secret }}"
+                key: "{{ .Values.environment.config__composeRedis__tlsServerHost.key }}"
+          {{- end }}
+          {{- if .Values.environment.config__composeRedis__certificate }}
+          - name: "{{ .Values.environment.config__composeRedis__certificate.name }}"
+            valueFrom:
+              secretKeyRef:
+                name: "{{ .Values.environment.config__composeRedis__certificate.secret }}"
+                key: "{{ .Values.environment.config__composeRedis__certificate.key }}"
+          {{- end }}
+          {{- if eq .Values.global.deploymentTarget "cloud" }}
+          - name: {{ .Values.environment.auth__iamId__clientSecret.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.auth__iamId__clientSecret.secret }}
+                key: {{ .Values.environment.auth__iamId__clientSecret.key }}
+          - name: "LOGDNA_SAVE_SERVICE_COPY"
+            value: {{ quote .Values.environment.LOGDNA_SAVE_SERVICE_COPY }}
+          - name: {{ .Values.environment.LOGDNA_LOG_SOURCE_CRN.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.LOGDNA_LOG_SOURCE_CRN.secret }}
+                key: {{ .Values.environment.LOGDNA_LOG_SOURCE_CRN.key }}
+          {{- if .Values.environment.SEGMENT_KEY }}
+          - name: {{ .Values.environment.SEGMENT_KEY.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.SEGMENT_KEY.secret }}
+                key: {{ .Values.environment.SEGMENT_KEY.key }}
+                optional: true
+          {{- end }}
+          {{- if .Values.environment.NEW_RELIC_LICENSE_KEY }}
+          - name: {{ .Values.environment.NEW_RELIC_LICENSE_KEY.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.environment.NEW_RELIC_LICENSE_KEY.secret }}
+                key: {{ .Values.environment.NEW_RELIC_LICENSE_KEY.key }}
+                optional: true
+          {{- end }}
+          {{- end }}
+          {{- if .Values.extraEnv }}
+{{ toYaml .Values.extraEnv | trim | indent 10 }}
+          {{- end }}

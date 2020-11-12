@@ -9,52 +9,62 @@ metadata:
     heritage: "{{ .Release.Service }}"
     run: runtimes-def-configmap
     icpdata_addon: "true"
-    icpdata_addon_version: "3.0.1"
+    icpdata_addon_version: "3.5.1"
     app.kubernetes.io/name: "ugi-addon"
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/instance: {{ .Release.Name }}
 data:
   nginx.conf: |
+    set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
     location = /ibm/iis/igcui/login {
       return 301 $scheme://$http_host/zen/;
     }
     location /ibm/iis {
+      set $is_servicesdocker is-servicesdocker.$nsdomain;
       proxy_set_header Host $http_host;
-      proxy_pass https://is-servicesdocker:9446;
+      proxy_pass https://$is_servicesdocker:9446;
       proxy_read_timeout 30m;
       proxy_connect_timeout 5m;
     }
     location /ibm/iis/api/app_config {
-        proxy_pass http://{{ .Values.gov.appConfigService.app_name }}:9083;
+        set $appConfigService {{ .Values.gov.appConfigService.app_name }}.$nsdomain;
+        proxy_pass http://$appConfigService:9083;
         proxy_read_timeout 30m;
     }
     location /ibm/iis/api/catalog_search {
-        proxy_pass http://{{ .Values.gov.catalogSearchService.app_name }}:9080;
+        set $catalogSearchService {{ .Values.gov.catalogSearchService.app_name }}.$nsdomain;
+        proxy_pass http://$catalogSearchService:9080;
         proxy_read_timeout 30m;
         more_clear_headers "Set-Cookie";
     }
     location /ibm/iis/shop4info {
-        proxy_pass http://{{ .Values.gov.enterpriseSearchUI.app_name }}:3000;
+        set $enterpriseSearchUI {{ .Values.gov.enterpriseSearchUI.app_name }}.$nsdomain;
+        proxy_pass http://$enterpriseSearchUI:3000;
         proxy_read_timeout 30m;
         proxy_connect_timeout 5m;
     }
     location /ibm/iis/api/shop4info {
-        proxy_pass http://{{ .Values.s4i.shop4infoRest.app_name }}:8080;
+        set $shop4infoRest {{ .Values.s4i.shop4infoRest.app_name }}.$nsdomain;
+        proxy_pass http://$shop4infoRest:8080;
         proxy_read_timeout 30m;
     }
     location /ibm/iis/api/user_prefs {
-        proxy_pass http://{{ .Values.gov.userPrefService.app_name }}:9082;
+        set $userPrefService {{ .Values.gov.userPrefService.app_name }}.$nsdomain;
+        proxy_pass http://$userPrefService:9082;
         proxy_read_timeout 30m;
     }
     location /ibm/iis/ia/api/rest {
+      set $ia_analysis ia-analysis.$nsdomain;
       proxy_set_header Host $http_host;
-      proxy_pass https://ia-analysis:443;
+      proxy_pass https://$ia_analysis:443;
       proxy_read_timeout 30m;
+      client_max_body_size 256m;
     }
     location /ibm/iis/igcui {
         access_by_lua_file /nginx_data/checkjwt.lua;
-        proxy_pass http://{{ .Values.igcUI.app_name }}:3000;
+        set $igcUI {{ .Values.igcUI.app_name }}.$nsdomain;
+        proxy_pass http://$igcUI:3000;
         proxy_read_timeout 30m;
         proxy_connect_timeout 5m;
     }
@@ -62,39 +72,47 @@ data:
        rewrite ^ $scheme://$http_host/zen/#/businessGlossary redirect;
     }
     location /ibm/iis/api/audit_trail {
-        proxy_pass http://{{ .Values.auditTrail.app_name }}:9080;
+        set $auditTrail {{ .Values.auditTrail.app_name }}.$nsdomain;
+        proxy_pass http://$auditTrail:9080;
         proxy_read_timeout 30m;
     }
     location /ibm/iis/ui/admin {
-        proxy_pass http://{{ .Values.gov.adminUI.app_name }}:3000;
+        set $adminUI {{ .Values.gov.adminUI.app_name }}.$nsdomain;
+        proxy_pass http://$adminUI:3000;
         proxy_read_timeout 30m;
         proxy_connect_timeout 5m;
     }
     location /ibm/iis/quality {
-        proxy_pass http://{{ .Values.gov.qualityUI.app_name }}:3000;
+        set $qualityUI {{ .Values.gov.qualityUI.app_name }}.$nsdomain;
+        proxy_pass http://$qualityUI:3000;
         proxy_read_timeout 30m;
         proxy_connect_timeout 5m;
     }
     location /ibm/iis/ui-libs {
-        proxy_pass http://{{ .Values.gov.govUI.app_name }}:3000;
+        set $govUI {{ .Values.gov.govUI.app_name }}.$nsdomain;
+        proxy_pass http://$govUI:3000;
         proxy_read_timeout 30m;
         proxy_connect_timeout 5m;
     }
     location /ibm/iis/api/igc-omrs {
-        proxy_pass http://{{ .Values.omag.app_name }}:8080;
+        set $omag {{ .Values.omag.app_name }}.$nsdomain;
+        proxy_pass http://$omag:8080;
         proxy_read_timeout 30m;
     }
     location /ibm/iis/api/insights {
-        proxy_pass http://{{ .Values.gov.insightsService.app_name }}:9080;
+        set $insightsService {{ .Values.gov.insightsService.app_name }}.$nsdomain;
+        proxy_pass http://$insightsService:9080;
         proxy_read_timeout 30m;
     }
     location /v3/insights {
-        proxy_pass http://{{ .Values.gov.insightsService.app_name }}:9080;
+        set $insightsService {{ .Values.gov.insightsService.app_name }}.$nsdomain;
+        proxy_pass http://$insightsService:9080;
         proxy_read_timeout 30m;
         proxy_connect_timeout 5m;
     }
     location ^~ /api/finley {
+        set $finley {{ .Values.finley.app_name }}.$nsdomain;
         proxy_set_header Host $http_host;
-        proxy_pass https://{{ .Values.finley.app_name }}:5000;
+        proxy_pass https://$finley:5000;
         proxy_read_timeout 30m;
     }
