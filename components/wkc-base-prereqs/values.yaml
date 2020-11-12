@@ -13,17 +13,21 @@ global:
     useDynamicProvisioning: true
     storageClassName: ""
   installCerts: true
-  ibmProduct: ""
+  ibmProduct: "zen"
   deploymentTarget: "icp4data"
+  podLabels:
+    icpdsupport/addOnId: "ccs"
+    icpdsupport/app: "api"
   podAnnotations:
-    productName: "IBM Common Core Services for IBM Cloud Pak for Data"
-    productID: "ICP4D-Common-Core-Services-3-0-1"
-    productVersion: "3.0.1"
+    productName: "IBM Cloud Pak for Data Common Core Services"
+    productID: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    productVersion: "3.5.1"
     productMetric: "VIRTUAL_PROCESSOR_CORE"
     productChargedContainers: "All"
     cloudpakName: "IBM Cloud Pak for Data"
     cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
-    cloudpakVersion: "3.0.1"
+    cloudpakInstanceId: "{{ .Values.global.cloudpakInstanceId }}"
+    productCloudpakRatio: "1:1"
 
 env:
   redisUrl: redis://redis-ha-master-svc:6379
@@ -33,12 +37,12 @@ env:
 couchdb:
   fullnameOverride: wdp
   createCloudantArtifacts: true
-  serviceAccountName: ""
+  serviceAccountName: "cpd-norbac-sa"
   useExistingCertificates:
     secretName: "wdp-cloudant-cert"
   image:
     repository: couchdb3
-    tag: 3.1.2
+    tag: 3.1.1-94
   resources:
     requests:
       cpu: 1
@@ -50,31 +54,22 @@ couchdb:
     size: 30Gi
   jobImage:
     repository: wkc-init-container
-    tag: 1.0.85
+    tag: 1.0.111
   initImage:
     repository: wkc-init-container
-    tag: 1.0.85
+    tag: 1.0.111
   secretGeneration:
     serviceAccountName: "cpd-editor-sa"
     image:
       repository: wkc-init-container
-      tag: 1.0.85
-  podAnnotations:
-    productName: "IBM Common Core Services for IBM Cloud Pak for Data"
-    productID: "ICP4D-Common-Core-Services-3-0-1"
-    productVersion: "3.0.1"
-    productMetric: "VIRTUAL_PROCESSOR_CORE"
-    productChargedContainers: "All"
-    cloudpakName: "IBM Cloud Pak for Data"
-    cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
-    cloudpakVersion: "3.0.1"
+      tag: 1.0.111
 
 # secret generation
 secretGeneration:
   serviceAccountName: "cpd-editor-sa"
   image:
     repository: wkc-init-container
-    tag: 1.0.85
+    tag: 1.0.111
     imagePullSecrets: ""
   resources:
     requests:
@@ -106,7 +101,7 @@ wdp-rabbitmq:
     storageClass: wdp-rabbitmq-class
   image:
     repository: rabbitmq
-    tag: 3.7.16-95
+    tag: 3.8.5-112
     pullSecrets: ""
   resources:
     requests:
@@ -118,33 +113,26 @@ wdp-rabbitmq:
   busybox:
     image:
       repository: wkc-init-container
-      tag: 1.0.85
-  initContainer:
-    resources: 
-      limits:
-        memory: 2Gi
+      tag: 1.0.111
   secretGeneration:
     serviceAccountName: "cpd-editor-sa"
     image:
       repository: wkc-init-container
-      tag: 1.0.85
-  podAnnotations:
-    productName: "IBM Common Core Services for IBM Cloud Pak for Data"
-    productID: "ICP4D-Common-Core-Services-3-0-1"
-    productVersion: "3.0.1"
-    productMetric: "VIRTUAL_PROCESSOR_CORE"
-    productChargedContainers: "All"
-    cloudpakName: "IBM Cloud Pak for Data"
-    cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
-    cloudpakVersion: "3.0.1"
+      tag: 1.0.111
+
 
 redis-ha:
   fullnameOverride: redis-ha
+  serviceAccount:
+    name: "cpd-norbac-sa"
   rbac:
     create: false
+  ssl:
+    enabled: true
+    disableNonSSL: false
   image:
     repository: redis
-    tag: 5.0.5-85
+    tag: 6.0.8-113
     pullSecret: ""
   replicas: 3
   persistentVolume:
@@ -177,24 +165,15 @@ redis-ha:
     serviceAccountName: "cpd-editor-sa"
     image:
       repository: wkc-init-container
-      tag: 1.0.85
+      tag: 1.0.111
   initContainer:
     image:
       repository: wkc-init-container
-      tag: 1.0.85
-  podAnnotations:
-    productName: "IBM Common Core Services for IBM Cloud Pak for Data"
-    productID: "ICP4D-Common-Core-Services-3-0-1"
-    productVersion: "3.0.1"
-    productMetric: "VIRTUAL_PROCESSOR_CORE"
-    productChargedContainers: "All"
-    cloudpakName: "IBM Cloud Pak for Data"
-    cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
-    cloudpakVersion: "3.0.1"
+      tag: 1.0.111
   haproxy:
     image:
       repository: haproxy
-      tag: 1.9-26
+      tag: 2.0.14-31
       pullSecret: ""
     securityContext:
       runAsUser: ""
@@ -205,26 +184,17 @@ redis-ha:
       limits:
         memory: 1Gi
         cpu: 1
-    redis:
-      checkSeconds: 5
-    podAnnotations:
-      productName: "IBM Common Core Services for IBM Cloud Pak for Data"
-      productID: "ICP4D-Common-Core-Services-3-0-1"
-      productVersion: "3.0.1"
-      productMetric: "VIRTUAL_PROCESSOR_CORE"
-      productChargedContainers: "All"
-      cloudpakName: "IBM Cloud Pak for Data"
-      cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
-      cloudpakVersion: "3.0.1"
 
 elasticsearch:
   fullnameOverride: wdp-elasticsearch
   nameOverride: wdp-elasticsearch
+  serviceAccount:
+    name: "cpd-norbac-sa"
   persistence:
     enabled: true
   image:
     repository: elasticsearch
-    tag: 7.5.2-76
+    tag: 7.8.1-114
   antiAffinity: "off"
   imagePullSecrets: ""
   replicas: 3
@@ -241,19 +211,19 @@ elasticsearch:
     serviceAccountName: "cpd-editor-sa"
     image:
       repository: wkc-init-container
-      tag: 1.0.85
+      tag: 1.0.111
   initContainer:
     initImage:
       repository: wkc-init-container
-      tag: 1.0.85
+      tag: 1.0.111
   sysCtlsJobContainer:
     initImage:
       repository: wkc-init-container
-      tag: 1.0.85
+      tag: 1.0.111
   haproxy:
     image:
       repository: haproxy
-      tag: 1.9-26
+      tag: 2.0.14-31
     securityContext:
       runAsUser: ""
     resources:
@@ -263,16 +233,6 @@ elasticsearch:
       limits:
         memory: 1Gi
         cpu: 1
-  podAnnotations:
-    productName: "IBM Common Core Services for IBM Cloud Pak for Data"
-    productID: "ICP4D-Common-Core-Services-3-0-1"
-    productVersion: "3.0.1"
-    productMetric: "VIRTUAL_PROCESSOR_CORE"
-    productChargedContainers: "All"
-    cloudpakName: "IBM Cloud Pak for Data"
-    cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
-    cloudpakVersion: "3.0.1"
-  
   nodeLabel: wkc-privileged-node
 
 ccHomePVC:

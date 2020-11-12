@@ -1,0 +1,29 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: wkc-extension-translations-config
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": post-upgrade, post-install
+    "helm.sh/hook-weight": "-4"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  translations.sh: |
+    echo "Traverse to the translation folder"
+    cd ~/dc-main/extension_translations/global_wkc
+
+    echo "Sending translations tar to API"
+    curl -X PUT -k -v -H "token: $ZEN_SERVICE_BROKER_SECRET" -H "Content-Type: multipart/form-data" -F "translation_package=@global_wkc.tgz" https://zen-core-api-svc:4444/v1/translation/global_wkc
+
+    # added exit 0 temporarily to unblock installations
+    exit 0
+{{- end }}

@@ -1,0 +1,122 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.catalogSearchIndex.app_name }}
+  labels:
+    app: {{ .Values.catalogSearchIndex.app_name }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/name: {{ .Values.catalogSearchIndex.app_name }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.catalogSearchIndex.app_name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.catalogSearchIndex.app_name }}
+        chart: "{{ .Values.catalogSearchIndex.chartName }}"
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/name: {{ .Values.catalogSearchIndex.app_name }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        heritage: "{{ .Release.Service }}"
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
+      annotations:
+      {{- include "product-metering" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      hostname: {{ .Values.catalogSearchIndex.app_name }}
+      {{- include "image-secret" . | indent 6 }}
+      containers:
+      - name: {{ .Values.catalogSearchIndex.app_name }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.catalogSearchIndex.repository }}:{{ .Values.catalogSearchIndex.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          requests:
+            memory: "{{ .Values.catalogSearchIndex.requests.memory }}"
+            cpu: "{{ .Values.catalogSearchIndex.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.catalogSearchIndex.limits.memory }}"
+            cpu: "{{ .Values.catalogSearchIndex.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+        readinessProbe:
+          tcpSocket:
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 5
+        livenessProbe:
+          tcpSocket:
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 40
+          timeoutSeconds: 5
+        volumeMounts:
+        - name: configs
+          mountPath: /config
+        env:
+        - name: DB_XMETA_TYPE
+          value: db2
+        - name: DB_XMETA_HOST
+          value: is-xmetadocker
+        - name: DB_XMETA_PORT
+          value: "50000"
+        - name: DB_XMETA_NAME
+          value: xmeta
+        - name: DB_XMETA_USER
+          value: xmeta
+        - name: DB_XMETA_PASS
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: xmeta_password
+        - name: KAFKA_BOOTSTRAP
+          value: {{ .Values.kafka.app_name }}:9093
+        - name: SOLR_ZK_HOSTS
+          value: is-servicesdocker:52181
+        - name: SOLR_CONNECT
+          value: http://solr:8983/solr
+        - name: SOLR_USER
+          value: solr
+        - name: SOLR_PASS
+          value:
+        - name: DB_STAGING_USER
+          value: xmetasr
+        - name: DB_STAGING_PASS
+          valueFrom:
+            secretKeyRef:
+              name: iis-usr-secrets
+              key: xmetasr_password
+      volumes:
+      - name: configs
+        emptyDir: {}
+      securityContext:
+        {{- if .Values.catalogSearchIndex.runAsUser }}
+        runAsUser: {{ .Values.catalogSearchIndex.runAsUser }}
+        {{- end }}
+        {{- if .Values.catalogSearchIndex.fsGroup }}
+        fsGroup: {{ .Values.catalogSearchIndex.fsGroup }}
+        {{- end }}
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- end }}

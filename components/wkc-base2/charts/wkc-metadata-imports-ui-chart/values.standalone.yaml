@@ -1,0 +1,90 @@
+# Default values for wkc-metadata-imports-ui-chart.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+global:
+  deploymentTarget: "icp4data"
+  dockerRegistryPrefix: ""
+  podLabels:
+    icpdsupport/app: "ui"
+    icpdsupport/addOnId: "wkc"
+  podAnnotations:
+    productName: "IBM Watson Knowledge Catalog for IBM Cloud Pak for Data"
+    productID: "ICP4D-WKCLite-Prod-3-5-0"
+    productVersion: "3.5.0"
+replicas: 1
+app_name: wkc-metadata-imports-ui
+strategy:
+  type: RollingUpdate # updates one pod at a time, rather than taking down the entire service at the same time
+  maxSurge: 100% # the maximum number of Pods that can be created over the desired number of Pods. When set to 75%, can be scaled up such that the total number of old and new Pods does not exceed 175% of desired Pods
+  maxUnavailable: 25% # the maximum number of Pods that can be unavailable during the update process
+image:
+  repository: "${DOCKER_REGISTRY}/ubi/wkc-metadata-imports-ui"
+  tag: "${BM_APP_VERSION}"
+repository:
+  secret:
+    name: "dr-docker-registry-cred"
+resources:
+  limits:
+    cpu: 500m
+    memory: 1024Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+securityContext:
+  runAsNonRoot: true
+  runAsUser:
+ports:
+  targetPort: 8443
+  externalPort: 443
+livenessProbe:
+  initialDelaySeconds: 90
+  timeoutSeconds: 5
+  periodSeconds: 30
+  successThreshold: 1
+  failureThreshold: 5
+readinessProbe:
+  initialDelaySeconds: 90
+  timeoutSeconds: 15
+  periodSeconds: 10
+  successThreshold: 1
+  failureThreshold: 3
+environment:
+  MONITOR_ENDPOINT: "/monitor"
+  wdpHostDomain:
+    configMapName: wdp-config
+    hostKey: host
+    icp4dHostKey: icp4d-host
+  DEPLOYMENT_TARGET: "icp4data"
+  PRODUCTION: true
+  NODE_ENV: "production"
+  NODE_EXTRA_CA_CERTS: "/etc/certificate/certificate.pem"
+  config__session__key:
+    name: config__session__key
+    secret: watson-studio-secrets
+    key: session-key.txt
+  config__session__secret:
+    name: config__session__secret
+    secret: watson-studio-secrets
+    key: session-secret.txt
+  config__composeRedis__url:
+    name: config__composeRedis__url
+    secret: redis-ha
+    key: redis-url-ssl
+  config__composeRedis__encryptionKey:
+    name: config__composeRedis__encryptionKey
+    secret: watson-studio-secrets
+    key: redis-encryption-token.txt
+  config__composeRedis__certificate:
+    name: config__composeRedis__certificate
+    secret: redis-ha-cert
+    key: cacertb64.pem
+  auth__certs__selfSignedCert:
+    name: auth__certs__selfSignedCert
+    secret: watson-studio-secrets
+    key: self-signed-certificate-base64.txt
+  auth__certs__selfSignedKey:
+    name: auth__certs__selfSignedKey
+    secret: watson-studio-secrets
+    key: self-signed-private-key-base64.txt
+

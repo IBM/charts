@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Chart.Name }}-test
+  labels:
+    app: {{ .Values.app_name }}-test
+    chart: {{ .Chart.Name }}- {{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}-test
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  {{- if eq .Values.global.deploymentTarget "icp4data" }}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+                  - ppc64le
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+    {{- if .Values.securityContext.runAsUser }}
+    runAsUser: {{ .Values.securityContext.runAsUser }}
+    {{- end }}
+  {{- end }}
+  containers:
+  - name: wkc-metadata-imports-ui-chart-test
+    image: artifactory-url/ubi/wkc-metadata-imports-ui:build_version
+    command: ["sh", "-c", "echo this is a test"]
+    {{- if eq .Values.global.deploymentTarget "icp4data" }}
+    securityContext:
+      privileged: false
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      readOnlyRootFilesystem: false
+      capabilities:
+        drop:
+          - ALL
+    {{- end }}
+    resources:
+      limits:
+        cpu: {{ .Values.resources.limits.cpu }}
+        memory: {{ .Values.resources.limits.memory }}
+      requests:
+        cpu: {{ .Values.resources.requests.cpu }}
+        memory: {{ .Values.resources.requests.memory }}

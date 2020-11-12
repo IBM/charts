@@ -1,0 +1,174 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Values.zookeeper.app_name }}
+  labels:
+    app: {{ .Values.zookeeper.app_name }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/name: {{ .Values.zookeeper.app_name }}
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  serviceName: {{ .Values.zookeeper.app_name }}
+  selector:
+    matchLabels:
+      app: {{ .Values.zookeeper.app_name }}
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.zookeeper.app_name }}
+        chart: {{ .Values.zookeeper.chartName }}
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/name: {{ .Values.zookeeper.app_name }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 8 }}
+        {{- end }}
+      annotations:
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: "app"
+                    operator: In
+                    values:
+                    - {{ .Values.zookeeper.app_name }}
+              topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: {{ .Values.zookeeper.app_name }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.zookeeper.repository }}:{{ .Values.zookeeper.tag }}
+        imagePullPolicy: {{ .Values.release.image.pullPolicy }}
+        resources:
+          requests:
+            memory: "{{ .Values.zookeeperResources.requests.memory }}"
+            cpu: "{{ .Values.zookeeperResources.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.zookeeperResources.limits.memory }}"
+            cpu: "{{ .Values.zookeeperResources.limits.cpu }}"
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        ports:
+        - containerPort: 2181
+          name: client
+        - containerPort: 2888
+          name: server
+        - containerPort: 3888
+          name: leader-election
+        env:
+        - name: ZK_REPLICAS
+          value: "1"
+        - name: ZK_HEAP_SIZE
+          valueFrom:
+            configMapKeyRef:
+              name: zookeeper-config
+              key: jvm.heap
+        - name: ZK_TICK_TIME
+          valueFrom:
+            configMapKeyRef:
+              name: zookeeper-config
+              key: tick
+        - name: ZK_INIT_LIMIT
+          valueFrom:
+            configMapKeyRef:
+              name: zookeeper-config
+              key: init
+        - name: ZK_SYNC_LIMIT
+          valueFrom:
+            configMapKeyRef:
+              name: zookeeper-config
+              key: tick
+        - name: ZK_MAX_CLIENT_CNXNS
+          valueFrom:
+            configMapKeyRef:
+              name: zookeeper-config
+              key: client.cnxns
+        - name: ZK_SNAP_RETAIN_COUNT
+          valueFrom:
+            configMapKeyRef:
+              name: zookeeper-config
+              key: snap.retain
+        - name: ZK_PURGE_INTERVAL
+          valueFrom:
+            configMapKeyRef:
+              name: zookeeper-config
+              key: purge.interval
+        - name: ZK_CLIENT_PORT
+          value: "2181"
+        - name: ZK_SERVER_PORT
+          value: "2888"
+        - name: ZK_ELECTION_PORT
+          value: "3888"
+        readinessProbe:
+          exec:
+            command:
+            - "zkOk.sh"
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - "zkOk.sh"
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+          periodSeconds: 30
+        volumeMounts:
+        - name: zookeeper-data
+          mountPath: /var/lib/zookeeper
+        - name: zookeeper-conf-dir
+          mountPath: /opt/zookeeper/conf
+      securityContext:
+        {{- if .Values.zookeeper.runAsUser }}
+        runAsUser: {{ .Values.zookeeper.runAsUser }}
+        {{- end }}
+        {{- if .Values.zookeeper.fsGroup }}
+        fsGroup: {{ .Values.zookeeper.fsGroup }}
+        {{- end }}
+      volumes:
+      - name: zookeeper-conf-dir
+        emptyDir: {}
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- end }}
+      {{- include "image-secret" . | indent 6 }}
+  volumeClaimTemplates:
+  - metadata:
+      name: zookeeper-data
+    spec:
+      {{- if and .Values.global.persistence.useDynamicProvisioning (not .Values.zookeeper.volumeClaim.overrideStorageClass) }}
+      # If present, use the storageClassName from the values.yaml, else use the
+      # default storageClass setup by Kubernetes Administrator
+      #
+      # Setting storageClassName to nil means use the default storage class
+      storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+      {{- else }}
+      storageClassName: {{ .Values.zookeeper.volumeClaim.storageClassName | quote }}
+      selector:
+        matchLabels:
+          assign-to: "{{ .Release.Namespace }}-zookeeper"
+      {{- end }}
+      accessModes: [ {{ .Values.zookeeper.volumeClaim.accessMode }} ]
+      resources:
+        requests:
+          storage: {{ .Values.zookeeper.volumeClaim.size }}
