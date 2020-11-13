@@ -61,7 +61,7 @@ Metering Annotations for CP4D
 {{- define "common.meteringAnnotations" -}}
 productName: "IBM Financial Crimes Insight for Claims Fraud Software"
 productID: "5737-E41"
-productVersion: "6.5.5"
+productVersion: "6.5.6"
 productMetric: "RESOURCE_VALUE_UNIT"
 productChargedContainers: "All"
 cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
