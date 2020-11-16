@@ -7,9 +7,10 @@ metadata:
     chart: "{{ .Chart.Name }}"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
-    icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
-    icpdsupport/addOnName: dg
-    icpd-addon/status: "{{ .Values.zenServiceInstanceId | int64 }}"
+    icpdsupport/podSelector: is-ibm-datagate-prod
+    icpdsupport/app: db2-dg
+{{ include "dg.addOnLevelLabels" . | indent 4 }}
+{{ include "dg.addOnInstanceLabels" . | indent 4 }}
 {{ include "dg.metadataLabels" . | indent 4 }}
 spec:
   replicas: {{ .Values.images.replicas }}
@@ -20,13 +21,19 @@ spec:
     metadata:
       annotations:
         {{- include "datagate.annotations" .  | indent 8 }}
+        hook.activate.cpd.ibm.com/command: "[]"
+        hook.deactivate.cpd.ibm.com/command: "[]"
+        hook.quiesce.cpd.ibm.com/command: "[]"
+        hook.unquiesce.cpd.ibm.com/command: "[]"
       labels:
         app: {{ template "dg.fullname" . }}
         release: "{{ .Release.Name }}"
-        icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
-        icpdsupport/addOnName: dg
         data-gate-status: {{ template "dg.fullname" . }}-data-gate-server
         chart: "{{ .Chart.Name }}"
+        icpdsupport/podSelector: is-ibm-datagate-prod
+        icpdsupport/app: db2-dg
+{{ include "dg.addOnLevelLabels" . | indent 8 }}
+{{ include "dg.addOnInstanceLabels" . | indent 8 }}
 {{ include "dg.metadataLabels" . | indent 8 }}
     spec:
       affinity:
@@ -37,13 +44,14 @@ spec:
               - key: beta.kubernetes.io/arch
                 operator: In
                 values:
-                - amd64
+                - {{ .Values.arch }}
         podAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
               matchLabels:
                 app: {{ default "default" .Values.targetDbInstance }}
             topologyKey: kubernetes.io/hostname
+{{ include "dg.podSecurityContext" . | indent 6 }}
       initContainers:
       - name: config-db2u
         image: "{{ .Values.images.initconfig.image.repository }}:{{ .Values.images.initconfig.image.tag }}"
@@ -107,7 +115,7 @@ spec:
           value: {{ template "dg.fullname" . }}
         livenessProbe:
           timeoutSeconds: 10
-          initialDelaySeconds: 120
+          initialDelaySeconds: 180
           exec:
             command:
             - "/opt/ibm/dwa/bin/installation/accelerator/data-gate-server.liveness.sh"
@@ -142,6 +150,9 @@ spec:
         - mountPath: /etc/ldapRootPwdSecret
           name: ldap-secret
           readOnly: true
+        - mountPath: /etc/db2CertSecret
+          name: cert-secret
+          readOnly: true
       - name: data-gate-stunnel
         image: "{{ .Values.images.stunnel.image.repository }}:{{ .Values.images.stunnel.image.tag }}"
         imagePullPolicy: {{ .Values.images.pullPolicy }}
@@ -168,7 +179,7 @@ spec:
           successThreshold: 1
           failureThreshold: 5
         readinessProbe:
-          tcpSocket:
+          httpGet:
             path: /certificate
             port: 8080
           timeoutSeconds: 5
@@ -321,4 +332,8 @@ spec:
       - name: ldap-secret
         secret:
           defaultMode: 292
-          secretName: {{ default "default" .Values.targetDbInstance }}-db2u-ldap
+          secretName: c-{{ default "default" .Values.targetDbInstance }}-ldappassword
+      - name: cert-secret
+        secret:
+          defaultMode: 292
+          secretName: internal-tls
