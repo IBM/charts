@@ -1,0 +1,94 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: {{ template "dg.fullname" . }}-clean-job
+  labels:
+    app: {{ template "dg.fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    icpdsupport/app: dg-job
+{{ include "dg.addOnLevelLabels" . | indent 4 }}
+{{ include "dg.addOnInstanceLabels" . | indent 4 }}
+{{ include "dg.metadataLabels" . | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-delete"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  template:
+    metadata:
+      annotations:
+        {{- include "datagate.annotations" .  | indent 8 }}
+      labels:
+        app: {{ template "dg.fullname" . }}
+        release: {{ .Release.Name }}
+        chart: {{ .Chart.Name }}
+        heritage: "{{ .Release.Service }}"
+        icpdsupport/app: dg-job
+{{ include "dg.addOnLevelLabels" . | indent 8 }}
+{{ include "dg.addOnInstanceLabels" . | indent 8 }}
+{{ include "dg.metadataLabels" . | indent 8 }}
+    spec:
+      serviceAccount: {{ default "default" .Values.serviceAccount }}
+      serviceAccountName: {{ default "default" .Values.serviceAccount }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: {{ template "dg.fullname" . }}
+            topologyKey: kubernetes.io/hostname
+      tolerations:
+      - key: "icp4data"
+        operator: "Exists"
+        effect: "NoSchedule"
+      restartPolicy: Never
+{{ include "dg.podSecurityContext" . | indent 6 }}
+      containers:
+      - name: data-gate-api
+        image: "{{ .Values.images.api.image.repository }}:{{ .Values.images.api.image.tag }}"
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        env:
+        - name: ZEN_SERVICE_INSTANCE
+          value: {{ template "dg.fullname" . }}
+        - name: ZEN_NAMESPACE
+          value: {{ .Values.baseNamespace }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: true
+          runAsUser: 1000326001
+          capabilities:
+            drop:
+            - ALL
+        command: ["/bin/sh", "-c"]
+        args: ["sh /opt/ibm/dwa/bin/installation/clone-api/scripts/clean_data_gate_server.sh"]
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+        volumeMounts:
+        - mountPath: /head
+          name: {{ template "dg.fullname" . }}-shared-pvc
+      volumes:
+        - name: {{ template "dg.fullname" . }}-shared-pvc
+          persistentVolumeClaim:
+            {{- if eq .Values.storage.type "existingClaim" }}
+            claimName: {{ .Values.storage.existingClaim.name }}
+            {{- else if eq .Values.storage.type "storageClass" }}
+            claimName: {{ template "dg.fullname" . }}-shared-pvc
+            {{- else }}
+            claimName: {{ template "dg.fullname" . }}-{{ .Values.storage.nfs.name }}
+            {{- end }}

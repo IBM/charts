@@ -7,6 +7,7 @@ IBM DB2 AESE or IBM DB2 Warehouse is the Prerequisites for Data Gate since Data 
 
 ## Version History
 1.1.0
+1.1.1
 
 ## What's new
 

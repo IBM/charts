@@ -4,24 +4,32 @@ metadata:
   name: {{ template "data-gate-catalog.fullname" . }}
   labels:
     component: "datagate-catalog-deployment"
+    icpdsupport/app: "ui"
+    icpdata_addon: "true"
+    icpdata_addon_version: {{.Chart.AppVersion | quote }}
 {{ include "data-gate-catalog.metadataLabels" . | indent 4 }}
+{{ include "data-gate-catalog.addOnLevelLabels" . | indent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       app: {{ template "data-gate-catalog.name" . }}
       release: {{ .Release.Name }}
-      icpdata_addon: "true"
-      icpdata_addon_version: {{.Chart.AppVersion | quote }}
   template:
     metadata:
       annotations:
 {{- include "datagate-catalog.annotations" .  | indent 8 }}
       labels:
         component: "datagate-catalog-deployment"
+        icpdsupport/app: "ui"
+        icpdata_addon: "true"
+        icpdata_addon_version: {{.Chart.AppVersion | quote }}
 {{ include "data-gate-catalog.metadataLabels" . | indent 8 }}
+{{ include "data-gate-catalog.addOnLevelLabels" . | indent 8 }}
     spec:
       serviceAccount: {{ default "default" .Values.global.serviceAccount }}
+      serviceAccountName: {{ default "default" .Values.global.serviceAccount }}
+{{- include "data-gate-catalog.podSecurityContext" . | indent 6 }}
       containers:
       - name: {{ .Chart.Name }}
         {{ if .Values.global.docker_registry_prefix }}
@@ -45,8 +53,6 @@ spec:
             fieldRef:
               fieldPath: metadata.namespace
         volumeMounts:
-          - mountPath: /shared
-            name: data-gate-catalog-pvc
           - mountPath: /user-home
             name: user-home-pvc
         ports:
@@ -75,9 +81,6 @@ spec:
         resources:
 {{ toYaml .Values.resources | indent 12 }}
       volumes:
-      - name: data-gate-catalog-pvc
-        persistentVolumeClaim:
-          claimName: data-gate-catalog-pvc
       - name: user-home-pvc
         persistentVolumeClaim:
           claimName: user-home-pvc
@@ -93,7 +96,7 @@ spec:
               - key: beta.kubernetes.io/arch
                 operator: In
                 values:
-                - amd64
+                - {{ .Values.arch }}
     {{- with .Values.tolerations }}
       tolerations:
 {{ toYaml . | indent 8 }}
