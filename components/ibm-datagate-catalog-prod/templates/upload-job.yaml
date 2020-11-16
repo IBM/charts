@@ -3,7 +3,9 @@ apiVersion: batch/v1
 metadata:
   name: {{ template "data-gate-catalog.fullname" .}}-upload-job
   labels:
+    icpdsupport/app: "job"
 {{ include "data-gate-catalog.metadataLabels" . | indent 4 }}
+{{ include "data-gate-catalog.addOnLevelLabels" . | indent 4 }}
 spec:
   backoffLimit: 1
   template:
@@ -12,8 +14,11 @@ spec:
 {{- include "datagate-catalog.annotations" .  | indent 8 }}
       labels:
         component: "datagate-catalog-upload-job"
+        icpdsupport/app: "job"
 {{ include "data-gate-catalog.metadataLabels" . | indent 8 }}
+{{ include "data-gate-catalog.addOnLevelLabels" . | indent 8 }}
     spec:
+{{- include "data-gate-catalog.podSecurityContext" . | indent 6 }}
       containers:
       - name: {{ .Chart.Name }}
         {{ if .Values.global.docker_registry_prefix }}
@@ -32,7 +37,7 @@ spec:
             drop:
             - ALL
         command: ['/bin/sh', '-cx']
-        args: ["sh /reloadNginxConfig.sh --namespace {{ .Values.baseNamespace }} --dbType {{ .Values.dbType }}; sh /upload.sh --image-registry {{ .Values.global.docker_registry_prefix }}"]
+        args: ["sh /reloadNginxConfig.sh --dbType {{ .Values.dbType }}; sh /upload.sh --image-registry {{ .Values.global.docker_registry_prefix }}"]
         resources:
 {{ toYaml .Values.uploadJobResources | indent 10 }}
         volumeMounts:
@@ -43,7 +48,10 @@ spec:
           persistentVolumeClaim:
             claimName: "user-home-pvc"
       restartPolicy: Never
+      securityContext:
+        runAsUser: 1000321000
       serviceAccount: {{ default "default" .Values.global.serviceAccount }}
+      serviceAccountName: {{ default "default" .Values.global.serviceAccount }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -52,4 +60,4 @@ spec:
               - key: beta.kubernetes.io/arch
                 operator: In
                 values:
-                - amd64
+                - {{ .Values.arch }}

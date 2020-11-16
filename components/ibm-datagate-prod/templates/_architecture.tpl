@@ -9,11 +9,18 @@ Check if tag contains specific platform suffix and if not set based on kube plat
   {{- if (eq "linux/ppc64le" .Capabilities.KubeVersion.Platform) }}
     {{- printf "-%s" "ppc64le" }}
   {{- end -}}
+  {{- if (eq "linux/s390x" .Capabilities.KubeVersion.Platform) }}
+    {{- printf "-%s" "s390x" }}
+  {{- end -}}
 {{- else -}}
   {{- if eq .Values.arch "amd64" }}
     {{- printf "-%s" "x86_64" }}
   {{- else -}}
-    {{- printf "-%s" .Values.arch }}
+    {{- if eq .Values.arch "s390x" }}
+      {{- printf "-%s" "s390x" }}
+    {{- else -}}
+      {{- printf "-%s" .Values.arch }}
+    {{- end -}}
   {{- end -}}
 {{- end -}}
 {{- end -}}
@@ -29,11 +36,18 @@ Check if tag contains specific platform suffix and if not set based on kube plat
   {{- if (eq "linux/ppc64le" .Capabilities.KubeVersion.Platform) }}
     {{- printf "%s" "ppc64le" }}
   {{- end -}}
+  {{- if (eq "linux/s390x" .Capabilities.KubeVersion.Platform) }}
+    {{- printf "%s" "s390x" }}
+  {{- end -}}
 {{- else -}}
     {{- if (eq "x86_64" .Values.arch) }}
        {{- printf "%s" "amd64" }}
     {{- else -}}
-       {{- printf "%s" .Values.arch }}
+      {{- if eq .Values.arch "s390x" }}
+        {{- printf "-%s" "s390x" }}
+      {{- else -}}
+        {{- printf "-%s" .Values.arch }}
+      {{- end -}}
     {{- end -}}
 {{- end -}}
 {{- end -}}
@@ -47,5 +61,8 @@ Return arch based on kube platform
   {{- end -}}
   {{- if (eq "linux/ppc64le" .Capabilities.KubeVersion.Platform) }}
     {{- printf "%s" "ppc64le" }}
+  {{- end -}}
+  {{- if (eq "linux/s390x" .Capabilities.KubeVersion.Platform) }}
+    {{- printf "%s" "s390x" }}
   {{- end -}}
 {{- end -}}

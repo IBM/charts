@@ -17,7 +17,7 @@ This chart will do the following:
 
 # Prerequisites
 * Kubernetes Level - ">=1.11.0"
-* Architecture - "amd64"
+* Architecture - "amd64" or "s390x"
 * PersistentVolume requirements - requires NFS which is a mounted clustered filesystem across all worker nodes. We also support Glusterfs, Ceph and Portworx etc.
 * IBM Db2 Advanced Enterprise Server Edition / IBM Db2 Warehouse Edition - ">= 11.5.1.0"
 
@@ -168,7 +168,7 @@ Only one Db2 Data Gate catalog can be deployed for one namespace, here is the mi
 ./cpd-linux --assembly datagate --insecure-skip-tls-verify -n zen --repo datagate.yaml --storageclass nfs-client --verbose
 
 For full step-by-step documentation on how to install this chart follow this link:
-https://www.ibm.com/support/knowledgecenter/SSQNUZ_2.1.0/com.ibm.icpdata.doc/dv/install-datagate-add-on.html#install-datagate-add-on
+https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_latest/zen-docs/svc-welcome/dg.html
 
 # Configuration
 The following tables lists the configurable parameters of the Db2 Data Gate chart and their default values.
@@ -231,4 +231,4 @@ If you hit any issue, please gather the following log, and contact IBM Support t
 4. Run gather_log.sh in the pod
 
 # Documentation
-KnowledgeCenter url: TBD
+KnowledgeCenter url: https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_latest/zen-docs/svc-welcome/dg.html

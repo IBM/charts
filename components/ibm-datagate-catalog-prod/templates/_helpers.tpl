@@ -47,14 +47,16 @@ app: {{ template "data-gate-catalog.name" . }}
 chart: {{ template "data-gate-catalog.chart" . }}
 release: {{ .Release.Name }}
 heritage: {{ .Release.Service }}
-icpdata_addon: "true"
-icpdata_addon_version: {{.Chart.AppVersion | quote }}
 app.kubernetes.io/instance: "{{ .Release.Name }}"
 app.kubernetes.io/managed-by: "helm"
 app.kubernetes.io/name: {{ template "data-gate-catalog.fullname" . }}
 helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 {{- end }}
 
+{{- define "data-gate-catalog.addOnLevelLabels" -}}
+icpdsupport/addOnId: dg
+icpdsupport/assemblyName: datagate
+{{- end }}
 
 {{- define "data-gate-catalog.nodeAffinity" -}}
 requiredDuringSchedulingIgnoredDuringExecution:
@@ -63,5 +65,11 @@ requiredDuringSchedulingIgnoredDuringExecution:
     - key: beta.kubernetes.io/arch
       operator: In
       values:
-      - amd64
+      - {{ .Values.arch }}
 {{- end -}}
+
+{{- define "data-gate-catalog.podSecurityContext" }}
+hostNetwork: false
+hostPID: false
+hostIPC: false
+{{- end  }}
