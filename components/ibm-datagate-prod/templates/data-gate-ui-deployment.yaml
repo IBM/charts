@@ -7,8 +7,10 @@ metadata:
     chart: "{{ .Chart.Name }}"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
-    icpd-addon/status: "{{ .Values.zenServiceInstanceId | int64 }}"
     component: "datagate-ui"
+    icpdsupport/app: "ui"
+{{ include "dg.addOnLevelLabels" . | indent 4 }}
+{{ include "dg.addOnInstanceLabels" . | indent 4 }}
 {{ include "dg.metadataLabels" . | indent 4 }}
 spec:
   replicas: {{ .Values.images.replicas }}
@@ -20,11 +22,18 @@ spec:
     metadata:
       annotations:
         {{- include "datagate.annotations" .  | indent 8 }}
+        hook.activate.cpd.ibm.com/command: "[]"
+        hook.deactivate.cpd.ibm.com/command: "[]"
+        hook.quiesce.cpd.ibm.com/command: "[]"
+        hook.unquiesce.cpd.ibm.com/command: "[]"
       labels:
         app: {{ template "dg.fullname" . }}-ui
         release: "{{ .Release.Name }}"
         chart: "{{ .Chart.Name }}"
         component: "datagate-ui"
+        icpdsupport/app: "ui"
+{{ include "dg.addOnLevelLabels" . | indent 8 }}
+{{ include "dg.addOnInstanceLabels" . | indent 8 }}
 {{ include "dg.metadataLabels" . | indent 8 }}
     spec:
       affinity:
@@ -35,13 +44,14 @@ spec:
               - key: beta.kubernetes.io/arch
                 operator: In
                 values:
-                - amd64
+                - {{ .Values.arch }}
         podAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
               matchLabels:
                 app: {{ default "default" .Values.targetDbInstance }}
             topologyKey: kubernetes.io/hostname
+{{ include "dg.podSecurityContext" . | indent 6 }}
       containers:
       - name: data-gate-ui
         securityContext:

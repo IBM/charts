@@ -27,3 +27,9 @@ securityContext:
   runAsNonRoot: true
   runAsUser: 1000
 {{- end  }}
+
+{{- define "dg.podSecurityContext" }}
+hostNetwork: false
+hostPID: false
+hostIPC: false
+{{- end  }}

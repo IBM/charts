@@ -28,7 +28,7 @@ This chart will do the following:
 
 # Prerequisites
 * Kubernetes Level - ">=1.11.0"
-* Architecture - "amd64"
+* Architecture - "amd64" or "s390x"
 * PersistentVolume requirements - requires NFS which is a mounted clustered filesystem across all worker nodes. We also support Glusterfs, Ceph and Portworx etc.
 * IBM Db2 Advanced Enterprise Server Edition / IBM Db2 Warehouse Edition - ">= 11.5.1.0"
 
@@ -174,7 +174,7 @@ There is the minimum source request for Db2 Data Gate Instance.
 5. Check the stauts of new datagate instance in "my instance" Page.
 
 For full step-by-step documentation on how to install this chart follow this link:
-https://www.ibm.com/support/knowledgecenter/SSQNUZ_2.1.0/com.ibm.icpdata.doc/dv/install-datagate-add-on.html#privison-datagate-instance
+https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_latest/zen-docs/svc-welcome/dg.html
 
 ### Typical Resource Configuration of Singular Data Gate Instance.
 
@@ -186,7 +186,7 @@ https://www.ibm.com/support/knowledgecenter/SSQNUZ_2.1.0/com.ibm.icpdata.doc/dv/
 
 ### High Availability
 1. We leverage the HA of deployment to make sure the datagate instance is always available.
-2. We can deploy two datagate instances with the same source database on Z and different target database to eliminate the risk occurring at target database. 
+2. We can deploy two datagate instances with the same source database on Z and different target database to eliminate the risk occurring at target database.
 
 # Configuration
 The following tables lists the configurable parameters of the Db2 Data Gate chart and their default values.
@@ -240,7 +240,7 @@ IBM Db2 for z/OS Data Gate supports to provision multiple instance in a single C
 # Limitations
 We do not want to scale our Db2 Data Gate deployment. This means we must leave the replica at 1. If we scale it over 1, the Db2 Date Gate instances will reference the same filesystem that consist of the instance, database directory, etc. This will cause Data Gate to crash.
 
-* Chart can only run on amd64 architecture type.
+* Chart can only run on amd64 or s390x architecture type.
 
 # Must gather process
 If you hit any issue, please gather the following log, and contact IBM Support to begin diagnosing,
@@ -252,4 +252,4 @@ If you hit any issue, please gather the following log, and contact IBM Support t
 4. Run gather_log.sh in the pod
 
 # Documentation
-KnowledgeCenter url: https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/svc/dbs/work-with-db-datagate.html
+KnowledgeCenter url: https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_latest/zen-docs/svc-welcome/dg.html
