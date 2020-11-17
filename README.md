@@ -9,7 +9,7 @@ The `repo/ibm-helm` directory contains packaged Helm chart binaries.  Installati
 
 To add the ibm-helm repo to local helm chart repository list run the following command : 
 ```
-helm repo add stable https://raw.githubusercontent.com/IBM/charts/master/repo/stable
+helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm
 ```
 
 To add the ibm-helm repo to a OCP 4.6+ helm chart repository list run the following command : 
