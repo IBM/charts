@@ -60,7 +60,6 @@ mkdir -p ${CUR_DIR_2}/../config_files
 
 mkdir -p ${CUR_DIR}/../InstallAndGo/config_files
 echo "#Service||Repo||Branch||Namespace||Jenkins||Jenkins Branch Name||project build machine||path" > ${CONFIG_FILE_PATH}
-echo "redis-repo||PrivateCloud/redis-repo||zen-modularization||ibm-private-cloud||DSXL-Trigger-redis-repo||BR:redisRepoBranch||9.30.4.45||.." >> ${CONFIG_FILE_PATH}
 echo "usermgmt||PrivateCloud/usermgmt||zen-modularization||ibm-private-cloud||DSXL-Trigger-usermgmt||BR:usermgmtBranch||9.30.4.45||.." >> ${CONFIG_FILE_PATH}
 echo "influxdb-alpine||PrivateCloud/DSX-Docker-Images||zen-modularization||ibm-private-cloud||DSXL-influxdb-alpine||BR:DSX_DOCKER_IMAGES_BRANCH||9.30.4.45||.." >> ${CONFIG_FILE_PATH}
 

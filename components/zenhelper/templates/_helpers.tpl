@@ -4,9 +4,14 @@
 Create the default zen base chart annotations
 */}}
 {{- define "zenhelper.annotations" }}
+cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+cloudpakName: "IBM Cloud Pak for Data"
+cloudpakVersion: "3.0.1"
+productChargedContainers: "All"
+productMetric: "VIRTUAL_PROCESSOR_CORE"
 productName: "IBM Common Core Services for IBM Cloud Pak for Data"
-productID: "shared infrastructure"
-productVersion: "3.0"
+productID: "ICP4D-Common-Core-Services-3-0-1"
+productVersion: "3.0.1"
 {{- end }}
 
 
