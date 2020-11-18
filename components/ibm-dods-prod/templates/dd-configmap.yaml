@@ -6,7 +6,7 @@ kind: ConfigMap
 metadata:
   name: {{ template "ibm-dods-prod.addon-do.configname" . }}
   labels:
-{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddConfig.compName (dict "icpdsupport/addOnId" "do" "icpdsupport/app" .sch.chart.components.ddConfig.compName "app" .sch.chart.components.ddConfig.compName)) | indent 4 }}
     icpdata_addon: "true"
     icpdata_addon_version: {{.Chart.AppVersion | quote }}
 data:
@@ -17,15 +17,6 @@ data:
    {
       "do":{  
         "details": {
-{{- if hasKey .Values "global" }}
-{{- if hasKey .Values.global "ibmProduct" }}
-{{- if eq .Values.global.ibmProduct "ws" }}
-          "product_docs":"https://www.ibm.com/support/knowledgecenter/SSHGWL_2.1.0/do/do_local_home.html",
-          "deploy_docs": "https://www.ibm.com/support/knowledgecenter/SSHGWL_2.1.0/wsj/install/install-do.html",
-          "images": null,
-{{- end }}
-{{- end }}
-{{- end }}
           "premium": true
         },      
         "versions": {
@@ -44,6 +35,9 @@ data:
     set $dd_cognitive_api dd-cognitive-svc.$nsdomain;
         
     location /decision-optimization {
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
         access_by_lua_file /nginx_data/checkjwt.lua;
         sub_filter "ibm-nginx-svc" $host;
         sub_filter_once off;
@@ -92,19 +86,3 @@ data:
         proxy_redirect https://ibm-nginx-svc/ https://$host/;
         proxy_read_timeout 6m;
     }   
-    
-  watson_studio_premium.swidtag: |
-    <?xml version="1.0" encoding="UTF-8"?>
-    <SoftwareIdentity name="IBM Cloud Pak for Data Watson Studio Premium" tagId="ibm.com-2f650f331b974e5eb4dd242298b82954-3.0.1" version="3.0.1" versionScheme="multipartnumeric" xml:lang="en" xmlns="http://standards.iso.org/iso/19770/-2/2015/schema.xsd" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://standards.iso.org/iso/19770/-2/2015-current/schema.xsd schema.xsd">
-        <Meta persistentId="2f650f331b974e5eb4dd242298b82954"/>
-        <Meta generator="4-1-20200120"/>
-        <Entity name="IBM" regid="ibm.com" role="licensor tagCreator softwareCreator"/>
-    </SoftwareIdentity>
-
-  files: |
-    [
-      {
-        "dest": "/user-home/_global_/config/watson_studio_premium_dods.swidtag",
-        "contentKey": "watson_studio_premium.swidtag"
-      }
-    ]     

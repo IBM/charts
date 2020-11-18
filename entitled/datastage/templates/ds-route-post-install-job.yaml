@@ -1,0 +1,85 @@
+{{ include "sch.config.init" (list . "sch.chart.config.values" ) }}
+{{ $name := "ds-post-install-job" }}
+{{ $compName := "ds-post-install" -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+{{ $serviceAccountName := "cpd-admin-sa" -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+{{ include "ds.additional.labels" (list .) | indent 4 }}
+  annotations:
+    "helm.sh/hook": post-install, post-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    "helm.sh/hook-weight": "0"
+spec:
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      name: {{ $name | quote }}
+      labels:
+{{ $labels | indent 8 }}
+{{ include "ds.additional.labels" (list .) | indent 8 }}
+{{- include "ds.pod.labels" . | indent 8 }}
+      annotations:
+      {{- include "ds-product-metering" . | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.release.image.ds.proxy.runAsUser | int64 }}
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "image-secret" . | indent 6 }}
+      restartPolicy: Never
+      containers:
+        - name: "ds-container"
+          image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.preInstall.image.repository }}:{{ .Values.preInstall.image.tag }}
+          resources:
+{{ toYaml .Values.preInstall.resources | indent 12 }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.release.image.pullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ .Values.release.image.ds.proxy.runAsUser | int64 }}
+            capabilities:
+              drop:
+              - ALL
+          command: 
+            - "/bin/sh"
+            - "-ec"
+            - |
+              set +e
+              routeName="{{ .Values.proxy.routeName }}"
+              kubectl -n {{ .Release.Namespace }} get route $routeName
+              if [ $? -ne 0 ]; then
+                 #create route for proxy service
+                 cat <<EOF | kubectl -n {{ .Release.Namespace }} create --validate=false -f - 
+              apiVersion: route.openshift.io/v1
+              kind: Route
+              metadata:
+                name: $routeName
+                labels:
+{{ $labels | indent 18 }}
+{{ include "ds.additional.labels" (list .) | indent 18}}
+                annotations:
+                  haproxy.router.openshift.io/balance: roundrobin
+                  haproxy.router.openshift.io/timeout: 5d
+                  openshift.io/host.generated: "true"
+              spec:
+                port:
+                  targetPort: ds-proxy-tls
+                to:
+                  kind: Service
+                  name: ds-proxy-svc
+                tls:
+                  termination: passthrough
+              EOF
+              fi

@@ -4,8 +4,7 @@ apiVersion: apps/v1
 metadata:
   name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.ddCognitive.compName ) | quote }}
   labels:
-{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddCognitive.compName) | indent 4 }}
-    app: {{ .sch.chart.components.ddCognitive.compName }}
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddCognitive.compName (dict "icpdsupport/addOnId" "do" "icpdsupport/app" .sch.chart.components.ddCognitive.compName "app" .sch.chart.components.ddCognitive.compName)) | indent 4 }}
 spec:
   replicas: {{ .Values.ddCognitive.replicas }}
   selector:
@@ -14,10 +13,11 @@ spec:
   template:
     metadata:
       labels:
-{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddCognitive.compName) | indent 8 }}
-        app: {{ .sch.chart.components.ddCognitive.compName }}
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddCognitive.compName (dict "icpdsupport/addOnId" "do" "icpdsupport/app" .sch.chart.components.ddCognitive.compName "app" .sch.chart.components.ddCognitive.compName)) | indent 8 }}
       annotations:
-        {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil nil) | indent 8 }}      
+        {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+        hook.deactivate.cpd.ibm.com/command: "[]"
+        hook.activate.cpd.ibm.com/command: "[]"
     spec:
       terminationGracePeriodSeconds: 0
       affinity:
@@ -31,15 +31,17 @@ spec:
       {{- include "sch.security.securityContext" (list . .sch.chart.securityContextPodWAS) | indent 6 }}
       containers:
       - name: {{ .sch.chart.components.ddCognitive.compName }}-container
-        image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.ddCognitive.image.repository }}:{{ .Values.ddCognitive.image.tag }}-{{ .Values.global.architecture }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.ddCognitive.image.repository }}:{{ .Values.ddCognitive.image.tag }}-{{ .Values.global.architecture }}
         imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
         {{- include "sch.security.securityContext" (list . .sch.chart.securityContextContainerNoRoot) | indent 8 }}     
-        volumeMounts:
-        - mountPath: /user-home
-          name: user-home-mount
         env:
           - name: PROPERTY_PREFIX
-            value: "k8s_local_"     
+            value: "k8s_local_"
+          - name: INTERNAL_NGINX_CERTIFICATE
+            valueFrom:
+              secretKeyRef:
+                key: certificate.pem
+                name: internal-nginx-svc-tls
         resources:
 {{ toYaml .Values.ddCognitive.resources | indent 10 }}
         ports:
@@ -61,5 +63,3 @@ spec:
           initialDelaySeconds: 10
           periodSeconds: 30
           timeoutSeconds: 2
-      volumes:
-        {{- include "ibm-dods-prod.user-home-pvc" .  | indent 6 }}

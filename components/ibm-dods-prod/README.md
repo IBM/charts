@@ -1,11 +1,14 @@
 # ibm-dods-prod
-IBM Decision Optimization for Data Science (DODS) is an add-on to Watson Studio / Cloud Pack for Data that provides
+
+IBM Decision Optimization for Data Science (DODS) is an add-on to Cloud Pack for Data that provides
 advanced decision capabilities.
 
 ## Introduction
-This chart is an add-on to Watson Studio / Cloud Pack for Data that provides advanced decision capabilities.
+
+This chart is an add-on to Cloud Pack for Data that provides advanced decision capabilities.
 
 ## Chart Details
+
 This chart contains following components:
 - dd-init: initialization job on install/uninstall. This setup libraries in user-home PV.
 - dd-scenario-api: backend APIs for the decision optimization features
@@ -13,77 +16,82 @@ This chart contains following components:
 - dd-cognitive: backend APIs for the modeling assistant
 
 ## Prerequisites
-This chart pre-reqs the CP4D, Watson Studio and WML base charts. These chart sets up the PV and brings in essential services like user management, nginx, metastoredb, etc. and actual solve capabilities.
 
-### Red Hat OpenShift SecurityContextConstraints Requirements
+This add-on pre-reqs Cloud Pack for Data, and the Watson Studio and WML add-ons. 
 
-This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
+For information on prerequisites see [Planning installation] (https://www.ibm.com/support/knowledgecenter/en/SSQNUZ_3.0.1/cpd/plan/planning.html)
 
-The predefined SecurityContextConstraints name: `cpd-user-scc` provided by CP4D has been verified for this chart, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart. This shall be the
-case as CP4D installation is a prerequisite.
+## PodSecurityPolicy Requirements
+
+Custom PodSecurityPolicy definition: 
+```
+none
+```
+
+## SecurityContextConstraints Requirements
+This chart requires the same SecurityContentConstraints that are set up when Cloud Pak for Data is installed. 
+
+The predefined SecurityContextConstraints name: `cpd-user-scc` provided by CP4D has been verified for this chart, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart. This shall be the case as CP4D installation is a prerequisite.
 
 This predefined SecurityContextConstraints name: [`ibm-anyuid-scc`](https://ibm.biz/cpkspec-scc) has also been verified for this chart, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
 
 You can also define a custom SecurityContextConstraints which can be used to finely control the permissions/capabilities needed to deploy this chart. For example, from the user interface you can copy and paste the following snippets to setup the custom SecurityContextConstraints
-- Custom SecurityContextConstraints definition:
-    ```
-    apiVersion: security.openshift.io/v1
-    kind: SecurityContextConstraints
-    metadata:
-      name: ibm-dods-prod-scc
-    readOnlyRootFilesystem: false
-    allowedCapabilities:
-    - CHOWN
-    - DAC_OVERRIDE
-    - SETGID
-    - SETUID
-    - NET_BIND_SERVICE
-    seLinux:
-      type: RunAsAny
-    supplementalGroups:
-      type: RunAsAny
-    runAsUser:
-      type: RunAsAny
-    fsGroup:
-      rule: RunAsAny
-    volumes:
-    - configMap
-    - secret
-    ```
+Custom SecurityContextConstraints definition: 
+```
+apiVersion: security.openshift.io/v1
+metadata:
+  annotations: {}
+  name: ibm-dods-prod-scc
+kind: SecurityContextConstraints
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: true
+allowPrivilegedContainer: false
+allowedCapabilities: null
+defaultAddCapabilities: null
+fsGroup:
+  type: RunAsAny
+groups: []
+priority: null
+readOnlyRootFilesystem: false
+requiredDropCapabilities:
+- KILL
+- MKNOD
+- SETUID
+- SETGID
+runAsUser:
+  type: MustRunAsRange
+  uidRangeMin: 1000320900
+  uidRangeMax: 1000361000
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  type: RunAsAny
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- persistentVolumeClaim
+- projected
+- secret
+```
 
 ## Resources Required
-Cumulatively the minimum CPU required by all deployments (with 2 replicas each, the default) is 1800m, and
-the minimum memory is 3 Gb.
+
+For information on resources required see [System requirements for services] (https://www.ibm.com/support/knowledgecenter/en/SSQNUZ_3.0.1/sys-reqs/services_prereqs.html)
 
 ## Installing the Chart
 
-The recommended way to install this chart is using the `cpd` install utility shipped with Cloudpak for Data parent product.
-see the [IBM Cloud Pak for Data documentation](https://www.ibm.com/support/knowledgecenter/en/SSQNUZ)
+The recommended way to install this product is using the cpd install utility shipped with Cloudpak for Data.
 
-Alternatively, you can install it with helm: to install the chart with the release name `my-release`:
-
-```bash
-$ helm install --tls --namespace <your pre-created namespace> --name my-release stable/ibm-dods-prod
-```
-
-The command deploys <Chart name> on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
-
-> **Tip**: List all releases using `helm list`
-
-### Verifying the Chart
-See the instruction (from NOTES.txt within chart) after the helm installation completes for chart verification. The instruction can also be viewed by running the command: helm status my-release --tls.
+For information on installation see [Decision Optimization installation](https://www.ibm.com/support/knowledgecenter/en/SSQNUZ_3.0.1/do/cpd_svc/do-install.html)
 
 ### Uninstalling the Chart
 
-To uninstall/delete the `my-release` deployment:
-
-```bash
-$ helm delete my-release --purge --tls
-```
-
-The command removes all the Kubernetes components associated with the chart and deletes the release. 
-If the uninstall command above seems blocked for a long time, it might be because the uninstallation hook
-can not run. You may in this case retry it with an additional parameter `--no-hooks` to force deletion.
+For information on uninstallation see [Decision Optimization uninstall](https://www.ibm.com/support/knowledgecenter/en/SSQNUZ_3.0.1/do/cpd_svc/do-uninstall.html)
 
 ## Configuration
 
@@ -119,8 +127,10 @@ Alternatively, a YAML file that specifies the values for the parameters can be p
 In most cases, the default values are correct and shall not be changed.
 
 ## Storage
+
 The chart stores some info in the pre-existing user-home PV created by CP4D. It does not create or require any other storage.
 
 ## Limitations
+
 This chart is not self sufficient. It has dependency on other charts. 
 

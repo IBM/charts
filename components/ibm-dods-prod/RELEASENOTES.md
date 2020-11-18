@@ -11,7 +11,7 @@ Bug fixes release, and adaptation for CP4D 3.0. No major feature changes.
 
 
 ## Prerequisites
-This is an addon for CP4D/WSL. It needs CP4D and Watson Studio addon installed
+This is an add-on for CP4D/WSL. It needs CP4D and Watson Studio add-on installed
 
 ## Documentation
 

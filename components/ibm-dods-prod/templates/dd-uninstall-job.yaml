@@ -4,8 +4,7 @@ apiVersion: batch/v1
 metadata:
   name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.ddUninstall.compName ) | quote }}
   labels:
-{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddUninstall.compName) | indent 4 }}
-    app: {{ .sch.chart.components.ddInit.compName }}
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddUninstall.compName (dict "icpdsupport/addOnId" "do" "icpdsupport/app" .sch.chart.components.ddUninstall.compName "app" .sch.chart.components.ddUninstall.compName)) | indent 4 }}
   annotations:
     # we run only on actual delete, not rollback or upgrade, as we clear all add-on presence here
     "helm.sh/hook": pre-delete
@@ -15,10 +14,11 @@ spec:
   template:
     metadata:
       labels:
-{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddUninstall.compName) | indent 8 }}
-        app: {{ .sch.chart.components.ddInit.compName }}
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddUninstall.compName (dict "icpdsupport/addOnId" "do" "icpdsupport/app" .sch.chart.components.ddUninstall.compName "app" .sch.chart.components.ddUninstall.compName)) | indent 8 }}
       annotations:
-        {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil nil) | indent 8 }} 
+        {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+        hook.deactivate.cpd.ibm.com/command: "[]"
+        hook.activate.cpd.ibm.com/command: "[]"
     spec:
       affinity:
         {{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
@@ -31,7 +31,7 @@ spec:
       {{- include "sch.security.securityContext" (list . .sch.chart.securityContextPodSetup) | indent 6 }}
       containers:
       - name: {{ .sch.chart.components.ddUninstall.compName }}-container
-        image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.ddInit.image.repository }}:{{ .Values.ddInit.image.tag }}-{{ .Values.global.architecture }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.ddInit.image.repository }}:{{ .Values.ddInit.image.tag }}-{{ .Values.global.architecture }}
         imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
         {{- include "sch.security.securityContext" (list . .sch.chart.securityContextContainerNoRoot) | indent 8 }}
         # this is the difference with dd-init job: we run uninstall here

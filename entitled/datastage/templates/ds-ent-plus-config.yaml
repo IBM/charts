@@ -1,0 +1,31 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: ds-ent-plus-config
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  activateiisAdmin.sh: |
+    set -x
+    cd /opt/IBM/InformationServer/initScripts/
+    source ./job-common.env
+    svcPodName=$(./kctl get pods | grep "is-service" | awk {'print $1'})
+    if [[ "X$svcPodName" == "X" ]]; then
+      echo "###ERROR: service pod does not exist!"
+      exit 1
+    fi
+    ## Enable quality stage
+    ./kctl exec ${svcPodName} -- /opt/IBM/InformationServer/ASBServer/bin/iisAdmin.sh -set -key com.ibm.iis.datastage.license.option.qualitystage -value 1
+    ## Enable SDL
+    ./kctl exec ${svcPodName} -- /opt/IBM/InformationServer/ASBServer/bin/iisAdmin.sh -unset -key com.ibm.iis.isf.security.directory.icp4d.permissionsToRolesMap.administrator
+    ## stop wlp server
+    ./kctl exec ${svcPodName} -- /opt/IBM/InformationServer/wlp/bin/server stop iis
+    ## start wlp server
+    ./kctl exec ${svcPodName} -- /opt/IBM/InformationServer/wlp/bin/server start iis
