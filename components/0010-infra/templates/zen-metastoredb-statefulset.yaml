@@ -1,3 +1,4 @@
+{{if .Values.global.cockroachdb }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -14,6 +15,9 @@ spec:
     metadata:
       labels:
         {{- include "zenhelper.labels" (list . .Values.zenCoreMetaDb.Component ) | indent 8 }}
+        {{- if (.Values.podLabels) }} 
+{{ toYaml .Values.podLabels | indent 8 }}
+        {{- end }}
       annotations:
         {{- include "zenhelper.annotations" . | indent 8}}
     spec:
@@ -138,7 +142,7 @@ spec:
           - "-ecx"
             # The use of qualified `hostname -f` is crucial:
             # Other nodes aren't able to look up the unqualified hostname.
-          - "exec /cockroach/cockroach start --temp-dir=/tmp --max-disk-temp-storage 8GiB --logtostderr --certs-dir=/certs --advertise-host $(hostname).${STATEFULSET_FQDN} --http-host 0.0.0.0 --http-port {{ .Values.zenCoreMetaDb.InternalHttpPort }} --port {{ .Values.zenCoreMetaDb.InternalGrpcPort }} --cache {{ .Values.zenCoreMetaDb.CacheSize }} --max-sql-memory {{ .Values.zenCoreMetaDb.MaxSQLMemory }} {{ if .Values.zenCoreMetaDb.Locality }}--locality={{.Values.zenCoreMetaDb.Locality }}{{ end }} --join {{ if .Values.zenCoreMetaDb.JoinExisting }}{{ join "," .Values.zenCoreMetaDb.JoinExisting }}{{ else }}${STATEFULSET_NAME}-0.${STATEFULSET_FQDN}:{{ .Values.zenCoreMetaDb.InternalGrpcPort }},${STATEFULSET_NAME}-1.${STATEFULSET_FQDN}:{{ .Values.zenCoreMetaDb.InternalGrpcPort }},${STATEFULSET_NAME}-2.${STATEFULSET_FQDN}:{{ .Values.zenCoreMetaDb.InternalGrpcPort }}{{ end }}"
+          - "exec /cockroach/cockroach start --max-offset=1000ms --temp-dir=/tmp --max-disk-temp-storage 8GiB --logtostderr --certs-dir=/certs --advertise-host $(hostname).${STATEFULSET_FQDN} --http-host 0.0.0.0 --http-port {{ .Values.zenCoreMetaDb.InternalHttpPort }} --port {{ .Values.zenCoreMetaDb.InternalGrpcPort }} --cache {{ .Values.zenCoreMetaDb.CacheSize }} --max-sql-memory {{ .Values.zenCoreMetaDb.MaxSQLMemory }} {{ if .Values.zenCoreMetaDb.Locality }}--locality={{.Values.zenCoreMetaDb.Locality }}{{ end }} --join {{ if .Values.zenCoreMetaDb.JoinExisting }}{{ join "," .Values.zenCoreMetaDb.JoinExisting }}{{ else }}${STATEFULSET_NAME}-0.${STATEFULSET_FQDN}:{{ .Values.zenCoreMetaDb.InternalGrpcPort }},${STATEFULSET_NAME}-1.${STATEFULSET_FQDN}:{{ .Values.zenCoreMetaDb.InternalGrpcPort }},${STATEFULSET_NAME}-2.${STATEFULSET_FQDN}:{{ .Values.zenCoreMetaDb.InternalGrpcPort }}{{ end }}"
       # No pre-stop hook is required, a SIGTERM plus some time is all that's
       # needed for graceful shutdown of a node.
       terminationGracePeriodSeconds: 60
@@ -181,3 +185,4 @@ spec:
         matchLabels:
           assign-to: "{{ .Release.Namespace }}-metastoredb"
 {{- end }}
+{{end}}
