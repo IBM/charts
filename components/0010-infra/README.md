@@ -8,14 +8,12 @@
 
 This chart contains following components
 
-1. Redis deployment
-2. Zen-metastoredb statefulset (cockroachdb)
-3. Infuxdb deployment
-4. User management deployment
-5. user-home (shared PV) preparation job
-6. User management preparation job
-7. Couchdb deployment
-8. Set of configmaps to drive product behavior
+1. Zen-metastoredb statefulset (cockroachdb)
+2. Infuxdb deployment
+3. User management deployment
+4. user-home (shared PV) preparation job
+5. User management preparation job
+6. Set of configmaps to drive product behavior
 
 ## Prerequisites
 
@@ -35,38 +33,12 @@ This chart also requires a set of PVCs to be attached with PVs in your runtime.
 2. *Static Provisioning*
     In case of storage class with static provisioning, Kubernetes needs both PV and PVC to have common label for matching. In case of 0010 chart Cloud Pak for Data uses the following mechanism for label matching using `assign-to` as a common label in both YAML files.
 
-```yaml
-apiVersion: v1
-kind: PersistentVolumeClaim
-selector:
-    matchLabels:
-      assign-to: "{{ .Release.Namespace }}-couchdb"
-...
-```
-
-which matches the PV with label
-
-```yaml
-Name:            PV-couchdb
-Labels:          assign-to: zen-couchdb
-Annotations:     gluster.org/type=file
-                 kubernetes.io/createdby=heketi-dynamic-provisioner
-
-StorageClass:    XXX
-Reclaim Policy:  Delete
-Access Modes:    RWX
-Capacity:        YYGi
-Node Affinity:   <none>
-```
-
 ## Resources Required
 
 | Component                   	| Replicas 	| Max CPU | Max Memory 	| Min CPU | Min Memory 	|
 |-----------------------------	|----------	|---------|-------------|---------|-------------|
-| Couchdb deployment          	| 1        	| 2000m   | 2048Mi 	    | 100m    | 64Mi	    |
 | Influxdb                    	| 1        	| 1000m   | 2048Mi 	    | 100m    | 256Mi 	    |
 | Influxdb-populate-job       	| 1        	| 1000m   | 512Mi  	    | 100m    | 512Mi  	    |
-| Redis deployment            	| 1        	| 1000m   | 512Mi  	    | 100m    | 256Mi 	    |
 | User-home prep job          	| 1        	| 1000m   | 512Mi  	    | 500m    | 256Mi  	    |
 | Usermgmt prep job          	| 1        	| 1000m   | 512Mi  	    | 500m    | 256Mi  	    |
 | Usermgmt                    	| 2        	| 1000m   | 512Mi  	    | 200m    | 256Mi  	    |
@@ -76,9 +48,144 @@ Node Affinity:   <none>
 
 ## Red Hat OpenShift SecurityContextConstraints Requirements
 
-This chart needs two SCCs described in the section above.
-Please visit this link for more information on SCCs.
-<https://ibm.box.com/s/4u08mmazirl9vwo7hha736xuv3ps1qow>
+This chart requires a SecurityContextConstraints to be bound to the target service accounts prior to installation. 
+
+From the user interface, you can copy and paste the following snippets to enable the custom SecurityContextConstraints
+
+- Custom SecurityContextConstraints definition:
+
+```yaml
+apiVersion: security.openshift.io/v1
+metadata:
+  annotations: {}
+  name: cpd-user-scc
+kind: SecurityContextConstraints
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: true
+allowPrivilegedContainer: false
+allowedCapabilities: null
+defaultAddCapabilities: null
+fsGroup:
+  type: RunAsAny
+groups: []
+priority: null
+readOnlyRootFilesystem: false
+requiredDropCapabilities:
+- KILL
+- MKNOD
+- SETUID
+- SETGID
+runAsUser:
+  type: MustRunAsRange
+  uidRangeMin: 1000320900
+  uidRangeMax: 1000361000
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  type: RunAsAny
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- persistentVolumeClaim
+- projected
+- secret
+```
+
+```yaml
+apiVersion: security.openshift.io/v1
+metadata:
+  annotations: {}
+  name: cpd-zensys-scc
+kind: SecurityContextConstraints
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: true
+allowPrivilegedContainer: false
+allowedCapabilities: null
+defaultAddCapabilities: null
+fsGroup:
+  type: RunAsAny
+groups: []
+priority: null
+readOnlyRootFilesystem: false
+requiredDropCapabilities:
+- KILL
+- MKNOD
+runAsUser:
+  type: MustRunAs
+  uid: 1000321000
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  type: RunAsAny
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- persistentVolumeClaim
+- projected
+- secret
+```
+
+```yaml
+apiVersion: security.openshift.io/v1
+metadata:
+  annotations: {}
+  name: cpd-noperm-scc
+kind: SecurityContextConstraints
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: true
+allowPrivilegedContainer: false
+allowedCapabilities: null
+defaultAddCapabilities: null
+fsGroup:
+  type: MustRunAs
+groups: []
+priority: null
+readOnlyRootFilesystem: false
+requiredDropCapabilities:
+- KILL
+- MKNOD
+- SETUID
+- SETGID
+runAsUser:
+  type: MustRunAsRange
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  type: RunAsAny
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- persistentVolumeClaim
+- projected
+- secret
+```
+
+This then will need to be manually added to the service account.
+
+```
+oc adm policy add-scc-to-user cpd-zensys-scc -z cpd-admin-sa
+oc adm policy add-scc-to-user cpd-user-scc -z cpd-viewer-sa
+oc adm policy add-scc-to-user cpd-user-scc -z cpd-editor-sa
+oc adm policy add-scc-to-user cpd-noperm-scc -z cpd-norbac-sa
+```
+
+This all can be automated using cpd-cli and is documented here: https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/install/service_accts.html
+
 
 ## Installing the Chart
 

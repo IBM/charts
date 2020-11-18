@@ -1,23 +1,28 @@
-# What's new in Chart Version 2.1.0.0
+# Release Notes
 
-* IBM Cloud Pak for Data Watson Studio services  
+## What's new
 
-# Fixes
+* See [Details](https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/overview/overview.html)
 
-* None
+## Fixes
 
-# Prerequisites
+* See [Details](https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/overview/whats-new.html)
 
-1. Openshift 3.11.0
+## Breaking Changes
 
-# Version History
+* See [Details](https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/overview/whats-new.html)
 
-| Chart | Date               | Openshift Required | Image(s) Supported | Breaking Changes | Details |
-| ----- | ------------------ | ------------------- | ------------------ | ---------------- | ------- |
-| 2.1.0 | Nov 22 2019   | >=3.11.0            | None                  | None             | zen-helper chart is an helper chart
+## Prerequisites
 
-# Breaking Changes
+* See [Details](https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/overview/whats-new.html)
 
-None
+## Documentation
 
-# Documentation
+* See [Details](https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/overview/overview.html)
+
+## Version History
+
+| Chart | Date | Kubernetes Version Required | Breaking Changes | Details |
+| ----- | ---- | --------------------------- | ---------------- | ------- |
+| 1.2 | May 5, 2020  | >= 1.11 | None | Added support for Openshift 4.3|
+| 1.1 | Nov 22, 2019 | >= 1.9 | None | Initial release of this chart.|

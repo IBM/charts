@@ -19,12 +19,15 @@ spec:
     metadata:
       labels:
         {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+        {{- if (.Values.podLabels) }}
+{{ toYaml .Values.podLabels | indent 8 }}
+        {{- end }}
       annotations:
         {{- include "zenhelper.annotations" . | indent 8 }}
     spec:
       securityContext:
         runAsNonRoot: true
-        {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+        {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
         runAsUser: 1000321000
         {{- end }}
       serviceAccountName: {{ .Values.global.viewer.sa }}
@@ -53,6 +56,11 @@ spec:
         - configMapRef:
             name: product-configmap
         env:
+        - name: ZEN_SERVICE_BROKER_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: zen-service-broker-secret
+              key: token
         - name: NODENAME
           valueFrom:
             fieldRef:
@@ -84,6 +92,8 @@ spec:
         - name: NAMESPACE
           value: {{ .Release.Namespace }}
         volumeMounts:
+        - mountPath: /etc/custom-ssl-certs
+          name: external-tls-secret
         - mountPath: /user-home
           name: user-home-mount
         - mountPath: /etc/internal-nginx-svc-tls
@@ -124,3 +134,7 @@ spec:
       - name: internal-nginx-svc-tls
         secret:
           secretName: internal-nginx-svc-tls
+      - name: external-tls-secret
+        secret:
+          secretName: external-tls-secret
+          optional: true

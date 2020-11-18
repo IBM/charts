@@ -1,0 +1,61 @@
+{{- $compName := "annotate-couchdb-job" -}}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: annotate-couchdb-job
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+        {{- if (.Values.podLabels) }}
+{{ toYaml .Values.podLabels | indent 8 }}
+        {{- end }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      serviceAccountName: {{ .Values.global.admin.sa }}
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
+      containers:
+      - command:
+        - "/bin/sh"
+        - "-c"
+        - |
+          set -x
+
+          svc=$(/user-home-content/_global_/utilities/bin/kubectl get svc couchdb-svc --ignore-not-found --no-headers)
+          if [ -z "$svc" ];
+          then
+              echo "Annotation not required - couchdb service not found..."
+          else
+              /user-home-content/_global_/utilities/bin/kubectl annotate svc couchdb-svc helm.sh/resource-policy=keep --overwrite
+          fi
+
+          deployment=$(/user-home-content/_global_/utilities/bin/kubectl get deploy couchdb --ignore-not-found --no-headers)
+          if [ -z "$deployment" ];
+          then
+              echo "Annotation not required - couchdb deployment not found..."
+          else
+              /user-home-content/_global_/utilities/bin/kubectl annotate deploy couchdb helm.sh/resource-policy=keep --overwrite
+          fi
+        name: annotate-couchdb-job
+        securityContext:
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.annotateCouchdbJob.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.annotateCouchdbJob.resources | indent 12 }}
+      restartPolicy: OnFailure

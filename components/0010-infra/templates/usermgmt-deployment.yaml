@@ -19,14 +19,17 @@ spec:
     metadata:
       labels:
         {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+        {{- if (.Values.podLabels) }}
+{{ toYaml .Values.podLabels | indent 8 }}
+        {{- end }}
       annotations:
         {{- include "zenhelper.annotations" . | indent 8 }}
     spec:
       securityContext:
         runAsNonRoot: true
-  {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+  {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
         runAsUser: 1000321000
-  {{- end }} 
+  {{- end }}
       serviceAccountName: {{ .Values.global.admin.sa }}
       terminationGracePeriodSeconds: 0
       affinity:
@@ -38,7 +41,7 @@ spec:
       {{- end }}
       containers:
       - name: usermgmt-container
-        securityContext:    
+        securityContext:
           runAsNonRoot: true
 {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
           runAsUser: 1000321000
@@ -54,18 +57,21 @@ spec:
         - configMapRef:
             name: product-configmap
         env:
+        - name: INITIAL_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: admin-user-details
+              key: initial_admin_password
+              optional: true
+        - name: ZEN_SERVICE_BROKER_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: zen-service-broker-secret
+              key: token
+        - name: LOG_LEVEL
+          value: "warn"
         - name: NODE_OPTIONS
           value: --max-http-header-size=32768
-        - name: COUCHDB_USERNAME
-          valueFrom:
-            secretKeyRef:
-              name: couchdb-secrets
-              key: couchdb_username
-        - name: COUCHDB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: couchdb-secrets
-              key: couchdb_password
         - name: ICPD_CONTROLPLANE_NAMESPACE
           valueFrom:
             fieldRef:
@@ -95,6 +101,24 @@ spec:
               fieldPath: spec.serviceAccountName
         - name: CONTAINERNAME
           value: usermgmt-container
+        {{ if .Values.global.cockroachdb }}
+        - name: COCKROACHDB
+          value: "true"
+        {{ end }}
+        - name: DATABASE_NAME
+          value: "{{ .Values.global.databaseName }}"
+        - name: DATABASE_USER
+          value: "{{ .Values.global.databaseUser }}"
+        - name: DATABASE_HOST
+          value: "{{ .Values.global.databaseHost }}"
+        - name: DATABASE_PORT
+          value: "{{ .Values.global.databasePort }}"
+        - name: DATABASE_CLIENT_CERT
+          value: "{{ .Values.global.databaseClientCert }}"
+        - name: DATABASE_CLIENT_KEY
+          value: "{{ .Values.global.databaseClientKey }}"
+        - name: DATABASE_ROOT_CERT
+          value: "{{ .Values.global.databaseRootCert }}"
         resources:
 {{ toYaml .Values.usermgmt.resources | indent 12 }}
         {{- end }}
@@ -108,8 +132,13 @@ spec:
           name: user-home-mount
         - mountPath: /etc/internal-tls
           name: internal-tls
+      {{ if .Values.global.cockroachdb }}
         - mountPath: /tmp/metastore
           name: metastore-secret
+      {{ else }}
+        - mountPath: /tmp/postgres/secrets
+          name: postgres-secret
+      {{ end }}
         readinessProbe:
           httpGet:
             path: /?ready=true
@@ -129,6 +158,13 @@ spec:
       - name: internal-tls
         secret:
           secretName: internal-tls
+    {{ if .Values.global.cockroachdb }}
       - name: metastore-secret
         secret:
           secretName: metastore-secret
+    {{ else }}
+      - name: postgres-secret
+        secret:
+          secretName: postgres
+          defaultMode: 420
+    {{ end }}

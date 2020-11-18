@@ -10,10 +10,14 @@ metadata:
   annotations:
     "helm.sh/hook-delete-policy": "hook-succeeded"
 spec:
+  backoffLimit: 20
   template:
     metadata:
       labels:
         {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+        {{- if (.Values.podLabels) }}
+{{ toYaml .Values.podLabels | indent 8 }}
+        {{- end }}
       annotations:
         {{- include "zenhelper.annotations" . | indent 8 }}
     spec:
@@ -40,9 +44,12 @@ spec:
         imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
         command:
         - node
-        - /usr/src/server-src/migrate-user-roles.js
+        - /usr/src/server-src/kube-job-scripts/migration/migrate-user-roles.js
         resources:
 {{ toYaml .Values.zenMigrateUserRoles.resources | indent 12 }}
+        envFrom:
+        - configMapRef:
+            name: product-configmap
         env:
         - name: COUCHDB_USERNAME
           valueFrom:
@@ -54,10 +61,45 @@ spec:
             secretKeyRef:
               name: couchdb-secrets
               key: couchdb_password
+      {{ if .Values.global.cockroachdb }}
+        - name: COCKROACHDB
+          value: "true"
+      {{ end }}
+        - name: DATABASE_NAME
+          value: "{{ .Values.global.databaseName }}"
+        - name: DATABASE_USER
+          value: "{{ .Values.global.databaseUser }}"
+        - name: DATABASE_HOST
+          value: "{{ .Values.global.databaseHost }}"
+        - name: DATABASE_PORT
+          value: "{{ .Values.global.databasePort }}"
+        - name: DATABASE_CLIENT_CERT
+          value: "{{ .Values.global.databaseClientCert }}"
+        - name: DATABASE_CLIENT_KEY
+          value: "{{ .Values.global.databaseClientKey }}"
+        - name: DATABASE_ROOT_CERT
+          value: "{{ .Values.global.databaseRootCert }}"
         volumeMounts:
+      {{ if .Values.global.cockroachdb }}
+        - mountPath: /tmp/metastore
+          name: metastore-secret
+      {{ else }}
+        - mountPath: /tmp/postgres/secrets
+          name: postgres-secret
+      {{ end }}
         - mountPath: /var/run/sharedsecrets
           name: zen-service-broker-secret
       volumes:
+    {{ if .Values.global.cockroachdb }}
+      - name: metastore-secret
+        secret:
+          secretName: metastore-secret
+    {{ else }}
+      - name: postgres-secret
+        secret:
+          secretName: postgres
+          defaultMode: 420
+    {{ end }}
       - name: zen-service-broker-secret
         secret:
           defaultMode: 420

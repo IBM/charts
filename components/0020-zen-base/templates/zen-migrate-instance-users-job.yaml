@@ -1,0 +1,98 @@
+{{- $compName := "zen-migrate-instance-users-job" -}}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: zen-migrate-instance-users-job
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded
+  
+spec:
+  backoffLimit: 30
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+        {{- if (.Values.podLabels) }} 
+{{ toYaml .Values.podLabels | indent 8 }}
+        {{- end }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 1000321000
+        {{- end }}
+      serviceAccountName: {{ .Values.global.admin.sa }}
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
+      containers:
+      - name: zen-migrate-instance-users-job
+        securityContext:
+          runAsNonRoot: true
+          {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 1000321000
+          {{- end }}
+          capabilities:
+            drop:
+            - KILL
+            - MKNOD
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenRequisite.image.repository }}:{{ .Values.global.image.tag }}"
+        command:
+        - /bin/sh
+        - -c
+        - |
+          mkdir -p /tmp/metastore/
+          cp -r /user-home/_global_/security/metastore/* /tmp/metastore/
+          chmod -R 700 /tmp/metastore/*
+          ./coreapi-server migrate
+        imagePullPolicy: IfNotPresent
+        resources:
+{{ toYaml .Values.zenRequisite.resources | indent 12 }}
+        env:
+          - name: ICPD_CONTROLPLANE_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: DATABASE_NAME
+            value: "{{ .Values.global.databaseName }}"
+          - name: DATABASE_USER
+            value: "{{ .Values.global.databaseUser }}"
+          - name: DATABASE_HOST
+            value: "{{ .Values.global.databaseHost }}"
+          - name: DATABASE_PORT
+            value: "{{ .Values.global.databasePort }}"
+          - name: DATABASE_ENABLE_SSL
+            value: "{{ .Values.global.databaseEnableSSL }}"
+          - name: DATABASE_SSL_MODE
+            value: "{{ .Values.global.databaseSSLMode }}"
+          - name: DATABASE_CLIENT_CERT
+            value: "{{ .Values.global.databaseClientCert }}"
+          - name: DATABASE_CLIENT_KEY
+            value: "{{ .Values.global.databaseClientKey }}"
+          - name: DATABASE_ROOT_CERT
+            value: "{{ .Values.global.databaseRootCert }}"
+        {{if .Values.global.cockroachdb }}
+          - name: COCKROACHDB
+            value: "true"
+          - name: METASTORE_CERT_DIR
+            value: "/tmp/metastore"
+        {{ else }}
+          - name: METASTORE_CERT_DIR
+            value: "/tmp/postgres/secrets"
+        {{ end }}
+          - name: PODIPADDRESS
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+      volumes:
+      {{- include "zenhelper.user-home-pvc" .  | indent 6 }}
+      restartPolicy: OnFailure

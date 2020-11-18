@@ -19,12 +19,15 @@ spec:
     metadata:
       labels:
         {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+        {{- if (.Values.podLabels) }} 
+{{ toYaml .Values.podLabels | indent 8 }}
+        {{- end }}
       annotations:
         {{- include "zenhelper.annotations" . | indent 8 }}
     spec:
       securityContext:
         runAsNonRoot: true
-        {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+        {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
         runAsUser: 1000321000
         {{- end }}
       serviceAccountName: {{ .Values.global.editor.sa }}
@@ -32,6 +35,54 @@ spec:
       affinity:
         {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
         {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
+      initContainers:
+        {{if .Values.global.cockroachdb }}
+      - args: ["cp -r /user-home/_global_/security/metastore/* /tmp/metastore/; chmod -R 700 /tmp/metastore/*"]
+        command:
+        - /bin/sh
+        - '-c'
+        {{ else }}
+      - args: ["cp -L /postgres/secrets/* /tmp/postgres/secrets/; chmod -R 600 /tmp/postgres/secrets/*"]
+        command:
+        - /bin/sh
+        - '-c'
+        {{ end }}
+        env:
+        - name: ICPD_CONTROLPLANE_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenRequisite.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: IfNotPresent
+        name: change-permissions
+        securityContext:
+          runAsNonRoot: true
+          {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 1000321000
+          {{- end }}
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          limits:
+            cpu: '2'
+            memory: 2Gi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+          {{if .Values.global.cockroachdb }}
+        - mountPath: /tmp/metastore
+          name: metastore-volume
+          {{ else }}
+        - name: postgres-volume
+          mountPath: /tmp/postgres/secrets
+        - name: postgres
+          mountPath: /postgres/secrets
+          {{ end }}
       containers:
       - name: zen-watchdog-container
         securityContext:
@@ -58,7 +109,39 @@ spec:
         - "/etc/internal-tls/tls.crt"
         - --tls-key
         - "/etc/internal-tls/tls.key"
+        envFrom:
+        - configMapRef:
+            name: product-configmap
         env:
+      {{if .Values.global.cockroachdb }}
+        - name: COCKROACHDB
+          value: "true"
+      {{ end }}
+        - name: DATABASE_NAME
+          value: "{{ .Values.global.databaseName }}"
+        - name: DATABASE_USER
+          value: "{{ .Values.global.databaseUser }}"
+        - name: DATABASE_HOST
+          value: "{{ .Values.global.databaseHost }}"
+        - name: DATABASE_PORT
+          value: "{{ .Values.global.databasePort }}"
+        - name: DATABASE_ENABLE_SSL
+          value: "{{ .Values.global.databaseEnableSSL }}"
+        - name: DATABASE_SSL_MODE
+          value: "{{ .Values.global.databaseSSLMode }}"
+        - name: DATABASE_CLIENT_CERT
+          value: "{{ .Values.global.databaseClientCert }}"
+        - name: DATABASE_CLIENT_KEY
+          value: "{{ .Values.global.databaseClientKey }}"
+        - name: DATABASE_ROOT_CERT
+          value: "{{ .Values.global.databaseRootCert }}"
+      {{if .Values.global.cockroachdb }}
+        - name: METASTORE_CERT_DIR
+          value: "/tmp/metastore"
+      {{ else }}
+        - name: METASTORE_CERT_DIR
+          value: "/tmp/postgres/secrets"
+      {{ end }}
         - name: ICPD_CONTROLPLANE_NAMESPACE
           valueFrom:
             fieldRef:
@@ -117,11 +200,35 @@ spec:
           initialDelaySeconds: 30
           periodSeconds: 30
         volumeMounts:
+    {{if .Values.global.cockroachdb }}
+        - mountPath: /tmp/metastore
+          name: metastore-volume
+    {{ else }}
+        - name: postgres-volume
+          mountPath: /tmp/postgres/secrets
+    {{ end }}
         - mountPath: /user-home
           name: user-home-mount
         - mountPath: /etc/internal-tls
           name: internal-tls
+        - mountPath: /var/run/sharedsecrets
+          name: zen-service-broker-secret
       volumes:
+    {{ if .Values.global.cockroachdb }}
+      - emptyDir: {}
+        name: metastore-volume
+    {{ else }}
+      - name: postgres
+        secret:
+          secretName: postgres
+          defaultMode: 420
+      - name: postgres-volume
+        emptyDir: {}
+    {{ end }}
+      - name: zen-service-broker-secret
+        secret:
+          defaultMode: 420
+          secretName: zen-service-broker-secret
       {{- include "zenhelper.user-home-pvc" .  | indent 6 }}
       - name: internal-tls
         secret:

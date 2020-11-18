@@ -1,0 +1,98 @@
+{{- if .Values.usermgmt.usermgmt_enable_localrepo }}
+{{- $compName := "usermgmt-ldap-sync-cron-job" -}}
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: usermgmt-ldap-sync-cron-job
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+spec:
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "zenhelper.labels" (list . $compName) | indent 12 }}
+            {{- if (.Values.podLabels) }}
+{{ toYaml .Values.podLabels | indent 12 }}
+            {{- end }}
+          annotations:
+            {{- include "zenhelper.annotations" . | indent 12 }}
+        spec:
+          securityContext:
+            runAsNonRoot: true
+            {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 1000321000
+            {{- end }}
+          serviceAccountName: {{ .Values.global.viewer.sa }}
+          affinity:
+            {{- include "zenhelper.nodeArchAffinity" . | indent 12 }}
+            {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 12 }}
+          containers:
+          - name: usermgmt-ldap-sync-cron-job
+            securityContext:
+              runAsNonRoot: true
+              {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+              runAsUser: 1000321000
+              {{- end }}
+              capabilities:
+                drop:
+                - ALL
+            image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenUsermgmtLDAPSync.image.repository }}:{{ .Values.global.image.tag }}"
+            imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+            command:
+            - node
+            - /usr/src/server-src/kube-job-scripts/ldap-sync-job/ldap-sync.js
+            resources:
+{{ toYaml .Values.zenUsermgmtLDAPSync.resources | indent 14 }}
+            envFrom:
+            - configMapRef:
+                name: product-configmap
+            env:
+          {{ if .Values.global.cockroachdb }}
+            - name: COCKROACHDB
+              value: "true"
+          {{ end }}
+            - name: DATABASE_NAME
+              value: "{{ .Values.global.databaseName }}"
+            - name: DATABASE_USER
+              value: "{{ .Values.global.databaseUser }}"
+            - name: DATABASE_HOST
+              value: "{{ .Values.global.databaseHost }}"
+            - name: DATABASE_PORT
+              value: "{{ .Values.global.databasePort }}"
+            - name: DATABASE_CLIENT_CERT
+              value: "{{ .Values.global.databaseClientCert }}"
+            - name: DATABASE_CLIENT_KEY
+              value: "{{ .Values.global.databaseClientKey }}"
+            - name: DATABASE_ROOT_CERT
+              value: "{{ .Values.global.databaseRootCert }}"
+            - name: LOG_LEVEL
+              value: "warn"
+            volumeMounts:
+            - mountPath: /user-home
+              name: user-home-mount
+        {{ if .Values.global.cockroachdb }}
+            - mountPath: /tmp/metastore
+              name: metastore-secret
+        {{ else }}
+            - mountPath: /tmp/postgres/secrets
+              name: postgres-secret
+        {{ end }}
+          volumes:
+          {{- include "zenhelper.user-home-pvc" .  | indent 10 }}
+        {{ if .Values.global.cockroachdb }}
+          - name: metastore-secret
+            secret:
+              secretName: metastore-secret
+        {{ else }}
+          - name: postgres-secret
+            secret:
+              secretName: postgres
+              defaultMode: 420
+        {{ end }}
+          restartPolicy: OnFailure
+
+  schedule: '*/20 * * * *'
+{{- end }}

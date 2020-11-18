@@ -13,6 +13,9 @@ spec:
     metadata:
       labels:
         {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+        {{- if (.Values.podLabels) }}
+{{ toYaml .Values.podLabels | indent 8 }}
+        {{- end }}
       annotations:
         {{- include "zenhelper.annotations" . | indent 8 }}
     spec:
@@ -32,7 +35,7 @@ spec:
           capabilities:
             drop:
             - KILL
-            - MKNOD        
+            - MKNOD
         image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.userHomePrep.image.repository }}:{{ .Values.global.image.tag }}"
         resources:
 {{ toYaml .Values.usermgmt.resources | indent 12 }}
@@ -42,10 +45,6 @@ spec:
             fieldRef:
               fieldPath: metadata.namespace
         volumeMounts:
-        {{- if .Values.usermgmt.usermgmt_enable_localrepo }}
-        - mountPath: /opt/couchdb/data
-          name: zen-meta-couchdb-pvc
-        {{- end }}
         - name: data
           mountPath: {{ .Values.config.storage_directory }}
         - mountPath: /user-home
@@ -66,15 +65,6 @@ spec:
         {{- end }}
       {{- else }}
         emptyDir: {}
-      {{- end }}
-      {{- if .Values.usermgmt.usermgmt_enable_localrepo }}
-      - name: zen-meta-couchdb-pvc
-        persistentVolumeClaim:
-        {{- if .Values.couchdbSrvPVC.persistence.existingClaimName }}
-          claimName: {{ .Values.couchdbSrvPVC.persistence.existingClaimName }}
-        {{- else }}
-          claimName: {{ .Values.couchdbSrvPVC.name }}
-        {{- end }}
       {{- end }}
       - name: pv-setup-configmap
         configMap:

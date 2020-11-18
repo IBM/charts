@@ -1,0 +1,55 @@
+{{- $compName := "zen-post-requisite-job" -}}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: zen-post-requisite-job
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  backoffLimit: 20
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+        {{- if (.Values.podLabels) }}
+{{ toYaml .Values.podLabels | indent 8 }}
+        {{- end }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 1000321000
+        {{- end }}
+      serviceAccountName:  {{ .Values.global.admin.sa }}
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
+      containers:
+      - name: zen-post-requisite-job
+        securityContext:
+          runAsNonRoot: true
+          {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 1000321000
+          {{- end }}
+          capabilities:
+            drop:
+            - KILL
+            - MKNOD
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenRequisite.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: Always
+        resources:
+{{ toYaml .Values.zenRequisite.resources | indent 12 }}
+        env:
+        - name: POST_INSTALL_RUN
+          value: "true"
+        - name: ICPD_CONTROLPLANE_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+      restartPolicy: OnFailure
