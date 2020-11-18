@@ -4,8 +4,7 @@ apiVersion: apps/v1
 metadata:
   name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.ddScenarioUi.compName ) | quote }}
   labels:
-{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddScenarioUi.compName) | indent 4 }}
-    app: {{ .sch.chart.components.ddScenarioUi.compName }}
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddScenarioUi.compName (dict "icpdsupport/addOnId" "do" "icpdsupport/app" .sch.chart.components.ddScenarioUi.compName "app" .sch.chart.components.ddScenarioUi.compName)) | indent 4 }}
 spec:
   replicas: {{ .Values.ddScenarioUi.replicas }}
   selector:
@@ -14,10 +13,11 @@ spec:
   template:
     metadata:
       labels:
-{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddScenarioUi.compName) | indent 8 }}
-        app: {{ .sch.chart.components.ddScenarioUi.compName }}
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddScenarioUi.compName (dict "icpdsupport/addOnId" "do" "icpdsupport/app" .sch.chart.components.ddScenarioUi.compName "app" .sch.chart.components.ddScenarioUi.compName)) | indent 8 }}
       annotations:
-        {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil nil) | indent 8 }}      
+        {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+        hook.deactivate.cpd.ibm.com/command: "[]"
+        hook.activate.cpd.ibm.com/command: "[]"        
     spec:
       terminationGracePeriodSeconds: 0
       affinity:
@@ -28,10 +28,10 @@ spec:
       hostNetwork: false
       hostPID: false
       hostIPC: false
-      {{- include "sch.security.securityContext" (list . .sch.chart.securityContextPodNode) | indent 6 }}
+      {{- include "sch.security.securityContext" (list . .sch.chart.securityContextPodNode) | indent 6 }}          
       containers:
       - name: {{ .sch.chart.components.ddScenarioUi.compName }}-container
-        image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.ddScenarioUi.image.repository }}:{{ .Values.ddScenarioUi.image.tag }}-{{ .Values.global.architecture }}
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.ddScenarioUi.image.repository }}:{{ .Values.ddScenarioUi.image.tag }}-{{ .Values.global.architecture }}
         imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
         {{- include "sch.security.securityContext" (list . .sch.chart.securityContextContainerNoRoot) | indent 8 }}
         env:
@@ -50,7 +50,7 @@ spec:
         # For the more basic ones, we use the deploy.properties in the pod with the proper PROPERTY_PREFIX, as 
         # for cloud deployment. 
         - name: ZEN_DOMAIN
-          value: "ibm-nginx-svc:443"
+          value: "internal-nginx-svc:12443"
         - name: SELF_SIGNED_CERTIFICATE_BASE64
           valueFrom:
             secretKeyRef:
@@ -83,14 +83,19 @@ spec:
               key: session-secret.txt
         - name: REDIS_URL
           valueFrom:
-            configMapKeyRef:
-              name: redis-ha-configmap
-              key: redis-url
+            secretKeyRef:
+              key: redis-url-ssl
+              name: redis-ha
+        - name: REDIS_CERT
+          valueFrom:
+            secretKeyRef:
+              key: cacertb64.pem
+              name: redis-ha-cert
         - name: REDISSTORE_ENCRYPTION_TOKEN
           valueFrom:
             secretKeyRef:
               name: watson-studio-secrets
-              key: redis-encryption-token.txt
+              key: redis-encryption-token.txt              
         - name: WDP_SERVICE_ID_CREDENTIALS
           valueFrom:
             secretKeyRef:
@@ -100,7 +105,12 @@ spec:
           valueFrom:
             secretKeyRef:
               key: rabbitmq-url.txt
-              name: rabbitmq-url              
+              name: rabbitmq-url  
+        # contains certificate.pem from internal-nginx-svc-tls and cacert.pem from rabbitmq-ha-cert,
+        # so similar to API secrets
+        volumeMounts:
+        - mountPath: /etc/certificate
+          name: certificate
         resources:
 {{ toYaml .Values.ddScenarioUi.resources | indent 10 }}
         ports:
@@ -123,4 +133,8 @@ spec:
           initialDelaySeconds: 10
           periodSeconds: 30
           timeoutSeconds: 2
+      volumes:
+      - name: certificate
+        secret:
+          secretName: ca-certificate-chain-trust
           
