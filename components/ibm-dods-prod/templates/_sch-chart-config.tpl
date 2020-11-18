@@ -29,14 +29,15 @@ sch:
     labelType: "prefixed"      
     metering:
       productName: "{{ .Chart.Description }}"
-      productID: "ICP4D-addon-DecisionOptimization_{{ .Chart.AppVersion | replace "." "" }}_perpetual_00000"
+      productID: "497aaae00a3f402dbcbb6ee00d1b924b"
       productVersion: "{{ .Chart.AppVersion }}"
-      cloudpakName: "IBM Cloud Pak for Data"
-      cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
-      cloudpakVersion: "3.0.1"
-      productChargedContainers: "All"
+      cloudpakName: "IBM Watson Studio Premium Extension for IBM Cloud Pak for Data"
+      cloudpakId: "497aaae00a3f402dbcbb6ee00d1b924b"
+      cloudpakInstanceId: "{{ .Values.global.cloudpakInstanceId }}"
       productMetric: "VIRTUAL_PROCESSOR_CORE"
-      serviceability.io/collection_type: "DEFAULT"
+      productChargedContainers: "All"
+      productCloudpakRatio: "1:1"
+
     nodeAffinity:
       nodeAffinityRequiredDuringScheduling:
         operator: In
@@ -54,6 +55,7 @@ sch:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000330999 
+        runAsGroup: 1000        
     securityContextContainerNoRoot:
       securityContext:
         privileged: false
@@ -73,4 +75,6 @@ sch:
         compName: "dd-init"
       ddUninstall:
         compName: "dd-uninstall"
+      ddConfig:
+        compName: "dd-config"        
 {{- end -}}
