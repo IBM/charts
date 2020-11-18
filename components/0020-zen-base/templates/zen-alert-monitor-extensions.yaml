@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zen-alert-monitor-extension
+  labels:
+    icpdata_addon: "true"
+    icpdata_addon_version: "3.5.1"
+data:
+  extension_points: |
+    [
+      {
+        "id": "zen_alert_monitor",
+        "display_name": "Alert Monitors",
+        "description": "Extension point for zen alert monitors",
+        "edit_allowed": "true",
+        "insert_allowed": "true",
+        "editable_by": "administrator",
+        "insertable_by":  "administrator",
+        "meta": {},
+        "details": {
+          "name": "string,<monitor_name>",
+          "image": "string,<image_to_be_used_for_cronjob>",
+          "command": "list_of_strings,<commands_for_script_or_api_execution>",
+          "schedule": "string,<run_schedule_in_cron_format>,default_every_10_mins",
+          "args": "list_of_strings,<args_for_script_or_api_execution>",
+            "event_types": [
+              {
+                "name": "string,<event_type_one>",
+                "alert_type": "string,<associated_alert_type>",
+                "purge_frequency": "number,<purge_frequency_in_days>,default_3_days",
+                "description": "string,<event_type_description_to_accompany_alerts>",
+                "resolution": "string,<event_type_resolution_to_accompany_alerts>"
+              }
+            ]
+        }
+      }
+    ]
+  extensions: |
+      [
+      {
+          "extension_point_id": "zen_alert_monitor",
+          "extension_name": "zen_alert_monitor_diagnostics",
+          "display_name": "Diagnostic alert monitor",
+          "details": {
+            "name":"diagnostics",
+            "image": "zen-data-sorcerer",
+            "command": ["/bin/sh", "-c"],
+            "schedule": "*/10 * * * *",
+            "args": ["curl -X GET http://zen-watchdog-svc:3333/zen-watchdog/v1/monitoring/samples/diagnostics"],
+            "event_types": [
+              {
+                "name": "check-replica-status",
+                "alert_type": "platform",
+                "purge_frequency": 3,
+                "description": "one or more unavailable replicas.",
+                "resolution": "Check pods status and associated events."
+              },
+              {
+                "name": "check-pvc-status",
+                "alert_type": "platform",
+                "purge_frequency": 3,
+                "description": "Unbound or Failed PVC.",
+                "resolution": "Check PVC logs."
+              },
+              {
+                "name": "check-resource-status",
+                "alert_type": "platform",
+                "purge_frequency": 3,
+                "description": "High CPU/Memory usage relative to set quotas.",
+                "resolution": "Increase quotas if necessary or revoke running workloads."
+              },
+              {
+                "name": "check-monitor-status",
+                "alert_type": "platform",
+                "purge_frequency": 3,
+                "description": "Failed jobs as part of the monitor cronjob run.",
+                "resolution": "Check pod logs for the failed jobs."
+              }
+            ]
+          }
+        }
+      ]
