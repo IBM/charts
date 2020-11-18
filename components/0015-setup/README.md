@@ -39,6 +39,138 @@ This chart is not self sufficient. It has dependency on other charts. Installing
 
 ## Red Hat OpenShift SecurityContextConstraints Requirements
 
-See this for more details
-https://ibm.box.com/s/4u08mmazirl9vwo7hha736xuv3ps1qow
+This chart requires a SecurityContextConstraints to be bound to the target service accounts prior to installation. 
 
+From the user interface, you can copy and paste the following snippets to enable the custom SecurityContextConstraints
+
+- Custom SecurityContextConstraints definition:
+
+```yaml
+apiVersion: security.openshift.io/v1
+metadata:
+  annotations: {}
+  name: cpd-user-scc
+kind: SecurityContextConstraints
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: true
+allowPrivilegedContainer: false
+allowedCapabilities: null
+defaultAddCapabilities: null
+fsGroup:
+  type: RunAsAny
+groups: []
+priority: null
+readOnlyRootFilesystem: false
+requiredDropCapabilities:
+- KILL
+- MKNOD
+- SETUID
+- SETGID
+runAsUser:
+  type: MustRunAsRange
+  uidRangeMin: 1000320900
+  uidRangeMax: 1000361000
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  type: RunAsAny
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- persistentVolumeClaim
+- projected
+- secret
+```
+
+```yaml
+apiVersion: security.openshift.io/v1
+metadata:
+  annotations: {}
+  name: cpd-zensys-scc
+kind: SecurityContextConstraints
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: true
+allowPrivilegedContainer: false
+allowedCapabilities: null
+defaultAddCapabilities: null
+fsGroup:
+  type: RunAsAny
+groups: []
+priority: null
+readOnlyRootFilesystem: false
+requiredDropCapabilities:
+- KILL
+- MKNOD
+runAsUser:
+  type: MustRunAs
+  uid: 1000321000
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  type: RunAsAny
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- persistentVolumeClaim
+- projected
+- secret
+```
+```yaml
+apiVersion: security.openshift.io/v1
+metadata:
+  annotations: {}
+  name: cpd-noperm-scc
+kind: SecurityContextConstraints
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: true
+allowPrivilegedContainer: false
+allowedCapabilities: null
+defaultAddCapabilities: null
+fsGroup:
+  type: MustRunAs
+groups: []
+priority: null
+readOnlyRootFilesystem: false
+requiredDropCapabilities:
+- KILL
+- MKNOD
+- SETUID
+- SETGID
+runAsUser:
+  type: MustRunAsRange
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  type: RunAsAny
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- persistentVolumeClaim
+- projected
+- secret
+```
+This then will need to be manually added to the service account.
+
+```
+oc adm policy add-scc-to-user cpd-zensys-scc -z cpd-admin-sa
+oc adm policy add-scc-to-user cpd-user-scc -z cpd-viewer-sa
+oc adm policy add-scc-to-user cpd-user-scc -z cpd-editor-sa
+oc adm policy add-scc-to-user cpd-noperm-scc -z cpd-norbac-sa
+```
+
+This all can be automated using cpd-cli and is documented here: https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/install/service_accts.html
