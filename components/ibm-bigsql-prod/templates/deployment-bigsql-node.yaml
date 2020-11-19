@@ -1,0 +1,323 @@
+
+# Deployment for the Big Sql Head node Pod
+# https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.15/#deployment-v1-apps
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bigsql-{{ .Values.zenServiceInstanceId | int64 }}-head
+
+  annotations:
+    bigsql-secrets-key: {{ include "bigsql.instance.secret.key" . | quote }}
+
+  labels:
+    app: {{ template "bigsql.app_name" . }}
+    app.kubernetes.io/component: "head"
+    app.kubernetes.io/instance: {{ .Values.zenServiceInstanceId | int64 | quote }}
+    app.kubernetes.io/managed-by: "Tiller"
+    app.kubernetes.io/name: {{ template "bigsql.app_name" . }}
+    bigsql-node-role: head
+    chart: {{ template "bigsql.chart" . }}
+    helm.sh/chart: {{ template "bigsql.chart_name" . }}
+    heritage: {{ .Release.Service }}
+    instance: {{ .Values.zenServiceInstanceId | int64 | quote }}
+    instanceType: {{ .Values.zenServiceInstanceType | quote }}
+    instanceVersion: {{ .Values.zenServiceInstanceVersion | quote }}
+    release: {{ .Release.Name }}
+
+spec:
+  progressDeadlineSeconds: {{ .Values.progressDeadlineSeconds }}
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: {{ template "bigsql.app_name" . }}
+      bigsql-node-role: head
+      instance: {{ .Values.zenServiceInstanceId | int64 | quote }}
+      release: {{ .Release.Name }}
+
+  strategy:
+    type: Recreate
+
+  template:
+
+    # The Big SQL node Pod template
+
+    metadata:
+      name: bigsql-engine
+      annotations:
+        cloudpakId: {{ template "bigsql.cloudpak_id" . }}
+        cloudpakInstanceId: {{ .Values.global.cloudpakInstanceId | int64 | quote }}
+        cloudpakName: {{ template "bigsql.cloudpak_name" . }}
+        hook.activate.cpd.ibm.com/command: "[]"
+        hook.deactivate.cpd.ibm.com/command: "[]"
+        hook.quiesce.cpd.ibm.com/command: "[]"
+        hook.unquiesce.cpd.ibm.com/command: "[]"
+        productChargedContainers: {{ template "bigsql.product_charged_containers" . }}
+        productCloudpakRatio: {{ template "bigsql.product_cloudpak_ratio" . }}
+        productID: {{ template "bigsql.product_id" . }}
+        productMetric: {{ template "bigsql.product_metric" . }}
+        productName: {{ template "bigsql.product_name" . }}
+        productVersion: {{ include "bigsql.product_version" . | quote }}
+      labels:
+        app: {{ template "bigsql.app_name" . }}
+        app.kubernetes.io/component: "head"
+        app.kubernetes.io/instance: {{ .Values.zenServiceInstanceId | int64 | quote }}
+        app.kubernetes.io/managed-by: "Tiller"
+        app.kubernetes.io/name: {{ template "bigsql.app_name" . }}
+        bigsql-node-role: head
+        helm.sh/chart: {{ template "bigsql.chart_name" . }}
+        icpdsupport/addOnId: "bigsql"
+        icpdsupport/app: "db2-bigsql"
+        icpdsupport/createdBy: {{ .Values.zenServiceInstanceUID | int64 | quote }}
+        icpdsupport/podSelector: bigsql-head
+        icpdsupport/serviceInstanceId: {{ .Values.zenServiceInstanceId | int64 | quote }}
+        instance: {{ .Values.zenServiceInstanceId | int64 | quote }}
+        instanceType: {{ .Values.zenServiceInstanceType | quote }}
+        instanceVersion: {{ .Values.zenServiceInstanceVersion | quote }}
+        release: {{ .Release.Name }}
+        {{ if .Values.resources.setHostIPCTrue }} 
+        type: engine
+        {{ end }}
+
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+
+        {{ if .Values.resources.setHostIPCTrue }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                - key: 'type'
+                  operator: In
+                  values:
+                  - 'engine'
+              topologyKey: 'kubernetes.io/hostname'
+        {{ end }}
+
+      containers:
+
+        # The Big SQL engine container
+
+        - name: bigsql-engine
+          command: [ "/bin/sh" ]
+          args: [ "-c", "sleep 5; /home/bigsql/bigsql-container.sh -A start" ]
+
+          env:
+            - name: BIGSQL_SECRETS_KEY
+              value: {{ include "bigsql.instance.secret.key" . | quote }}
+
+            - name: CM_ADMIN_USER
+              value: {{ .Values.remoteCluster.cmAdminUser | quote }}
+            - name: CM_PROTOCOL
+              value: {{ .Values.remoteCluster.cmProtocol | quote }}
+            - name: CM_HOST
+              value: {{ .Values.remoteCluster.cmHost | quote }}
+            - name: CM_PORT
+              value: {{ .Values.remoteCluster.cmPort | quote }}
+
+            - name: OC_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+
+            - name: OS_BUCKETNAME
+              value: {{ .Values.objectStore.bucketName | quote }}
+            - name: OS_ENDPOINT
+              value: {{ .Values.objectStore.endpoint | quote }}
+            - name: OS_HMAC_ACCESS
+              value: {{ .Values.objectStore.hmacAccess | quote }}
+            - name: OS_SSL_ENABLED
+              value: {{ .Values.objectStore.sslEnabled | quote }}
+
+            - name: ZEN_INSTANCE_ID
+              value: {{ .Values.zenServiceInstanceId | int64 | quote }}
+            - name: ZEN_PULL_PREFIX
+              value: {{ .Values.docker_registry_prefix }}
+
+          image: "{{ .Values.docker_registry_prefix }}/{{ .Values.bigsqlEngine.image.dockerImage }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          livenessProbe:
+            exec:
+              command: ["/bin/sh","-c","/home/bigsql/bigsql-container.sh -A live" ]
+            initialDelaySeconds: 600
+            periodSeconds: 30
+            timeoutSeconds: 20
+            failureThreshold: 30
+
+{{- $bigsqlCPUReq := (.Values.resources.engine.requests.cpu) -}}
+{{- $bigsqlCPULim := (.Values.resources.engine.requests.cpu) -}}
+{{- $bigsqlMem := (.Values.resources.engine.requests.memory) -}}
+{{- include "bigsql.helpers.resources" (list . (dict "requests" (dict "cpu" $bigsqlCPUReq "memory" $bigsqlMem) "limits" (dict "cpu" $bigsqlCPULim "memory" $bigsqlMem) )) | indent 10 }}
+
+          ports:
+            - name: ssh
+              containerPort: 2222
+              protocol: TCP
+            - name: metastore
+              containerPort: 9083
+              protocol: TCP
+            - name: jdbc
+              containerPort: 32051
+              protocol: TCP
+            - name: jdbc-tls
+              containerPort: 32052
+              protocol: TCP
+
+          readinessProbe:
+            exec:
+              command: ["/bin/sh","-c","/home/bigsql/bigsql-container.sh -A ready" ]
+            initialDelaySeconds: 5
+            periodSeconds: 30
+            timeoutSeconds: 20
+            failureThreshold: 30
+
+          securityContext:
+            allowPrivilegeEscalation: true
+            capabilities:
+              add:
+                - AUDIT_WRITE
+                - CHOWN
+                - DAC_OVERRIDE
+                - FOWNER
+                - FSETID
+                - KILL
+                - MKNOD
+                - NET_BIND_SERVICE
+                - NET_RAW
+                - SETFCAP
+                - SETGID
+                - SETPCAP
+                - SETUID
+                - SYS_CHROOT
+                - IPC_OWNER
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+
+          volumeMounts:
+            - name: bigsql-engine-pv
+              mountPath: /mnt/PV
+            - mountPath: /secrets/external/zen-service-broker-secret
+              name: zen-service-broker-secret
+              readOnly: true
+            - name: secret-volume
+              readOnly: true
+              mountPath: "/etc/secret-volume"
+            - mountPath: /tmp/container_resources
+              name: bigsql-pod-info
+              readOnly: false
+            - mountPath: "/etc/internal-nginx-svc-tls"
+              name: internal-nginx-svc-tls
+              readOnly: true
+            - mountPath: /etc/zen-ca
+              name: zen-ca
+              readOnly: true
+            - mountPath: "/etc/zen-service-id-secret-volume"
+              name: zen-service-id-secret-volume
+              readOnly: true
+
+            {{ if .Values.optionalSharedVolume.use }}
+            - mountPath: /mnt/PV/shared
+              name: shared-volume
+            {{ end }}
+
+      hostIPC: {{ template "bigsql.hostIPC" . }}
+
+      hostname: head
+
+      hostNetwork: false
+      hostPID: false
+
+      initContainers:
+
+        # The Big SQL volume init container
+
+        - name: bigsql-volume-init
+          args: [ "python3", "-u", "/restore-volumes-script.py", "head", "false" ]
+          image: "{{ .Values.docker_registry_prefix }}/{{ .Values.bigsqlInit.image.dockerImage }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+{{- include "bigsql.helpers.resources" (list . (dict "requests" (dict "cpu" $bigsqlCPUReq "memory" $bigsqlMem) "limits" (dict "cpu" $bigsqlCPULim "memory" $bigsqlMem) )) | indent 10 }}
+          securityContext:
+            allowPrivilegeEscalation: true
+            capabilities:
+              add:
+                - CHOWN
+                - DAC_OVERRIDE
+                - FOWNER
+                - SETGID
+                - SETUID
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+
+          volumeMounts:
+            - name: bigsql-engine-pv
+              mountPath: /mnt/PV
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000322824 # bigsql user
+        {{ if .Values.resources.setKernelSemSysCtls }}
+        sysctls:
+          - name: kernel.sem
+            value: "250 256000 100 4096"
+        {{ end }}
+
+      serviceAccountName: {{ template "bigsql.service_account_name" . }}
+
+      subdomain: bigsql-{{ .Values.zenServiceInstanceId | int64 }}
+
+      volumes:
+        - name: bigsql-engine-pv
+          persistentVolumeClaim:
+            {{ if .Values.persistence.useDynamicProvisioning }}
+            claimName: bigsql-{{ .Values.zenServiceInstanceId | int64 }}-head
+            {{ else }}
+            claimName: {{ .Values.persistence.headPvcName }}
+            {{ end }}
+        - name: secret-volume
+          secret:
+            secretName: bigsql-secret{{ template "bigsql.instance.secret.suffix" . }}
+        - name: bigsql-pod-info
+          downwardAPI:
+            items:
+              - path: "mem_request"
+                resourceFieldRef:
+                  containerName: bigsql-engine
+                  resource: requests.memory
+              - path: "cpu_request"
+                resourceFieldRef:
+                  containerName: bigsql-engine
+                  resource: requests.cpu
+        - name: internal-nginx-svc-tls
+          secret:
+            secretName: internal-nginx-svc-tls
+        - name: zen-ca
+          secret:
+            secretName: internal-tls
+        - name: zen-service-id-secret-volume
+          secret:
+            secretName: zen-service-broker-secret
+        - name: zen-service-broker-secret
+          secret:
+            secretName: zen-service-broker-secret
+
+        {{ if .Values.optionalSharedVolume.use }}
+        - name: shared-volume
+          persistentVolumeClaim:
+            claimName: {{ .Values.optionalSharedVolume.persistentVolumeClaimName }}
+        {{ end }}

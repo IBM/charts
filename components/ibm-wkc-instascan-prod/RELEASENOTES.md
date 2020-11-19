@@ -26,4 +26,5 @@
 | ----- | ---- | --------------------------- | ---------------- | ------- |
 | 1.1.0 | Apr 07, 2020 | >= 1.11 | None | Initial version |
 | 1.1.1 | Jun 19, 2020 | >= 1.11 | None | Better scalability with ds-manager |
-| 1.1.2 |  |  |  |  |
+| 1.1.2 | Sep 30, 2020 | >= 1.11 | None | Gmail support |
+| 1.1.3 | Nov 20, 2020 | >= 1.11 | None | Support for CPD 3.5.0 |
