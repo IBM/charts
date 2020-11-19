@@ -84,8 +84,15 @@ chart: {{ .Chart.Name }}
 release: {{ .Release.Name }}
 heritage: {{ .Release.Service }}
 {{ if .Values.global.icp4Data }}
+{{- if semverCompare "< 3.5.0" .Values.global.icp4DataVersion -}}
 {{- $instanceid := default 9700000000079 .Values.global.zenServiceInstanceId -}}
 {{- printf "icpdsupport/serviceInstanceId: '%s'" ($instanceid | int64 | toString) -}}
+{{- else -}}
+{{- $instanceid := default 9700000000079 .Values.global.zenServiceInstanceId -}}
+{{- printf "icpdsupport/serviceInstanceId: '%s'" ($instanceid | int64 | toString) }}
+icpdsupport/addOnId: "cognos-analytics-app"
+icpdsupport/app: "cognos-analytics"
+{{- end -}}
 {{ end }}
 {{- end -}}
 
@@ -341,6 +348,7 @@ uncomment this section for PPA charts, can be removed in github.com charts
 Helper template to define pod annotations for metering
 */}}
 {{- define "metering.annotations" }}
+{{ if semverCompare "< 3.5.0" .Values.global.icp4DataVersion -}}
 productName: "IBM Cloud Pak for Data Cognos Analytics Advanced"
 productID: ed38a4bc92be42e98a3d1dcdfad529e0
 productVersion: 11.1.7
@@ -349,7 +357,18 @@ productChargedContainers: All
 productCloudpakRatio: "1:1"
 cloudpakName: "IBM Cloud Pak for Data"
 cloudpakId: eb9998dcc5d24e3eb5b6fb488f750fe2
-cloudpakVersion: "3.0.1"
+cloudpakVersion: {{ print .Values.global.icp4DataVersion }}
+{{ else -}}
+productName: "IBM Cognos Analytics Extension for IBM Cloud Pak for Data"
+productID: 5c92123b253a492780e6c6d4fe151d57
+productVersion: 11.1.7
+productMetric: "VIRTUAL_PROCESSOR_CORE"
+productChargedContainers: All
+productCloudpakRatio: "1:1"
+cloudpakName: "IBM Cognos Analytics Extension for IBM Cloud Pak for Data"
+cloudpakId: 5c92123b253a492780e6c6d4fe151d57
+cloudpakInstanceId: {{ print .Values.global.cloudpakInstanceId | quote }}
+{{ end -}}
 {{ end }}
 
 {{/*
