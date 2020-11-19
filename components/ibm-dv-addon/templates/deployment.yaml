@@ -1,0 +1,47 @@
+{{- include "sch.config.init" (list . "dvAddon.sch.chart.config.values") -}}
+{{- $appName := .sch.chart.appName -}}
+{{- $compName := .sch.chart.components.addon.name -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "icpdata_addon" "true" "icpdata_addon_version" "1.4.1" "app" $appName)) | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "icpdata_addon" "true" "app" $appName)) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "icpdata_addon" "true" "icpdata_addon_version" "1.4.1" "app" $appName)) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering nil nil nil) | indent 8 }}
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.security.addonPodSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      containers:
+      - name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.image.dockerImage }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: https
+          containerPort: 8443
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /add-ons/meta/add-ons.json
+            port: https
+            scheme: HTTPS
+        readinessProbe:
+          httpGet:
+            path: /add-ons/meta/add-ons.json
+            port: https
+            scheme: HTTPS
+{{- include "dv.helpers.resources" (list . .Values.resources.addon) | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.security.addonContainerSecurityContext) | indent 8 }}

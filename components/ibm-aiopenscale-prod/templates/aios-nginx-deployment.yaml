@@ -1,0 +1,127 @@
+{{ $namePrefix := "nginx" -}}
+{{ $compName := "aios-nginx" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+{{- $serviceAccount := include "aios.serviceAccountName" (list . "serviceAccount" ) }}
+{{ $nonRootUser := include "aios.nonroot.uid" (list .) -}}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+{{- include "aios.labels" . | indent 2 }}
+spec:
+  progressDeadlineSeconds: {{ .Values.progressDeadline.seconds }}
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+    type: RollingUpdate
+  replicas: {{ .Values.nginx.replicaCount }}
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $namePrefix | quote }}
+  template:
+    metadata:
+      labels:
+{{ $labels | indent 8 }}
+{{- include "aios.pod.labels" . | indent 6 }}
+      annotations:
+      {{- include "aios.metering.nocharge" . | indent 6 }}
+      {{- include "aios.cpdbr.annotations" . | indent 6 }}
+    spec:
+      restartPolicy: Always
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $nonRootUser }}
+{{ include "aios.fsGroupGid" (list . ) | indent 8 }}
+      affinity:
+      {{- include "aios.nodeAffinity" . | indent 6 }}
+      # to prevent multiple replicas from deploying on the same node
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "release"
+                      operator: In
+                      values:
+                        -  {{ .Release.Name | quote }}
+                    - key: "serviceSelector"
+                      operator: In
+                      values:
+                        -  {{ $namePrefix | quote }}
+                topologyKey: {{ .Values.global.topologyKey }}
+      volumes:
+      - name: nginx-conf
+        configMap:
+          name: "{{ template "fullname" . }}-nginx"
+      - name: logs
+        emptyDir: {}
+      - name: tls
+        secret:
+          secretName: {{ template "fullname" . }}-nginx-secrets
+      - name: audit-tls
+        secret:
+          secretName: {{ .Values.cpd.audit.tls }}
+      serviceAccountName: {{ $serviceAccount }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      containers:
+      - name: "nginx"
+        imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+        image: {{ include "aios.image" (list . .Values.nginx.image.name .Values.nginx.image.tag) | quote }}
+        securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+        env:
+          - name: DOCKER_REPO
+            value: "{{ .Values.global.dockerRegistryPrefix }}"
+          - name: CLOUD_PAK_INSTSANCE_ID
+            value: "{{ .Values.global.cloudpakInstanceId }}"
+          - name: KUBECTL_VERSION
+            value: "{{ .Values.kubectl.image.tag }}"
+          - name: AIOS_DEFAULT_INSTANCE_NAME
+            value: "{{ .Values.aios.defaultInstance.name }}"
+        resources:
+{{ toYaml .Values.nginx.resources | indent 12 }}
+        readinessProbe:
+          tcpSocket:
+            port: 8443
+          initialDelaySeconds: 20
+          periodSeconds: 30
+        livenessProbe:
+          tcpSocket:
+            port: 8443
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        ports:
+        - name: http
+          containerPort: 8443
+          protocol: TCP
+        volumeMounts:
+        - name: nginx-conf
+          mountPath: "/etc/nginx/nginx.conf"
+          subPath: "nginx.conf"
+        - name: logs
+          mountPath: "/logs"
+        - name: tls
+          mountPath: /home/aios/
+          readOnly: true
+        - name: audit-tls
+          mountPath: /etc/internal-tls
+          readOnly: true
