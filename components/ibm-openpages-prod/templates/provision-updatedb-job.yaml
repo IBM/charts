@@ -1,0 +1,105 @@
+#*******************************************************************************
+# Licensed Materials - Property of IBM
+#
+#
+# OpenPages GRC Platform (PID: 5725-D51)
+#
+#  © Copyright IBM Corporation 2020. All Rights Reserved.
+#
+# US Government Users Restricted Rights- Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+#*******************************************************************************
+{{- include "sch.config.init" (list . "op.sch.chart.config.values") -}}
+{{ $compName := .sch.chart.components.opapp.name }}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "{{ .Values.name }}-provision-updatedb"
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    icpdsupport/app : {{ include "sch.names.appName" (list .) }}
+    icpdsupport/serviceInstanceId: {{ .Values.zenServiceInstanceId | int64 | quote }}
+    icpd-addon/status: "{{ .Values.zenServiceInstanceId | int64 }}"
+    icpdsupport/addOnId: {{ .Values.zenServiceInstanceType | quote}}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "4"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+        icpdsupport/addOnId: {{ .Values.zenServiceInstanceType | quote}}
+        icpdsupport/app : {{ include "sch.names.appName" (list .) }}
+        icpdsupport/serviceInstanceId: {{ .Values.zenServiceInstanceId | int64 | quote }}
+        app : {{ include "sch.names.appName" (list .) }}
+      annotations:
+          {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.securityContextRestricted) | indent 6 }}
+      serviceAccountName: {{ .Values.global.serviceAccountName }}
+      containers:
+      - name: opdbprovisioner-pre-install-job-container
+        image: "{{ .Values.docker_registry_prefix }}/openpages-cpd-provisioner:{{ .Values.image.tag }}"
+        command: ["provision-updatedb.sh"]
+        imagePullPolicy: Always
+{{- with .Values.smallContainer.resources }}
+        resources:
+{{ toYaml . | indent 10 }}
+{{- end }}
+        env:
+        - name: INSTANCE_ID
+          value: {{ .Values.zenServiceInstanceId | int64 | quote }}
+        - name: OP_EXT_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: "{{ .Values.name }}-url-cm"
+              key: op-external-url
+        - name: OP_EXT_PORT
+          value: "443"
+        - name: OPDB_HOST
+          value: "c-db2oltp-{{ .Values.zenServiceInstanceId | int64 }}-db2u"
+        - name: OPDB_PORT
+          value: {{ .Values.opdb.port | quote }}
+        - name: OPDB_ALIAS
+          value: {{ .Values.opdb.alias | quote }}
+        - name: OPDB_USER
+          value: {{ .Values.opdb.username | quote }}
+        - name: OPDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.name }}-db-secret
+              key: openpage-pw
+        - name: OP_SEC_SYSTEM_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.name }}-platform-secret
+              key: opsystem-pw
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.name }}-platform-secret
+              key: encryption-key-pw
+        volumeMounts:
+        - mountPath: /var/run/op-initialpw-secret
+          name: op-initialpw-secret
+        - mountPath: /var/run/certs
+          name: internal-tls
+        - mountPath: /mnt/opdbbackup
+          name: {{ .Values.name }}-dbbackup-volume
+      volumes:
+        - name: op-initialpw-secret
+          secret:
+            defaultMode: 420
+            secretName: {{ .Values.name }}-initialpw-secret
+        - name: internal-tls
+          secret:
+            defaultMode: 420
+            secretName: internal-tls
+        - name: {{ .Values.name }}-dbbackup-volume
+          persistentVolumeClaim:
+            claimName: {{ .Values.name }}-dbbackup-pvc
+      restartPolicy: Never
+  backoffLimit: 3
