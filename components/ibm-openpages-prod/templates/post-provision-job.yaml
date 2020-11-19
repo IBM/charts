@@ -1,0 +1,92 @@
+#*******************************************************************************
+# Licensed Materials - Property of IBM
+#
+#
+# OpenPages GRC Platform (PID: 5725-D51)
+#
+#  © Copyright IBM Corporation 2020. All Rights Reserved.
+#
+# US Government Users Restricted Rights- Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+#*******************************************************************************
+{{- include "sch.config.init" (list . "op.sch.chart.config.values") -}}
+{{ $compName := .sch.chart.components.opapp.name }}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "{{ .Values.name }}-post-provision"
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+    icpd-addon/status: "{{ .Values.zenServiceInstanceId | int64 }}"
+    icpdsupport/app: {{ include "sch.names.appName" (list .) }}
+    app: {{ include "sch.names.appName" (list .) }}
+    icpdsupport/addOnId: {{ .Values.zenServiceInstanceType | quote}}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+        icpdsupport/addOnId: {{ .Values.zenServiceInstanceType | quote}}
+        icpdsupport/app: {{ include "sch.names.appName" (list .) }}
+        icpdsupport/serviceInstanceId: {{ .Values.zenServiceInstanceId | int64 | quote }}
+        app: {{ include "sch.names.appName" (list .) }}
+      annotations:
+          {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.global.serviceAccountName }}
+      containers:
+      - name: opstorageprovisioner-post-install-job-container
+        image: "{{ .Values.docker_registry_prefix }}/openpages-cpd-provisioner:{{ .Values.image.tag }}"
+        imagePullPolicy: Always
+{{- with .Values.smallContainer.resources }}
+        resources:
+{{ toYaml . | indent 10 }}
+{{- end }}
+        env:
+        - name: INSTANCE_ID
+          value: {{ .Values.zenServiceInstanceId | int64 | quote }}
+        - name: OP_EXT_HOST
+          value: {{ .Values.name }}-svc
+        - name: OP_EXT_PORT
+          value: "10111"
+        - name: OPDB_HOST
+          value: "c-db2oltp-{{ .Values.zenServiceInstanceId | int64 }}-db2u"
+        - name: OPDB_PORT
+          value: {{ .Values.opdb.port | quote }}
+        - name: OPDB_ALIAS
+          value: {{ .Values.opdb.alias | quote }}
+        - name: OPDB_USER
+          value: {{ .Values.opdb.username | quote }}
+        - name: OPDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.name }}-db-secret
+              key: openpage-pw
+        - name: OPENPAGES_ADMINISTRATOR_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.name }}-initialpw-secret
+              key: OpenPagesAdministrator
+        volumeMounts:
+        - mountPath: /var/run/sharedsecrets
+          name: zen-service-broker-secret
+        - mountPath: /var/run/certs
+          name: internal-tls
+        command: ["post-provision.sh"]
+      volumes:
+        - name: zen-service-broker-secret
+          secret:
+            defaultMode: 420
+            secretName: zen-service-broker-secret
+        - name: internal-tls
+          secret:
+            defaultMode: 420
+            secretName: internal-tls
+      restartPolicy: Never
+  backoffLimit: 3

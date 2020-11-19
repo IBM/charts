@@ -1,0 +1,226 @@
+#*******************************************************************************
+# Licensed Materials - Property of IBM
+#
+#
+# OpenPages GRC Platform (PID: 5725-D51)
+#
+#  © Copyright IBM Corporation 2018 - 2020. All Rights Reserved.
+#
+# US Government Users Restricted Rights- Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+#*******************************************************************************
+{{- include "sch.config.init" (list . "op.sch.chart.config.values") -}}
+{{ $compName := .sch.chart.components.opapp.name }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: "{{ .Values.name }}-sts"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    icpdsupport/app : {{ include "sch.names.appName" (list .) }}
+    icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+    icpd-addon/status: "{{ .Values.zenServiceInstanceId | int64 }}"
+    icpdsupport/addOnId: {{ .Values.zenServiceInstanceType | quote}}
+    icpdsupport/assemblyName: {{ .Values.zenServiceInstanceType | quote}}
+    icpdsupport/addon: "false"
+    app : {{ include "sch.names.appName" (list .) }}
+spec:
+  serviceName: "{{ .Values.name }}-svc"
+  replicas: {{ pluck .Values.tShirtSize .Values.replicaCount | first }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+      icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+      icpd-addon/status: "{{ .Values.zenServiceInstanceId | int64 }}"
+  updateStrategy:
+    type: OnDelete
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+        icpdsupport/app : {{ include "sch.names.appName" (list .) }}
+        icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+        icpd-addon/status: "{{ .Values.zenServiceInstanceId | int64 }}"
+        icpdsupport/addOnId: {{ .Values.zenServiceInstanceType | quote}}
+        icpdsupport/podSelector: "application"
+        app : {{ include "sch.names.appName" (list .) }}
+      annotations:
+        hook.deactivate.cpd.ibm.com/command : '[]'
+        hook.activate.cpd.ibm.com/command : '[]'
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.global.serviceAccountViewerName }}
+{{- include "sch.security.securityContext" (list . .sch.chart.securityContextRestricted) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.podAntiAffinity" (list .) | indent 8 }}
+      volumes:
+      - name: {{ .Values.name }}-appdata-volume
+        persistentVolumeClaim:
+          claimName: {{ .Values.name }}-appdata-pvc
+      - name: {{ .Values.name }}-shared-volume
+        persistentVolumeClaim:
+          claimName: {{ .Values.name }}-shared-pvc
+      initContainers:
+      - name: {{ include "sch.names.appName" (list .) }}-opappdata
+        command: ["/opappdataStartup.sh"]
+        args: ["/tgt"]
+        image: "{{ .Values.docker_registry_prefix }}/openpages-cpd-opappdata:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+{{- with .Values.smallContainer.resources }}
+        resources:
+{{ toYaml . | indent 10 }}
+{{- end }}
+        volumeMounts:
+        - mountPath: /tgt
+          name: {{ .Values.name }}-appdata-volume
+      - name: {{ include "sch.names.appName" (list .) }}-init-logs
+        command: ['sh', '-c', "mkdir -p /openpages-logs/aurora-logs; mkdir -p /openpages-logs/wlp-logs; mkdir -p /openpages-logs/LogCollector"]
+        image: "{{ .Values.docker_registry_prefix }}/openpages-cpd-opappdata:{{ .Values.image.tag }}"
+        imagePullPolicy: IfNotPresent
+{{- with .Values.smallContainer.resources }}
+        resources:
+{{ toYaml . | indent 10 }}
+{{- end }}
+        volumeMounts:
+        - mountPath: /openpages-logs/
+          name: {{ .Values.name }}-logs-vct
+      - name: {{ include "sch.names.appName" (list .) }}-init-shared
+        command: ['sh', '-c', "mkdir -p /openpages-shared/openpages-backup-restore; mkdir -p /openpages-shared/environment-migration"]
+        image: "{{ .Values.docker_registry_prefix }}/openpages-cpd-opapp:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+{{- with .Values.smallContainer.resources }}
+        resources:
+{{ toYaml . | indent 10 }}
+{{- end }}
+        volumeMounts:
+        - mountPath: /openpages-shared
+          name: {{ .Values.name }}-shared-volume
+      containers:
+      - name: {{ include "sch.names.appName" (list .) }}-opapp
+        command: ["/home/default/opappStartup.sh"]
+        image: "{{ .Values.docker_registry_prefix }}/openpages-cpd-opapp:{{ .Values.image.tag }}"
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: OP_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: OP_EXT_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: "{{ .Values.name }}-url-cm"
+              key: op-external-url
+        - name: OP_EXT_PORT
+          value: "443"
+        - name: OPDB_HOST
+          value: "c-db2oltp-{{ .Values.zenServiceInstanceId | int64 }}-db2u"
+        - name: OPDB_PORT
+          value: {{ .Values.opdb.port | quote }}
+        - name: OPDB_ALIAS
+          value: {{ .Values.opdb.alias | quote }}
+        - name: OPDB_USER
+          value: {{ .Values.opdb.username | quote }}
+        - name: OP_SVC_NAME
+          value: {{ .Values.name }}-svc
+        - name: OPDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.name }}-db-secret
+              key: openpage-pw
+        - name: OPDB_CRT
+          valueFrom:
+            secretKeyRef:
+              name: internal-tls
+              key: certificate.pem
+        - name: TLS_CRT
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.name }}-svc-tls
+              key: tls.crt
+        - name: TLS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.name }}-svc-tls
+              key: tls.key
+        - name: OP_SEC_SYSTEM_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.name }}-platform-secret
+              key: opsystem-pw
+        - name: OP_KEYSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.name }}-platform-secret
+              key: keystore-pw
+        - name: OP_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.name }}-platform-secret
+              key: encryption-key-pw
+        - name: OP_LDAP_SEARCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.name }}-platform-secret
+              key: ldap-search-pw
+        - name: MEM_REQUEST
+          valueFrom:
+            resourceFieldRef:
+              containerName: {{ include "sch.names.appName" (list .) }}-opapp
+              resource: requests.memory
+        - name: MEM_LIMIT
+          valueFrom:
+            resourceFieldRef:
+              containerName: {{ include "sch.names.appName" (list .) }}-opapp
+              resource: limits.memory
+        ports:
+        - containerPort: 10111
+          name: https
+          protocol: TCP
+        - containerPort: 10118
+          name: jmss
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /openpages-storage
+          name: {{ .Values.name }}-appdata-volume
+        - mountPath: /openpages-logs/
+          name: {{ .Values.name }}-logs-vct
+        - mountPath: /openpages-shared
+          name: {{ .Values.name }}-shared-volume
+        resources:
+          limits:
+            cpu: {{ pluck .Values.tShirtSize .Values.resources.limits | first | pluck "cpu" | first | quote }}
+            memory: {{ pluck .Values.tShirtSize .Values.resources.limits | first | pluck "memory" | first | quote }}
+          requests:
+            cpu: {{ pluck .Values.tShirtSize .Values.resources.requests | first | pluck "cpu" | first | quote }}
+            memory: {{ pluck .Values.tShirtSize .Values.resources.requests | first | pluck "memory" | first | quote }}
+        readinessProbe:
+          exec:  
+            command: ['sh', '-c', "[ -f /output/OPStartupReady.txt -a ! -f /output/OPShutdownReady.txt ]"]
+          initialDelaySeconds: 60 
+          timeoutSeconds: 1
+          failureThreshold: 1
+          successThreshold : 1
+          periodSeconds: 30
+        livenessProbe:
+          exec:  
+            command: ['sh', '-c', "! [ -f /output/OPStartupReady.txt -a ! -f /output/OPShutdownReady.txt ] || [ \"$(curl -k -sL -w '%{http_code}' https://localhost:10111/logon.jsp -o /dev/null)\" = \"200\" ]"]
+          initialDelaySeconds: 120 
+          timeoutSeconds: 30
+          failureThreshold: 3
+          periodSeconds: 10
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ .Values.name }}-logs-vct
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+{{- if .Values.volumes.useDynamicProvisioning }}
+      storageClassName: {{ .Values.appStorageClass | quote }}
+{{- else }}
+      ## disable dynamic provisioning
+      storageClassName: ""
+{{- end }}
+      resources:
+        requests:
+          storage: 10Gi

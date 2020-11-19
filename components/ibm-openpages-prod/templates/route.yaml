@@ -1,0 +1,37 @@
+###############################################################################
+# Licensed Materials - Property of IBM
+#
+#
+# OpenPages GRC Platform (PID: 5725-D51)
+#
+#  © Copyright IBM Corporation 2020 - CURRENT_YEAR. All Rights Reserved.
+#  
+# US Government Users Restricted Rights- Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+{{- include "sch.config.init" (list . "op.sch.chart.config.values") -}}
+{{ $compName := .sch.chart.components.opapp.name }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+    icpd-addon/status: "{{ .Values.zenServiceInstanceId | int64 }}"
+  annotations:
+    haproxy.router.openshift.io/balance: roundrobin
+    haproxy.router.openshift.io/timeout: "10m"
+    haproxy.router.openshift.io/cookie_name: "op-cpd-route"
+    router.openshift.io/cookie_name: "op-cpd-route"
+spec:
+  to:
+    kind: Service
+    name: "{{ .Values.name }}-svc"
+  port:
+    targetPort: https
+  tls:
+    termination: reencrypt
+    insecureEdgeTerminationPolicy: Redirect
