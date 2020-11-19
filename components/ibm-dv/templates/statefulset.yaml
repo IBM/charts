@@ -1,0 +1,149 @@
+{{- include "sch.config.init" (list . "dv.sch.chart.config.values") -}}
+{{- $appName := .sch.chart.appName -}}
+{{- $compName := .sch.chart.components.engine.name -}}
+{{- $podName := .sch.chart.pods.engine.name -}}
+{{- $bigsqlComp := .sch.chart.components.bigsql.name -}}
+{{- $ServiceInstanceID := .Values.zenServiceInstanceId | int64 -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict $bigsqlComp $bigsqlComp "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName)) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict $bigsqlComp $bigsqlComp "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName)) | indent 6 }}
+  serviceName: {{ include "sch.names.appName" (list .) }}
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict $bigsqlComp $bigsqlComp "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName)) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering nil nil nil) | indent 8 }}
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.security.headPodSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            preference:
+              matchExpressions:
+              - key: dv-dedicated
+                operator: Exists
+      containers:
+        - name: {{ include "sch.names.appName" (list .) }}-{{ .sch.chart.components.engine.name }}
+          image: "{{ .Values.docker_registry_prefix }}/{{ .Values.dvEngine.image.dockerImage }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+          - mountPath: /mnt/PV/versioned
+            name: dv-data
+            subPath: "{{ .Chart.AppVersion }}"
+          - mountPath: /mnt/PV/versioned/uc_dsserver_shared
+            name: dv-data
+            subPath: uc_dsserver_shared
+          - mountPath: /mnt/PV/versioned/unified_console_data
+            name: dv-data
+            subPath: unified_console_data
+          - mountPath: /mnt/PV/unversioned
+            name: dv-caching-data
+            subPath: unversioned
+          - mountPath: /var/log
+            name: dv-data
+            subPath: logfiles
+          - mountPath: /tmp/container_resources
+            name: dv-pod-info
+            readOnly: false
+          - name: secret-volume
+            readOnly: true
+            mountPath: "/etc/secret-volume"
+          - name: wdp-service-id-secret-volume
+            readOnly: true
+            mountPath: "/etc/wdp-service-id-secret-volume"
+          - name: internal-nginx-svc-tls
+            readOnly: true
+            mountPath: "/etc/internal-nginx-svc-tls"
+          ports:
+            {{- with .Values.service }}
+            - containerPort: {{ .qpDiscoveryPort }}
+            - containerPort: {{ .bigsqlDB2JDBC }}
+            - containerPort: {{ .bigsqlDB2JDBCSSL }}
+            {{- end }}
+          command:
+          - /opt/dv/current/dv-cli.sh
+          - -o
+          - start-dv
+          - --keep-alive
+          readinessProbe:
+            exec:
+              command:
+              {{- with .Values.service }}
+               - /bin/bash
+               - -c
+               - --
+               - "/opt/dv/current/readiness.sh -p {{ .bigsqlDB2JDBC }}"
+              {{- end }}
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            failureThreshold: 12
+            timeoutSeconds: 15
+          livenessProbe:
+            exec:
+              command:
+              - /bin/bash
+              - -c
+              - /opt/dv/current/liveness.sh
+            initialDelaySeconds: 300
+            periodSeconds: 120
+            failureThreshold: 10
+            timeoutSeconds: 10
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                - /opt/dv/current/dv-cli.sh
+                - -o
+                - stop-dv -c "qp bigsql ldap"
+          env:
+            - name: IS_KUBERNETES
+              value: "true"
+            - name: IS_HELM_UPGRADE
+              value: "{{ .Release.IsUpgrade }}"
+{{- include "dv.helpers.resources" (list . .Values.resources.dv) | indent 10 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.security.serverContainerSecurityContext) | indent 10 }}
+      terminationGracePeriodSeconds: 120
+      volumes:
+      - name: dv-data
+        persistentVolumeClaim:
+            claimName: {{ if .Values.persistence.existingClaimName }}{{ .Values.persistence.existingClaimName }}{{- else }}{{ include "sch.names.appName" (list .) }}-pvc{{- end }}
+      - name: dv-caching-data
+        persistentVolumeClaim:
+            claimName: {{ if .Values.persistence.cachingpv.existingClaimName }}{{ .Values.persistence.cachingpv.existingClaimName }}{{- else }}{{ include "sch.names.appName" (list .) }}-caching-pvc{{- end }}
+      - name: dv-pod-info
+        downwardAPI:
+          items:
+            - path: "mem_request"
+              resourceFieldRef:
+                containerName: {{ include "sch.names.appName" (list .) }}-{{ .sch.chart.components.engine.name }}
+                resource: requests.memory
+            - path: "cpu_request"
+              resourceFieldRef:
+                containerName: {{ include "sch.names.appName" (list .) }}-{{ .sch.chart.components.engine.name }}
+                resource: requests.cpu
+      - name: secret-volume
+        secret:
+          secretName: {{ include "sch.names.appName" (list .) }}-{{ .sch.chart.components.secret.name }}
+          defaultMode: 288
+      - name: wdp-service-id-secret-volume
+        secret:
+          secretName: wdp-service-id
+          defaultMode: 288
+          optional: true
+      - name: internal-nginx-svc-tls
+        secret:
+          secretName: internal-nginx-svc-tls
+          defaultMode: 288
+          optional: true

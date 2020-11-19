@@ -1,0 +1,48 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $nonRootUser := include "aios.nonroot.uid" (list .) -}}
+{{- $serviceAccount := include "aios.serviceAccountName" (list . "serviceAccount" ) }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-datamart-test"
+  annotations:
+{{- include "aios.testpod.annotations" . | indent 2 }}
+  labels:
+    name: {{ .Release.Name }}-datamart-test
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+{{- include "aios.pod.labels" . | indent 2 }}
+spec:
+  {{- if .Values.imagePullSecrets }}
+  {{- if ne .Values.imagePullSecrets "default" }}
+  imagePullSecrets:
+    - name: {{ .Values.imagePullSecrets }}
+  {{- end }}
+  {{- end }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  serviceAccountName: {{ $serviceAccount }}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: {{ $nonRootUser }}
+  containers:
+  - name: {{ template "fullname" . }}-datamart-test
+    image: {{ include "aios.image" (list . .Values.kubectl.image.name .Values.kubectl.image.tag) | quote }}
+    resources:
+{{ toYaml .Values.ephemeralPod.resources | indent 12 }}
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: {{ $nonRootUser }}
+      capabilities:
+        drop:
+        - ALL
+    command: ["sh", "-c", "curl -k https://{{ include "aios.fqdn" (list . "nginx-internal") }}/v1/aios_datamart_service_api/heartbeat"]
+  restartPolicy: Never
+  affinity:
+  {{- include "aios.nodeAffinity" . | indent 2 }}

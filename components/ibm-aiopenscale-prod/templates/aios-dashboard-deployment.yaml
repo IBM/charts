@@ -1,0 +1,180 @@
+{{ $namePrefix := "dashboard" -}}
+{{ $compName := "aios-dashboard" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+{{- $serviceAccount := include "aios.serviceAccountName" (list . "serviceAccount" ) }}
+{{ $nonRootUser := include "aios.nonroot.uid" (list .) -}}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+{{- include "aios.labels" . | indent 2 }}
+spec:
+  progressDeadlineSeconds: {{ .Values.progressDeadline.seconds }}
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+    type: RollingUpdate
+  replicas: {{ .Values.dashboard.replicas }}
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $namePrefix | quote }}
+  template:
+    metadata:
+      labels:
+{{ $labels | indent 8 }}
+{{- include "aios.pod.labels" . | indent 6 }}
+      annotations:
+      {{- include "aios.metering" . | indent 6 }}
+      {{- include "aios.cpdbr.annotations" . | indent 6 }}
+    spec:
+      terminationGracePeriodSeconds: 0
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $nonRootUser }}
+{{ include "aios.fsGroupGid" (list . ) | indent 8 }}
+      serviceAccountName: {{ $serviceAccount }}
+      affinity:
+      {{- include "aios.nodeAffinity" . | indent 6 }}
+      # to prevent multiple replicas from deploying on the same node
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "release"
+                      operator: In
+                      values:
+                        -  {{ .Release.Name | quote }}
+                    - key: "serviceSelector"
+                      operator: In
+                      values:
+                        -  {{ $namePrefix | quote }}
+                topologyKey: {{ .Values.global.topologyKey }}
+      {{- if .Values.imagePullSecrets }}
+      {{- if ne .Values.imagePullSecrets "default" }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      {{- end }}
+      volumes:
+      - name: nginx-tls
+        secret:
+          secretName: {{ template "fullname" . }}-nginx-secrets
+      initContainers:
+        - name: ready-check
+          image: {{ include "aios.image" (list . .Values.redis.image.name .Values.redis.image.tag) | quote }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+          resources:
+{{ toYaml .Values.readyCheckContainer.resources | indent 12 }}
+          command: ['sh', '-c',
+                'while true; do echo "Waiting for Redis service to come up...";
+                 redis-cli -h {{ template "fullname" . }}-redis-master-svc ping && break;
+                 sleep 5; done; echo "Redis service available!";
+                 while true; do echo "Checking availability of ICP4D JWT public key...";
+                 curl -ko /dev/null $AIOS_GATEWAY_URL/auth/jwtpublic && break;
+                 sleep 5; done;
+                 echo "ICP4D JWT public key available.";
+                 echo "Starting main container."']
+          env:
+            - name: "AIOS_GATEWAY_URL"
+              value: "https://{{ include "aios.fqdn2" (list . "nginx-internal") }}"
+      containers:
+        - name: aios-dashboard
+          image: {{ include "aios.image" (list . .Values.dashboard.image.name .Values.dashboard.image.tag) | quote }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+          resources:
+{{ toYaml .Values.dashboard.resources | indent 12 }}
+          ports:
+            - containerPort: 9443
+              protocol: TCP
+          livenessProbe:
+            {{ include "aios.common.liveness.options" . | indent 10 }}
+            httpGet:
+              path: /v1/aios_dashboard/heartbeat
+              port: 9443
+              scheme: HTTPS
+          readinessProbe:
+            {{ include "aios.common.readiness.options" . | indent 10 }}
+            httpGet:
+              path: /v1/aios_dashboard/heartbeat
+              port: 9443
+              scheme: HTTPS
+          volumeMounts:
+          - name: nginx-tls
+            mountPath: "/etc/pki/ca-trust/extracted/java/cacerts"
+            subPath: "java-cacerts"
+          - name: nginx-tls
+            mountPath: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
+            subPath: "ca-pem"
+          env:
+            - name: "AIOS_GATEWAY_URL"
+              value: "https://{{ include "aios.fqdn2" (list . "nginx-internal") }}"
+            - name: BM_APP_VERSION_ENDPOINT
+              value: "/v1/aios_dashboard/heartbeat"
+            - name: CONFIG_PREFIX
+              value: "YPQA"
+            - name: HTTPS
+              value: "true"
+            - name: CRYPTO_PASSWORD
+              value: "aiopsdashboard_tar_ys1dev"
+            - name: SESSION_KEY
+              value: "aiopsdashboard"
+            - name: SESSION_SECRET
+              value: "aiopsdashboard"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-redis-secrets
+                  key: auth
+            - name: REDIS_URL
+              value: "redis://admin:$(REDIS_PASSWORD)@{{ template "fullname" . }}-redis-master-svc:6379"
+            - name: CONFIG_DATAMART_URL
+              value: "$(AIOS_GATEWAY_URL)"
+            - name: CONFIG_EXPLANATION_CONFIG_URL
+              value: "$(AIOS_GATEWAY_URL)"
+            - name: EXPLAINABILITY_URL
+              value: "$(AIOS_GATEWAY_URL)"
+            - name: CONFIG_AIOS_API_URL
+              value: "$(AIOS_GATEWAY_URL)"
+            - name: "ENABLE_ICP"
+              value: "true"
+            - name: ICP4D_JWT_PUBLIC_KEY_URL
+              value: "$(AIOS_GATEWAY_URL)/auth/jwtpublic"
+            - name: AIOS_SERVICE_CREDENTIALS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-service-secrets
+                  key: aios-service-credential
+            - name: BM_APP_VERSION
+              value: "{{ .Values.dashboard.image.tag}}"
+            - name: AIOS_ADDON_TYPE
+              value: "{{ .Values.aios.addon.type }}"
+            - name: ICP_PLATFORM_URL
+              value: "https://ibm-nginx-svc.{{ include "aios.cp4d.namespace" (list .) }}.svc.{{ .Values.clusterDomain }}"

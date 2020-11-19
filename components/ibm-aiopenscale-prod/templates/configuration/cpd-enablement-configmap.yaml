@@ -1,0 +1,232 @@
+{{ if .Values.global.dockerRegistryPrefix }}
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $name := "aios-addon-config" -}}
+{{ $compName := "config" -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.cpd.addon.configmap }}
+  labels:
+{{ $labels | indent 4 }}
+{{- include "aios.labels" . | indent 2 }}
+    icpdata_addon: "true"
+    icpdata_addon_version: {{ .Values.cpd.addon.version | quote }}
+data:
+  add-ons.json: |
+    {
+      "aios":{
+        "access_management_enable":true,
+        "add_on_type":"application",
+        "category": "ai",
+        "details":{
+           "deploy_docs":"https://cloud.ibm.com/docs/services/ai-openscale-icp?topic=ai-openscale-icp-inst-install-icp#install",
+           "product_docs": "https://cloud.ibm.com/docs/services/ai-openscale-icp?topic=ai-openscale-icp-gs-get-started#gs-get-started",
+           "openURL": "/aiopenscale",
+           "external_open_url_target": "_blank",
+           "premium": "false",
+           "extraPrepNeeded": false,
+           "service_provider_url":"self",
+           "provisioning_type": "helm",
+           "provisionURL": "#/provisioning/aios/{{ .Values.cpd.addon.version }}",
+           "accessManagementURL": "#/accessManagement",
+           "serviceDetailsURL": "#/details"
+         },
+         "display_name":"Watson OpenScale",
+         "extensions":{
+           "provisioning":{
+           },
+           "details":{
+             "tokens_enabled":true
+           },
+           "access_management":{
+             "roles":[
+                "Editor",
+                "Viewer"
+             ]
+           }
+         },
+         "max_instances":"",
+         "vendor":"IBM",
+         "versions": {
+            "{{ .Values.cpd.addon.version }}" : {
+            "helm_location":{
+                "chart_path": [
+                   "https://aiopenscale-ibm-aios-nginx-internal/helm/addon-provision-3.0.0.tgz"
+                ]
+            },
+            "state": "installed",
+            "details":{}
+          }
+        }
+      }
+    }
+  nginx.conf: |
+    location /aiopenscale
+    {
+      proxy_set_header Host $http_host;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      set $dashboard https://{{ template "fullname" . }}-dashboard-svc.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:9443;
+      proxy_pass $dashboard;
+      proxy_read_timeout 10m;
+    }
+    location /openscale
+    {
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      set $aiosnginx https://{{ include "aios.fqdn" (list . "nginx-internal") }};
+      proxy_pass $aiosnginx;
+      proxy_read_timeout 10m;
+    }
+    location /v1/aios_dashboard/
+    {
+      proxy_set_header Host $host;
+      set $dashboard https://{{ template "fullname" . }}-dashboard-svc.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:9443;
+      proxy_pass $dashboard;
+      proxy_read_timeout 10m;
+    }
+    location /v1/model_explanations
+    {
+      proxy_set_header Host $host;
+      set $aiosnginx https://{{ include "aios.fqdn" (list . "nginx-internal") }};
+      proxy_pass $aiosnginx;
+      proxy_read_timeout 10m;
+    }
+    #v2 api starts with datamart id
+    location /00000000-0000-0000-0000-000000000000
+    {
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      set $aiosnginx https://{{ include "aios.fqdn" (list . "nginx-internal") }};
+      proxy_pass $aiosnginx;
+      proxy_read_timeout 10m;
+    }
+    location /v1/model_explanation_configurations
+    {
+      proxy_set_header Host $host;
+      set $aiosnginx https://{{ include "aios.fqdn" (list . "nginx-internal") }};
+      proxy_pass $aiosnginx;
+      proxy_read_timeout 10m;
+    }
+    location /v1/fastpath
+    {
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      set $aiosnginx https://{{ include "aios.fqdn" (list . "nginx-internal") }};
+      proxy_pass $aiosnginx;
+      proxy_read_timeout 10m;
+    }
+    location /v1/fairness_monitoring
+    {
+      proxy_set_header Host $host;
+      set $aiosnginx https://{{ include "aios.fqdn" (list . "nginx-internal") }};
+      proxy_pass $aiosnginx;
+      proxy_read_timeout 10m;
+    }
+    location /v1/aios_payload_logging_service/
+    {
+      proxy_set_header Host $host;
+      set $aiosnginx https://{{ include "aios.fqdn" (list . "nginx-internal") }};
+      proxy_pass $aiosnginx;
+      proxy_read_timeout 10m;
+    }
+    location /v1/data_marts/
+    {
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      set $aiosnginx https://{{ include "aios.fqdn" (list . "nginx-internal") }};
+      proxy_pass $aiosnginx;
+      proxy_read_timeout 10m;
+    }
+    location /v1/aios_configuration_service
+    {
+      proxy_set_header Host $host;
+      set $aiosnginx https://{{ include "aios.fqdn" (list . "nginx-internal") }};
+      proxy_pass $aiosnginx;
+      proxy_read_timeout 10m;
+    }
+    
+    location /v1/model_drifts/
+    {
+      proxy_set_header Host $host;
+      set $aiosnginx https://{{ include "aios.fqdn" (list . "nginx-internal") }};
+      proxy_pass $aiosnginx;
+      proxy_read_timeout 10m;
+    }
+    location /v1prv/
+    {
+      proxy_set_header Host $host;
+      set $aiosnginx https://{{ include "aios.fqdn" (list . "nginx-internal") }};
+      proxy_pass $aiosnginx;
+      proxy_read_timeout 10m;
+    }
+    location /v1/data_marts_service_api/
+    {
+      proxy_set_header Host $host;
+      set $aiosnginx https://{{ include "aios.fqdn" (list . "nginx-internal") }};
+      proxy_pass $aiosnginx;
+      proxy_read_timeout 10m;
+    }
+    location /v1/aios_datamart_service_api/
+    {
+      proxy_set_header Host $host;
+      set $aiosnginx https://{{ include "aios.fqdn" (list . "nginx-internal") }};
+      proxy_pass $aiosnginx;
+      proxy_read_timeout 10m;
+    }
+    location /v1/aios_payload_logging_service_api/
+    {
+      proxy_set_header Host $host;
+      set $aiosnginx https://{{ include "aios.fqdn" (list . "nginx-internal") }};
+      proxy_pass $aiosnginx;
+      proxy_read_timeout 10m;
+    }
+    location /v1/aios_feedback_service/
+    {
+      proxy_set_header Host $host;
+      set $aiosnginx https://{{ include "aios.fqdn" (list . "nginx-internal") }};
+      proxy_pass $aiosnginx;
+      proxy_read_timeout 10m;
+    }
+    location /v1/ml_instances
+    {
+      proxy_set_header Host $host;
+      set $aiosnginx https://{{ include "aios.fqdn" (list . "nginx-internal") }};
+      proxy_pass $aiosnginx;
+      proxy_read_timeout 10m;
+    }
+    # other than testing purposes, the endpoints below do not need to be externalized
+    location /v1/schedules
+    {
+      proxy_set_header Host $http_host;
+      set $aiosnginx https://{{ include "aios.fqdn" (list . "nginx-internal") }};
+      proxy_pass $aiosnginx;
+      proxy_read_timeout 10m;
+    }
+    location /v1/aios_common_api
+    {
+      proxy_set_header Host $http_host;
+      set $aiosnginx https://{{ include "aios.fqdn" (list . "nginx-internal") }};
+      proxy_pass $aiosnginx;
+      proxy_read_timeout 10m;
+    }
+    location /v1/entitlements
+    {
+      proxy_set_header Host $http_host;
+      set $aiosnginx https://{{ include "aios.fqdn" (list . "nginx-internal") }};
+      proxy_pass $aiosnginx;
+      proxy_read_timeout 10m;
+    }
+    location /mrm/images
+    {
+      proxy_set_header Host $http_host;
+      set $aiosnginx https://{{ include "aios.fqdn" (list . "nginx-internal") }};
+      proxy_pass $aiosnginx;
+      proxy_read_timeout 10m;
+    }
+{{ end }}
