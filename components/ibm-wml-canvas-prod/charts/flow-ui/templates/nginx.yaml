@@ -5,9 +5,13 @@ kind: ConfigMap
 metadata:
   name: {{ template "flow-ui.fullname" . }}
   labels:
+    icpdsupport/app: {{ template "flow-ui.name" . }}
+    icpdsupport/addOnId: {{ .Release.Name }}
     app.kubernetes.io/name: {{ template "flow-ui.name" . }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
     helm.sh/chart: {{ template "flow-ui.chart" . }}
     app.kubernetes.io/instance: {{ .Release.Name }}
+    release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
     # Apparently, we need this for every configMap associated with our addon,
     # not just the top level one which declares our addon metadata.
@@ -21,7 +25,7 @@ data:
       proxy_set_header Upgrade $http_upgrade;
       proxy_set_header Connection "upgrade";
       proxy_http_version 1.1;
-      set $url "https://{{ template "flow-ui.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.https_port }}";
+      set $url "https://{{ template "flow-ui.fullname" . }}.{{ .Release.Namespace }}.{{ .Values.global.clusterDomain }}:{{ .Values.service.https_port }}";
       proxy_pass $url;
     }
     location /{{ .Values.global.flowUi.nginxPath }}/monitor {
@@ -29,7 +33,7 @@ data:
       proxy_set_header Upgrade $http_upgrade;
       proxy_set_header Connection "upgrade";
       proxy_http_version 1.1;
-      set $url "https://{{ template "flow-ui.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.https_port }}";
+      set $url "https://{{ template "flow-ui.fullname" . }}.{{ .Release.Namespace }}.{{ .Values.global.clusterDomain }}:{{ .Values.service.https_port }}";
       proxy_pass $url;
       rewrite ^/{{ .Values.global.flowUi.nginxPath }}(.*) $1 break;
     }

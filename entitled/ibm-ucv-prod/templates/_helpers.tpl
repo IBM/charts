@@ -100,16 +100,16 @@ nodeAffinity:
 
 {{- define "ucv.resources" -}}
 limits:
-  memory: 2Gi
-  cpu: 1
+  memory: {{ (index .Values.resources.limits.memory .ucvService) | default .Values.resources.limits.memory.default }}
+  cpu: {{ (index .Values.resources.limits.cpu .ucvService) | default .Values.resources.limits.cpu.default }}
 requests:
-  memory: 512Mi
-  cpu: 50m
+  memory: {{ (index .Values.resources.requests.memory .ucvService) | default .Values.resources.requests.memory.default }}
+  cpu: {{ (index .Values.resources.requests.cpu .ucvService) | default .Values.resources.requests.cpu.default }}
 {{- end -}}
 
 {{- define "ucv.productAnnotations" -}}
 productName: 'UrbanCode Velocity'
-productID: '5737-H22'
+productID: '49333afbd55b467987bfff5305891dd2'
 productVersion: '{{ .Chart.Version }}'
 {{- end -}}
 
@@ -125,7 +125,7 @@ capabilities:
 {{- end -}}
 
 {{- define "ucv.imagePullSecrets" -}}
-- name: velocity-image-secret
+- name: {{.Values.secrets.imagePull}}
 - name: "sa-{{ .Release.Namespace }}"
 {{- end -}}
 

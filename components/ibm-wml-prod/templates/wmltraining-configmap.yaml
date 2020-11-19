@@ -51,11 +51,33 @@ data:
       logging-filter = "akka.event.slf4j.Slf4jLoggingFilter"
 
       http {
+        parsing.max-chunk-size = 8m
+        client.connecting-timeout = 30s
+        client.idle-timeout = infinite
         server {
           max-connections = 1024
           idle-timeout = 130s
-          request-timeout = 200s
+          request-timeout = 130s
+          pipelining-limit = 1
         }
+        host-connection-pool {
+          max-connections = 256
+          max-open-requests = 1024
+          max-retries = 0
+        }
+      }
+
+      ssl-config {
+        enabledProtocols = [
+          "TLSv1.2"
+        ]
+
+        enabledCipherSuites = [
+          "TLS_DHE_RSA_WITH_AES_128_GCM_SHA256",
+          "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+          "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384",
+          "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+        ]
       }
     }
 
@@ -64,9 +86,11 @@ data:
       pretty-print = false
       component-name = "wml-training"
     }
+
     service {
           rmq-icd=false
           redis-icd=false
+          redis.ssl=true
           wml-training-data-pvc = "wml-training-data"
 
           validateTokenService.ml.pubkey.path = "/opt/ibm/training/keys/mltoken.pub"
@@ -90,16 +114,43 @@ data:
           http {
             port = 13300
           }
-      
+
           security {
             key-store = "/opt/ibm/training/keys/keystore.jks"
             key-store-type = "JKS"
+          }
+
+          kube {
+            labels {
+              "icpdsupport/addOnId"="wml"
+              "icpdsupport/app"="api"
+              "release"="wml"
+            }
+
+            annotations {
+              "cloudpakName" = "IBM Cloud Pak for Data"
+              "cloudpakId" = "eb9998dcc5d24e3eb5b6fb488f750fe2"
+              "productCloudpakRatio" = "1:1"
+              "productID" = "eb9998dcc5d24e3eb5b6fb488f750fe2"
+              "cloudpakInstanceId" = "{{ .Values.global.cloudpakInstanceId }}"
+              "productName" = "IBM Watson Machine Learning"
+              "productVersion" = "3.5.0"
+              "productMetric" = "VIRTUAL_PROCESSOR_CORE"
+              "productChargedContainers" = "All"
+              "hook.activate.cpd.ibm.com/command" = "[\"date\"]"
+              "hook.deactivate.cpd.ibm.com/command" = "[\"date\"]"
+            }
           }
 
           repository {
             url = "https://internal-nginx-svc:12443"
             retries = 2
             retry-interval = 10s
+          }
+
+          platform {
+            host = "internal-nginx-svc"
+            port = 12443
           }
 
           cloudant {
@@ -132,8 +183,6 @@ data:
 
           wmla {
             use_proxy = false
-            proxy_host = "9.21.55.13"
-            proxy_port = 30123
             use_url_metrics=true
           }
 
@@ -165,25 +214,43 @@ data:
 
           auto_ai.kb {
             image = "{{ .Values.global.docker_registry_prefix }}/wml-autoai-kb"
-            default.version = "v.0.1.413.0.8"
+            default.version = "{{ .Values.wmlAutoaiKB.image.tag }}"
+            default.version_v4beta = "{{ .Values.wmlAutoaiKB.image.tag }}"
             port = 5449
             create-job-timeout = 360s
             retries = 2
             retry-interval = 60s
             retries-status = 2
             retry-interval-status = 5s
+            default.tsize = "l"
+            software_spec = "autoai-kb_3.1-py3.7"
+          }
+
+          auto_ai.obm {
+            image = "{{ .Values.global.docker_registry_prefix }}/wml-automl-obm-hybrid-pipeline"
+            default.version = "{{ .Values.wmlAutoML_OBM.image.tag }}"
+            default.version_v4beta = "{{ .Values.wmlAutoML_OBM.image.tag }}"
+            port = 5448
+            create-job-timeout = "40 minutes"
+            retry-interval = 60s
+            retries-status = 2
+            retry-interval-status = 5s
+            hardware_spec = "XS"
+            billable = false
+            software_spec = "autoai-obm_2.0"
           }
 
           federated-learning {
-            image = "{{ .Values.global.docker_registry_prefix }}/federated-learning"
-            default.version = "1.1.137"
+            image = "{{ .Values.global.docker_registry_prefix }}/wml-federated-learning"
+            default.version = "{{ .Values.wmlFederatedLearning.image.tag }}"
             host = "$host"
             cluster-port = 50443
             pod-port = 13301
             del_on_close = true
           }
+    
           activeDeadlineSeconds = 604800
-        
+
           kube-config {
             encrypted-certificate-authority = "/opt/ibm/wml-training/encrypted/ca.pem"
             encrypted-client-certificate = "/opt/ibm/wml-training/encrypted/admin.pem"
