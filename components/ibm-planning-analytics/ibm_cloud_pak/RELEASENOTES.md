@@ -13,5 +13,8 @@
 ## Version History
 - 2.0.49
 	- Initial Release
-- 2.0.50
-	- Add OCP 4.5.4 compatibility
+- 2.0.55
+	- Upgraded Planning Analytics Workspace to version 2.0.55
+	- Improved provisioning experience
+- 3.5.0
+	- Introduce Planning Analytics Analytics Spreadsheet Services

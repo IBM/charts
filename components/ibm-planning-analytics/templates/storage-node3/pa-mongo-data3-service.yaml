@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     name: mongo-data3
-    release: {{ .Release.Name }}
+    release: 3.5.0
     paw_instance_name: {{ .Values.paw_instance_name }}
     
   name: mongo-data3
@@ -20,23 +20,32 @@ spec:
   template:
     metadata:
       annotations:
-        productName: IBM Planning Analytics Workspace
-        productID: com.ibm.ba.paw.{{ .Release.Name }}
-        productVersion: {{ .Release.Name }}
+        hook.activate.cpd.ibm.com/command: '[]'
+        hook.deactivate.cpd.ibm.com/command: '[]'
+        cloudpakName: "IBM Planning Analytics Extension for IBM Cloud Pak for Data"
+        cloudpakId: "27646a3a52bb43408a3156180def3775"
+        productCloudpakRatio: "1:1"
+        productID: "27646a3a52bb43408a3156180def3775"
+        productName: "IBM Planning Analytics Workspace"
         productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productVersion: 3.5.0
         productChargedContainers: "All"
-        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
-        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
-        cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
         
       labels:
         app.kubernetes.io/name: paw
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
+        icpdsupport/addOnId: pa
+        icpdsupport/app: "pa-workspace" 
+        cloudpakInstanceId: "{{ .Values.zenCloudPakInstanceId }}"
+        {{- include "planning-analytics.serviceid" . | indent 8 }}
+        {{- if ( .Values.createdBy )  }}
+        icpdsupport/createdBy: {{ .Values.createdBy | quote }}
+        {{- end }} 
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         name: mongo-data3
-        release: {{ .Release.Name }}
-        version: "1.0.91-ubi7"
+        release: 3.5.0
+        version: "1.0.91-ubi7-1"
     spec:
       affinity:
         nodeAffinity:
@@ -75,7 +84,7 @@ spec:
             sizeLimit: "{{ .Values.mongo.emptyDirSizeLimit }}"
       containers:
         - name: wait-for-pods
-          image: {{ .Values.docker_registry_prefix }}/pa-mongo:1.0.91-ubi7
+          image: {{ .Values.docker_registry_prefix }}/pa-mongo:1.0.91-ubi7-1
           command: ["/bin/bash", "-c", "/tmp/wait-for-pods.sh" ]
           ports:
             - containerPort: 31000
@@ -98,6 +107,9 @@ spec:
               value: "mongo1 mongo2 mongo3"
           securityContext:
             runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+            runAsUser: 2000
+{{- end }} 
             capabilities:
               drop:
                 - ALL
@@ -114,7 +126,7 @@ spec:
             exec:
               command:
                 - date
-            initialDelaySeconds: 0
+            initialDelaySeconds: 5
             periodSeconds: 60
           readinessProbe:
             exec:
@@ -123,7 +135,7 @@ spec:
             initialDelaySeconds: 0
             periodSeconds: 60
         - name: mongo3
-          image: {{ .Values.docker_registry_prefix }}/pa-mongo:1.0.91-ubi7
+          image: {{ .Values.docker_registry_prefix }}/pa-mongo:1.0.91-ubi7-1
           command: ["/bin/bash", "-c", "while [ ! -f ${TEMP_DIR}/true ]; do sleep 2; done; exec /paw-entrypoint.sh mongod --replSet rs0"]
           ports:
             - containerPort: 27017
@@ -152,6 +164,9 @@ spec:
               value: "/run/pa-temp"
           securityContext:
             runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+            runAsUser: 2000
+{{- end }} 
             capabilities:
               drop:
                 - ALL

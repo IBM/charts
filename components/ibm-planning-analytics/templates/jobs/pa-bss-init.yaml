@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     name: bss-init
-    release: {{ .Release.Name }}
+    release: 3.5.0
     paw_instance_name: {{ .Values.paw_instance_name }}
     
   name: bss-init
@@ -18,23 +18,32 @@ spec:
   template:
     metadata:
       annotations:
-        productName: IBM Planning Analytics Workspace
-        productID: com.ibm.ba.paw.{{ .Release.Name }}
-        productVersion: {{ .Release.Name }}
+        hook.activate.cpd.ibm.com/command: '[]'
+        hook.deactivate.cpd.ibm.com/command: '[]'
+        cloudpakName: "IBM Planning Analytics Extension for IBM Cloud Pak for Data"
+        cloudpakId: "27646a3a52bb43408a3156180def3775"
+        productCloudpakRatio: "1:1"
+        productID: "27646a3a52bb43408a3156180def3775"
+        productName: "IBM Planning Analytics Workspace"
         productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productVersion: 3.5.0
         productChargedContainers: "All"
-        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
-        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
-        cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
         
       labels:
         app.kubernetes.io/name: paw
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
+        icpdsupport/addOnId: pa
+        icpdsupport/app: "pa-workspace" 
+        cloudpakInstanceId: "{{ .Values.zenCloudPakInstanceId }}"
+        {{- include "planning-analytics.serviceid" . | indent 8 }}
+        {{- if ( .Values.createdBy )  }}
+        icpdsupport/createdBy: {{ .Values.createdBy | quote }}
+        {{- end }} 
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         name: bss-init
-        release: {{ .Release.Name }}
-        version: "1.0.234-ubi7"
+        release: 3.5.0
+        version: "1.0.234-ubi7-1"
     spec:
       affinity:
         nodeAffinity:
@@ -47,7 +56,7 @@ spec:
                 - {{ .Values.arch }}
       containers:
         - name: bss-init
-          image: {{ .Values.docker_registry_prefix }}/pa-bss-init:1.0.234-ubi7
+          image: {{ .Values.docker_registry_prefix }}/pa-bss-init:1.0.234-ubi7-1
           env:
             - name: TM1Location
               value: "{{ .Values.common.tm1Location }}"
@@ -76,6 +85,9 @@ spec:
               memory: "250M"
           securityContext:
             runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+            runAsUser: 2000
+{{- end }} 
             capabilities:
               drop:
                 - ALL
@@ -89,7 +101,7 @@ spec:
             exec:
               command:
                 - date
-            initialDelaySeconds: 0
+            initialDelaySeconds: 5
             periodSeconds: 60
           readinessProbe:
             exec:

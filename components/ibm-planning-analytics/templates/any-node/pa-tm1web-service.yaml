@@ -1,0 +1,127 @@
+{{- if .Values.common.webappsEnabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: pa-tm1web
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    name: tm1web
+    release: 3.5.0
+  name: tm1web
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: tm1web
+  template:
+    metadata:
+      annotations:
+        hook.activate.cpd.ibm.com/command: '[]'
+        hook.deactivate.cpd.ibm.com/command: '[]'
+        cloudpakName: "IBM Planning Analytics Extension for IBM Cloud Pak for Data"
+        cloudpakId: "27646a3a52bb43408a3156180def3775"
+        productCloudpakRatio: "1:1"
+        productID: "27646a3a52bb43408a3156180def3775"
+        productName: "IBM Planning Analytics Spreadsheet Service"
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productVersion: 3.5.0
+        productChargedContainers: "All"
+      labels:
+        app.kubernetes.io/name: pa-tm1web
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        icpdsupport/addOnId: pa
+        icpdsupport/app: "pa-spreadsheet-services" 
+        cloudpakInstanceId: "{{ .Values.zenCloudPakInstanceId }}"
+        {{- include "planning-analytics.serviceid" . | indent 8 }}
+        {{- if ( .Values.createdBy )  }}
+        icpdsupport/createdBy: {{ .Values.createdBy | quote }}
+        {{- end }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        name: tm1web
+        release: 3.5.0
+        version: "11.0.57-20110317"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      containers:
+        - name: tm1web
+          image: {{.Values.docker_registry_prefix}}/pa-tm1web:11.0.57-20110317
+          ports:
+            - containerPort: 9510
+              protocol: TCP
+          resources:
+            limits:
+              cpu: "{{ .Values.tm1web.cpuLimit }}"
+              memory: "{{ .Values.tm1web.memoryLimit }}"
+            requests:
+              cpu: "{{ .Values.tm1web.cpuRequest }}"
+              memory: "{{ .Values.tm1web.memoryRequest }}"
+          env:
+          - name: MEMORY
+            value: "{{ .Values.tm1web.memoryRequest }}"
+          securityContext:
+            runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+            runAsUser: 2000
+{{- end }} 
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 10001
+            {{- end }}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            tcpSocket:
+              port: 9510
+            initialDelaySeconds: 60
+            failureThreshold: 1
+            periodSeconds: 2
+          readinessProbe:
+            tcpSocket:
+              port: 9510
+            initialDelaySeconds: 10
+            failureThreshold: 1
+            periodSeconds: 2
+          volumeMounts:
+          - name: pa-tm1web-volume
+            mountPath: /etc/websheetsconfig
+          - name: pa-cacerts
+            mountPath: /run/config
+      volumes:
+        - name: pa-tm1web-volume
+          configMap:
+            name: pa-tm1web-configmap
+        - name: pa-cacerts
+          secret:
+            secretName: pa-cacerts
+      hostNetwork: false
+      hostIPC: false
+      hostPID: false
+      restartPolicy: Always
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      schedulerName: default-scheduler
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+{{- end }}

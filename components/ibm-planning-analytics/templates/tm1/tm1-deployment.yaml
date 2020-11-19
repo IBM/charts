@@ -10,7 +10,7 @@ metadata:
     paw_instance_name: {{ .Values.paw_instance_name }}
     name: tm1
     app: tm1
-    release: {{ .Release.Name }}
+    release: 3.5.0
   name: tm1
 spec:
   strategy:
@@ -20,25 +20,34 @@ spec:
   selector:
     matchLabels:
       app: tm1
-      release: {{ .Release.Name }}
+      release: 3.5.0
   template:
     metadata:
       annotations:
+        hook.activate.cpd.ibm.com/command: '[]'
+        hook.deactivate.cpd.ibm.com/command: '[]'
         cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
         openshift.io/scc: hostmount-anyuid
-        productName: IBM Planning Analytics TM1 Server
-        productID: com.ibm.ba.paw.{{ .Release.Name }}
-        productVersion: {{ .Release.Name }}
+        cloudpakName: "IBM Planning Analytics Extension for IBM Cloud Pak for Data"
+        cloudpakId: "27646a3a52bb43408a3156180def3775"
+        productCloudpakRatio: "1:1"
+        productID: "27646a3a52bb43408a3156180def3775"
+        productName: "IBM Planning Analytics Local TM1 Server"
         productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productVersion: 3.5.0
         productChargedContainers: "All"
-        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
-        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
-        cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
       creationTimestamp: null
       labels:
         app: tm1
         app.kubernetes.io/name: paw
-        release: {{ .Release.Name }}
+        icpdsupport/addOnId: pa
+        icpdsupport/app: "pa-tm1"
+        cloudpakInstanceId: "{{ .Values.zenCloudPakInstanceId }}"
+        {{- include "planning-analytics.serviceid" . | indent 8 }}
+        {{- if ( .Values.createdBy )  }}
+        icpdsupport/createdBy: {{ .Values.createdBy | quote }}
+        {{- end }}
+        release: 3.5.0
     spec:
       containers:
       - env:
@@ -56,7 +65,7 @@ spec:
           value: "8081"
         - name: MAX_MEMORY_GB
           value: "{{ .Values.tm1.maxMemoryDisplayPAAGB }}"
-        image: {{.Values.docker_registry_prefix}}/pa-tm1-cp4d:b625CP4D
+        image: {{.Values.docker_registry_prefix}}/pa-tm1-cp4d:b625CP4D-1
         imagePullPolicy: Always
         name: tm1
         readinessProbe:
@@ -74,10 +83,10 @@ spec:
         resources:
           limits:
             cpu: {{ .Values.tm1.cpu }}
-            memory: {{ .Values.tm1.memory }}
+            memory:  {{ .Values.tm1.memory }}
           requests:
-            cpu: {{ .Values.tm1.cpu }}
-            memory: {{ .Values.tm1.memory }}
+            cpu:  {{ .Values.tm1.cpu }}
+            memory:  {{ .Values.tm1.memory }}
         volumeMounts:
         - mountPath: /tm1mnt
           name: tm1-storage
