@@ -1,0 +1,108 @@
+{{- include "sch.config.init" (list . "dv.sch.chart.config.values") -}}
+{{- $appName := .sch.chart.appName -}}
+{{- $compName := .sch.chart.components.utils.name -}}
+{{- $podName := .sch.chart.pods.utils.name -}}
+{{- $ServiceInstanceID := .Values.zenServiceInstanceId | int64 -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName)) | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName)) | indent 6 }}
+  serviceName: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName)) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering nil nil nil) | indent 8 }}
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.security.utilsPodSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      containers:
+      - name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
+        image: "{{ .Values.docker_registry_prefix }}/{{ .Values.dvEngine.image.dockerImage }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /opt/dv/current/opensource-services-util.sh
+              - -o
+              - stop
+        livenessProbe:
+          exec:
+            command:
+            - /opt/dv/current/opensource-services-util.sh
+            - -o
+            - check-liveness
+          initialDelaySeconds: 300
+          periodSeconds: 120
+          failureThreshold: 10
+          timeoutSeconds: 15
+        readinessProbe:
+          exec:
+            command:
+            - /opt/dv/current/opensource-services-util.sh
+            - -o
+            - check-readiness
+          periodSeconds: 120
+          failureThreshold: 10
+          timeoutSeconds: 15
+        volumeMounts:
+        - mountPath: /var/log
+          name: dv-data
+          subPath: logfiles
+        - mountPath: /mnt/PV/versioned
+          name: dv-data
+          subPath: "{{ .Chart.AppVersion }}"
+        - mountPath: /mnt/PV/unversioned
+          name: dv-caching-data
+          subPath: unversioned
+        - mountPath: /tmp/opensource_container_resources
+          name: dv-pod-info-opensource
+          readOnly: false
+        - mountPath: "/etc/secret-volume"
+          name: secret-volume
+          readOnly: true
+        ports:
+          {{- with .Values.dvEngine }}
+          - containerPort: {{ .namenodeRPCPort }}
+          - containerPort: {{ .hiveMetastorePort }}
+          {{- end }}
+        command:
+        - /opt/dv/current/opensource-services-util.sh
+        - -o
+        - start
+        - --keep-alive
+        env:
+          - name: IS_KUBERNETES
+            value: "true"
+{{- include "dv.helpers.resources" (list . .Values.resources.opensource) | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.security.utilsContainerSecurityContext) | indent 8 }}
+      volumes:
+      - name: dv-data
+        persistentVolumeClaim:
+            claimName: {{ if .Values.persistence.existingClaimName }}{{ .Values.persistence.existingClaimName }}{{- else }}{{ include "sch.names.appName" (list .) }}-pvc{{- end }}
+      - name: dv-caching-data
+        persistentVolumeClaim:
+            claimName: {{ if .Values.persistence.cachingpv.existingClaimName }}{{ .Values.persistence.cachingpv.existingClaimName }}{{- else }}{{ include "sch.names.appName" (list .) }}-caching-pvc{{- end }}
+      - name: dv-pod-info-opensource
+        downwardAPI:
+          items:
+            - path: "mem_request"
+              resourceFieldRef:
+                containerName: {{ include "sch.names.appName" (list .) }}-{{ .sch.chart.components.utils.name }}
+                resource: requests.memory
+      - name: secret-volume
+        secret:
+          secretName: {{ include "sch.names.appName" (list .) }}-{{ .sch.chart.components.secret.name }}
+          defaultMode: 288

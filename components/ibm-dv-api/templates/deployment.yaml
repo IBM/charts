@@ -1,0 +1,170 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+{{- if .Values.deployName }}
+  name: {{ .Values.deployName }}
+{{- else }}
+  name: {{ template "ibm-dv-api.name" . }}
+{{- end }}
+  labels:
+    ServiceInstanceID: {{ .Values.zenServiceInstanceId| int64 | quote }}
+    app: "dv"
+    app.kubernetes.io/name: "dv"
+    helm.sh/chart: "ibm-dv-api"
+    app.kubernetes.io/managed-by: "Tiller"
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/component: {{ template "ibm-dv-api.name" . }}
+    icpdata_dvapi: "true"
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}   
+    heritage: {{ .Release.Service }}
+spec:
+  selector:
+    matchLabels:
+      ServiceInstanceID: {{ .Values.zenServiceInstanceId| int64 | quote }}
+      app: "dv"
+      app.kubernetes.io/name: "dv"
+      helm.sh/chart: "ibm-dv-api"
+      app.kubernetes.io/managed-by: "Tiller"
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      release: {{ .Release.Name }}
+      app.kubernetes.io/component: {{ template "ibm-dv-api.name" . }}
+      icpdata_dvapi: "true"
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        ServiceInstanceID: {{ .Values.zenServiceInstanceId| int64 | quote }}
+        app: "dv"
+        app.kubernetes.io/name: "dv"
+        helm.sh/chart: "ibm-dv-api"
+        app.kubernetes.io/managed-by: "Tiller"
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        release: {{ .Release.Name }}
+        app.kubernetes.io/component: {{ template "ibm-dv-api.name" . }}
+        icpdata_dvapi: "true"
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}   
+        heritage: {{ .Release.Service }}
+      annotations:
+        {{- range $key, $val := .Values.customAnnotations }}
+        {{ $key }}: {{ $val | quote }}
+        {{- end }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+    {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{.Values.serviceAccountName }}
+    {{- else }}
+      serviceAccountName:  "dv-sa"
+    {{- end }}
+      securityContext:
+        runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+        runAsUser: {{ .Values.runAsUser }}
+{{- end }}      
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      affinity:
+      {{- include "dvapi.NodeAffinity" . | indent 8 }}
+      containers:
+      - securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+          runAsUser: {{ .Values.runAsUser }}
+{{- end }} 
+          capabilities:
+            drop:
+            - ALL
+      {{- if .Values.deployName }}
+        name: {{ .Values.deployName }}
+      {{- else }}
+        name: {{ .Chart.Name }}
+      {{- end }}           
+      {{- if .Values.image.arch }}
+        image: "{{ .Values.docker_registry_prefix }}/{{ .Values.image.docker_image }}:{{ .Values.image.tag }}-{{ .Values.image.arch }}"
+      {{- else }}
+        image: "{{ .Values.docker_registry_prefix }}/{{ .Values.image.docker_image }}:{{ .Values.image.tag }}"
+      {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: ZEN_SERVICE_INSTANCE_ID
+          value: "{{ .Values.zenServiceInstanceId }}"
+        - name: DV_DATABASE_SSL_ENABLE
+          value: "{{ .Values.service.databaseSSLEnabled }}"
+        - name: DV_POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+      {{- if .Values.dvapiLogLevel }}
+        - name: DVAPI_LOG_LEVEL
+          value: "{{ .Values.dvapiLogLevel }}"
+      {{- end }}
+        volumeMounts:
+        - mountPath: /mnt/PV/versioned/uc_dsserver_shared
+          name: dv-data
+          subPath: uc_dsserver_shared
+        - name: secret-volume
+          readOnly: true
+          mountPath: "/etc/secret-volume"
+
+        ports:
+          - name: dvapi-https
+            containerPort: {{ .Values.service.port }}
+            protocol: TCP
+        livenessProbe:
+          exec:
+            command:
+            - cat
+            - /dv-api/config/config.prod.yaml
+          # tcpSocket:
+          #   port: dvapi-https
+          # httpGet:
+          #   scheme: HTTPS
+          #   path: /
+          #   port: dvapi-https
+        readinessProbe:
+          exec:
+            command:
+            - cat
+            - /dv-api/config/config.prod.yaml
+          # tcpSocket:
+          #   port: dvapi-https
+          # # httpGet:
+          #   scheme: HTTPS
+          #   path: /
+          #   port: dvapi-https
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}          
+          
+      volumes:
+      - name: dv-data
+        persistentVolumeClaim:
+          {{- if .Values.persistence.existingClaimName }}
+            claimName: {{ .Values.persistence.existingClaimName }}
+          {{- else }}
+            claimName: dv-pvc
+          {{- end }}
+            
+      - name: secret-volume
+        secret:
+          defaultMode: 420
+          secretName: dv-secret
+        
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
