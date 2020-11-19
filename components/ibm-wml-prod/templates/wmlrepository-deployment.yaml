@@ -36,15 +36,20 @@ spec:
         app.kubernetes.io/instance: {{.Release.Name | quote }}
         app.kubernetes.io/name: "{{ .Release.Name }}"
         helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+        icpdsupport/addOnId: wml
+        icpdsupport/app: api
       annotations:
-        cloudpakName: IBM Cloud Pak for Data
-        cloudpakId: eb9998dcc5d24e3eb5b6fb488f750fe2
-        cloudpakVersion: 3.0.1
-        productName: IBM Watson Machine Learning for IBM Cloud Pak for Data
-        productID: ICP4D-Watson-Machine-Learning-3-0-1
-        productVersion: 3.0.1
-        productMetric: VIRTUAL_PROCESSOR_CORE
-        productChargedContainers: All        
+        hook.deactivate.cpd.ibm.com/command: "[]"
+        hook.activate.cpd.ibm.com/command: "[]"
+        cloudpakName: "IBM Cloud Pak for Data"
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        productCloudpakRatio: "1:1"
+        productID: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakInstanceId: "{{ .Values.global.cloudpakInstanceId }}"
+        productName: "IBM Watson Machine Learning" 
+        productVersion: "3.5.0"
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productChargedContainers: All      
         checksum.helm.kubernetes.io/configmap: {{ include (print $.Template.BasePath "/wmlrepository-configmap.yaml") . | sha256sum }}
     spec:
       affinity:
@@ -55,7 +60,7 @@ spec:
               - key: beta.kubernetes.io/arch
                 operator: In
                 values:
-                  - amd64
+                  - {{ .Values.global.architecture }}
       securityContext:
         runAsUser: {{ .Values.global.user.id }}
       serviceAccount: {{ .Values.global.editor.sa }}
@@ -162,7 +167,7 @@ spec:
             port: 8080
             scheme: HTTP
           failureThreshold: 3
-          initialDelaySeconds: 20
+          initialDelaySeconds: 95
           periodSeconds: 60
           successThreshold: 1
           timeoutSeconds: 5
@@ -183,12 +188,6 @@ spec:
               - sleep
               - "120"
         imagePullPolicy: IfNotPresent
-        lifecycle:
-          preStop:
-            exec:
-              command:
-              - sleep
-              - "120"
         name: wmlrepositoryservice
         ports:
         - containerPort: 32191

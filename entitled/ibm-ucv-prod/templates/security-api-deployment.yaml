@@ -30,13 +30,11 @@ spec:
         {{- include "ucv.nodeAffinity" . | nindent 8 }}
       containers:
         - name: security-api
-          image: 'cp.icr.io/cp/ibm-ucv-security-api:1.5.5-ifix01.36'
+          image: 'cp.icr.io/cp/ibm-ucv-security-api:2.1.0-ifix01.29'
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3911
           env:
-            - name: NODE_ENV
-              value: local
             - name: PORT
               value: '3911'
             - name: MONGO_DB
@@ -51,16 +49,6 @@ spec:
                   name: {{ .Values.secrets.tokens }}
                   key: apiToken
             - name: SECURITY_AUTH_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.secrets.tokens }}
-                  key: hmacKey
-            - name: JWT_CIPHER_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.secrets.tokens }}
-                  key: cipherToken
-            - name: JWT_HMAC_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.secrets.tokens }}
@@ -86,7 +74,9 @@ spec:
                   name: {{ .Values.secrets.rabbit }}
                   key: password
           resources:
-            {{- include "ucv.resources" . | nindent 12 }}
+            {{- $vars := merge (dict) . -}}
+            {{- $_ := set $vars "ucvService" "security-api" -}}
+            {{- include "ucv.resources" $vars | nindent 12 }}
           securityContext:
             {{- include "ucv.securityContext" . | nindent 12 }}
           livenessProbe:

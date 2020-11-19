@@ -42,18 +42,60 @@ This chart deploys IBM Watson Studio Local.
 
 ### Red Hat OpenShift SecurityContextConstraints Requirements
 
-* Cluster administrator role is required for installation.
-* This chart references the [`ibm-restricted-scc`](https://ibm.biz/cpkspec-scc) custom SecurityContextConstraints definition:
-    ```
-    apiVersion: security.openshift.io/v1
-    kind: SecurityContextConstraints
-    metadata:
-    annotations:
-        kubernetes.io/description: "This policy is the most restrictive, 
-        requiring pods to run with a non-root UID, and preventing pods from accessing the host.
-        The UID and GID will be bound by ranges specified at the Namespace level." 
-        cloudpak.ibm.com/version: "1.1.0"
-    name: ibm-restricted-scc
-    :
-    ```
-    
+* Custom SecurityContextConstraints definition
+You can copy and paste the following snippets to enable the custom PodSecurityPolicy Custom PodSecurityPolicy definition:
+
+```
+apiVersion: app/v1
+kind: PodSecurityPolicy
+metadata:
+  annotations:
+    kubernetes.io/description: "This policy is the most restrictive,
+      requiring pods to run with a non-root UID, and preventing pods from accessing the host."
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: docker/default
+    seccomp.security.alpha.kubernetes.io/defaultProfileName: docker/default
+  name: ibm-restricted-psp-minio
+spec:
+  allowPrivilegeEscalation: false
+  forbiddenSysctls:
+  - '*'
+  fsGroup:
+    ranges:
+    - max: 65535
+      min: 1
+    rule: MustRunAs
+  requiredDropCapabilities:
+  - ALL
+  runAsUser:
+    rule: MustRunAsNonRoot
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    ranges:
+    - max: 65535
+      min: 1
+    rule: MustRunAs
+  volumes:
+  - configMap
+  - emptyDir
+  - projected
+  - secret
+  - downwardAPI
+  - persistentVolumeClaim
+
+  ```
+
+* The predefined SecurityContextConstraints name: `restricted` has been verified for this chart, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
+
+This README does contain the right link: [`hostmount-anyuid`](https://ibm.biz/cpkspec-scc)
+
+```
+        securityContext:
+          runAsUser: {{ .Values.global.runAsUser }}
+          capabilities:
+            drop:
+            - ALL
+          allowPrivilegeEscalation: false
+          privileged: false
+          runAsNonRoot: true
+```          

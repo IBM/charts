@@ -5,54 +5,39 @@
 global:
   # This value will have the unique-id of the build which created the addon injected
   # as part of the build process.
+  cloudpakInstanceId: "set during installation"
   annotations:
-    cloudpakName: "IBM Cloud Pak for Data Watson Studio Premium - SPSS Modeler Add On"
-    cloudpakId: "38fe119937c64484aed5493a36be88ed"
-    cloudpakVersion: "3.0.1"
+    cloudpakName: "IBM Watson Studio Premium Extension for IBM Cloud Pak for Data"
+    cloudpakId: "497aaae00a3f402dbcbb6ee00d1b924b"
     productMetric: "VIRTUAL_PROCESSOR_CORE"
     productChargedContainers: "All"
-    productID: "ICP4D-addon-SPSS-Modeler_3_0_1"
-    productName: "SPSS Modeler for Watson Studio"
-    productVersion: "3.0.1"
-  
-  flowSession:
-    cpuLimits: 4
-    cpuRequests: 4
-    memLimits: 16Gi
-    memRequests: 16Gi
+    productCloudpakRatio: "1:1"
+    productID: "497aaae00a3f402dbcbb6ee00d1b924b"
+    productName: "IBM SPSS Modeler"
+    productVersion: "3.5.0"
+
+  image:
+    pullPolicy: "IfNotPresent"
+
+  clusterDomain: svc.cluster.local
+
+  addOnPodLabels:
+    addOnId: "spss-modeler"
+    app: "api"
+
+  ibmProduct: "zen"
 
   buildVersion: "0.0"
 
-  bluemix:
-    enabled: false
-    domain: "stage1.ng.bluemix.net"
-    extDomain: "stage1.mybluemix.net"
+  flowSession:
+    cpuLimits: 4
+    memLimits: 16Gi
 
   runAsUser: "1000320999"
   editor:
     sa: cpd-editor-sa
   viewer:
     sa: cpd-viewer-sa
-
-  billing:
-    enabled: false
-    serviceId: "???"
-
-  activityTracker:
-    enabled: false
-    region: "ng"
-    project:
-      # The activity tracker project we want our logged activity to appear in.
-      id: "2c71e962-6bef-441c-98b5-9be8143c31be"
-    # How to reach the activity tracker APIs
-    url: "https://???"
-
-  rabbitmq:
-    enabled: false
-
-  crn:
-    name: "???"
-    location: "???"
 
   watsonStudio:
     url: "https://internal-nginx-svc:12443"
@@ -61,19 +46,13 @@ global:
     trustSelfSignedCertificates: false
 
   auth:
-    iam:
-      # IAM Authentication related setting. Disabled for local.
-      enabled: false
     icp4d:
       # ICP4D Authentication related settings. Enabled for local.
       enabled: true
       publicKeyUrl: "https://internal-nginx-svc:12443/auth/jwtpublic"
-
-  cloudant:
-    enabled: false
-
-  newRelic:
-    enabled: false
+      authorizationUrl: "/auth/login/zen-login.html"
+      callbackUrl: "/auth/iamid/callback"
+      logoutUrl: "/home"
 
   nginx:
     enabled: true
@@ -82,6 +61,11 @@ global:
       certificateSecret:
         name: internal-nginx-svc-tls
         key: certificate.pem
+    internalSSLCertificate:
+      # The name of the certificate file we are going to mount, so the container code can trust it.
+      fileName: "nginx_internal_certificate.pem"
+      # The folder into which the certificate will be mounted.
+      mountFolder: "/etc/certificates"
 
   docker:
     useNameSpace: false
@@ -89,123 +73,50 @@ global:
 
   redis:
     enabled: true
-    # Indicates that the encryption_token is being passed-in from the environment or not.
-    # If not, then it must be being picked-up from a secret which already exists in the environment.
-    tokenFromValue: false
-    # If tokenFromValue is set, we expect this encryption_token to be over-ridden.
-    encryption_token: ""
-
-    # The name of the configmap to get the redis URL from
     configMap: "redis-ha-configmap"
 
   modelViewer:
     # Where can we access the model viewer ?
-    # TODO: make sure this matches Don P's service name..
     url: "https://internal-nginx-svc:12443/model-viewer"
 
   canvasApi:
     # Where can the canvas components call to reach the canvas-api REST service ?
-    url: "https://internal-nginx-svc:12443/flow-api"
+    url: "https://internal-nginx-svc:12443/canvas_api"
 
-  cacheDb:
-    serviceName: modeler-flow-cache-db
-    chartName: cache-db
+  commonApi:
+    url: "https://internal-nginx-svc:12443"
+
+  commonUI:
+    url: "https://internal-nginx-svc:12443"
 
   flowApi:
-    nginxPath: "flow-api"
+    nginxPath: "canvas_api"
 
   wml:
     # Tells the canvas service how it can connect to the machine learning api
     url: "https://internal-nginx-svc:12443"
+# end of global value settings
 
 # Values specific to the canvas API deployment.
 flow-api:
   image:
     repository: flow-api
-    tag: "2031-x86-64"
-  # TODO Set these initially to work in Terry's cluster
-  resources:
-    replicaCount: 3
-    memory: 2Gi
-    cpuLimits: 1000m
-    cpuRequests: 500m
-
-
-# Values specific to the cache-db deployment.
-cache-db:
-  postgres:
-    user: postgres_user
-    database: cache_db
-  service:
-    port: "5432"
-  image:
-    repository: cache-db-local
-    tag: "9184-x86-64"
-  # TODO Set these initially to work in Terry's cluster
-  resources:
-    memory: 2Gi
-    cpuLimits: 2000m
-    cpuRequests: 500m
-    # Passed to the database, affects how many connections can be serviced.
-    # Should be set to the <memory> - 1024MB
-    sharedBuffers: 1024MB
-    # Passed to the database. Should be sharedBuffers/2MB.
-    maxConnections: 512
-
-
-# Values specific to the flow-session-cache deployment.
-flow-session-cache:
-  image:
-    repository: flow-session-cache
-    tag: "9184-x86-64"
-  # TODO Set these initially to work in Terry's cluster
-  resources:
-    replicaCount: 3
-    memory: 2Gi
-    cpuLimits: 1000m
-    cpuRequests: 500m
-  sessionPool:
-    # The number of cpus to use for the pods in the session pool
-    cpus: 6
-    # The amount of memory to use for the pods in the session pool
-    memoryGiB: 24
-    # The percentage of pods in the pool used for those in the running state. The
-    # remaining cpu/memory will be used for pods in other states, such as in the
-    # cache state (ready for new sessions), or deleting/waiting to start etc
-    # states. Typically this will be around 80%, unless running on very limited
-    # resources.
-    maxRunningPercent: 50
-
-
-# The flow session container...
-flow-session:
-  usePVCForTempDiskSpace: false
-  resources:
-    memory: 4Gi
+    tag: "2033-x86-64"
 
 flow-ui:
   image:
     repository: flow-ui
-    tag: "9184-x86-64"
-  # TODO Set these initially to work in Terry's cluster
-  resources:
-    replicaCount: 3
-    memory: 2Gi
-    cpuLimits: 1000m
-    cpuRequests: 500m
+    tag: "9251-x86-64"
 
 preInstaller:
   image:
     repository: pre-installer
-    tag: "830-x86-64"
+    tag: "917-x86-64"
 
 flowSession:
   image:
     repository: flow-session
-    tag: "7955-x86-64"
-
-image:
-  pullPolicy: IfNotPresent
+    tag: "8029-x86-64"
 
 runtimes:
   workerNodes: 30

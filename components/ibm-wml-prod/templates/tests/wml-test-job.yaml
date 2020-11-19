@@ -1,0 +1,79 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: wml-test-job
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+    app: wml-test-job
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}"
+    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+spec:
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      name: wml-test-job
+      labels:
+        app: wml-test-job
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        app.kubernetes.io/name: "{{ .Release.Name }}"
+        helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+        icpdsupport/addOnId: wml 
+        icpdsupport/app: api        
+      annotations:
+        cloudpakName: "IBM Cloud Pak for Data"
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        productCloudpakRatio: "1:1"
+        productID: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        productName: "IBM Watson Machine Learning"
+        productVersion: "3.5.0"
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productChargedContainers: All
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - {{ .Values.global.architecture }}
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      restartPolicy: Never
+      containers:
+        - name: "wml-test-container"
+          image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.wmlDeleteRuntime.image.repository }}:{{ .Values.wmlDeleteRuntime.image.tag }}"
+          resources:
+            limits:
+              cpu: "0.5"
+              memory: "256Mi"
+            requests:
+              cpu: "0.5"
+              memory: "256Mi"
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ .Values.global.user.id }}
+            capabilities:
+              drop:
+              - ALL
+          command:
+          - "/bin/bash"
+          - -c
+          - /tmp/test_wml.sh

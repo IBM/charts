@@ -1,34 +1,50 @@
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ template "flow-ui.fullname" . }}
   labels:
     app.kubernetes.io/name: {{ template "flow-ui.name" . }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
     helm.sh/chart: {{ template "flow-ui.chart" . }}
     app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    {{- include "flow-ui.flowUiaddOnPodLabels" . | indent 4 }}
   annotations:
     build: {{ .Values.global.buildVersion | quote }}
-    {{- if .Values.global.annotations }}
-{{ toYaml .Values.global.annotations | trim | indent 4 }}
-    {{- end }}
+    {{- include "spss-modeler.cloudpak_annotations" . | indent 4 }}
 spec:
   replicas: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ template "flow-ui.name" . }}
       app.kubernetes.io/instance: {{ .Release.Name }}
+      release: {{ .Release.Name }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 4
+      maxUnavailable: 0
+    type: RollingUpdate    
   template:
     metadata:
       labels:
         app.kubernetes.io/name: {{ template "flow-ui.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        helm.sh/chart: {{ template "flow-ui.chart" . }}
+        release: {{ .Release.Name }}
+        {{- include "flow-ui.flowUiaddOnPodLabels" . | indent 8 }}
       annotations:
         build: {{ .Values.global.buildVersion | quote }}
-        {{- if .Values.global.annotations }}
-{{ toYaml .Values.global.annotations | trim | indent 8 }}
-        {{- end }}
+        {{- include "spss-modeler.cloudpak_annotations" . | indent 8 }}
     spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.global.runAsUser }}
+      serviceAccount: {{ .Values.global.viewer.sa }}
+      serviceAccountName: {{ .Values.global.viewer.sa }}     
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -39,12 +55,6 @@ spec:
                     values:
                       - "amd64"
                       - "ppc64le"
-      strategy:
-        rollingUpdate:
-          maxSurge: 4
-          maxUnavailable: 0
-        type: RollingUpdate
-
 
       {{- if .Values.global.nginx.importSSLCertificate.enabled }}
       volumes:
@@ -55,17 +65,14 @@ spec:
           # The key name is dictated by the installer team - who created the secret.
           - key: {{ .Values.global.nginx.importSSLCertificate.certificateSecret.key }}
             # The path where we mount the secret is up to us.
-            path: {{ .Values.nginx.internalSSLCertificate.fileName }}
+            path: {{ .Values.global.nginx.internalSSLCertificate.fileName }}
       {{- end }}
-
-      serviceAccount: {{ .Values.global.viewer.sa }}
-      serviceAccountName: {{ .Values.global.viewer.sa }}
       containers:
       - name: {{ .Chart.Name }}
         image: {{ template "full-image-url" . }}
-        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
         securityContext:
-          runAsUser: {{ $.Values.global.runAsUser }}
+          runAsUser: {{ .Values.global.runAsUser }}
           capabilities:
             drop:
             - ALL
@@ -79,10 +86,10 @@ spec:
         resources:
           limits:
             cpu: {{ .Values.resources.cpuLimits }}
-            memory: {{ .Values.resources.memory }}
+            memory: {{ .Values.resources.memLimits }}
           requests:
             cpu: {{ .Values.resources.cpuRequests }}
-            memory: {{ .Values.resources.memory }}
+            memory: {{ .Values.resources.memRequests }}
         livenessProbe:
           httpGet:
             path: /monitor
@@ -102,20 +109,11 @@ spec:
         {{ if .Values.global.nginx.importSSLCertificate.enabled }}
         volumeMounts:
         - name: certificates
-          mountPath: {{ .Values.nginx.internalSSLCertificate.mountFolder }}
+          mountPath: {{ .Values.global.nginx.internalSSLCertificate.mountFolder }}
           readOnly: true
         {{- end }}
 
         env:
-
-        {{- if .Values.global.bluemix.enabled }}
-        # Bluemix
-        - name: DOMAIN
-          value: {{ .Values.global.bluemix.domain }}
-        - name: EXT_DOMAIN
-          value: {{ .Values.global.bluemix.extDomain }}
-        {{- end }}
-
         # Control the node runtime
         - name: NODE_ENV
           value: {{ .Values.node.env }}
@@ -164,15 +162,6 @@ spec:
               name: watson-studio-secrets
               key: session-secret.txt
 
-        {{- if .Values.global.auth.iam.enabled }}
-        # Authentication...
-        # Used in cloud, some varialbes/values missing
-        - name: IAM_JWKS_URL
-          value: {{ .Values.global.auth.iam.jwks.url }}
-        - name: IAM_TOKEN_URL
-          value: {{ .Values.global.auth.iam.token.url }}
-        {{- end }}
-
         {{- if .Values.global.auth.icp4d.enabled }}
         # icp4d auth.
         - name: auth__icp4d__authorizationUrl
@@ -189,59 +178,31 @@ spec:
         - name: auth__icp4d__logoutUrl
           value: {{ .Values.global.auth.icp4d.logoutUrl }}
         {{- end }}
-
         - name: config__commonApi__url
           value: {{ .Values.global.commonApi.url }}
         - name: config__commonUI__url
           value: {{ .Values.global.commonUI.url }}
-
-        {{- if .Values.global.activityTracker.enabled }}
-        # Activity tracker-related things:
-        - name: APP_ENV_ACTIVITY_TRACKER_REGION
-          value: {{ .Values.global.activityTracker.region }}
-        - name: APP_ENV_ACTIVITY_TRACKER_PROJECTID
-          value: {{ .Values.global.activityTracker.project.id }}
-        - name: APP_ENV_ACTIVITY_TRACKER_URL
-          value: {{ .Values.global.activityTracker.url }}
-        - name: APP_ENV_CRN_CNAME
-          value: {{ .Values.global.crn.name }}
-        - name: APP_ENV_CRN_LOCATION
-          value: {{ .Values.global.crn.location }}
-        - name: ACTIVITY_TRACKER_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "flow-ui.secrets" . }}
-              key: activity-tracker-token
-        {{- end }}
-
-        {{- if .Values.global.newRelic.enabled }}
-        - name: NEW_RELIC_LICENSE_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "flow-ui.secrets" . }}
-              key: new-relic-license-key
-        - name: NEW_RELIC_APP_NAME
-          value: {{ .Values.newRelic.applicationName }}
-        {{- end }}
-
         {{- if .Values.global.redis.enabled }}
         - name: composeRedis_url
           valueFrom:
-            configMapKeyRef:
-              name: {{ .Values.global.redis.configMap }}
-              key: redis-url
+            secretKeyRef:
+              name: redis-ha
+              key: redis-url-ssl
         - name: APP_ENV_REDIS_ENCRYPTION_KEY
           valueFrom:
             secretKeyRef:
               name: watson-studio-secrets
               key: redis-encryption-token.txt
         - name: APP_ENV_REDIS_SSL_CERTIFICATE
-          value: ""
+          valueFrom:
+            secretKeyRef:
+              key: cacertb64.pem
+              name: redis-ha-cert
         {{- end }}
 
         {{ if .Values.global.nginx.importSSLCertificate.enabled }}
         - name: NODE_EXTRA_CA_CERTS
-          value: {{ .Values.nginx.internalSSLCertificate.mountFolder }}/{{ .Values.nginx.internalSSLCertificate.fileName }}
+          value: {{ .Values.global.nginx.internalSSLCertificate.mountFolder }}/{{ .Values.global.nginx.internalSSLCertificate.fileName }}
         {{- end }}
 
 

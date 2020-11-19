@@ -1,9 +1,9 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: wml-scoring-rt-utils
+  name: wml-deployment-agent
   labels:
-    app: wml-scoring-rt-utils
+    app: wml-deployment-agent
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
@@ -14,14 +14,14 @@ metadata:
 spec:
   revisionHistoryLimit: 3
   replicas: 1
-  serviceName: wml-scoring-rt-utils
+  serviceName: wml-deployment-agent
   selector:
     matchLabels:
-      app: wml-scoring-rt-utils
+      app: wml-deployment-agent
   template:
     metadata:
       labels:
-        app: wml-scoring-rt-utils
+        app: wml-deployment-agent
         chart: "{{ .Chart.Name }}"
         release: "{{ .Release.Name }}"
         heritage: "{{ .Release.Service }}"
@@ -29,15 +29,20 @@ spec:
         app.kubernetes.io/instance: {{.Release.Name | quote }}
         app.kubernetes.io/name: "{{ .Release.Name }}"
         helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+        icpdsupport/addOnId: wml
+        icpdsupport/app: api
       annotations:
-        cloudpakName: IBM Cloud Pak for Data
-        cloudpakId: eb9998dcc5d24e3eb5b6fb488f750fe2
-        cloudpakVersion: 3.0.1
-        productName: IBM Watson Machine Learning for IBM Cloud Pak for Data
-        productID: ICP4D-Watson-Machine-Learning-3-0-1
-        productVersion: 3.0.1
-        productMetric: VIRTUAL_PROCESSOR_CORE
-        productChargedContainers: All        
+        hook.deactivate.cpd.ibm.com/command: '["date"]'
+        hook.activate.cpd.ibm.com/command: '["date"]'
+        cloudpakName: "IBM Cloud Pak for Data"
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        productCloudpakRatio: "1:1"
+        productID: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakInstanceId: "{{ .Values.global.cloudpakInstanceId }}"
+        productName: "IBM Watson Machine Learning"
+        productVersion: "3.5.0"
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productChargedContainers: All      
     spec:
       affinity:
         nodeAffinity:
@@ -47,12 +52,51 @@ spec:
               - key: beta.kubernetes.io/arch
                 operator: In
                 values:
-                  - amd64
+                  - {{ .Values.global.architecture }}
       serviceAccount: {{ .Values.global.editor.sa }}
       serviceAccountName: {{ .Values.global.editor.sa }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
+      initContainers:
+      - name: init-container
+        command: ['sh', '-c', 'while true; do echo "Waiting for Ectd service to come up..."; sleep 120; etcdctl --cert="/var/etcd/certs/server.crt" --key="/var/etcd/certs/server.key" --cacert="/var/etcd/certs/server.cacrt" --insecure-skip-tls-verify=true --user root:$ETCD_PASS --endpoints=wml-deployments-etcd:2379 endpoint health  --dial-timeout=300s --command-timeout=300s && break; sleep 20; done; echo "Etcd service available!";']
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.wmlEtcd.image.repository }}:{{ .Values.wmlEtcd.image.tag }}"
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: ETCDCTL_API
+          value: "3"
+        - name: ETCD_PASS
+          valueFrom:
+            secretKeyRef:
+              key: etcd-password
+              name: wml-deployments-etcd-secret
+        resources:
+          limits:
+            cpu: 250m
+            memory: 512M
+          requests:
+            cpu: 200m
+            memory: 256M
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsUser: {{ .Values.global.user.id }}
+          runAsNonRoot: true
+          privileged: false
+          readOnlyRootFilesystem: false
+        volumeMounts:
+        - mountPath: /var/etcd/certs/
+          name: tls
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      volumes:
+      - name: tls
+        secret:
+          defaultMode: 420
+          secretName: wml-deployments-etcd-secret
       containers:
       - name: agent-container
         image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.wmlScoringUtils.image.repository }}:{{ .Values.wmlScoringUtils.image.tag }}"
@@ -67,7 +111,7 @@ spec:
           readOnlyRootFilesystem: false
         livenessProbe:
           exec:
-            command:  ["/etc/agent/bin/grpc-healthcheck", "localhost", "16502"]
+            command:  ["/etc/agent/bin/grpc-healthcheck", "localhost", "17502"]
           failureThreshold: 3
           initialDelaySeconds: 25
           periodSeconds: 60
@@ -75,7 +119,7 @@ spec:
           timeoutSeconds: 5
         readinessProbe:
           exec:
-            command: ["/etc/agent/bin/grpc-healthcheck", "localhost", "16502"]
+            command: ["/etc/agent/bin/grpc-healthcheck", "localhost", "17502"]
           failureThreshold: 3
           initialDelaySeconds: 20
           periodSeconds: 60
@@ -86,39 +130,42 @@ spec:
             name: wdp-service-id
         resources:
           limits:
-            cpu: "2"
+            cpu: "1"
             memory: 2Gi
           requests:
-            cpu: "500m"
+            cpu: "150m"
             memory: 2Gi
         env:
         - name: AGT_SERVICE_NAME
-          value: wml-online-scoring
+          value: wml-deployment
         - name: WMLENV
           value: fvt
         - name: DATACENTRE
           value: $datacentre
         - name: AGT_ETCD_CLUSTER
           valueFrom:
-           secretKeyRef:
-            name: etcd-secret
-            key: etcd_cluster
+            secretKeyRef:
+              key: etcd-cluster
+              name: wml-deployments-etcd-secret
         - name: AGT_ETCD_USERNAME
-          valueFrom:
-           secretKeyRef:
-            name: etcd-secret
-            key: etcd_username
+          value: "root"
         - name: AGT_ETCD_PASSWORD
           valueFrom:
-           secretKeyRef:
-            name: etcd-secret
-            key: etcd_password
+            secretKeyRef:
+              key: etcd-password
+              name: wml-deployments-etcd-secret
+        - name: AGT_CA_FILE
+          value: "/var/etcd/certs/server.cacrt"
         - name: AGT_POLL_INTERVAL_IN_SEC
           value: "1800"
         - name: AGT_ETCD_TLS
-          value: "0"
+          value: "1"
         - name: AGT_SERVICE_TLS
           value: "true"
         - name: AGT_STATSD_ENABLE
           value: "1"
-
+        - name: AGT_SERVER_PORT
+          value: "17502"
+        volumeMounts:
+        - mountPath: /var/etcd/certs/
+          name: tls

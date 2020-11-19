@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Values.image.repository }}-verify"
+  annotations:
+    "helm.sh/hook": test-success
+    {{- include "spss-modeler.cloudpak_annotations" . | indent 4 }}
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: "{{ .Values.image.repository }}-verify"
+    helm.sh/chart: {{ template "flow-ui.chart" . }}
+    {{- include "spss-modeler.addOnPodLabels" . | indent 4 }}
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  serviceAccountName: cpd-viewer-sa
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - amd64
+  containers:
+    - name: "{{ .Values.image.repository }}-verify"
+      image: {{ template "full-image-url" . }}
+      securityContext:
+        privileged: false
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 1000320999
+        readOnlyRootFilesystem: false
+        capabilities:
+          drop:
+            - ALL
+      command: [sh, -c]
+      args:
+        - |
+          response=$(curl -k -s -o /dev/null -w "%{response_code}" https://{{ .Release.Name }}-{{ template "flow-ui.name" . }}:{{ .Values.container.port }}/monitor)
+          if [ $response -ne 200 ]; then
+            echo "HTTP response $response accessing the spss-modeler flow-ui service"
+            exit 1
+          else
+            echo "spss-modeler flow-ui service is up"
+          fi
+      resources:
+        limits:
+          cpu: {{ .Values.resources.cpuLimits }}
+          memory: {{ .Values.resources.memLimits }}
+        requests:
+          cpu: {{ .Values.resources.cpuRequests }}
+          memory: {{ .Values.resources.memRequests }}
+  restartPolicy: Never
