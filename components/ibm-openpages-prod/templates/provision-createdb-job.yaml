@@ -1,0 +1,91 @@
+#*******************************************************************************
+# Licensed Materials - Property of IBM
+#
+#
+# OpenPages GRC Platform (PID: 5725-D51)
+#
+#  © Copyright IBM Corporation 2020. All Rights Reserved.
+#
+# US Government Users Restricted Rights- Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+#*******************************************************************************
+{{- include "sch.config.init" (list . "op.sch.chart.config.values") -}}
+{{ $compName := .sch.chart.components.opapp.name }}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "{{ .Values.name }}-provision-createdb"
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    icpdsupport/app : {{ include "sch.names.appName" (list .) }}
+    icpdsupport/serviceInstanceId: {{ .Values.zenServiceInstanceId | int64 | quote }}
+    icpd-addon/status: "{{ .Values.zenServiceInstanceId | int64 }}"
+    icpdsupport/addOnId: {{ .Values.zenServiceInstanceType | quote}}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "2"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+        icpdsupport/addOnId: {{ .Values.zenServiceInstanceType | quote}}
+        icpdsupport/app : {{ include "sch.names.appName" (list .) }}
+        icpdsupport/serviceInstanceId: {{ .Values.zenServiceInstanceId | int64 | quote }}
+        app : {{ include "sch.names.appName" (list .) }}
+      annotations:
+          {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.securityContextRestricted) | indent 6 }}
+      serviceAccountName: {{ .Values.global.serviceAccountName }}
+      containers:
+      - name: opdbprovisioner-pre-install-job-container
+        image: "{{ .Values.docker_registry_prefix }}/openpages-cpd-provisioner:{{ .Values.image.tag }}"
+        imagePullPolicy: Always
+{{- with .Values.smallContainer.resources }}
+        resources:
+{{ toYaml . | indent 10 }}
+{{- end }}
+        env:
+        - name: INSTANCE_ID
+          value: {{ .Values.zenServiceInstanceId | int64 | quote }}
+        - name: INSTANCE_TYPE
+          value: {{ .Values.zenServiceInstanceType | quote }}
+        - name: RELEASE
+          value: {{ .Release.Name | quote }}
+        - name: NAMESPACE
+          value: {{ .Release.Namespace | quote }}
+        - name: OPDB_USER
+          value: {{ .Values.opdb.username | quote }}
+        - name: DEDICATED
+          value: "{{ .Values.dedicatedDbNodes }}"
+        - name: NODE_LABEL_VALUE
+          value: "{{ .Values.dbNodeLabelValue }}"
+        - name: DATA_STORAGE_CLASS
+          value: "{{ .Values.dbDataStorageClass }}"
+        - name: META_STORAGE_CLASS
+          value: "{{ .Values.dbMetaStorageClass }}"
+        - name: DB_BACKUP_PVC_NAME
+          value: "{{ .Values.name }}-dbbackup-pvc"
+        - name: DB_CPU
+          value: {{ pluck .Values.tShirtSize .Values.resources.db | first | pluck "cpu" | first | quote }}
+        - name: DB_MEM
+          value: {{ pluck .Values.tShirtSize .Values.resources.db | first | pluck "memory" | first | quote }}
+        volumeMounts:
+        - mountPath: /var/run/sharedsecrets
+          name: zen-service-broker-secret
+        - mountPath: /var/run/db-secrets
+          name: db-passwords-secret
+      volumes:
+        - name: zen-service-broker-secret
+          secret:
+            defaultMode: 420
+            secretName: zen-service-broker-secret
+        - name: db-passwords-secret
+          secret:
+            defaultMode: 420
+            secretName: {{ .Values.name }}-db-secret
+      restartPolicy: Never
+  backoffLimit: 3
