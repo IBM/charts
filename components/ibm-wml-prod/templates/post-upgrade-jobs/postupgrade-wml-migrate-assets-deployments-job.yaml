@@ -1,0 +1,242 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postupgrade-wml-migrate-assets-deployments-job
+  labels:
+    app: postupgrade-wml-migrate-assets-deployments-job
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}"
+    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+  annotations:
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      name: postupgrade-wml-migrate-assets-deployments-job
+      labels:
+        app: postupgrade-wml-migrate-assets-deployments-job
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/name: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+        icpdsupport/addOnId: wml
+        icpdsupport/app: api
+      annotations:
+        cloudpakName: "IBM Cloud Pak for Data"
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        productCloudpakRatio: "1:1"
+        productID: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        productName: "IBM Watson Machine Learning"
+        productVersion: "3.5.0"
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productChargedContainers: All
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - {{ .Values.global.architecture }}
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+      - args:
+        - "/opt/ibm/scripts/master_migrate.sh"
+        command:
+        - /bin/sh
+        - -c
+        env:
+        - name: KEYSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: key_store_password
+              name: training-secrets
+        - name: WDP_BASE_URL
+          valueFrom:
+            configMapKeyRef:
+              key: host-url
+              name: wdp-config
+        - name: INTERNAL_NGINX_CERT
+          valueFrom:
+            secretKeyRef:
+              key: certificate.pem
+              name: internal-nginx-svc-tls
+        - name: DEPLOYMENT_PLATFORM
+          value: private
+        - name: MEMORY
+          value: "3072"
+        - name: CLOUDANT_PORT
+          value: "6984"
+        - name: ETCD_USER_OLD
+          valueFrom:
+            secretKeyRef:
+              name: etcd-secret
+              key: etcd_username
+        - name: ETCD_PASSWORD_OLD
+          valueFrom:
+            secretKeyRef:
+              name: etcd-secret
+              key: etcd_password
+        - name: ETCD_CLUSTER_OLD
+          valueFrom:
+            secretKeyRef:
+              name: etcd-secret
+              key: etcd_cluster
+        - name: ETCD_USER_NEW
+          valueFrom:
+            secretKeyRef:
+              name: wml-deployments-etcd-secret
+              key: etcd-user
+        - name: ETCD_PASSWORD_NEW
+          valueFrom:
+            secretKeyRef:
+              name: wml-deployments-etcd-secret
+              key: etcd-password
+        - name: ETCD_CLUSTER_NEW
+          valueFrom:
+            secretKeyRef:
+              name: wml-deployments-etcd-secret
+              key: etcd-cluster
+        - name: ETCD_CERTFILE_NEW
+          value: "/etcd/cert/server.cacrt"
+        - name: WML_CLOUDANT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: wdp-cloudant-creds
+              key: username
+        - name: WML_CLOUDANT_PASSWORD
+          valueFrom:
+             secretKeyRef:
+               name: wdp-cloudant-creds
+               key: password
+        - name: WML_CLOUDANT_HOSTNAME
+          valueFrom:
+            configMapKeyRef:
+               name: wmltrainingconfigmap
+               key: cloudant_host
+        - name: PLATFORM
+          value: "wml"
+        - name: SERVICE
+          value: "Watson Machine Learning"
+        - name: VERSION
+          value: "4.0.0"
+        - name: couchdb_url
+          value: "https://wdp-cloudant:443"
+        - name: couchdb_uid
+          valueFrom:
+             secretKeyRef:
+               name: wdp-couchdb
+               key: adminUsername
+        - name: couchdb_pwd
+          valueFrom:
+             secretKeyRef:
+               name: wdp-couchdb
+               key: adminPassword
+        - name: cams_db_prefix
+          value: "v2_"
+        - name: cams_db_admn_db
+          value: "admin"
+        - name: cams_db_ca_cert
+          valueFrom:
+             secretKeyRef:
+               name: wdp-cloudant-cert
+               key: ca.crt.pem
+        - name: elasticsearch_index
+          value: "wkc-ALIAS"
+        - name: elasticsearch_uri_config
+          value: "elasticsearch-master"
+        - name: elasticsearch_uid_config
+          valueFrom:
+             secretKeyRef:
+               name: elasticsearch-master-secret
+               key: username
+        - name: elasticsearch_pwd_config
+          valueFrom:
+             secretKeyRef:
+               name: elasticsearch-master-secret
+               key: password
+        - name: elasticsearch_uri_port_config
+          value: "9200"
+        - name: elasticsearch_ca_base64_cert_config
+          valueFrom:
+             secretKeyRef:
+               name: elasticsearch-master-cert
+               key: ca.pem
+        - name: elasticsearch_http_protocol
+          value: "https"
+        volumeMounts:
+        - mountPath: /etcd/cert
+          name: etcd-cert
+        - mountPath: /user-home
+          name: user-home-mount
+        - name: config-volume
+          mountPath: /opt/ibm/ml-repository/conf
+        - name: config-volume-keystore
+          mountPath: /opt/ibm/ml-repository/keys
+        - name: config-volume-keystore
+          mountPath: /opt/ibm/training/keys
+        - mountPath: /opt/ibm/training/conf
+          name: config-volume-training
+        envFrom:
+        - secretRef:
+            name: wdp-service-id
+        name: preupgrade-spaces-migrate-job
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.wmlPreUpgradeAssets.image.repository }}:{{ .Values.wmlPreUpgradeAssets.image.tag }}"
+        resources:
+          limits:
+            cpu: "1"
+            memory: 1Gi
+          requests:
+            cpu: 500m
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsUser: {{ .Values.global.user.id }}
+          runAsNonRoot: true
+          privileged: false
+          readOnlyRootFilesystem: false
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Never
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: config-volume
+          configMap:
+            name: wmlrepositorymigrationv4configmap
+        - name: config-volume-keystore
+          configMap:
+            name: wmlsslcertsconfigmap
+        - name: config-volume-training
+          configMap:
+            name: wmltrainingconfigmap
+        - name: user-home-mount
+          persistentVolumeClaim:
+            claimName: user-home-pvc
+        - name: etcd-cert
+          secret:
+            defaultMode: 420
+            items:
+            - key: server.cacrt
+              path: server.cacrt
+            secretName: wml-deployments-etcd-secret

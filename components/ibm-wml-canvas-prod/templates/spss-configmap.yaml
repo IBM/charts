@@ -5,10 +5,16 @@ metadata:
   labels:
     icpdata_addon: "true"
     icpdata_addon_version: {{.Chart.AppVersion | quote }}
+    app.kubernetes.io/name: {{ template "wml-canvas.fullname" . }}-configmap
+    helm.sh/chart: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{ template "wml-canvas.fullname" . }}-configmap
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
     release: {{ .Release.Name }}
   namespace: {{ .Release.Namespace }}
   annotations:
+    {{- include "spss-modeler.cloudpak_annotations" . | indent 4 }}
     build: {{ .Values.global.buildVersion | quote }}
+
 data:
   add-ons.json: |
     {
@@ -18,8 +24,8 @@ data:
 {{- if hasKey .Values "global" }}
 {{- if hasKey .Values.global "ibmProduct" }}
 {{- if eq .Values.global.ibmProduct "ws" }}
-            "product_docs":"https://www.ibm.com/support/knowledgecenter/SSHGWL_3.0.1/wsd/spss-modeler.html",
-            "deploy_docs": "https://www.ibm.com/support/knowledgecenter/SSHGWL_3.0.1/wsj/install/install-spss.html",
+            "product_docs":"https://www.ibm.com/support/knowledgecenter/SSHGWL_3.5.0/wsd/spss-modeler.html",
+            "deploy_docs": "https://www.ibm.com/support/knowledgecenter/SSHGWL_3.5.0/wsj/install/install-spss.html",
             "images": null,
 {{- end }}
 {{- end }}
@@ -31,7 +37,7 @@ data:
         "extensions": {},
         "max_instances": "",
         "versions": {
-          "3.0.1": {
+          "3.5.0": {
             "state": "enabled",
             "details": {}
           }
@@ -52,16 +58,16 @@ data:
             "value": "{{ .Values.global.annotations.cloudpakId }}"
           },
           {
-            "name": "cloudpakVersion",
-            "value": "{{ .Values.global.annotations.cloudpakVersion }}"
-          },
-          {
             "name": "productMetric",
             "value": "{{ .Values.global.annotations.productMetric }}"
           },
           {
             "name": "productChargedContainers",
             "value": "{{ .Values.global.annotations.productChargedContainers }}"
+          },
+          {
+            "name": "productCloudpakRatio",
+            "value": "{{ .Values.global.annotations.productCloudpakRatio }}"
           },
           {
             "name": "productID",
@@ -74,6 +80,28 @@ data:
           {
             "name": "productVersion",
             "value": "{{ .Values.global.annotations.productVersion }}"
+          },
+          {
+            "name": "cloudpakInstanceId",
+            "value": "{{ .Values.global.cloudpakInstanceId }}"
+          },
+          {
+            "name": "hook.deactivate.cpd.ibm.com/command",
+            "value": "[]"
+          },
+          {
+            "name": "hook.activate.cpd.ibm.com/command",
+            "value": "[]"
+          }
+      ],
+     "labels": [
+          {
+            "name": "icpdsupport/addOnId",
+            "value": "spss-modeler"
+          },
+          {
+            "name": "icpdsupport/app",
+            "value": "api"
           }
       ],
       "author": "IBM",
@@ -91,7 +119,7 @@ data:
       "replicas": 1,
       "image": "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.flowSession.image.repository }}:{{ .Values.flowSession.image.tag }}",
       "privileged": false,
-      "command": ["./modeler-service-1.0/startup.sh"],
+      "command": ["./modeler-service-1.0/scripts/startup.sh"],
       "env": [
         {
           "name": "SERVICE_IMAGE_NAME",
@@ -116,10 +144,6 @@ data:
         {
           "name": "DEVELOPMENT_MODE",
           "value": "false"
-        },
-        {
-          "name": "USE_ICONSET",
-          "value": "v1/"
         },
         {
           "name": "PLAY_OPTS",
@@ -160,10 +184,6 @@ data:
         {
           "name": "MODEL_VIEWER_SERVICE",
           "value": "{{ .Values.global.modelViewer.url }}"
-        },
-        {
-          "name": "MODEL_VIEWER_BROWSER_PREFIX",
-          "value": "/model-viewer"
         }
       ],
       "probes": {

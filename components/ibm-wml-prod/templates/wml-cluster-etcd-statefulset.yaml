@@ -1,0 +1,293 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: wml-deployments-etcd
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    heritage: "{{ .Release.Service }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}"
+    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+  name: wml-deployments-etcd
+spec:
+  podManagementPolicy: Parallel
+  replicas: 3
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      release: "{{ .Release.Name }}"
+      serviceSelector: wml-deployments-etcd
+  serviceName: wml-deployments-etcd
+  template:
+    metadata:
+      annotations:
+        hook.deactivate.cpd.ibm.com/command: '["date"]'
+        hook.activate.cpd.ibm.com/command: '["date"]'
+        cloudpakName: "IBM Cloud Pak for Data"
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        productCloudpakRatio: "1:1"
+        productID: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakInstanceId: "{{ .Values.global.cloudpakInstanceId }}"
+        productName: "IBM Watson Machine Learning"
+        productVersion: "3.5.0"
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productChargedContainers: All
+      labels:
+        app: wml-deployments-etcd
+        chart: "{{ .Chart.Name }}"
+        heritage: "{{ .Release.Service }}"
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        app.kubernetes.io/name: "{{ .Release.Name }}"
+        helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+        serviceSelector: wml-deployments-etcd
+        icpdsupport/addOnId: wml
+        icpdsupport/app: api
+      name: wml-deployments-etcd
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.global.architecture }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: "release"
+                  operator: In
+                  values:
+                  - "{{ .Release.Name}}"
+                - key: serviceSelector
+                  operator: In
+                  values:
+                  - wml-deployments-etcd
+              topologyKey: kubernetes.io/hostname
+            weight: 1
+      containers:
+      # Variables to populate static cluster
+      {{- $replicaCount := int .Values.wmlclusterEtcd.replicaCount }}
+      {{- $clientPort := int "2379" }}
+      {{- $peerPort := int "2380" }}
+      {{- $etcdFullname := .Values.wmlclusterEtcd.etcdServiceName }}
+      {{- $releaseNamespace := .Release.Namespace }}
+      {{- $clusterDomain := .Values.wmlclusterEtcd.clusterDomain }}
+      {{- $etcdServiceName := .Values.wmlclusterEtcd.etcdServiceName }}
+      {{- $etcdPeerProtocol := "http" }}
+      {{- $etcdClientProtocol := "https" }}
+      {{- $dataDir := printf "/data/etcd/%s" $etcdFullname }}
+      - command:
+        - "/bin/sh"
+        - "-ec"
+        - |
+          HOSTNAME=$(hostname -s)
+          ID=${HOSTNAME:(-1)}
+          echo "==> The ID of the host is $ID"
+          DATA_DIR={{ $dataDir }}
+          ## Store member id for later member replacement
+          store_member_id() {
+            while ! etcdctl member list; do sleep 10; echo "${ETCDCTL_ENDPOINTS}"; done
+            etcdctl member list | grep `hostname -s` | awk '{ print $1}' | awk -F ":" '{ print $1}' > ${DATA_DIR}/member_id
+            exit 0
+          }
+          ## Create data dir if not exists
+          if [ ! -d "${DATA_DIR}" ]; then
+            echo "==> Creating data dir..."
+            mkdir -p ${DATA_DIR}
+          fi
+          if [ -f "${DATA_DIR}/member_id" ]; then
+            member_id=$(cat ${DATA_DIR}/member_id)
+          fi
+          set +e
+          export ETCD_INITIAL_CLUSTER_STATE="existing"
+          ## Test endpoint health before adding members
+          counter=0
+          while test $counter -lt 3; do
+            counter=$((counter+1))
+            echo $counter
+            if test $ID -eq 0; then
+              etcdctl endpoint health --endpoints={{ $etcdClientProtocol }}://{{ $etcdFullname }}-1.{{ $etcdServiceName }}.{{ $releaseNamespace }}.svc.{{ $clusterDomain }}:{{ $clientPort }} && break
+            fi
+            sleep 10
+          done
+          ## Re-joining failed node
+          if [ ! -z $member_id ]; then
+            echo "==> Data exists. Re-joining etcd member"
+            ## remove commas at the end of member_id
+            member_id=${member_id::-1}
+            echo "==> Updating member in existing cluster."
+            if test $ID -eq 0; then
+              export ETCDCTL_ENDPOINTS="{{ $etcdClientProtocol }}://{{ $etcdFullname }}-1.{{ $etcdServiceName }}.{{ $releaseNamespace }}.svc.{{ $clusterDomain }}:{{ $clientPort }}"
+            else
+              export ETCDCTL_ENDPOINTS="{{ $etcdClientProtocol }}://{{ $etcdFullname }}-0.{{ $etcdServiceName }}.{{ $releaseNamespace }}.svc.{{ $clusterDomain }}:{{ $clientPort }}"
+            fi
+            etcdctl member update ${member_id} --peer-urls={{ $etcdPeerProtocol }}://`hostname -s`.{{ $etcdServiceName }}.{{ $releaseNamespace }}.svc.{{ $clusterDomain }}:{{ $peerPort }}
+          ## Adding new member to the cluster
+          elif [ "${ID}" -ge {{ $replicaCount }} ]; then
+            echo "==> Adding member to existing cluster."
+            export ETCDCTL_ENDPOINTS="{{ $etcdClientProtocol }}://{{ $etcdFullname }}-0.{{ $etcdServiceName }}.{{ $releaseNamespace }}.svc.{{ $clusterDomain }}:{{ $clientPort }}"
+            echo "==> Adding new member"
+            etcdctl member add `hostname -s` --peer-urls={{ $etcdPeerProtocol }}://`hostname -s`.{{ $etcdServiceName }}.{{ $releaseNamespace }}.svc.{{ $clusterDomain }}:{{ $peerPort }} | grep "^ETCD_" > ${DATA_DIR}/new_member_envs
+            sed -ie 's/^/export /' ${DATA_DIR}/new_member_envs
+            echo "==> Loading env vars of existing cluster"
+            source ${DATA_DIR}/new_member_envs
+            store_member_id &
+          ## Setting up new cluster
+          else
+            export ETCD_INITIAL_CLUSTER_STATE="new"
+            echo "==> There is no data at all. Creating new cluster"
+            export ETCDCTL_ENDPOINTS="{{ $etcdClientProtocol }}://{{ $etcdFullname }}-0.{{ $etcdServiceName }}.{{ $releaseNamespace }}.svc.{{ $clusterDomain }}:{{ $clientPort }}"
+            store_member_id &
+            if [ ! -z "$ROOT_PASSWORD" ] && [ `hostname -s` == '{{ $etcdFullname }}-0' ]; then
+              echo "==> Configuring RBAC authentication!"
+              #to suppress password in log
+              etcd --log-package-levels "etcdserver=ERROR,auth=ERROR" &
+              ETCD_PID=$!
+              sleep 5
+              while ! etcdctl user get root --dial-timeout=10s; do
+                echo "==> Root User Not found, creating..."
+                etcdctl --endpoints=${ETCDCTL_ENDPOINTS} user add root:${ROOT_PASSWORD}
+                sleep 10
+              done
+              while ! etcdctl --endpoints=${ETCDCTL_ENDPOINTS} auth enable --dial-timeout=10s; do
+                echo "==> Failed to enable auth, retry.."
+                sleep 10
+              done
+              kill $ETCD_PID
+              sleep 5
+            fi
+          fi
+          exec etcd --auto-compaction-mode=revision --auto-compaction-retention=1000 --log-package-levels "etcdserver=ERROR,auth=ERROR"
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.wmlEtcd.image.repository }}:{{ .Values.wmlEtcd.image.tag }}"
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: {{ .Values.global.user.id }}
+          capabilities:
+            drop:
+            - ALL
+        name: etcd
+        ports:
+        - containerPort: 2379
+          name: client
+          protocol: TCP
+        - containerPort: 2380
+          name: server
+          protocol: TCP
+        env:
+        - name: SET_NAME
+          value: {{ $etcdServiceName }}.{{ .Release.Namespace }}.svc.{{ $clusterDomain }}
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+
+        ## Basic configuration
+        - name: GOMAXPROCS
+          value: {{ .Values.wmlclusterEtcd.maxEtcdThreads | quote }}
+
+        - name: ETCD_NAME
+          value: "$(POD_NAME)"
+        - name: ETCD_DATA_DIR
+          value: {{ $dataDir }}
+        - name: ETCD_ADVERTISE_CLIENT_URLS
+          value: '{{ $etcdClientProtocol }}://$(POD_NAME).{{ $etcdServiceName }}.{{ $releaseNamespace }}.svc.{{ $clusterDomain }}:{{ $clientPort }}'
+        - name: ETCD_LISTEN_CLIENT_URLS
+          value: "{{ $etcdClientProtocol }}://0.0.0.0:{{ $clientPort }}"
+        - name: ETCD_INITIAL_ADVERTISE_PEER_URLS
+          value: "{{ $etcdPeerProtocol }}://$(POD_NAME).{{ $etcdServiceName }}.{{ $releaseNamespace }}.svc.{{ $clusterDomain }}:{{ $peerPort }}"
+        - name: ETCD_LISTEN_PEER_URLS
+          value: "{{ $etcdPeerProtocol }}://0.0.0.0:{{ $peerPort }}"
+
+        ## Clustering configuration
+{{- if gt $replicaCount 1 }}
+        - name: ETCD_INITIAL_CLUSTER_TOKEN
+          value: "ibm-wcd-etcd-cluster-{{ .Release.Name }}"
+        - name: ETCD_INITIAL_CLUSTER_STATE
+          value: "new"
+        - name: ETCD_INITIAL_CLUSTER
+          value: {{range $i, $e := until $replicaCount }}{{ $etcdFullname }}-{{ $e }}={{ $etcdPeerProtocol }}://{{ $etcdFullname }}-{{ $e }}.{{ $etcdServiceName }}.{{ $releaseNamespace }}.svc.{{ $clusterDomain }}:{{ $peerPort }},{{ end }}
+{{- end }}
+        - name: ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: wml-deployments-etcd-secret
+              key: etcd-password
+        - name: ETCD_CERT_FILE
+          value: "/var/etcd/certs/server.crt"
+        - name: ETCD_KEY_FILE
+          value: "/var/etcd/certs/server.key"
+        - name: ETCDCTL_CACERT
+          value: "/var/etcd/certs/server.cacrt"
+        - name: ETCDCTL_API
+          value: "3"
+        livenessProbe:
+          tcpSocket:
+            port: 2379
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 5
+          periodSeconds: 20
+          successThreshold: 1
+        readinessProbe:
+          tcpSocket:
+            port: 2379
+          initialDelaySeconds: 35
+          timeoutSeconds: 5
+          failureThreshold: 5
+          periodSeconds: 10
+          successThreshold: 1
+        resources:
+          limits:
+            cpu: 150m
+            memory: 4Gi
+          requests:
+            cpu: 150m
+            memory: 1Gi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/etcd/certs/
+          name: tls
+          readOnly: true
+        - mountPath: /data/
+          name: data
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        runAsUser: {{ .Values.global.user.id }}
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: tls
+        secret:
+          defaultMode: 420
+          secretName: wml-deployments-etcd-secret
+      - name: data
+        emptyDir: {}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
+      storageClassName: "{{ .Values.global.storageclass_name }}"

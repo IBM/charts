@@ -15,12 +15,88 @@ metadata:
     helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
     icpdata_addon_version: {{.Chart.AppVersion | quote }}
 data:
+  upstream.conf: |
+    map $http_x_global_transaction_id $x_global_transaction_id  {
+      '' $request_id;
+      default   $http_x_global_transaction_id;
+    }
+
+    upstream wml-training-upstream {
+      keepalive 32;
+      keepalive_timeout 30s;
+      keepalive_requests 500;
+      server wmltrainingservice:13300;
+    }
+
+    upstream wml-trainingorchestrator-upstream {
+      keepalive 32;
+      keepalive_timeout 30s;
+      keepalive_requests 500;
+      server wmltrainingorchestratorservice:13333;
+    }
+
+
+    upstream wml-envoy-upstream {
+      keepalive 32;
+      keepalive_timeout 30s;
+      keepalive_requests 500;
+      server wml-deployment-envoy:17600;
+    }
+
+
+    upstream wml-repositoryv4-upstream {
+      keepalive 32;
+      keepalive_timeout 30s;
+      keepalive_requests 500;
+      server mlrepositoryv4service:18803; 
+    }
+
   nginx.conf: |
     set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
-    set $envoy_service wml-os-envoy;
     set $repo_service wmlrepositoryservice;
-    set $training_service wmltrainingservice;
-    set $training_orchestrator_service wmltrainingorchestratorservice;
+
+    location ~ ^/ml/wml_services/ml-repository/(heartbeat|test) {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://wml-repositoryv4-upstream;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location /ml/wml_services/version {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://wml-repositoryv4-upstream;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ ^/ml/v4/(deployment_job_definitions|experiments|functions|models|model_definitions|pipelines|remote_training_systems|training_definitions) {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://wml-repositoryv4-upstream;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
 
     location /v2/artifacts {
       rewrite ^\/(.*) /$1 break;
@@ -51,49 +127,6 @@ data:
       send_timeout                300;
       proxy_next_upstream error timeout;
     }
-
-
-    location ~ /v3/wml_instances/([a-z0-9-]+)/published_models/([a-z0-9-]+)/deployments/([a-z0-9-]+)/online {
-      rewrite ^\/v3/wml_instances/([a-z0-9-]+)/published_models/([a-z0-9-]+)/deployments/([a-z0-9-]+)/online /v3/scoring/online/$3 break;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
-      proxy_http_version 1.1;
-      proxy_set_header Connection "";
-      proxy_set_header Host $host;
-      proxy_set_header ML-Instance-Id "";
-      proxy_set_header ML-Instance-Id $1;
-      proxy_pass_request_headers      on;
-    }
-
-
-    location ~ /v3/wml_instances/([a-z0-9-]+)/deployments/([a-z0-9-]+)/online {
-      rewrite ^\/v3/wml_instances/([a-z0-9-]+)/deployments/([a-z0-9-]+)/online /v3/scoring/online/$2 break;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
-      proxy_http_version 1.1;
-      proxy_set_header Connection "";
-      proxy_set_header Host $host;
-      proxy_set_header ML-Instance-Id "";
-      proxy_set_header ML-Instance-Id $1;
-      proxy_pass_request_headers      on;
-    }
-
-
-    location /v3/scoring/online {
-      rewrite ^\/(.*) /$1 break;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
-      proxy_http_version 1.1;
-      proxy_set_header Connection "";
-      proxy_set_header Host $host;
-      proxy_pass_request_headers      on;
-    }
-
-    location /v3/scoring/batch {
-      rewrite ^\/(.*) /$1 break;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
-      proxy_http_version 1.1;
-      proxy_set_header Connection "";
-      proxy_pass_request_headers      on;
-    }
-
 
     location ~ /v3/ml_assets/models/([a-z0-9-]+)/versions/([a-z0-9-]+)/content {
       rewrite ^\/(.*) /$1 break;
@@ -594,14 +627,16 @@ data:
       proxy_next_upstream error timeout;
     }
 
-    # V4 Deployment
+    ## New endpoints for Deployment
 
-    location /v4/deployments {
-      rewrite ^\/(.*) /$1 break;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
+    location ~ ^/ml/v4/deployments/([a-z0-9-]+)/predictions {
+      rewrite ^\/ml/v4/deployments/([a-z0-9-]+)/(.*) /ml/v4/deployments/$1/$2 break;
+      proxy_pass https://wml-envoy-upstream;
       proxy_http_version 1.1;
       proxy_set_header Connection "";
       proxy_set_header Host $http_host;
+      proxy_set_header x-global-transaction-id $x_global_transaction_id;
+      proxy_set_header v4-deployment-id $1;
       proxy_pass_request_headers      on;
       proxy_connect_timeout       30;
       proxy_send_timeout          300;
@@ -610,42 +645,14 @@ data:
       proxy_next_upstream error timeout;
     }
 
-    location /v4/deployments/environments {
-      rewrite ^\/(.*) /$1 break;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
-      proxy_http_version 1.1;
-      proxy_set_header Connection "";
-      proxy_set_header Host $http_host;
-      proxy_pass_request_headers      on;
-      proxy_connect_timeout       30;
-      proxy_send_timeout          300;
-      proxy_read_timeout          300;
-      send_timeout                300;
-      proxy_next_upstream error timeout;
-    } 
-
-    location ~ /v4/deployments/environments/([a-z0-9-]+) {
-      rewrite ^\/(.*) /$1 break;
-      proxy_request_buffering off;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
-      proxy_http_version 1.1;
-      proxy_set_header Connection "";
-      proxy_set_header Host $http_host;
-      proxy_pass_request_headers      on;
-      proxy_connect_timeout       30;
-      proxy_send_timeout          300;
-      proxy_read_timeout          300;
-      send_timeout                300;
-      proxy_next_upstream error timeout;
-    }
-
-    location ~ /v4/deployments/([a-z0-9-]+)/r_shiny {
+    location ~ /ml/v4/deployments/([a-z0-9-]+)/r_shiny {
       proxy_request_buffering off;
       proxy_pass https://kube-rshiny-$1.$nsdomain:7333;
       proxy_http_version 1.1;
       proxy_set_header Connection "upgrade";
       proxy_set_header Upgrade $http_upgrade;
       proxy_set_header Host $http_host;
+      proxy_set_header x-global-transaction-id $x_global_transaction_id;
       proxy_pass_request_headers      on;
       proxy_connect_timeout       30;
       proxy_send_timeout          300;
@@ -654,13 +661,13 @@ data:
       proxy_next_upstream error timeout;
     }
 
-    location ~ /v4/deployments/([a-z0-9-]+) {
+    location /ml/wml_services/deployment/heartbeat/all {
       rewrite ^\/(.*) /$1 break;
-      proxy_request_buffering off;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_pass https://wml-envoy-upstream;
       proxy_http_version 1.1;
       proxy_set_header Connection "";
       proxy_set_header Host $http_host;
+      proxy_set_header x-global-transaction-id $x_global_transaction_id;
       proxy_pass_request_headers      on;
       proxy_connect_timeout       30;
       proxy_send_timeout          300;
@@ -669,13 +676,13 @@ data:
       proxy_next_upstream error timeout;
     }
 
-    location ~ /v4/deployments/([a-z0-9-]+)/predictions {
+    location /ml/wml_services/deployment/heartbeat {
       rewrite ^\/(.*) /$1 break;
-      proxy_request_buffering off;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_pass https://wml-envoy-upstream;
       proxy_http_version 1.1;
       proxy_set_header Connection "";
       proxy_set_header Host $http_host;
+      proxy_set_header x-global-transaction-id $x_global_transaction_id;
       proxy_pass_request_headers      on;
       proxy_connect_timeout       30;
       proxy_send_timeout          300;
@@ -684,12 +691,14 @@ data:
       proxy_next_upstream error timeout;
     }
 
-    location /v4/deployment_job_definitions {
+
+    location ~ /ml/v4_private/deployment_jobs/pod_instances/([a-z0-9-]+)/ready {
       rewrite ^\/(.*) /$1 break;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_pass https://wml-envoy-upstream;
       proxy_http_version 1.1;
       proxy_set_header Connection "";
       proxy_set_header Host $http_host;
+      proxy_set_header x-global-transaction-id $x_global_transaction_id;
       proxy_pass_request_headers      on;
       proxy_connect_timeout       30;
       proxy_send_timeout          300;
@@ -699,13 +708,13 @@ data:
     }
 
 
-    location ~ /v4/deployment_job_definitions/([a-z0-9-]+) {
+    location ~ /ml/v4_private/deployments/([a-z0-9-]+)/payload_logging_configuration {
       rewrite ^\/(.*) /$1 break;
-      proxy_request_buffering off;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_pass https://wml-envoy-upstream;
       proxy_http_version 1.1;
       proxy_set_header Connection "";
       proxy_set_header Host $http_host;
+      proxy_set_header x-global-transaction-id $x_global_transaction_id;
       proxy_pass_request_headers      on;
       proxy_connect_timeout       30;
       proxy_send_timeout          300;
@@ -714,13 +723,13 @@ data:
       proxy_next_upstream error timeout;
     }
 
-    location ~ /v4/deployments/([a-z0-9-]+)/jobs {
+    location ~ /ml/v4/deployments/rolling_update/([a-z0-9-]+) {
       rewrite ^\/(.*) /$1 break;
-      proxy_request_buffering off;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_pass https://wml-envoy-upstream;
       proxy_http_version 1.1;
       proxy_set_header Connection "";
       proxy_set_header Host $http_host;
+      proxy_set_header x-global-transaction-id $x_global_transaction_id;
       proxy_pass_request_headers      on;
       proxy_connect_timeout       30;
       proxy_send_timeout          300;
@@ -729,13 +738,13 @@ data:
       proxy_next_upstream error timeout;
     }
 
-    location ~ /v4/deployments/([a-z0-9-]+)/jobs/([a-z0-9-]+) {
+    location ~ /ml/v4/deployments/hibernation/status/([a-z0-9-]+) {
       rewrite ^\/(.*) /$1 break;
-      proxy_request_buffering off;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_pass https://wml-envoy-upstream;
       proxy_http_version 1.1;
       proxy_set_header Connection "";
       proxy_set_header Host $http_host;
+      proxy_set_header x-global-transaction-id $x_global_transaction_id;
       proxy_pass_request_headers      on;
       proxy_connect_timeout       30;
       proxy_send_timeout          300;
@@ -744,13 +753,13 @@ data:
       proxy_next_upstream error timeout;
     }
 
-    location ~ /v4/jobs {
+    location ~ /ml/v4/deployments/hibernation_policy/([a-z0-9-]+) {
       rewrite ^\/(.*) /$1 break;
-      proxy_request_buffering off;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_pass https://wml-envoy-upstream;
       proxy_http_version 1.1;
       proxy_set_header Connection "";
       proxy_set_header Host $http_host;
+      proxy_set_header x-global-transaction-id $x_global_transaction_id;
       proxy_pass_request_headers      on;
       proxy_connect_timeout       30;
       proxy_send_timeout          300;
@@ -759,13 +768,13 @@ data:
       proxy_next_upstream error timeout;
     }
 
-    location ~ /v4/jobs/([a-z0-9-]+) {
+    location ~ /ml/v4/deployments/rolling_update {
       rewrite ^\/(.*) /$1 break;
-      proxy_request_buffering off;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_pass https://wml-envoy-upstream;
       proxy_http_version 1.1;
       proxy_set_header Connection "";
       proxy_set_header Host $http_host;
+      proxy_set_header x-global-transaction-id $x_global_transaction_id;
       proxy_pass_request_headers      on;
       proxy_connect_timeout       30;
       proxy_send_timeout          300;
@@ -774,13 +783,13 @@ data:
       proxy_next_upstream error timeout;
     }
 
-    location ~ /v4/jobs/([a-z0-9-]+)/runtime-internal/tenant/([a-z0-9-]+)/fetch {
+    location ~ ^/ml/v4/deployments/etcd_record {
       rewrite ^\/(.*) /$1 break;
-      proxy_request_buffering off;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_pass https://wml-envoy-upstream;
       proxy_http_version 1.1;
       proxy_set_header Connection "";
       proxy_set_header Host $http_host;
+      proxy_set_header x-global-transaction-id $x_global_transaction_id;
       proxy_pass_request_headers      on;
       proxy_connect_timeout       30;
       proxy_send_timeout          300;
@@ -789,13 +798,13 @@ data:
       proxy_next_upstream error timeout;
     }
 
-    location ~ /v4/jobs/([a-z0-9-]+)/runtime-internal/tenant/([a-z0-9-]+)/update {
+    location ~ /ml/v4/deployments/([a-z0-9-]+) {
       rewrite ^\/(.*) /$1 break;
-      proxy_request_buffering off;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_pass https://wml-envoy-upstream;
       proxy_http_version 1.1;
       proxy_set_header Connection "";
       proxy_set_header Host $http_host;
+      proxy_set_header x-global-transaction-id $x_global_transaction_id;
       proxy_pass_request_headers      on;
       proxy_connect_timeout       30;
       proxy_send_timeout          300;
@@ -804,57 +813,12 @@ data:
       proxy_next_upstream error timeout;
     }
 
-    location ~ /v4/deployment_jobs {
+    location ~ ^/ml/v4/deployment_jobs/([a-z0-9-]+) {
       rewrite ^\/(.*) /$1 break;
-      proxy_request_buffering off;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_pass https://wml-envoy-upstream;
       proxy_http_version 1.1;
       proxy_set_header Connection "";
-      proxy_set_header Host $http_host;
-      proxy_pass_request_headers      on;
-      proxy_connect_timeout       30;
-      proxy_send_timeout          300;
-      proxy_read_timeout          300;
-      send_timeout                300;
-      proxy_next_upstream error timeout;
-    }
-
-    location ~ /v4/deployment_jobs/([a-z0-9-]+) {
-      rewrite ^\/(.*) /$1 break;
-      proxy_request_buffering off;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
-      proxy_http_version 1.1;
-      proxy_set_header Connection "";
-      proxy_set_header Host $http_host;
-      proxy_pass_request_headers      on;
-      proxy_connect_timeout       30;
-      proxy_send_timeout          300;
-      proxy_read_timeout          300;
-      send_timeout                300;
-      proxy_next_upstream error timeout;
-    }
-
-    location ~ /v4/deployments/([a-z0-9-]+)/runtime-internal/([a-z0-9-]+)/tenant/([a-z0-9-]+)/fetch {
-      rewrite ^\/(.*) /$1 break;
-      proxy_request_buffering off;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
-      proxy_http_version 1.1;
-      proxy_set_header Connection "";
-      proxy_set_header Host $http_host;
-      proxy_pass_request_headers      on;
-      proxy_connect_timeout       30;
-      proxy_send_timeout          300;
-      proxy_read_timeout          300;
-      send_timeout                300;
-      proxy_next_upstream error timeout;
-    }
-
-    location ~ /v4/deployments/([a-z0-9-]+)/runtime-internal/([a-z0-9-]+)/tenant/([a-z0-9-]+)/update {
-      rewrite ^\/(.*) /$1 break;
-      proxy_request_buffering off;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
-      proxy_http_version 1.1;
-      proxy_set_header Connection "";
+      proxy_set_header x-global-transaction-id $x_global_transaction_id;
       proxy_set_header Host $http_host;
       proxy_pass_request_headers      on;
       proxy_connect_timeout       30;
@@ -865,8 +829,69 @@ data:
     }
 
 
-    location ~ ^/v4/trainings/([a-z0-9-]+)/aggregator1 {
-      rewrite ^/v4/trainings/([a-z0-9-]+)/aggregator1 / break;
+    location ~ /ml/v4_private/deployment_jobs/([a-z0-9-]+) {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://wml-envoy-upstream;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $http_host;
+      proxy_set_header x-global-transaction-id $x_global_transaction_id;
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /ml/v4_private/deployments/([a-z0-9-]+) {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://wml-envoy-upstream;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $http_host;
+      proxy_set_header x-global-transaction-id $x_global_transaction_id;
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location /ml/v4/deployments {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://wml-envoy-upstream;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $http_host;
+      proxy_set_header x-global-transaction-id $x_global_transaction_id;
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ ^/ml/v4/deployment_jobs {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://wml-envoy-upstream;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $http_host;
+      proxy_set_header x-global-transaction-id $x_global_transaction_id;
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+
+    location ~ ^/ml/v4/trainings/([a-z0-9-]+)/aggregator1 {
+      rewrite ^/ml/v4/trainings/([a-z0-9-]+)/aggregator1 / break;
       proxy_pass https://train-wml-fl-agg-$1-svc.$nsdomain:13302;
       proxy_http_version 1.1;
       proxy_set_header Upgrade $http_upgrade;
@@ -879,8 +904,8 @@ data:
       proxy_next_upstream error timeout;
     }
 
-    location ~ ^/v4/trainings/([a-z0-9-]+)/aggregator {
-      rewrite ^/v4/trainings/([a-z0-9-]+)/aggregator / break;
+    location ~ ^/ml/v4/trainings/([a-z0-9-]+)/aggregator {
+      rewrite ^/ml/v4/trainings/([a-z0-9-]+)/aggregator / break;
       proxy_pass https://train-wml-fl-agg-$1-svc.$nsdomain:13301;
       proxy_http_version 1.1;
       proxy_set_header Upgrade $http_upgrade;
@@ -895,7 +920,7 @@ data:
 
     location ~ /v4/trainings/([a-z0-9-]+) {
       rewrite ^\/(.*) /$1 break;
-      proxy_pass https://$training_service.$nsdomain:13300;
+      proxy_pass https://wml-training-upstream;
       proxy_http_version 1.1;
       proxy_set_header Upgrade $http_upgrade;
       proxy_set_header Connection "upgrade";
@@ -909,7 +934,35 @@ data:
 
     location /v4/trainings {
       rewrite ^\/(.*) /$1 break;
-      proxy_pass https://$training_service.$nsdomain:13300;
+      proxy_pass https://wml-training-upstream;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /ml/v4/trainings/([a-z0-9-]+) {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://wml-training-upstream;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location /ml/v4/trainings {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://wml-training-upstream;
       proxy_http_version 1.1;
       proxy_set_header Upgrade $http_upgrade;
       proxy_set_header Connection "upgrade";
@@ -923,7 +976,7 @@ data:
 
     location ~ /v4_private/trainings/([a-z0-9-]+) {
       rewrite ^\/(.*) /$1 break;
-      proxy_pass https://$training_service.$nsdomain:13300;
+      proxy_pass https://wml-training-upstream;
       proxy_http_version 1.1;
       proxy_set_header Upgrade $http_upgrade;
       proxy_set_header Connection "upgrade";
@@ -937,7 +990,7 @@ data:
 
     location ~ /v4_private/submissions/([a-z0-9-]+) {
       rewrite ^\/(.*) /$1 break;
-      proxy_pass https://$training_orchestrator_service.$nsdomain:13333;
+      proxy_pass https://wml-trainingorchestrator-upstream;
       proxy_http_version 1.1;
       proxy_set_header Upgrade $http_upgrade;
       proxy_set_header Connection "upgrade";
@@ -951,7 +1004,7 @@ data:
 
     location ~ /v4_private/submissions {
       rewrite ^\/(.*) /$1 break;
-      proxy_pass https://$training_orchestrator_service.$nsdomain:13333;
+      proxy_pass https://wml-trainingorchestrator-upstream;
       proxy_http_version 1.1;
       proxy_set_header Upgrade $http_upgrade;
       proxy_set_header Connection "upgrade";
@@ -965,7 +1018,7 @@ data:
 
     location /wml_services/training/heartbeat {
       rewrite ^\/(.*) /$1 break;
-      proxy_pass https://$training_service.$nsdomain:13300;
+      proxy_pass https://wml-training-upstream;
       proxy_http_version 1.1;
       proxy_set_header Upgrade $http_upgrade;
       proxy_set_header Connection "upgrade";
@@ -979,7 +1032,7 @@ data:
 
     location ~ /v4_private/([a-z0-9-]+)/payload_logging_configuration {
       rewrite ^\/(.*) /$1 break;
-      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_pass https://wml-envoy-upstream;
       proxy_http_version 1.1;
       proxy_set_header Upgrade $http_upgrade;
       proxy_set_header Connection "";
