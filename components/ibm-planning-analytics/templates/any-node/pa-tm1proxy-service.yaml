@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     name: tm1proxy
-    release: {{ .Release.Name }}
+    release: 3.5.0
     paw_instance_name: {{ .Values.paw_instance_name }}
     
   name: tm1proxy
@@ -20,23 +20,32 @@ spec:
   template:
     metadata:
       annotations:
-        productName: IBM Planning Analytics Workspace
-        productID: com.ibm.ba.paw.{{ .Release.Name }}
-        productVersion: {{ .Release.Name }}
+        hook.activate.cpd.ibm.com/command: '[]'
+        hook.deactivate.cpd.ibm.com/command: '[]'
+        cloudpakName: "IBM Planning Analytics Extension for IBM Cloud Pak for Data"
+        cloudpakId: "27646a3a52bb43408a3156180def3775"
+        productCloudpakRatio: "1:1"
+        productID: "27646a3a52bb43408a3156180def3775"
+        productName: "IBM Planning Analytics Workspace"
         productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productVersion: 3.5.0
         productChargedContainers: "All"
-        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
-        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
-        cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
         
       labels:
         app.kubernetes.io/name: paw
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
+        icpdsupport/addOnId: pa
+        icpdsupport/app: "pa-workspace" 
+        cloudpakInstanceId: "{{ .Values.zenCloudPakInstanceId }}"
+        {{- include "planning-analytics.serviceid" . | indent 8 }}
+        {{- if ( .Values.createdBy )  }}
+        icpdsupport/createdBy: {{ .Values.createdBy | quote }}
+        {{- end }} 
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         name: tm1proxy
         pa-cacerts-secret: {{ .Values.secrets.cacertVersion }}
-        release: {{ .Release.Name }}
+        release: 3.5.0
         version: "1.0.260-ubi7"
     spec:
       affinity:
@@ -54,13 +63,13 @@ spec:
             secretName: pa-cacerts        
       containers:
         - name: tm1proxy
-          image: {{ .Values.docker_registry_prefix }}/pa-tm1proxy:1.0.256-ubi7
+          image: {{ .Values.docker_registry_prefix }}/pa-tm1proxy:1.0.256-ubi7-2
           ports:
             - containerPort: 1339
               protocol: TCP
           env:          
             - name: TM1PROXY_VERSION
-              value: "{{ .Values.docker_registry_prefix }}/pa-tm1proxy:1.0.256-ubi7"
+              value: "{{ .Values.docker_registry_prefix }}/pa-tm1proxy:1.0.256-ubi7-2"
             - name: TM1PROXY_PORT
               value: "1339"
             - name: TM1PROXY_REDIS_SENTINEL
@@ -78,6 +87,9 @@ spec:
               memory: "{{ .Values.tm1proxy.memoryRequestLimit }}"
           securityContext:
             runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+            runAsUser: 2000
+{{- end }} 
             capabilities:
               drop:
                 - ALL

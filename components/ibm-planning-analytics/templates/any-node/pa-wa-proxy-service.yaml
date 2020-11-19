@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     name: wa-proxy
-    release: {{ .Release.Name }}
+    release: 3.5.0
     paw_instance_name: {{ .Values.paw_instance_name }}
     
   name: wa-proxy
@@ -20,25 +20,34 @@ spec:
   template:
     metadata:
       annotations:
-        productName: IBM Planning Analytics Workspace
-        productID: com.ibm.ba.paw.{{ .Release.Name }}
-        productVersion: {{ .Release.Name }}
+        hook.activate.cpd.ibm.com/command: '[]'
+        hook.deactivate.cpd.ibm.com/command: '[]'
+        cloudpakName: "IBM Planning Analytics Extension for IBM Cloud Pak for Data"
+        cloudpakId: "27646a3a52bb43408a3156180def3775"
+        productCloudpakRatio: "1:1"
+        productID: "27646a3a52bb43408a3156180def3775"
+        productName: "IBM Planning Analytics Workspace"
         productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productVersion: 3.5.0
         productChargedContainers: "All"
-        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
-        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
-        cloudpakVersion: "{{ .Values.cloudpakAnnotations.cloudpakVersion }}"
         
       labels:
         app.kubernetes.io/name: paw
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
+        icpdsupport/addOnId: pa
+        icpdsupport/app: "pa-workspace" 
+        cloudpakInstanceId: "{{ .Values.zenCloudPakInstanceId }}"
+        {{- include "planning-analytics.serviceid" . | indent 8 }}
+        {{- if ( .Values.createdBy )  }}
+        icpdsupport/createdBy: {{ .Values.createdBy | quote }}
+        {{- end }} 
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         name: wa-proxy
         pa-cacerts-secret: {{ .Values.secrets.cacertVersion }}
         pa-paw-secret: {{ .Values.secrets.pawSecretVersion }}
-        release: {{ .Release.Name }}
-        version: "1.0.588-ubi7"
+        release: 3.5.0
+        version: "1.0.594-ubi7-1"
     spec:
       affinity:
         nodeAffinity:
@@ -68,15 +77,33 @@ spec:
             secretName: pa-internal-tls-cert
       initContainers:
         - name: wa-proxy-jwt-init
-          image:  {{ .Values.docker_registry_prefix }}/pa-wa-proxy:1.0.588-ubi7
+          image:  {{ .Values.docker_registry_prefix }}/pa-wa-proxy:1.0.594-ubi7-1
           command: ["/bin/sh"]
           args: ["-c", "curl -k https://ibm-nginx-svc/auth/jwtcert > /jwt/jwtcert"]
+          resources:
+            limits:
+              cpu: "{{ .Values.waProxy.cpuLimit }}"
+              memory: "{{ .Values.waProxy.memoryLimit }}"
+            requests:
+              cpu: "{{ .Values.waProxy.cpuRequestLimit }}"
+              memory: "{{ .Values.waProxy.memoryRequestLimit }}"
+          securityContext:
+            runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+            runAsUser: 2000
+{{- end }} 
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
           volumeMounts:
             - name: jwt-cert
               mountPath: /jwt
       containers:
         - name: wa-proxy
-          image: {{ .Values.docker_registry_prefix }}/pa-wa-proxy:1.0.588-ubi7
+          image: {{ .Values.docker_registry_prefix }}/pa-wa-proxy:1.0.594-ubi7-1
           ports:
             - containerPort: 1331
               protocol: TCP
@@ -135,7 +162,9 @@ spec:
               value: "/jwt-key/tls.key"
             - name: CONFIG_NAME
               value: "paw-cp4d"
-            {{- if (not .Values.common.tm1InternalType) }}
+              # Websheets should be enabled when TM1 is external, OR when PASS /is/ running internally
+              # I.e. if TM1 is internal, but PASS wasn't deployed, then it should be disabled.
+            {{- if or (not .Values.common.tm1InternalType) (.Values.common.webappsEnabled) }}
             - name: PROFILE_OVERRIDES
               value: "{\"welcome\": {\"enableWebsheets\": true},\"gemini\": {\"tm1Websheet\": \"enabled\",\"allowSaveWebsheets\": \"enabled\"}}"
             {{- end }}
@@ -148,6 +177,9 @@ spec:
               memory: "{{ .Values.waProxy.memoryRequestLimit }}"
           securityContext:
             runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+            runAsUser: 2000
+{{- end }} 
             capabilities:
               drop:
                 - ALL
@@ -172,19 +204,8 @@ spec:
             failureThreshold: 1
             initialDelaySeconds: 300
             tcpSocket:
-              port: 1331
-            periodSeconds: 2
-          livenessProbe:
-            failureThreshold: 1
-            initialDelaySeconds: 300
-            tcpSocket:
               port: 1338
             periodSeconds: 2
-          readinessProbe:
-            failureThreshold: 1
-            periodSeconds: 2
-            tcpSocket:
-              port: 1331
           readinessProbe:
             failureThreshold: 1
             periodSeconds: 2
