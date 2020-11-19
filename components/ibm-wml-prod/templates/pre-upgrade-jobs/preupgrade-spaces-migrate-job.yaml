@@ -1,0 +1,100 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: preupgrade-spaces-migrate-job
+  labels:
+    app: preupgrade-spaces-migrate-job
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}"
+    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "5"
+spec:
+  template:
+    metadata:
+      name: preupgrade-spaces-migrate-job
+      labels:
+        app: preupgrade-spaces-migrate-job
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/name: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+        icpdsupport/addOnId: wml
+        icpdsupport/app: api
+      annotations:
+        cloudpakName: "IBM Cloud Pak for Data"
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        productCloudpakRatio: "1:1"
+        productID: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        productName: "IBM Watson Machine Learning"
+        productVersion: "3.5.0"
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productChargedContainers: All
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - {{ .Values.global.architecture }}
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+      - args:
+        - "/opt/ibm/scripts/migrate_spaces.sh"
+        command:
+        - /bin/sh
+        - -c
+        env:
+        - name: WDP_BASE_URL
+          valueFrom:
+            configMapKeyRef:
+              key: host
+              name: wdp-config
+        - name: DEPLOYMENT_PLATFORM
+          value: private
+        - name: MEMORY
+          value: "1024"
+        envFrom:
+        - secretRef:
+            name: wdp-service-id
+        name: preupgrade-spaces-migrate-job
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.wmlPreUpgradeAssets.image.repository }}:{{ .Values.wmlPreUpgradeAssets.image.tag }}"
+        resources:
+          limits:
+            cpu: "1"
+            memory: 1Gi
+          requests:
+            cpu: 500m
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsUser: {{ .Values.global.user.id }}
+          runAsNonRoot: true
+          privileged: false
+          readOnlyRootFilesystem: false
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: OnFailure
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30

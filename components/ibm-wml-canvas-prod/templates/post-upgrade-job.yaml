@@ -7,20 +7,26 @@ metadata:
     app.kubernetes.io/name: {{$compName}}
     helm.sh/chart: {{$compName}}
     app.kubernetes.io/instance: {{$compName}}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    release: {{ .Release.Name }}
+    {{- include "spss-modeler.addOnPodLabels" . | indent 4 }}
   annotations:
     "helm.sh/hook": post-upgrade
     "helm.sh/hook-delete-policy": hook-succeeded 
-    {{- if .Values.global.annotations }}
-{{ toYaml .Values.global.annotations | trim | indent 4 }}
-    {{- end }}
+    {{- include "spss-modeler.cloudpak_annotations" . | indent 4 }}
 spec:
   template:
     metadata:
+      annotations: 
+        {{- include "spss-modeler.cloudpak_annotations" . | indent 8 }}
       labels:
         app.kubernetes.io/name: {{$compName}}
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
         helm.sh/chart: {{$compName}}
         component: {{$compName}}
         app.kubernetes.io/instance: {{$compName}}
+        release: {{ .Release.Name }}
+        {{- include "spss-modeler.addOnPodLabels" . | indent 8 }}
     spec:
       hostNetwork: false
       hostPID: false
@@ -44,7 +50,7 @@ spec:
       containers:
         - name: {{$compName}}
           image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.preInstaller.image.repository }}:{{ .Values.preInstaller.image.tag }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}          
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}          
           resources:
             limits:
               cpu: "0.5"

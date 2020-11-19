@@ -1,9 +1,9 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: post-install-repo-cams-asssettype
+  name: post-install-wml-service-cleanup
   labels:
-    app: post-install-repo-cams-asssettype
+    app: post-install-wml-service-cleanup
     chart: "{{ .Chart.Name }}"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
@@ -13,14 +13,14 @@ metadata:
     helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
   annotations:
     "helm.sh/hook": post-install
-    "helm.sh/hook-weight": "0"
-    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-weight": "6"
 spec:
   template:
     metadata:
-      name: post-install-repo-cams-assettype
+      name: post-install-wml-service-cleanup
       labels:
-        app: post-install-repo-cams-asssettype
+        app: post-install-wml-service-cleanup
         chart: "{{ .Chart.Name }}"
         release: "{{ .Release.Name }}"
         heritage: "{{ .Release.Service }}"
@@ -28,15 +28,17 @@ spec:
         app.kubernetes.io/instance: {{.Release.Name | quote }}
         app.kubernetes.io/name: "{{ .Release.Name }}"
         helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+        icpdsupport/addOnId: wml
+        icpdsupport/app: api
       annotations:
-        cloudpakName: IBM Cloud Pak for Data
-        cloudpakId: eb9998dcc5d24e3eb5b6fb488f750fe2
-        cloudpakVersion: 3.0.1
-        productName: IBM Watson Machine Learning for IBM Cloud Pak for Data
-        productID: ICP4D-Watson-Machine-Learning-3-0-1
-        productVersion: 3.0.1
-        productMetric: VIRTUAL_PROCESSOR_CORE
-        productChargedContainers: All        
+        cloudpakName: "IBM Cloud Pak for Data"
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        productCloudpakRatio: "1:1"
+        productID: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        productName: "IBM Watson Machine Learning"
+        productVersion: "3.5.0"
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productChargedContainers: All
     spec:
       affinity:
         nodeAffinity:
@@ -46,15 +48,15 @@ spec:
               - key: beta.kubernetes.io/arch
                 operator: In
                 values:
-                  - amd64
+                  - {{ .Values.global.architecture }}
       serviceAccount: {{ .Values.global.editor.sa }}
       serviceAccountName: {{ .Values.global.editor.sa }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
       containers:
-      - name: post-install-repo-cams-assettype-job
-        image: "{{ .Values.global.docker_registry_prefix}}/{{ .Values.wmlAssetTypes.image.repository }}:{{ .Values.wmlAssetTypes.image.tag }}"
+      - name: post-install-wml-service-cleanup-job
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.wmlDeleteRuntime.image.repository }}:{{ .Values.wmlDeleteRuntime.image.tag }}"
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -64,22 +66,22 @@ spec:
           runAsNonRoot: true
           privileged: false
           readOnlyRootFilesystem: false
+        volumeMounts:
+        - mountPath: /user-home
+          readOnly: true
+          subPath: _global_/config/jwt/
+          name: volume-at-index-0
         command: ["/bin/sh","-c"]
-        args: ["/assetType/run.sh"]
-        envFrom:
-            - secretRef:
-                name: wdp-service-id
-        env:
-          - name: WDP_BASE_URL
-            valueFrom:
-              configMapKeyRef:
-                key: host-url
-                name: wdp-config
+        args: ["kubectl delete deployment wmlrepository; kubectl delete cm wmlrepositoryconfigmap; kubectl delete svc wmlrepositoryservice; kubectl delete secret repo-secrets; kubectl delete pvc wml-repo-pvc ; kubectl delete statefulset wml-etcd; kubectl delete svc wml-etcd; kubectl delete secret etcd-secret; kubectl delete pvc etcd-pvc"]
         resources:
           limits:
-            cpu: 1
-            memory: 1Gi
+            cpu: 250m
+            memory: 512M
           requests:
-            cpu: 500m
-            memory: 1Gi
+            cpu: 200m
+            memory: 256M
       restartPolicy: OnFailure
+      volumes:
+      - name: volume-at-index-0
+        persistentVolumeClaim:
+          claimName: user-home-pvc
