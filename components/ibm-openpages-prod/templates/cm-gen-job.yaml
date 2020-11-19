@@ -1,0 +1,203 @@
+#*******************************************************************************
+# Licensed Materials - Property of IBM
+#
+#
+# OpenPages GRC Platform (PID: 5725-D51)
+#
+#  © Copyright IBM Corporation 2020. All Rights Reserved.
+#
+# US Government Users Restricted Rights- Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+#*******************************************************************************
+{{- include "sch.config.init" (list . "op.sch.chart.config.values") -}}
+{{ $compName := .sch.chart.components.opapp.name }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Values.name }}-cm-gen-job"
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+    icpd-addon/status: "{{ .Values.zenServiceInstanceId | int64 }}"
+    icpdsupport/app : {{ include "sch.names.appName" (list .) }}
+    app : {{ include "sch.names.appName" (list .) }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+        icpdsupport/addOnId: {{ .Values.zenServiceInstanceType | quote}}
+        icpdsupport/app : {{ include "sch.names.appName" (list .) }}
+        icpdsupport/serviceInstanceId: {{ .Values.zenServiceInstanceId | int64 | quote }}
+        app : {{ include "sch.names.appName" (list .) }}
+      annotations:
+          {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+{{- include "sch.security.securityContext" (list . .sch.chart.securityContextRestricted) | indent 6 }}
+      serviceAccountName: {{ .Values.global.serviceAccountName | quote }}
+      containers:
+      - name: "{{ .Values.name }}-cm-gen"
+        image: "{{ .Values.docker_registry_prefix }}/{{ .Values.commonUtils.image.dockerImage }}:{{ .Values.commonUtils.image.imageTag }}"
+        imagePullPolicy: "IfNotPresent"
+        env:
+{{- with .Values.smallContainer.resources }}
+        resources:
+{{ toYaml . | indent 10 }}
+{{- end }}
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+
+          # this gets the full subdomain by examining the already-created CPD router
+          readonly subdomain="$(kubectl get route {{ .Release.Namespace }}-cpd -n {{ .Release.Namespace }} -o jsonpath='{ .status.ingress[].routerCanonicalHostname }')"
+
+          readonly externalUrl="{{ .Values.name }}-{{ .Release.Namespace }}.${subdomain}"
+
+          echo "$(date) : Creating config map containing external URL: ${externalUrl}"
+
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: "{{ .Values.name }}-url-cm"
+            labels:
+              {{- include "sch.metadata.labels.standard" (list . $compName) | nindent 14 }}
+          data:
+            op-external-url: "${externalUrl}"
+          EOF
+
+          # for future releases, send correct lang code in header, and use jq instead of grep once it's available in image
+          readonly sharedsecret="$(cat /var/run/sharedsecrets/token)"
+          readonly token="$(curl -ks -H "secret: ${sharedsecret}" -H 'cache-control: no-cache' -X GET 'https://ibm-nginx-svc/zen-data/internal/v1/service_token' | \
+            grep -Po '"token": *\K"[^"]*"' | \
+            grep -o '[^"]*')"
+          readonly translationKey="global_openpages_size_{{ .Values.tShirtSize }}_label"
+          readonly translationValue="$(curl -ks -X GET "https://ibm-nginx-svc/zen-data/v1/translation/openpages" \
+            -H "Authorization: Bearer ${token}" \
+            -H "Accept-Language: en" | \
+            grep -Po "\"${translationKey}\": *\K\"[^\"]*\"" | \
+            grep -o '[^"]*')"
+
+          echo "$(date) : Fetched translation from zen api: ${translationKey}:${translationValue}"
+
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: "{{ .Values.name }}-instance-details-cm"
+            labels:
+              {{- include "sch.metadata.labels.standard" (list . $compName) | nindent 14 }}
+              icpdata_addon: "true"
+          data:
+            extensions: |
+              [
+                {
+                  "extension_point_id": "service_instance_details",
+                  "extension_name": "instance-details-extension-{{ .Values.zenServiceInstanceId | int64 }}",
+                  "display_name": "OpenPages connection info",
+                  "match_permissions": "",
+                  "match_instance_id": "{{ .Values.zenServiceInstanceId | int64 }}",
+                  "meta": {},
+                  "details": {
+                    "custom_sections": [
+                      {
+                        "section_key": "section0",
+                        "title": "{{`{{ .global_openpages_access_info }}`}}",
+                        "rows": [
+                          {
+                            "label": "URL",
+                            "value": "https://${externalUrl}",
+                            "actions": [
+                              {
+                                "id": "copy",
+                                "type": "copy",
+                                "label": "",
+                                "icon": "copy"
+                              },
+                              {
+                                "id": "open",
+                                "type": "api",
+                                "label": "{{`{{ .global_openpages_launch_icon_tooltip }}`}}",
+                                "icon": "launch",
+                                "on_click": {
+                                  "url": "",
+                                  "method": "GET",
+                                  "href_url": "https://${externalUrl}",
+                                  "href_target": "_blank"
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "section_key": "section1",
+                        "title": "{{`{{ .global_openpages_size_prop_label }}`}}",
+                        "rows": [
+                          {
+                            "label": "{{`{{ .global_openpages_size_prop_label }}`}}",
+                            "value": "${translationValue}"
+                          }
+                        ]
+                      },
+                      {
+                        "section_key": "section2",
+                        "title": "{{`{{ .global_openpages_config_section_app }}`}}",
+                        "rows": [
+                          {
+                            "label": "{{`{{ .global_openpages_appstorage_prop_label_short }}`}}",
+                            "value": "{{ .Values.appStorageClass }}"
+                          }
+                        ]
+                      },
+                      {
+                        "section_key": "section3",
+                        "title": "{{`{{ .global_openpages_config_section_db }}`}}",
+                        "rows": [
+                          {
+                            "label": "{{`{{ .global_openpages_dedicated_prop_label_short }}`}}",
+                            "value": "{{ .Values.dedicatedDbNodes }}"
+                          },
+                          {
+                            "label": "{{`{{ .global_openpages_node_prop_label_short }}`}}",
+                            "value": "{{ .Values.dbNodeLabelValue }}"
+                          },
+                          {
+                            "label": "{{`{{ .global_openpages_datastorage_prop_label_short }}`}}",
+                            "value": "{{ .Values.dbDataStorageClass }}"
+                          },
+                          {
+                            "label": "{{`{{ .global_openpages_metastorage_prop_label_short }}`}}",
+                            "value": "{{ .Values.dbMetaStorageClass }}"
+                          },
+                          {
+                            "label": "{{`{{ .global_openpages_backupstorage_prop_label_short }}`}}",
+                            "value": "{{ .Values.dbBackupStorageClass }}"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+          EOF
+        volumeMounts:
+        - mountPath: /var/run/sharedsecrets
+          name: zen-service-broker-secret
+      volumes:
+        - name: zen-service-broker-secret
+          secret:
+            defaultMode: 420
+            secretName: zen-service-broker-secret
+      restartPolicy: Never
+  backoffLimit: 3

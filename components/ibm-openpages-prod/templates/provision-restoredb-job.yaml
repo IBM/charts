@@ -1,0 +1,73 @@
+#*******************************************************************************
+# Licensed Materials - Property of IBM
+#
+#
+# OpenPages GRC Platform (PID: 5725-D51)
+#
+#  © Copyright IBM Corporation 2020. All Rights Reserved.
+#
+# US Government Users Restricted Rights- Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+#*******************************************************************************
+{{- include "sch.config.init" (list . "op.sch.chart.config.values") -}}
+{{ $compName := .sch.chart.components.opapp.name }}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "{{ .Values.name }}-provision-restoredb"
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    icpdsupport/app : {{ include "sch.names.appName" (list .) }}
+    icpdsupport/serviceInstanceId: {{ .Values.zenServiceInstanceId | int64 | quote }}
+    icpd-addon/status: "{{ .Values.zenServiceInstanceId | int64 }}"
+    icpdsupport/addOnId: {{ .Values.zenServiceInstanceType | quote}}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "3"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+        icpdsupport/addOnId: {{ .Values.zenServiceInstanceType | quote}}
+        icpdsupport/app : {{ include "sch.names.appName" (list .) }}
+        icpdsupport/serviceInstanceId: {{ .Values.zenServiceInstanceId | int64 | quote }}
+        app : {{ include "sch.names.appName" (list .) }}
+      annotations:
+          {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.securityContextRestricted) | indent 6 }}
+      serviceAccountName: {{ .Values.global.serviceAccountName }}
+      containers:
+      - name: opdbprovisioner-pre-install-job-container
+        image: "{{ .Values.docker_registry_prefix }}/openpages-cpd-provisioner:{{ .Values.image.tag }}"
+        command: ["provision-restoredb.sh"]
+        imagePullPolicy: Always
+{{- with .Values.smallContainer.resources }}
+        resources:
+{{ toYaml . | indent 10 }}
+{{- end }}
+        env:
+        - name: INSTANCE_ID
+          value: {{ .Values.zenServiceInstanceId | int64 | quote }}
+        - name: NAMESPACE
+          value: {{ .Release.Namespace | quote }}
+        - name: OPDB_ALIAS
+          value: {{ .Values.opdb.alias | quote }}
+        volumeMounts:
+        - mountPath: /var/run/sharedsecrets
+          name: zen-service-broker-secret
+        - mountPath: /mnt/opdbbackup
+          name: {{ .Values.name }}-dbbackup-volume
+      volumes:
+        - name: zen-service-broker-secret
+          secret:
+            defaultMode: 420
+            secretName: zen-service-broker-secret
+        - name: {{ .Values.name }}-dbbackup-volume
+          persistentVolumeClaim:
+            claimName: {{ .Values.name }}-dbbackup-pvc
+      restartPolicy: Never
+  backoffLimit: 3

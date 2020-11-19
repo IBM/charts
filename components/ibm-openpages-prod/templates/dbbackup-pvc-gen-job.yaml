@@ -1,0 +1,85 @@
+#*******************************************************************************
+# Licensed Materials - Property of IBM
+#
+#
+# OpenPages GRC Platform (PID: 5725-D51)
+#
+#  © Copyright IBM Corporation 2020. All Rights Reserved.
+#
+# US Government Users Restricted Rights- Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+#*******************************************************************************
+# Generates PVC for OP database backup
+#
+{{- include "sch.config.init" (list . "op.sch.chart.config.values") -}}
+{{ $compName := .sch.chart.components.opapp.name }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Values.name }}-dbbackup-pvc-gen"
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+    icpd-addon/status: "{{ .Values.zenServiceInstanceId | int64 }}"
+    icpdsupport/app : {{ include "sch.names.appName" (list .) }}
+    app : {{ include "sch.names.appName" (list .) }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+        icpdsupport/addOnId: {{ .Values.zenServiceInstanceType | quote}}
+        icpdsupport/app : {{ include "sch.names.appName" (list .) }}
+        icpdsupport/serviceInstanceId: {{ .Values.zenServiceInstanceId | int64 | quote }}
+        app : {{ include "sch.names.appName" (list .) }}
+      annotations:
+          {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+{{- include "sch.security.securityContext" (list . .sch.chart.securityContextRestricted) | indent 6 }}
+      serviceAccountName: {{ .Values.global.serviceAccountName }}
+      containers:
+      - name: op-dbbackup-pvc-gen
+        image: "{{ .Values.docker_registry_prefix }}/{{ .Values.commonUtils.image.dockerImage }}:{{ .Values.commonUtils.image.imageTag }}"
+        imagePullPolicy: IfNotPresent
+        env:
+{{- with .Values.smallContainer.resources }}
+        resources:
+{{ toYaml . | indent 10 }}
+{{- end }}
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: {{ .Values.name }}-dbbackup-pvc
+            labels:
+              {{- include "sch.metadata.labels.standard" (list . $compName) | nindent 14 }}
+              icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+              icpd-addon/status: "{{ .Values.zenServiceInstanceId | int64 }}"
+          spec:
+            accessModes:
+              - ReadWriteMany
+            resources:
+              requests:
+                storage: 100Gi
+            {{- if .Values.volumes.useDynamicProvisioning }}
+            storageClassName: {{ .Values.dbBackupStorageClass | quote }}
+            {{- else }}
+            ## disable dynamic provisioning
+            storageClassName: ""
+            {{- end }}
+          EOF
+      restartPolicy: Never
+  backoffLimit: 3

@@ -1,0 +1,63 @@
+#*******************************************************************************
+# Licensed Materials - Property of IBM
+#
+#
+# OpenPages GRC Platform (PID: 5725-D51)
+#
+#  © Copyright IBM Corporation 2020. All Rights Reserved.
+#
+# US Government Users Restricted Rights- Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+#*******************************************************************************
+{{- include "sch.config.init" (list . "op.sch.chart.config.values") -}}
+{{ $compName := .sch.chart.components.opapp.name }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "ibm-openpages-addon-cm-gen-job"
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    release: "{{.Release.Name}}"
+spec:
+  template:
+    metadata:
+      labels:
+        icpdsupport/addOnId: {{ .Values.zenServiceInstanceType | quote}}
+        icpdsupport/app : {{ include "sch.names.appName" (list .) }}
+        app : {{ include "sch.names.appName" (list .) }}
+      annotations:
+          {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+{{- include "sch.security.securityContext" (list . .sch.chart.securityContextRestricted) | indent 6 }}
+      serviceAccountName: {{ .Values.global.serviceAccountName | quote }}
+      containers:
+      - name: "ibm-openpages-addon-cm-gen"
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.commonUtils.image.dockerImage }}:{{ .Values.commonUtils.image.imageTag }}"
+        imagePullPolicy: "IfNotPresent"
+        env:
+{{- with .Values.smallContainer.resources }}
+        resources:
+{{ toYaml . | indent 10 }}
+{{- end }}
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+
+          echo "Creating config map containing addon version: {{ .Values.image.tag }}"
+
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: "openpages-addon-version"
+          data:
+            version: "{{ .Values.image.tag }}"
+          EOF
+      restartPolicy: Never
+  backoffLimit: 3
