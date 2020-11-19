@@ -18,10 +18,10 @@
 
 ## PodSecurityPolicy Requirements
 
-Custom PodSecurityPolicy definition: ``` ```
+Custom PodSecurityPolicy definition: ``` ```	
 
-## SecurityContextConstraints Requirements
+## SecurityContextConstraints Requirements	
 
 "[`ibm-restricted-psp`](https://ibm.biz/cpkspec-psp)"
 
-Custom SecurityContextConstraints definition: ``` ```
+Custom SecurityContextConstraints definition: ``` ```	
