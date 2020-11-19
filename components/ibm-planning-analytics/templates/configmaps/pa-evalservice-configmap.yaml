@@ -1,0 +1,88 @@
+{{- if .Values.common.webappsEnabled }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: pa-evalservice-configmap
+data:
+  server.xml: |-
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!--
+        Licensed Materials - Property of IBM
+        IBM Planning Analytics
+        (C) Copyright IBM Corp. 2013 2020
+        US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+    -->
+    <server description="IBM Cognos TM1">
+            <applicationMonitor dropins="${wlp.user.dir}/../../wlpdropins" updateTrigger="mbean" pollingRate="10s"/>
+            <executor coreThreads="-1" maxThreads="1500"/>
+            <featureManager>
+                <feature>jsp-2.2</feature>
+                <feature>localConnector-1.0</feature>
+                <feature>jaxb-2.2</feature>
+                <feature>json-1.0</feature>
+                <feature>jaxrs-1.1</feature>
+            </featureManager>
+
+            <httpEndpoint id="defaultHttpEndpoint" httpPort="9510" httpsPort="9513" host="*" removeServerHeader="true" >
+            </httpEndpoint>
+            <httpSession cookieHttpOnly="true"/>
+            <httpDispatcher appOrContextRootMissingMessage=" " enableWelcomePage="false"/>
+            <application id="evalservice" location="${wlp.user.dir}/../../webapps/evalservice/" name="evalservice" type="war" context-root="evalservice"/>
+            <config/>
+    </server>
+
+  bootstrap.properties: |-
+    # Evaluation service logging properties file path
+    logback.configurationFile=${server.config.dir}/configuration/evalservice-logback.xml
+    evalservice.log.file.path=${server.config.dir}/logs
+    com.ibm.ws.logging.console.log.level=INFO
+    com.ibm.ws.logging.trace.file.name=stdout
+
+  jvm.options: |-
+    -Dfile.encoding=UTF-8
+    -Dclient.encoding.override=UTF-8
+    -Djavax.net.ssl.trustStore=../../../../bin64/ssl/tm1store
+    -Djavax.net.ssl.trustStorePassword=applix
+    -Xmx768m
+    -Xms768m
+    -Xgcpolicy:gencon
+    -Xmn384m
+    -Xdump:heap+system:none
+    -Xdump:system:events=gpf+abort,range=1..2,request=serial+compact+prepwalk
+    -Xdump:system:events=systhrow+throw,filter=java/lang/OutOfMemory*,range=1..2,request=serial+compact+prepwalk
+    -Xdisableexplicitgc
+    -Djdk.map.althashing.threshold=512
+    -Dhttps.protocols=TLSv1.2
+
+  evalservice-logback.xml: |-
+    <?xml version="1.0" encoding="UTF-8"?>
+    <configuration>
+      <appender name="TextFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <File>${evalservice.log.file.path}/evalservice.log</File>
+        <encoder>
+          <pattern>%d [%t] %-5p \(\) %c - %m%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+          <fileNamePattern>${evalservice.log.file.path}/evalservice.log.%d{.yyyy-MM-dd}</fileNamePattern>
+        </rollingPolicy>
+      </appender>
+      <appender name="Console" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+          <pattern>%d [%t] %-5p \(\) %c - %m%n</pattern>
+        </encoder>
+      </appender>
+      <logger name="com.ibm.pa.tm1.query" level="ERROR"/>
+      <root level="ERROR">
+        <appender-ref ref="Console"/>
+      </root>
+    </configuration>
+
+  evalservice_config.xml: |-
+    <evalservice_config>
+      <appSettings>
+      </appSettings>
+      <servers>
+              <server requestHost = "http://tm1:4000" requestServer = "{{ .Values.paw_instance_name }}" targetHost="http://tm1:8080" targetServer="{{ .Values.paw_instance_name }}" />
+      </servers>
+    </evalservice_config>
+{{- end}}
