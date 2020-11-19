@@ -1,0 +1,87 @@
+{{ if .Values.global.dockerRegistryPrefix }}
+{{ $namePrefix := "pre-delete-job" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $compName := "pre-delete-config" -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+{{ $serviceAccountName := "cpd-editor-sa" -}}
+{{ $nonRootUser := include "aios.nonroot.uid" (list .) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+{{- include "aios.labels" . | indent 2 }}
+  annotations:
+{{- include "aios.metering.nocharge" . | indent 2 }}
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    "helm.sh/hook-weight": "0"
+spec:
+  activeDeadlineSeconds: 100
+  template:
+    metadata:
+      name: {{ $name | quote }}
+      labels:
+{{ $labels | indent 8 }}
+{{- include "aios.pod.labels" . | indent 6 }}
+      annotations:
+{{- include "aios.metering.nocharge" . | indent 6 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      {{- if .Values.imagePullSecrets }}
+      {{- if ne .Values.imagePullSecrets "default" }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $nonRootUser }}
+      affinity:
+      {{- include "aios.nodeAffinity" . | indent 8 }}
+      restartPolicy: Never
+      containers:
+        - name: "aios-kubectl"
+          image: {{ include "aios.image" (list . .Values.kubectl.image.name .Values.kubectl.image.tag) | quote }}
+          resources:
+{{ toYaml .Values.ephemeralPod.resources | indent 12 }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+          env:
+            - name: ZEN_BROKER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: zen-service-broker-secret
+                  key: token
+          command: 
+            - "/bin/sh"
+            - "-ec"
+            - |
+              function log_msg() {
+                echo "["`date +"%Y/%m/%d %r"`"]" $1
+              }
+              
+              function deleteInstance() {
+                 instanceID=$1
+                 log_msg "Deleting instance ${instanceID}}"
+                 curl -ik -H "secret: ${ZEN_BROKER_TOKEN}" -X DELETE https://zen-core-api-svc:4444/v3/service_instances/${instanceID}?force=true
+              }
+              instanceIDs=(`curl -sk -H "secret: ${ZEN_BROKER_TOKEN}" https://zen-core-api-svc:4444/v3/service_instances | tr ',' '\n' | grep '"id"' | cut -f4 -d\"`)
+              for (( i=0; i<${#instanceIDs[@]}; i++ ))
+              do
+                deleteInstance "${instanceIDs[i]}"
+              done
+{{ end }}

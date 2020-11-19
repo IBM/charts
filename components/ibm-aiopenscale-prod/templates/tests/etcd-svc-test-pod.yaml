@@ -1,0 +1,64 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $nonRootUser := include "aios.nonroot.uid" (list .) -}}
+{{- $serviceAccount := include "aios.serviceAccountName" (list . "serviceAccount" ) }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-etcd-test"
+  annotations:
+{{- include "aios.testpod.annotations" . | indent 2 }}
+  labels:
+    name: {{ .Release.Name }}-etcd-test
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+{{- include "aios.pod.labels" . | indent 2 }}
+spec:
+  {{- if .Values.imagePullSecrets }}
+  {{- if ne .Values.imagePullSecrets "default" }}
+  imagePullSecrets:
+    - name: {{ .Values.imagePullSecrets }}
+  {{- end }}
+  {{- end }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  serviceAccountName: {{ $serviceAccount }}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: {{ $nonRootUser }}
+  volumes:
+  - name: tls
+    secret:
+      secretName: {{ template "fullname" . }}-etcd-secrets
+  containers:
+  - name: {{ template "fullname" . }}-etcd-test
+    image: {{ include "aios.image" (list . .Values.etcd.image.name .Values.etcd.image.tag) | quote }}
+    resources:
+{{ toYaml .Values.ephemeralPod.resources | indent 12 }}
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: {{ $nonRootUser }}
+      capabilities:
+        drop:
+        - ALL
+    volumeMounts:
+    - name: tls
+      mountPath: /var/etcd/certs/
+      readOnly: true
+    command: ['sh', '-c','etcdctl --cert="/var/etcd/certs/server.crt" --key="/var/etcd/certs/server.key" --cacert="/var/etcd/certs/server.cacrt" --insecure-skip-tls-verify=true --user root:$ETCD_PASS --endpoints={{ template "fullname" . }}-etcd:2379 endpoint health' ]
+    env:
+      - name: ETCDCTL_API
+        value: "3"
+      - name: "ETCD_PASS"
+        valueFrom:
+          secretKeyRef:
+            name: {{ template "fullname" . }}-etcd-secrets
+            key: etcd-root-password
+  restartPolicy: Never
+  affinity:
+  {{- include "aios.nodeAffinity" . | indent 2 }}

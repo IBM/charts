@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-test"
+  labels:
+    app.kubernetes.io/name: "dv"
+    helm.sh/chart: "ibm-dv-caching"
+    app.kubernetes.io/managed-by: "Tiller"
+    app.kubernetes.io/instance: "release-name"
+    release: "release-name"
+    app.kubernetes.io/component: "caching"
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  hostIPC: false
+  hostNetwork: false
+  hostPID: false
+  securityContext:
+    runAsNonRoot: true
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+                  - ppc64le
+                  - s390x
+  containers:
+  - name: {{ .Release.Name }}-test
+    image: "{{ .Values.docker_registry_prefix }}/{{ .Values.image.dockerImage }}:{{ .Values.image.tag }}"
+    imagePullPolicy: {{ .Values.image.pullPolicy }}
+    volumeMounts:
+    - name: secret-volume
+      readOnly: true
+      mountPath: "/etc/secret-volume"
+    command:
+    - cat /dev/null
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+      limits:
+        cpu: "500m"
+        memory: "1Gi"
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      privileged: false
+      readOnlyRootFilesystem: false
+  restartPolicy: Never
+  volumes:
+  - name: secret-volume
+    secret:
+      secretName: dv-secret

@@ -1,0 +1,259 @@
+{{ $namePrefix := "datamart" -}}
+{{ $compName := "aios-datamart" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+{{- $serviceAccount := include "aios.serviceAccountName" (list . "serviceAccount" ) }}
+{{ $nonRootUser := include "aios.nonroot.uid" (list .) -}}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+{{- include "aios.labels" . | indent 2 }}
+spec:
+  progressDeadlineSeconds: {{ .Values.progressDeadline.seconds }}
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+    type: RollingUpdate
+  replicas: {{ .Values.datamart.replicas }}
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $namePrefix | quote }}
+  template:
+    metadata:
+      labels:
+{{ $labels | indent 8 }}
+{{- include "aios.pod.labels" . | indent 6 }}
+      annotations:
+      {{- include "aios.metering" . | indent 6 }}
+      {{- include "aios.cpdbr.annotations" . | indent 6 }}
+    spec:
+      terminationGracePeriodSeconds: 0
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $nonRootUser }}
+{{ include "aios.fsGroupGid" (list . ) | indent 8 }}
+      serviceAccountName: {{ $serviceAccount }}
+      affinity:
+      {{- include "aios.nodeAffinity" . | indent 6 }}
+      # to prevent multiple replicas from deploying on the same node
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "release"
+                      operator: In
+                      values:
+                        -  {{ .Release.Name | quote }}
+                    - key: "serviceSelector"
+                      operator: In
+                      values:
+                        -  {{ $namePrefix | quote }}
+                topologyKey: {{ .Values.global.topologyKey }}
+      {{- if .Values.imagePullSecrets }}
+      {{- if ne .Values.imagePullSecrets "default" }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      {{- end }}
+      volumes:
+        - name: es-truststore
+          secret:
+            secretName: {{ template "fullname" . }}-kafka-secrets
+            items:
+              - key: es-cert.jks
+                path: es-cert.jks
+        - name: nginx-tls
+          secret:
+            secretName: {{ template "fullname" . }}-nginx-secrets
+      initContainers:
+        - name: ready-check
+          image: {{ include "aios.image" (list . .Values.redis.image.name .Values.redis.image.tag) | quote }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+          resources:
+{{ toYaml .Values.readyCheckContainer.resources | indent 12 }}
+          command: ['sh', '-c',
+                'while true; do echo "Waiting for Redis service to come up...";
+                 redis-cli -h {{ template "fullname" . }}-redis-master-svc ping && break;
+                 sleep 5; done;
+                 echo "Redis service available!";
+                 while true; do echo "Checking availability of ICP4D JWT public key...";
+                 curl -ko /dev/null $AIOS_GATEWAY_URL/auth/jwtpublic && break;
+                 sleep 5; done;
+                 echo "ICP4D JWT public key available.";
+                 while true; do echo "Waiting for kafka service to come up...";
+                 (echo > /dev/tcp/{{ template "fullname" . }}-kafka-0.{{ template "fullname" . }}-kafka-headless/9092) > /dev/null 2>&1 && break;
+                 sleep 5; done;
+                 echo "Kafka service available.";
+                 echo "Starting main container."']
+          env:
+            - name: "AIOS_GATEWAY_URL"
+              value: "https://{{ include "aios.fqdn2" (list . "nginx-internal") }}"
+      containers:
+        - name: aios-datamart
+          image: {{ include "aios.image" (list . .Values.datamart.image.name .Values.datamart.image.tag) | quote }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+          resources:
+{{ toYaml .Values.datamart.resources | indent 12 }}
+          ports:
+            - containerPort: 9443
+              protocol: TCP
+          livenessProbe:
+            {{ include "aios.common.liveness.options" . | indent 10 }}
+            httpGet:
+              path: /v1/aios_datamart_service_api/heartbeat
+              port: 9443
+              scheme: HTTPS
+          readinessProbe:
+            {{ include "aios.common.readiness.options" . | indent 10 }}
+            httpGet:
+              path: /v1/aios_datamart_service_api/heartbeat
+              port: 9443
+              scheme: HTTPS
+          volumeMounts:
+          - name: es-truststore
+            mountPath: /home/aios/es-cert.jks
+            subPath: es-cert.jks
+          - name: nginx-tls
+            mountPath: "/opt/ibm/java/jre/lib/security/cacerts"
+            subPath: "java-cacerts"
+          - name: nginx-tls
+            mountPath: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
+            subPath: "ca-pem"
+          command:
+          - sh
+          - -ec
+          - |
+            CONTAINERID="$(grep "memory:/" < /proc/self/cgroup | sed 's|.*/||')"
+            export CONTAINERID
+            exec sh /opt/ibm/datamart/bin/00-runService.sh
+          env:
+            - name: BM_APP_VERSION_ENDPOINT
+              value: "/v1/aios_datamart_service_api/heartbeat"
+            - name: DATAMART_API_PORT
+              value: "9443"
+            - name: "AIOS_GATEWAY_URL"
+              value: "https://{{ include "aios.fqdn2" (list . "nginx-internal") }}"
+            - name: DATAMART_API_AIOS_HOST
+              value: "$(AIOS_GATEWAY_URL)"
+            - name: DATAMART_API_AIOS_PORT
+              value: "443"
+            - name: "ENABLE_ICP"
+              value: "true"
+            - name: ICP4D_JWT_PUBLIC_KEY_URL
+              value: "$(AIOS_GATEWAY_URL)/auth/jwtpublic"
+            - name: AIOS_SERVICE_CREDENTIALS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-service-secrets
+                  key: aios-service-credential
+            - name: DEPLOYMENTMODE
+              value: "icp4d"
+            - name: ENTITLEMENTS_URL
+              value: "$(AIOS_GATEWAY_URL)/v1/entitlements"
+            - name: "SERVICEID_0"
+              value: "$(AIOS_SERVICE_CREDENTIALS)"
+            - name: DATAMART_KAFKA_BROKERS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-kafka-secrets
+                  key: es-bootstrap-server
+            - name: DATAMART_KAFKA_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-kafka-secrets
+                  key: es-username
+            - name: DATAMART_KAFKA_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-kafka-secrets
+                  key: es-api-key
+            - name: KAFKA_TRUSTORE_LOCATION
+              value: /home/aios/es-cert.jks
+            - name: KAFKA_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-kafka-secrets
+                  key: es-truststore-password
+            - name: DATAMART_SERVICE_APIKEY
+              value: "$(AIOS_SERVICE_CREDENTIALS)"
+            - name: DATAMART_KAFKA_CONSUMERGROUPID
+              value: "Icp4d-datamart-consumer"
+            - name: PERFORMANCE_METRIC_CONSUMERGROUP
+              value: "Icp4d-datamart-metric-consumer"
+            - name: ICP_WML_URL
+              value: "$(AIOS_GATEWAY_URL)/wml"
+            - name: ICP_WML_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.icp4DToken.secretName }}
+                  key: {{ .Values.icp4DToken.secretKey }}
+            - name: REDIS_URL
+              value: "redis://{{ template "fullname" . }}-redis-master-svc:6379"
+            - name: USAGE_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-redis-secrets
+                  key: auth
+            - name: AT_SERVICE_PROVIDER_ID
+              value: ""
+            - name: AT_INITIATOR_ENV
+              value: ""
+            - name: AT_NAME_PREFIX
+              value: ""
+            - name: AT_SERVICE_PROVIDER_NAME
+              value: ""
+            - name: AT_TOKEN
+              value: ""
+            - name: AT_SERVICE_NAME
+              value: ""
+            - name: ENABLE_RBAC
+              value: "true"
+            - name: NODENAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: PODIPADDRESS
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: CONTAINERNAME
+              value: "aios-configuration-service"
+            - name: ENABLE_AUDIT
+              valueFrom:
+                configMapKeyRef:
+                  name: product-configmap
+                  key: ENABLE_AUDIT
+            - name: AUDIT_LOG_ENDPOINT
+              value: "$(AIOS_GATEWAY_URL)/records"

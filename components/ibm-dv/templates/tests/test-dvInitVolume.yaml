@@ -1,0 +1,42 @@
+{{- include "sch.config.init" (list . "dv.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.engine.name -}}
+{{- $testCompName :=  printf "%s-%s" $compName "test" }}
+{{- $labels := include "sch.metadata.labels.standard" (list . $testCompName) -}}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-test"
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.security.initVolumePodSecurityContext) | indent 2 }}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - {{ .Values.arch }}
+  containers:
+  - name: {{ .Release.Name }}-test
+    image: "{{ .Values.docker_registry_prefix }}/{{ .Values.dvInitVolume.image.dockerImage }}:{{ .Values.image.tag }}"
+    imagePullPolicy: {{ .Values.image.pullPolicy }}
+    command:
+      - /bin/sh
+      - -c
+      - ls /versioned.tar.gz && ls /unversioned.tar.gz
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: false
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+{{- include "dv.helpers.resources" (list . .Values.resources.dvInitVolume) | indent 4 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.security.initVolumeContainerSecurityContext) | indent 4 }}
+  restartPolicy: Never

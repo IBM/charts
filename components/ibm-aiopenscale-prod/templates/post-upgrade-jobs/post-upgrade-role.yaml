@@ -1,0 +1,29 @@
+{{ if not .Values.global.dockerRegistryPrefix }}
+{{ $namePrefix := "postupgrade-role" -}}
+{{ $compName := "postupgrade" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+{{- include "aios.labels" . | indent 2 }}
+  annotations:
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    "helm.sh/hook-weight": "0"
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - deployments
+    verbs:
+      - get
+      - list
+      - patch
+{{ end }}

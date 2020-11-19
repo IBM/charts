@@ -1,0 +1,140 @@
+{{ $namePrefix := "post-upgrade-migration-job" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $compName := "migration" -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+{{ $serviceAccount := "postupgrade-aios" -}}
+{{ $serviceAccountName := include "aios.serviceAccountNameEditor" (list . $serviceAccount) -}}
+{{ $nonRootUser := include "aios.nonroot.uid" (list .) -}}
+{{ $redisSentinel := include "sch.names.fullCompName" (list . "redis-sentinel" ) -}}
+{{ $redisServer := include "sch.names.fullCompName" (list . "redis-server" ) -}}
+{{ $addonName := include "sch.names.fullCompName" (list . "addon" ) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+{{- include "aios.labels" . | indent 2 }}
+  annotations:
+{{- include "aios.metering.nocharge" . | indent 2 }}
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "0"
+spec:
+  activeDeadlineSeconds: 18000
+  template:
+    metadata:
+      name: {{ $name | quote }}
+      labels:
+{{ $labels | indent 8 }}
+{{- include "aios.pod.labels" . | indent 6 }}
+      annotations:
+{{- include "aios.metering.nocharge" . | indent 6 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      {{- if .Values.imagePullSecrets }}
+      {{- if ne .Values.imagePullSecrets "default" }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $nonRootUser }}
+      affinity:
+      {{- include "aios.nodeAffinity" . | indent 8 }}
+      restartPolicy: Never
+      containers:
+        - name: "aios-migration"
+          image: {{ include "aios.image" (list . .Values.migration.image.name .Values.migration.image.tag) | quote }}
+          resources:
+{{ toYaml .Values.migration.resources | indent 12 }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+          env:
+            - name: "AIOS_GATEWAY_URL"
+              value: "https://{{ include "aios.fqdn2" (list . "nginx-internal") }}"
+            - name: "METRICS_READ_LIMIT"
+              value: "24"
+            - name: AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-service-secrets
+                  key: aios-service-credential 
+            - name: ZEN_BROKER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: zen-service-broker-secret
+                  key: token
+            - name: ICP_WML_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ibm-aios-icp4d-token
+                  key: token
+          command: 
+            - "/bin/sh"
+            - "-ec"
+            - |
+              log_msg() {
+                echo "["`date +"%Y/%m/%d %r"`"]" $1
+              }
+              restart_service() {
+                 service_name=$1
+                 log_msg "Restarting ${service_name} service"
+                 kubectl -n {{ .Release.Namespace }} delete pods -l release={{ .Release.Name }},serviceSelector=$service_name
+              }
+              
+              function provision_instance() {
+                while true; do echo "Checking availability of Addon helm chart..."; curl -ko /dev/null https://aiopenscale-ibm-aios-nginx-internal/helm/addon-provision-3.0.0.tgz && break; sleep 5; done;
+                counter=0;
+                while true; do log_msg "Provisioning default instance...";
+                  curl -i -k -H "secret: ${ZEN_BROKER_TOKEN}" -H "content-type: application/json" -X POST --data '{"addon_type": "aios","display_name": "{{ .Values.aios.defaultInstance.name }}", "namespace": "{{ .Release.Namespace }}", "addon_version": "{{ .Values.cpd.addon.version }}","create_arguments": {"resources": {},"parameters": {"storageClass": "nfs-client","storageSize": "16Gi"},"description": "{{ .Values.aios.defaultInstance.description }}","metadata": {"storageClass": "nfs-client","storageSize": "16Gi"},"owner_username": ""},"pre_existing_owner": false,"transientFields": {}}' 'https://zen-core-api-svc:4444/v3/service_instances' && log_msg "Default instance created" && break;
+                  log_msg "Default instance provisioned - rc: $?"
+                  counter=$((counter + 1))
+                  if [ $counter -gt 6 ]; then
+                    echo "Wait time exceeded."
+                    break;
+                  fi
+                  sleep 5
+                done
+              }
+              # wait for pods to be ready 
+              wait_pods_ready() {
+                counter=0
+                while true
+                do
+                  count=`kubectl -n {{ .Release.Namespace }} get pods -l release={{ .Release.Name }} | grep -v Completed | grep -v migration | grep -E "0/1|0/2|1/2" | wc -l`
+                  log_msg "Waiting for ${count} pods to be ready"
+                  if [ $count -eq 0 ]
+                  then
+                    break;
+                  fi
+                  counter=$((counter + 1))
+                  if [ $counter -gt 60 ]
+                  then
+                    log_msg "Wait time exceeded."
+                    break;
+                  fi
+                  sleep 20
+                done
+              }
+              # preupgrade scales downsczookeeper and kafka so that replication doesn't occur during rolling upgrade
+              # current cpd-admin-role doesn't have permission for scale
+              kubectl -n {{ .Release.Namespace }} patch statefulsets {{ template "fullname" . }}-kafka -p '{"spec":{"replicas":3}}'
+              kubectl -n {{ .Release.Namespace }} patch statefulsets {{ template "fullname" . }}-zookeeper -p '{"spec":{"replicas":3}}'
+              wait_pods_ready
+              provision_instance
+              sh -c "/opt/ibm/migration/run_migration.sh -e icp -a $AIOS_GATEWAY_URL -u icp -p icp -v 20191119_001; /opt/ibm/migration/verify.sh -a $AIOS_GATEWAY_URL -u icp -p icp"
+              log_msg "Migration completed."

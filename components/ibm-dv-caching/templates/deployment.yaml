@@ -1,0 +1,110 @@
+{{- include "sch.config.init" (list . "dvCaching.sch.chart.config.values") -}}
+{{- $appName := .sch.chart.appName -}}
+{{- $compName := .sch.chart.components.caching.name -}}
+{{- $ServiceInstanceID := .Values.zenServiceInstanceId | int64 -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName)) | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName)) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName)) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering nil nil nil) | indent 8 }}
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.security.defaultPodSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      initContainers:
+      - name: init-caching
+        image: "{{ .Values.docker_registry_prefix }}/{{ .Values.image.dockerImage }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ["sh", "-c"]
+        args:
+          - echo Waiting for volumes to be mounted;
+            until [[ -f "/mnt/marker_files/.restored.txt" ]]; do sleep 5; done;
+            echo Volume mount complete;
+            echo Waiting for dv-0 to be ready;
+            until [[ -f "/mnt/marker_files/.dv_initialized" ]]; do sleep 5; done;
+            echo dv-0 ready;
+        volumeMounts:
+          - mountPath: /mnt/marker_files
+            name: dv-data
+            subPath: {{ .Chart.AppVersion }}/marker_files
+{{- include "dv.helpers.resources" (list . .Values.resources.caching) | indent 8 }}
+      containers:
+      - name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
+        image: "{{ .Values.docker_registry_prefix }}/{{ .Values.image.dockerImage }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: METADB_HOST
+          value: "{{ .Values.dataServer.metadb.host }}"
+        - name: METADB_SSL_PORT
+          value: "{{ .Values.dataServer.metadb.sslPort }}"
+        - name: METADB_USER
+          value: "{{ .Values.dataServer.metadb.user }}"
+        - name: METADB_DB_NAME
+          value: "{{ .Values.dataServer.metadb.dbName }}"
+        - name: THREADPOOL_SIZE
+          value: "{{ .Values.cacheServer.threadpool.size }}"
+        - name: CACHESTORAGE_SIZE
+          value: "{{ .Values.persistence.cachingpv.size }}"
+        - name: JWT_PUBLICKEY_URL
+          value: {{.Values.auth.JwtPublicKeyUrl}}
+        - name: AUTH_METHOD
+          value: {{.Values.auth.authMethod}}
+        - name: SHUTDOWN_WAIT_TIME
+          value: "{{.Values.hooks.gracePeriodShutdown}}"
+        - name: JDBC_KEYSTORE_PATH
+          value: "{{.Values.keystore.jdbcKeystorePath}}"
+        - name: MINIMUM_UID
+          valueFrom:
+            configMapKeyRef:
+              name: product-configmap
+              key: MinimumUID
+        volumeMounts:
+        - name: secret-volume
+          readOnly: true
+          mountPath: "/etc/secret-volume"
+        - mountPath: /mnt/PV/versioned/public
+          name: dv-data
+          subPath: {{ .Chart.AppVersion }}/public
+        ports:
+        - name: https
+          containerPort: 8443
+          protocol: TCP
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /api/v1/swagger.json
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/v1/swagger.json
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 60
+          periodSeconds: 10
+{{- include "dv.helpers.resources" (list . .Values.resources.caching) | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.security.cachingContainerSecurityContext) | indent 8 }}
+      terminationGracePeriodSeconds: {{.Values.hooks.gracePeriodShutdown}}
+      volumes:
+      - name: secret-volume
+        secret:
+          secretName: {{ .Values.shared.pwdSecretName }}
+      - name: dv-data
+        persistentVolumeClaim:
+          claimName: {{ if .Values.persistence.existingClaimName }}{{ .Values.persistence.existingClaimName }}{{- else }}{{ include "sch.names.appName" (list .) }}-pvc{{- end }}

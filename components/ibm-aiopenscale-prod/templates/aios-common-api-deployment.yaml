@@ -1,0 +1,231 @@
+{{ $namePrefix := "common-api" -}}
+{{ $compName := "aios-common-api" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+{{- $serviceAccount := include "aios.serviceAccountName" (list . "serviceAccount" ) }}
+{{ $nonRootUser := include "aios.nonroot.uid" (list .) -}}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+{{- include "aios.labels" . | indent 2 }}
+spec:
+  progressDeadlineSeconds: {{ .Values.progressDeadline.seconds }}
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+    type: RollingUpdate
+  replicas: {{ .Values.commonApi.replicas }}
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $namePrefix | quote }}
+  template:
+    metadata:
+      labels:
+{{ $labels | indent 8 }}
+{{- include "aios.pod.labels" . | indent 6 }}
+      annotations:
+      {{- include "aios.metering" . | indent 6 }}
+      {{- include "aios.cpdbr.annotations" . | indent 6 }}
+    spec:
+      terminationGracePeriodSeconds: 0
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $nonRootUser }}
+{{ include "aios.fsGroupGid" (list . ) | indent 8 }}
+      serviceAccountName: {{ $serviceAccount }}
+      affinity:
+      {{- include "aios.nodeAffinity" . | indent 6 }}
+      # to prevent multiple replicas from deploying on the same node
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "release"
+                      operator: In
+                      values:
+                        -  {{ .Release.Name | quote }}
+                    - key: "serviceSelector"
+                      operator: In
+                      values:
+                        -  {{ $namePrefix | quote }}
+                topologyKey: {{ .Values.global.topologyKey }}
+      {{- if .Values.imagePullSecrets }}
+      {{- if ne .Values.imagePullSecrets "default" }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      {{- end }}
+      volumes:
+      - name: nginx-tls
+        secret:
+          secretName: {{ template "fullname" . }}-nginx-secrets
+      initContainers:
+        - name: ready-check
+          image: {{ include "aios.image" (list . .Values.redis.image.name .Values.redis.image.tag) | quote }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+          resources:
+{{ toYaml .Values.readyCheckContainer.resources | indent 12 }}
+          command: ['sh', '-c',
+                'while true; do echo "Waiting for Redis service to come up...";
+                 redis-cli -h {{ template "fullname" . }}-redis-master-svc ping && break;
+                 sleep 5; done;
+                 echo "Redis service available!";
+                 while true; do echo "Checking availability of ICP4D JWT public key...";
+                 curl -ko /dev/null $AIOS_GATEWAY_URL/auth/jwtpublic && break;
+                 sleep 5; done;
+                 echo "ICP4D JWT public key available.";
+                 echo "Starting main container."']
+          env:
+            - name: "AIOS_GATEWAY_URL"
+              value: "https://{{ include "aios.fqdn2" (list . "nginx-internal") }}"
+      containers:
+        - name: aios-common-api
+          image: {{ include "aios.image" (list . .Values.commonApi.image.name .Values.commonApi.image.tag) | quote }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+          resources:
+{{ toYaml .Values.commonApi.resources | indent 12 }}
+          ports:
+            - containerPort: 9443
+              protocol: TCP
+          livenessProbe:
+            {{ include "aios.common.liveness.options" . | indent 10 }}
+            httpGet:
+              path: /v1/aios_common_api/heartbeat
+              port: 9443
+              scheme: HTTPS
+          readinessProbe:
+            {{ include "aios.common.readiness.options" . | indent 10 }}
+            httpGet:
+              path: /v1/aios_common_api/heartbeat
+              port: 9443
+              scheme: HTTPS
+          volumeMounts:
+          - name: nginx-tls
+            mountPath: "/etc/pki/ca-trust/extracted/java/cacerts"
+            subPath: "java-cacerts"
+          - name: nginx-tls
+            mountPath: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
+            subPath: "ca-pem"
+          env:
+            - name: BM_APP_VERSION_ENDPOINT
+              value: "/v1/aios_common_api/heartbeat"
+            - name: CONFIG_PREFIX
+              value: "YPPROD"
+            - name: HTTPS
+              value: "true"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-redis-secrets
+                  key: auth
+            - name: REDIS_URL
+              value: "redis://admin:$(REDIS_PASSWORD)@{{ template "fullname" . }}-redis-master-svc:6379"
+            - name: PUBLIC_KEY_URL_IAM
+              value: "https://iam.bluemix.net/identity/keys"
+            - name: "AIOS_GATEWAY_URL"
+              value: "https://{{ include "aios.fqdn2" (list . "nginx-internal") }}"
+            - name: PUBLIC_KEY_URL_ICP4D
+              value: "$(AIOS_GATEWAY_URL)/auth/jwtpublic"
+            - name: ENABLE_ICP
+              value: "true"
+            - name: AIOS_ADDON_TYPE
+              value: "{{ .Values.aios.addon.type }}"
+            - name: AIOS_DEFAULT_INSTANCE_NAME
+              value: "{{ .Values.aios.defaultInstance.name }}"
+            - name: ICP_ROUTE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-service-secrets
+                  key: cpd-external-route
+            - name: USER_ACCESS_URL_ICP4D
+              value: "https://ibm-nginx-svc.{{ include "aios.cp4d.namespace" (list .) }}.svc.{{ .Values.clusterDomain }}"
+        - name: aios-common-api-nlp
+          image: {{ include "aios.image" (list . .Values.commonApi.nlpImage.name .Values.commonApi.nlpImage.tag) | quote }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+          resources:
+{{ toYaml .Values.commonApi.nlpResources | indent 12 }}
+          ports:
+            - containerPort: 9444
+              protocol: TCP
+          livenessProbe:
+            # to allow more time to startup on slower systems
+            failureThreshold: 10
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            httpGet:
+              path: /v1/aios_common_api/nlp/version
+              port: 9444
+              scheme: HTTPS
+          readinessProbe:
+            initialDelaySeconds: 130
+            periodSeconds: 30
+            httpGet:
+              path: /v1/aios_common_api/nlp/version
+              port: 9444
+              scheme: HTTPS
+          volumeMounts:
+          - name: nginx-tls
+            mountPath: "/etc/pki/ca-trust/extracted/java/cacerts"
+            subPath: "java-cacerts"
+          - name: nginx-tls
+            mountPath: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
+            subPath: "ca-pem"
+          env:
+            - name: BM_APP_VERSION_ENDPOINT
+              value: "/v1/aios_common_api/heartbeat"
+            - name: CONFIG_PREFIX
+              value: "YPPROD"
+            - name: HTTPS
+              value: "true"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-redis-secrets
+                  key: auth
+            - name: REDIS_URL
+              value: "redis://admin:$(REDIS_PASSWORD)@{{ template "fullname" . }}-redis-master-svc:6379"
+            - name: PUBLIC_KEY_URL_IAM
+              value: "https://iam.bluemix.net/identity/keys"
+            - name: "AIOS_GATEWAY_URL"
+              value: "https://{{ include "aios.fqdn2" (list . "nginx-internal") }}"
+            - name: PUBLIC_KEY_URL_ICP4D
+              value: "$(AIOS_GATEWAY_URL)/auth/jwtpublic"
+            - name: ENABLE_ICP
+              value: "true"

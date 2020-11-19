@@ -1,0 +1,44 @@
+{{- include "sch.config.init" (list . "dvAddon.sch.chart.config.values") -}}
+{{- $appName := .sch.chart.appName -}}
+{{- $compName := .sch.chart.components.serviceProvider.name -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "app" $appName)) | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "app" $appName)) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "app" $appName)) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering nil nil nil) | indent 8 }}
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.security.serviceProviderPodSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      containers:
+        - name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.serviceProvider.image.dockerImage }}:{{ .Values.serviceProvider.image.tag }}"
+          imagePullPolicy: {{ .Values.serviceProvider.image.pullPolicy }}
+          ports:
+            - name: {{ .Values.serviceProvider.service.httpsPortName }}
+              containerPort: {{ .Values.serviceProvider.service.httpsPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /v1/monitor?probe=liveness
+              port: {{ .Values.serviceProvider.service.httpsPort }}
+              scheme: HTTPS
+          readinessProbe:
+            httpGet:
+              path: /v1/monitor?probe=readiness
+              port: {{ .Values.serviceProvider.service.httpsPort }}
+              scheme: HTTPS
+{{- include "dv.helpers.resources" (list . .Values.resources.serviceProvider) | indent 10 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.security.serviceProviderContainerSecurityContext) | indent 10 }}

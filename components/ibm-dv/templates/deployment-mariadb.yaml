@@ -1,0 +1,69 @@
+{{- include "sch.config.init" (list . "dv.sch.chart.config.values") -}}
+{{- $appName := .sch.chart.appName -}}
+{{- $compName := .sch.chart.components.metastore.name -}}
+{{- $ServiceInstanceID := .Values.zenServiceInstanceId | int64 -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName)) | indent 4 }}
+spec:
+  replicas: 1
+  strategy: 
+    type: Recreate
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName)) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName)) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering nil nil nil) | indent 8 }}
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.security.metastorePodSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      containers:
+      - name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
+        image: "{{ .Values.docker_registry_prefix }}/{{ .Values.dvMetastore.image.dockerImage }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /etc/init.d/mysql
+              - stop
+        livenessProbe:
+          exec:
+            command:
+            - /opt/dv/current/mariadb-scripts/mariadb_liveness.sh
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          failureThreshold: 10
+        readinessProbe:
+          exec:
+            command:
+            - /opt/dv/current/mariadb-scripts/mariadb_readiness.sh
+          periodSeconds: 10
+          failureThreshold: 10
+        volumeMounts:
+        - mountPath: /mnt/PV/versioned
+          name: dv-data
+          subPath: "{{ .Chart.AppVersion }}"
+        - mountPath: "/etc/secret-volume"
+          name: secret-volume
+          readOnly: true
+        ports:
+        - containerPort: {{.Values.dvMetastore.mySqlPort}}
+{{- include "dv.helpers.resources" (list . .Values.resources.mariadb) | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.security.metastoreContainerSecurityContext) | indent 8 }}
+      volumes:
+      - name: dv-data
+        persistentVolumeClaim:
+            claimName: {{ if .Values.persistence.existingClaimName }}{{ .Values.persistence.existingClaimName }}{{- else }}{{ include "sch.names.appName" (list .) }}-pvc{{- end }}
+      - name: secret-volume
+        secret:
+          secretName: {{ include "sch.names.appName" (list .) }}-{{ .sch.chart.components.secret.name }}
+          defaultMode: 288
