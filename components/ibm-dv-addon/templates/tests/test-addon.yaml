@@ -1,0 +1,34 @@
+{{- include "sch.config.init" (list . "dvAddon.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.addon.name -}}
+{{- $testCompName :=  printf "%s-%s" $compName "test" }}
+{{- $labels := include "sch.metadata.labels.standard" (list . $testCompName) -}}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-test"
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.security.addonPodSecurityContext) | indent 2 }}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - {{ .Values.arch }}
+  containers:
+  - name: {{ .Release.Name }}-test
+    image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.image.dockerImage }}:{{ .Values.image.tag }}"
+    imagePullPolicy: {{ .Values.image.pullPolicy }}
+    command:
+      - cat /content/add-ons/meta/add-ons.json
+{{- include "dv.helpers.resources" (list . .Values.resources.addon) | indent 4 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.security.addonContainerSecurityContext) | indent 4 }}
+
+  restartPolicy: Never
