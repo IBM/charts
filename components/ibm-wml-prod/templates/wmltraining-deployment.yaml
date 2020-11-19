@@ -36,15 +36,22 @@ spec:
         app.kubernetes.io/instance: {{.Release.Name | quote }}
         app.kubernetes.io/name: "{{ .Release.Name }}"
         helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+        icpdsupport/addOnId: wml
+        icpdsupport/app: api
       annotations:
-        cloudpakName: IBM Cloud Pak for Data
-        cloudpakId: eb9998dcc5d24e3eb5b6fb488f750fe2
-        cloudpakVersion: 3.0.1
-        productName: IBM Watson Machine Learning for IBM Cloud Pak for Data
-        productID: ICP4D-Watson-Machine-Learning-3-0-1
-        productVersion: 3.0.1
-        productMetric: VIRTUAL_PROCESSOR_CORE
-        productChargedContainers: All        
+        hook.deactivate.cpd.ibm.com/command: '["sh", "/opt/ibm/training/bin/quiesce.sh", "start"]'
+        hook.activate.cpd.ibm.com/command: '["sh" , "/opt/ibm/training/bin/quiesce.sh", "stop"]'
+        hook.quiesce.cpd.ibm.com/command: '[]'
+        hook.unquiesce.cpd.ibm.com/command: '[]'
+        cloudpakName: "IBM Cloud Pak for Data"
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        productCloudpakRatio: "1:1"
+        productID: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakInstanceId: "{{ .Values.global.cloudpakInstanceId }}"
+        productName: "IBM Watson Machine Learning"
+        productVersion: "3.5.0"
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productChargedContainers: All      
         checksum.helm.kubernetes.io/configmap: {{ include (print $.Template.BasePath "/wmltraining-configmap.yaml") . | sha256sum }}
     spec:
       affinity:
@@ -55,7 +62,7 @@ spec:
               - key: beta.kubernetes.io/arch
                 operator: In
                 values:
-                  - amd64
+                  - {{ .Values.global.architecture }}
       serviceAccount: {{ .Values.global.editor.sa }}
       serviceAccountName: {{ .Values.global.editor.sa }}
       hostNetwork: false
@@ -97,6 +104,11 @@ spec:
               secretKeyRef:
                 key: redis-port
                 name: redis-ha-secret-host-and-port
+          - name: REDIS_HA_CERTIFICATE
+            valueFrom:
+              secretKeyRef:
+                key: redis.crt
+                name: redis-ha-cert
           - name: WML_CLOUDANT_USERNAME
             valueFrom:
               secretKeyRef:
@@ -107,6 +119,11 @@ spec:
               secretKeyRef:
                 name: wdp-cloudant-creds
                 key: password
+          - name: WML_CLOUDANT_CERT
+            valueFrom:
+              secretKeyRef:
+                name: wdp-cloudant-cert
+                key: certificate.pem
           - name: WML_CLOUDANT_HOSTNAME
             valueFrom:
               configMapKeyRef:
@@ -137,6 +154,13 @@ spec:
               configMapKeyRef:
                 key: external_url
                 name: wmltrainingconfigmap
+          - name: WML_STABLE_API_KEY
+            valueFrom:
+              secretKeyRef:
+                key: token
+                name: zen-service-broker-secret
+          - name: WML_STABLE_SERVICE_ID
+            value: "1000330990"
           - name: DEPLOYMENT_PLATFORM
             value: private
           - name: DEPLOYMENT_PRIVATE
@@ -193,12 +217,6 @@ spec:
               - sleep
               - "120"
         imagePullPolicy: IfNotPresent
-        lifecycle:
-          preStop:
-            exec:
-              command:
-              - sleep
-              - "120"
         name: wmltrainingservice
         ports:
         - containerPort: 32191
