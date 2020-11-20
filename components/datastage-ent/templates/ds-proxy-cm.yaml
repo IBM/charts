@@ -1,0 +1,49 @@
+{{ include "sch.config.init" (list . "sch.chart.config.values" ) }}
+{{ $compName := "ds-proxy" -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ds-proxy-cm
+  labels:
+{{ $labels | indent 4 }}
+{{ include "ds.additional.labels" (list .) | indent 4 }}
+data:
+  nginx.conf: |
+    load_module /usr/lib64/nginx/modules/ngx_stream_module.so;
+    events {
+      worker_connections  1024;
+    }
+    error_log /dev/stderr;
+    stream {
+      log_format json_combined escape=json
+        '{'
+          '"time_local":"$time_local",'
+          '"remote_addr":"$remote_addr",'
+          '"status": "$status",'
+          '"$upstream_bytes_sent":"$upstream_bytes_sent",'
+          '"$upstream_bytes_received":"$upstream_bytes_received",'
+          '"upstream_connect_time":"$upstream_connect_time",'
+          '"upstream_addr":"$upstream_addr"'
+        '}';
+      access_log /dev/stdout json_combined;
+      upstream backend {
+        server is-en-conductor-0.{{ .Release.Namespace }}:31538;
+      }
+
+      server {
+        listen 8443 ssl;
+        proxy_pass backend;
+
+        ssl_certificate /home/dsadm/certs/nginx.crt;
+        ssl_certificate_key /home/dsadm/certs/nginx.key;
+        ssl_protocols TLSv1.2;
+        ssl_prefer_server_ciphers on;
+        ssl_ciphers 'EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA:!3DES';
+        ssl_session_timeout 10m;
+        ssl_ecdh_curve secp384r1;
+        ssl_session_cache shared:SSL:10m;
+        ssl_session_tickets off;
+      }
+    }
+

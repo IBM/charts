@@ -1,0 +1,163 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ds-engine-compute
+  labels:
+    app: iis-en-comp
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: iis-en-comp
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.computeNode.replicas }}
+  serviceName: conductor-0
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: iis-en-comp
+      chart: "{{ .Chart.Name }}"
+      release: "{{ .Release.Name }}"
+      heritage: "{{ .Release.Service }}"
+  template:
+    metadata:
+      labels:
+        {{- include "ds.pod.labels" . | indent 8 }}
+        app: iis-en-comp
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        app.kubernetes.io/name: iis-en-comp
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        icpdata_addon_version: 11.7.1.1
+        icpdsupport/app: "apis"
+        istier: compute
+        {{ .Values.global.serviceabilityLabelName }}: {{ .Values.global.serviceabilityLabelValue }}
+      annotations:
+      {{- include "ds-product-metering" . | indent 8 }}
+      {{- include "ds.cpdbr.annotations" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "image-secret" . | indent 6 }}
+      containers:
+       - name: iis-en-compute
+         image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.release.image.iis.compute.repository }}:{{ .Values.release.image.iis.compute.tag }}
+         command: ["/bin/sh", "-c", "--"]
+         args: 
+         - (sed -i -e 's/sudo chown -R dsadm:dstage ${datamountdir}/#sudo chown -R dsadm:dstage ${datamountdir}/' /opt/IBM/InformationServer/initScripts/initEngineComputeVolumeData.sh || true) && sed -i -e '/tail\ -f\ \/dev\/null\ &/i\/bin\/rm\ -f\ \/opt\/IBM\/InformationServer\/Server\/Scratch\/Scratch' /opt/IBM/InformationServer/initScripts/startcontainer.sh && if [[ -f /opt/IBM/InformationServer/Server/PXEngine/etc/create_secrets.sh ]]; then /opt/IBM/InformationServer/Server/PXEngine/etc/create_secrets.sh && grep -q  'export[ ]*APT_SSL_CONNECTIONS=1' /opt/IBM/InformationServer/Server/DSEngine/dsenv ||  echo "export APT_SSL_CONNECTIONS=1" >> /opt/IBM/InformationServer/Server/DSEngine/dsenv; fi; /opt/IBM/InformationServer/initScripts/startcontainer.sh;
+         securityContext:
+           {{- if .Values.release.image.iis.compute.runAsUser }}
+           runAsUser: {{ .Values.release.image.iis.compute.runAsUser }}
+           {{- end }}
+           privileged: false
+           allowPrivilegeEscalation: true
+           runAsNonRoot: true
+           readOnlyRootFilesystem: false
+         envFrom:
+         - configMapRef:
+            name: is-en-conductor-0
+         imagePullPolicy: {{ .Values.release.image.pullPolicy }}
+         lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - /opt/IBM/InformationServer/initScripts/constructConfigFile.sh -a stop
+         env:
+         - name: MY_NODE_NAME
+           valueFrom:
+             fieldRef:
+               fieldPath: spec.nodeName
+         - name: MY_POD_NAME
+           valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+         - name: MY_POD_NAMESPACE
+           valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+         - name: ISADMIN_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: iis-usr-secrets
+               key: isadmin_password
+         - name: DEDICATED_ENGINE_VOLPATH
+           value: "/mnt/dedicated_vol/Engine"
+         - name: ENGINE_HOST
+           value: "is-en-conductor-0"
+         - name: IA_CUSTOM_DATA_CLASSES
+           value: "/opt/ia/custom"
+         livenessProbe:
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            tcpSocket:
+              port: 13502
+         readinessProbe:
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            tcpSocket:
+              port: 13502
+         volumeMounts:
+         - mountPath: "/mnt/dedicated_vol/Engine"
+           name: engine-dedicated-volume
+         - mountPath: /opt/ia/custom
+           name: engine-dedicated-volume
+           subPath: is-en-conductor-0/ia/custom
+         - mountPath: /home/dsadm
+           name: engine-dedicated-volume
+           subPath: is-en-conductor-0/EngineClients/db2_client/dsadm
+         - mountPath: /opt/IBM/InformationServer/Server/Scratch
+           name: compute-dedicated-scratch
+         resources:
+            requests:
+               memory: "{{ .Values.computeResouces.requests.memory }}"
+               cpu: "{{ .Values.computeResouces.requests.cpu }}"
+            limits:
+               memory: "{{ .Values.computeResouces.limits.memory }}"
+               cpu: "{{ .Values.computeResouces.limits.cpu }}"
+      {{- if .Values.release.image.iis.compute.serviceAccountName }}
+      serviceAccountName: {{ .Values.release.image.iis.compute.serviceAccountName }}
+      {{- end }}
+      securityContext:
+        {{- if .Values.release.image.ds.compute.fsGroup }}
+        fsGroup: {{ .Values.release.image.ds.compute.fsGroup }}
+        {{- end }}
+      volumes:
+       - emptyDir: {}
+         name: compute-dedicated-scratch
+       - name: engine-dedicated-volume
+         persistentVolumeClaim:
+         {{- if .Values.engineDedicatedVolumeInfo.volumeClaim.existingClaimName }}
+           claimName: {{ .Values.engineDedicatedVolumeInfo.volumeClaim.existingClaimName }}
+         {{- else }}
+           claimName: {{ .Values.release.iisprefix }}-{{ .Values.engineDedicatedVolumeInfo.volumeClaim.name }}
+         {{- end }}
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dfd-addon-configmap
+  labels:
+    icpdata_addon: "true"
+data:
+  add-ons.json: |
+    {
+      "dfd":{
+        "versions": {
+          "{{ .Values.release.image.iis.compute.addonTag }}" : {
+          "state":"enabled"
+          }
+         }
+       }
+    }

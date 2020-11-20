@@ -1,0 +1,51 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "ds-roles-init"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+      {{- include "ds.pod.labels" . | indent 8 }}
+      annotations:
+      {{- include "ds-product-metering" . | indent 8 }}
+    spec:
+      serviceAccountName: cpd-admin-sa
+      restartPolicy: Never
+      containers:
+      - name: "ds-roles-init"
+        imagePullPolicy: IfNotPresent
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.preInstall.image.repository }}:{{ .Values.preInstall.image.tag }}
+        command: ["/bin/sh", "/wkc/init.sh"]
+        volumeMounts:
+          - name: ds-roles-config
+            mountPath: /wkc
+        resources:
+          limits:
+            cpu: {{ .Values.preInstall.resources.limits.cpu }}
+            memory: {{ .Values.preInstall.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.preInstall.resources.requests.cpu }}
+            memory: {{ .Values.preInstall.resources.requests.memory }}
+        env:
+          - name: ICPD_CONTROLPLANE_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+      volumes:
+        - name: ds-roles-config
+          configMap:
+            name: ds-roles-config
+            defaultMode: 0555
