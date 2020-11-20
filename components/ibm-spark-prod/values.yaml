@@ -1,4 +1,6 @@
 # This is a YAML-formatted file.
+# Change license to true to indicate you have read and agree to license agreements
+license: false
 
 environment:
   name: spark-hb
@@ -21,6 +23,7 @@ charts:
   createJobV1: spark-submit-job-1.1.1.tgz
   createJobV2: spark-submit-job-v2-icp4d-1.1.1.tgz
   createJobV3: spark-submit-job-v3-icp4d-1.1.1.tgz
+  createJobV4: spark-submit-job-v4-icp4d-1.1.1.tgz
   deleteKernel: delete-kernel-icp4d-1.1.1.tgz
   
 # Use by image-secret.yaml
@@ -30,6 +33,22 @@ global:
   architecture: amd64
   ibmProduct: ""
   replicaCount: ""
+  addOnId: "spark"
+  cloudpakInstanceId: ""
+
+sparkMetastoredb:
+  cockroachdb: true
+  postgresSecretName: postgres
+  databaseUser: spark_user
+  databaseName: spark
+  databaseHost: zen-metastoredb-public
+  databasePort: 26257
+  databaseSSLMode: require
+  databaseClientCert: "client.spark_user.crt"
+  databaseClientKey: "client.spark_user.key"
+  databaseClientKeyPkcs8: "client.spark_user.key.pk8"
+  databaseRootCert: "ca.crt"
+  certsPath: /opt/hb/confidential_config/zenmetastore_certs
 
 # Use by micro-service-confidential-properties.yaml, micro-service-configmap.yaml
 iam:
@@ -38,39 +57,55 @@ iam:
     serviceToken: iam_dummy_token
 
 db:
-  version: 1
+  version: 5
 
 spark:
   image:
-    tag: 3.0.30-x86_64
-    tag23: 2.3.4-v15-x86_64
-    tag24: 2.4.4-v15-x86_64
+    tag: 3.5.0018-amd64
+    tag24: 2.4.7.v10-3.5.0-amd64
+    tag30: 3.0.1.v10-3.5.0-amd64
 
 dbSpec:
   scriptPath: /opt/ibm/entrypoint/
   image: spark-hb-db-spec
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
 
-
-zenMetastore:
-  user: spark_user
-  hostname: zen-metastoredb-public
-  port: 26257
-  dbName: spark
-  ssl: require
-  caCert: /opt/hb/confidential_config/zenmetastore_certs/ca.crt
-  clientCert: /opt/hb/confidential_config/zenmetastore_certs/client.spark_user.crt
-  clientKey: /opt/hb/confidential_config/zenmetastore_certs/client.spark_user.key
-  clientKeyPkcs8: /opt/hb/confidential_config/zenmetastore_certs/client.spark_user.key.pk8
+createSecretJob:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
 
 zenUserHomeVol:
   name: user-home-pvc
   metaStoreCertPath: "_global_/security/metastore"
   jwtCertPath: "_global_/config/jwt"
 
+rabbitMQ:
+  urlSecret: "rabbitmq-url"
+  certSecret: "rabbitmq-ha-cert"
+  certPath: /opt/hb/rabbit-mq-certs
+  urlSecretPath: /opt/hb/rabbit-mq
+  trustStoreSecretName: spark-hb-mq-trust-store
+
 cleanupCron:
   image: spark-hb-python
   scriptPath: /root/scripts
   configPath: /root/cron_config
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
 kernelCleanupCron:
   schedule: "*/30 * * * *"
 
@@ -79,6 +114,12 @@ jobCleanupCron:
   
 terminatingPodCleanupCron:
   schedule: "*/30 * * * *"
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
   
 # Use by micro-services
   
@@ -93,6 +134,12 @@ jobService:
 instanceManagerService:
   path: instance_manager/v1/instance
   contextRoot: "instance_manager/v1"
+  
+instanceManagerServiceV2:
+  contextRoot: "instance_manager/v2"
+  
+instanceManagerServiceV3:
+  contextRoot: "instance_manager/v3"
 
 dataPlaneManagerService:
   path: dataplane_manager/v1/dataplane
@@ -113,6 +160,7 @@ helmRepo:
     cpu: 50m
     memory: 64Mi
   limits:
+    cpu: 50m
     memory: 64Mi
     
 helmReadinessProbe:
@@ -126,6 +174,7 @@ helmLivenessProbe:
     
 microService:
   image: spark-hb-control-plane
+  imageSyslog: spark-hb-rsyslog-sidecar
   scheme: https
   dataplaneScheme: http
   confidentialProperties: /opt/hb/confidential_config
@@ -133,34 +182,29 @@ microService:
   resourceLimitPath: /opt/hb/resource_limit
   wdpPropertiesPath: /opt/hb/confidential_config/wdp
   serviceBrokerTokenPath: /opt/hb/confidential_config/cpd_service_broker
+  tempZenMetastoreCerts: /tmp/zenmetastore_certs_temp
   zenMetastoreCerts: /opt/hb/confidential_config/zenmetastore_certs
   jwtCerts: /opt/hb/confidential_config/jwt
   pathPrefix: /opt/hb
   trustStorePath: /opt/ibm/java/jre/lib/security
+  mqTrustStorePath: /opt/hb/trust_store
   wdpSecretName: wdp-service-id
   serviceBrokerTokenSecret: zen-service-broker-secret
-  port: 9443
+  auditEventLogsPath: /var/log/audit
+  rsyslogConfigPath: /tmp/rsyslog.d
+  port: 443
+  targetPort: 9443
   pullPolicy: Always
   requests:
     cpu: 1.2
-    cpu200: "200m"
-    cpu100: "100m" 
-    nocpu: "0m"
     memory: "2Gi"
-    memory256: "256Mi"
-    memory128: "128Mi"
-    nomemory: "0Mi"
   limits:
     cpu: 1.2
-    cpu100: "100m"
     memory: "2Gi"
-    memory256: "256Mi"
-    memory128: "128Mi"
-    nomemory: "0Mi"
   readinessProbeScheme: HTTPS
   isLocalMode: true
   svcType: ""
-  dataplanePort: ""
+  enableAudit: true
 readinessProbe:
   initialDelaySeconds: "180"
   periodSeconds: "30"
@@ -174,17 +218,19 @@ livenessProbe:
 
 # list of icp4d supported templates
 templates:
-  list: spark-2.3.0-jaas-v2-icp4d-template,spark-2.3.0-rstudio-icp4d-template,spark-2.3.0-shaper-v2-icp4d-template,spark-2.3.0-wml-icp4d-template
+  list: spark-2.4.0-jaas-v2-cp4d-template,spark-2.4.0-rstudio-icp4d-template,spark-2.4.0-shaper-v2-icp4d-template,spark-2.4.0-wml-icp4d-template
 
 # data plane registration details
 dataplaneReg:
   name: dataplane
-  image: spark-hb-db-spec
+  image: spark-hb-python
   scriptPath: /opt/ibm/entrypoint/
   requests:
-    cpu: 20m
+    cpu: 200m
+    memory: 256Mi
   limits:
-    memory: 64Mi
+    cpu: 200m
+    memory: 256Mi
   readinessProbe:
     initialDelaySeconds: "300"
     periodSeconds: "30"
@@ -205,6 +251,13 @@ trustStore:
   scriptPath: /opt/ibm/entrypoint/
   icp4dTsSecretName: spark-hb-java-trust-store
   osCertSecretName: spark-hb-os-trust-store
+  zenMetastoreCertsSecretName: spark-hb-zen-metastore
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
 
 # data plane nfs details
 nfs:
@@ -212,7 +265,7 @@ nfs:
   server: dummy.adn.networklayer.com
 
 nginxRepo:
-  resolver: "kubernetes.default"
+  nginxConfPath: "/tmp/nginx"
 
 nginx:
   name: "nginx"
@@ -239,6 +292,13 @@ sparkMaster:
 
 jkg:
   component: "jkg"
+preloadImage:
+  requests:
+    cpu: "0m"
+    memory: "0Mi"
+  limits:
+    cpu: "0m"
+    memory: "0Mi"
   image: spark-hb-jkg
   job:
     jobCompletion: 32
@@ -249,3 +309,25 @@ jkg:
 
 sparkHistory:
   image: spark-hb-jkg
+
+rsyslog:
+  port: 5140
+  targetHost: "zen-audit-svc"
+  driverAuthMode: "x509/name"
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  readinessProbe:
+    initialDelaySeconds: "300"
+    periodSeconds: "30"
+    failureThreshold: "120"
+  livenessProbe:
+    initialDelaySeconds: "300"
+    periodSeconds: "60"
+    failureThreshold: "120"
+
+configs:
+  auditEventLogFile: /var/log/audit/audit_events.log

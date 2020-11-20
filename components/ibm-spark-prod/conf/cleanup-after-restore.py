@@ -26,7 +26,7 @@ def purge_kernels(kernel_service_url,instance_id,state):
                 delete_kernel_release(kernel_id,release_name)
         else:
             print("There are no kernels in {} state under instance {}".format(state,instance_id))
-    else: 
+    else:
         print("Failed to get kernels in state {}, got responseCode {}".format(state,response))
 
 
@@ -44,14 +44,14 @@ def purge_jobs(job_service_url,instance_id,state):
                 delete_job_release(job_id,release_name)
         else:
             print("There are no jobs in {} state under instance {}".format(state,instance_id))
-    else: 
+    else:
         print("Failed to get jobs in state {}, got responseCode {}".format(state,response))
 
-  
-  
+
+
 #-------------------------------------------------------------------------------------------#
 # Get release names
-#-------------------------------------------------------------------------------------------#          
+#-------------------------------------------------------------------------------------------#
 def getReleaseName(unique_id):
     host=os.getenv("KUBERNETES_SERVICE_HOST")
     print(host)
@@ -64,7 +64,7 @@ def getReleaseName(unique_id):
     print(result.text)
     response=json.loads(result.text)
     return response['items'][0]['metadata']['labels']['release']
-    
+
 #-------------------------------------------------------------------------------------------#
 # Delete Kernel
 #-------------------------------------------------------------------------------------------#
@@ -76,8 +76,8 @@ def delete_kernel_release(kernel_id,release_name):
     response = requests.delete("http://zen-core-api-svc:3333/v2/release/{}".format(release_name), headers={'secret': '{}'.format(platform_token)}, verify=False,timeout=40)
     if response.status_code != 202:
         print("Failed to delete kernel {} of instance {}".format(kernel_id, instance_id))
-        
-        
+
+
 #-------------------------------------------------------------------------------------------#
 # Delete Job
 #-------------------------------------------------------------------------------------------#
@@ -90,38 +90,38 @@ def delete_job_release(job_id,release_name):
     response = requests.delete("http://zen-core-api-svc:3333/v2/release/{}".format(release_name), headers={'secret': '{}'.format(platform_token)}, verify=False,timeout=40)
     if response.status_code != 202:
         print("Failed to delete Job {} of instance {}".format(job_id, instance_id))
-        
+
 # ---------------------------------------------  PARSE ARGS ------------------------------------------- #
 parser = argparse.ArgumentParser()
 parser.add_argument("namespace", help="Current namespace")
 args = parser.parse_args()
 
 # ---------------------------------------------  BUILD JSON  ------------------------------------------- #
-instance_manager_url = "https://spark-hb-control-plane:9443/instance_manager/v1/instance"
-kernel_service_url = "https://spark-hb-control-plane:9443/ae/v1"
-job_service_url = "https://spark-hb-control-plane:9443/jobService/v2"
+instance_manager_url = "https://spark-hb-control-plane:443/instance_manager/v1/instance"
+kernel_service_url = "https://spark-hb-control-plane:443/ae/v1"
+job_service_url = "https://spark-hb-control-plane:443/jobService/v2"
 namespace=args.namespace
-    
+
 print("Start cleanup")
 
 
 
 headers = {'Content-Type':'application/json','Accept':'application/json'}
 response = requests.get("{}/list".format(instance_manager_url), headers=headers, verify=False)
-    
+
 if response.status_code == 200:
     instances = response.json()
-    
+
     for instance in instances:
         instance_id = instance["_id"]
-            
+
         if "api_key" not in instance:
             api_key = None
         else:
             api_key = instance["api_key"]
-        
+
         headers = {'Accept':'application/json','X-Api-Key':api_key}
-            
+
         # Delete kernels stuck in Deploying or Deleting state
         purge_kernels(kernel_service_url,instance_id,"Deploying")
         purge_kernels(kernel_service_url,instance_id,"Deleting")

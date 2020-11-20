@@ -1,0 +1,139 @@
+{{- $compName := "wdp-dataview" -}}
+{{- $files := $.Files }}
+{{- $fileContent := $files.Get $.Values.deployment.envVariableFile }}
+{{- $envVars := fromYaml $fileContent }}
+{{- $envVarsList := toYaml (index $envVars $.Values.deployment.env) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "wdp-dataview"
+  labels:
+    name: {{ $compName }}
+    app: {{ $compName }}
+    chart: {{ $compName }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-{{$compName}}"
+    helm.sh/chart: {{$.Chart.Name}}-{{$.Chart.Version | replace "+" "_" }}
+{{- if .Values.global.annotations }}
+  annotations:
+    hook.deactivate.cpd.ibm.com/command: "[]"
+    hook.activate.cpd.ibm.com/command: "[]"
+{{- if ($.Values.global.cloudpakInstanceId) }}
+    cloudpakInstanceId: {{ .Values.global.cloudpakInstanceId | default "" | quote }}
+{{- end }}
+{{ toYaml $.Values.global.annotations | trim | indent 4 }}
+{{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      name: {{ $compName }}
+      app: {{ $compName }}
+      chart: {{ $compName }}
+      component: {{ $compName }}
+      release: {{ .Release.Name }}
+      heritage: {{ .Release.Service }}
+  template:
+    metadata:
+      labels:
+        name: {{ $compName }}
+        app: {{ $compName }}
+        chart: {{ $compName }}
+        component: {{ $compName }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        app.kubernetes.io/name: "{{ .Release.Name }}-{{$compName}}"
+        helm.sh/chart: {{$.Chart.Name}}-{{$.Chart.Version | replace "+" "_" }}
+        icpdsupport/addOnId: "ccs"
+        icpdsupport/app: {{ $compName }}
+{{- if .Values.global.annotations }}
+      annotations:
+        hook.deactivate.cpd.ibm.com/command: "[]"
+        hook.activate.cpd.ibm.com/command: "[]"
+{{- if ($.Values.global.cloudpakInstanceId) }}
+        cloudpakInstanceId: {{ .Values.global.cloudpakInstanceId | default "" | quote }}
+{{- end }}
+{{ toYaml $.Values.global.annotations | trim | indent 8 }}
+{{- end }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.global.runAsUser }}
+      serviceAccount: {{ .Values.service.viewer.sa }}
+      serviceAccountName: {{ .Values.service.viewer.sa }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - {{ .Values.resources.architecture }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ $compName }}
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+      containers:
+      - name: "wdp-dataview-container" 
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.wdpDataview.image.name }}:{{ .Values.wdpDataview.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: {{ .Values.global.runAsUser }}
+          capabilities:
+            drop:
+            - ALL
+        livenessProbe:
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          httpGet:
+            path: /dataview/version
+            port: {{ .Values.container.uiHttpsPort }}
+            scheme: HTTPS
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+        readinessProbe:
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          httpGet:
+            path: /dataview/version
+            port: {{ .Values.container.uiHttpsPort }}
+            scheme: HTTPS
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+        resources:
+          limits:
+            cpu: {{ .Values.resources.limits.cpu }}
+            memory: {{ .Values.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.resources.requests.cpu }}
+            memory: {{ .Values.resources.requests.memory }}
+        volumeMounts:
+        - mountPath: /etc/certificate
+          name: certificate
+        env: 
+          {{ tpl $envVarsList $ | indent 10 | trim}}
+      volumes:
+        - name: certificate
+          secret:
+             secretName: ca-certificate-chain-trust

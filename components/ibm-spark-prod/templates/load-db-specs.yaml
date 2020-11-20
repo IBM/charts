@@ -7,29 +7,23 @@ metadata:
   name: "{{ .Values.environment.name }}-load-db-specs"
   annotations:
     "helm.sh/hook": "pre-install,pre-upgrade"
-    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-weight": "7"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "hook.deactivate.cpd.ibm.com/command": "[]"
+    "hook.activate.cpd.ibm.com/command": "[]"
   labels:
     app: "{{ .Values.environment.name }}-load-db-specs"
-    chart: "{{ .Chart.Name }}"
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: helm
-    app.kubernetes.io/name: {{ .Release.Name }}
-    helm.sh/chart: "{{ .Chart.Name }}"
+{{- include "helm.labels" . | indent 4 }}
+{{- include "cloudpak.labels" . | indent 4 }}
 spec:
   template:
     metadata:
+      annotations:
+{{- include "zenhelper.annotations" . | indent 8 }}
       labels:
         app: "{{ .Values.environment.name }}-load-db-specs"
-        chart: "{{ .Chart.Name }}"
-        heritage: {{ .Release.Service }}
-        release: {{ .Release.Name }}
-        app.kubernetes.io/instance: {{ .Release.Name }}
-        app.kubernetes.io/managed-by: helm
-        app.kubernetes.io/name: {{ .Release.Name }}
-        helm.sh/chart: "{{ .Chart.Name }}"
+{{- include "helm.labels" . | indent 8 }}
+{{- include "cloudpak.labels" . | indent 8 }}
     spec:
       affinity:
         nodeAffinity:
@@ -42,8 +36,9 @@ spec:
                 - {{ .Values.global.architecture }}
       restartPolicy: "OnFailure"
       serviceAccount: {{ .Values.sa.viewer }}
+      serviceAccountName: {{ .Values.sa.viewer }}
       securityContext:
-        runAsUser: {{ .Values.user.zensysId }}
+        runAsUser: {{ .Values.user.uid }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -54,7 +49,7 @@ spec:
           capabilities:
             drop:
               - ALL
-          runAsUser: {{ .Values.user.zensysId }}
+          runAsUser: {{ .Values.user.uid }}
           runAsNonRoot: true
           privileged: false
           readOnlyRootFilesystem: false
@@ -62,32 +57,41 @@ spec:
         imagePullPolicy: {{ .Values.microService.pullPolicy }}
         resources:
           requests:
-            cpu: {{ .Values.microService.requests.cpu200 }}
-            memory: {{ .Values.microService.limits.memory256 }}
+            cpu: {{ .Values.dbSpec.requests.cpu }}
+            memory: {{ .Values.dbSpec.requests.memory }}
           limits:
-            cpu: {{ .Values.microService.requests.cpu200 }}
-            memory: {{ .Values.microService.limits.memory256 }}
+            cpu: {{ .Values.dbSpec.limits.cpu }}
+            memory: {{ .Values.dbSpec.limits.memory }}
         env:
           - name: DB_URL
-            value: "postgresql://{{ .Values.zenMetastore.user }}@{{ .Values.zenMetastore.hostname }}:{{ .Values.zenMetastore.port }}/{{ .Values.zenMetastore.dbName }}?sslmode={{ .Values.zenMetastore.ssl }}&sslrootcert={{ .Values.zenMetastore.caCert }}&sslcert={{ .Values.zenMetastore.clientCert }}&sslkey={{ .Values.zenMetastore.clientKey }}"       
+            value: "postgresql://{{ .Values.sparkMetastoredb.databaseUser }}@{{ .Values.sparkMetastoredb.databaseHost }}:{{ .Values.sparkMetastoredb.databasePort }}/{{ .Values.sparkMetastoredb.databaseName }}?sslmode={{ .Values.sparkMetastoredb.databaseSSLMode }}&sslrootcert={{ .Values.sparkMetastoredb.certsPath }}/{{ .Values.sparkMetastoredb.databaseRootCert }}&sslcert={{ .Values.sparkMetastoredb.certsPath }}/{{ .Values.sparkMetastoredb.databaseClientCert }}&sslkey={{ .Values.sparkMetastoredb.certsPath }}/{{ .Values.sparkMetastoredb.databaseClientKey }}"
         command: ["/bin/bash", "-c"]
         args:
-          - "bash {{ .Values.dbSpec.scriptPath }}load-db-specs.sh {{ .Values.dbSpec.scriptPath }} {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.dbSpec.image }} {{ .Values.db.version }}"
+          - "bash {{ .Values.dbSpec.scriptPath }}load-db-specs.sh {{ .Values.dbSpec.scriptPath }} {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.dbSpec.image }} {{ .Values.db.version }} {{ .Values.microService.zenMetastoreCerts }} {{ .Values.microService.tempZenMetastoreCerts }}"
         volumeMounts:
         - name: "{{ .Values.environment.name }}-load-db-specs-script"
           mountPath: "{{ .Values.dbSpec.scriptPath }}"
-        - name: "{{ .Values.environment.name }}-zen-user-home-pvc"
-          mountPath: "{{ .Values.microService.zenMetastoreCerts }}"
-          subPath: "{{ .Values.zenUserHomeVol.metaStoreCertPath }}"
-          readOnly: true
-      serviceAccount: {{ .Values.sa.viewer }}
+        {{- if .Values.sparkMetastoredb.cockroachdb }}
+        - name: "{{ .Values.trustStore.zenMetastoreCertsSecretName }}"
+          mountPath: "{{ .Values.microService.tempZenMetastoreCerts }}"
+        {{- else }}
+        - name: {{ .Values.sparkMetastoredb.postgresSecretName }}
+          mountPath: "{{ .Values.microService.tempZenMetastoreCerts }}"
+        {{- end }}
       volumes:
-        - name: "{{ .Values.environment.name }}-zen-user-home-pvc"
-          persistentVolumeClaim:
-            claimName: "{{ .Values.zenUserHomeVol.name }}"
         - name: "{{ .Values.environment.name }}-load-db-specs-script"
           configMap:
             name: "{{ .Values.environment.name }}-load-db-specs-script"
         - name: "{{ .Values.environment.name }}-zen-metstore-certs"
           secret:
             secretName: "{{ .Values.microService.serviceBrokerTokenSecret }}"
+        {{- if .Values.sparkMetastoredb.cockroachdb }}
+        - name: "{{ .Values.trustStore.zenMetastoreCertsSecretName }}"
+          secret:
+            secretName: "{{ .Values.trustStore.zenMetastoreCertsSecretName }}"
+        {{- else }}
+        - name: {{ .Values.sparkMetastoredb.postgresSecretName }}
+          secret:
+            secretName: {{ .Values.sparkMetastoredb.postgresSecretName }}
+            defaultMode: 420
+        {{- end }}

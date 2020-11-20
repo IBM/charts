@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  annotations:
+    {{- include "runtime_addon_r36.cloudpak_annotations" . }}
+  name: "runtime-addon-r36"
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-configmap"
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+    release: "{{ .Release.Name }}"
+    app: "{{ .Release.Name }}-configmap"
+    chart: {{ .Chart.Name |quote }}
+    heritage: tiller
+    icpdata_addon: "true"
+    icpdata_addon_version: {{ (split "+" .Chart.Version)._0 }}
+data:
+  jupyter-r36-server.json: {{ tpl (.Files.Get "definitions/jupyter-r36-server.json") . | quote }}
+  nginx.conf: |
+    set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
+    location ~ ^/dsx-jupyter-r36/ibmdsxuser-(.*?)/(.*?)/(.*?)/logs(.*) {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      rewrite ^/dsx-jupyter-r36/ibmdsxuser-(.*?)/(.*?)/(.*?)/logs(.*)$ /dsx-jupyter-r36/ibmdsxuser-$1/$2/$3/logs$4 break;
+      proxy_pass https://$3-svc.$nsdomain:8889;
+      proxy_read_timeout 10m;
+    }
+    location ~ ^/dsx-jupyter-r36/ibmdsxuser-(.*?)/(.*?)/(.*?)/(.*) {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      rewrite ^/dsx-jupyter-r36/ibmdsxuser-(.*?)/(.*?)/(.*?)/(.*)$ /dsx-jupyter-r36/ibmdsxuser-$1/$2/$3/$4 break;
+      proxy_pass https://$3-svc.$nsdomain:8888;
+      proxy_read_timeout 10m;
+    }
+  files: |
+    [ { "dest": "/user-home/_global_/config/.runtime-definitions/ibm/jupyter-r36-server.json",
+        "contentKey": "jupyter-r36-server.json" }
+    ]
+  add-ons.json: |
+    {
+      "jupyter-r36": {
+        "details": {
+          "premium": false,
+          "internal": true,
+          "priority": 75
+        },
+        "versions": {
+          "3.5.0": {
+            "state": "enabled",
+            "details": {
+            }
+          }
+        }
+      }
+    }

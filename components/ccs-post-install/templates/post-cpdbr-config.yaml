@@ -1,0 +1,283 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wkc-backup-restore
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }} 
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  wkc-backup-restore.sh: |
+    defineDefaults () {
+        LogMode=Terse
+        ItemCount=10
+        WaitCounter=120
+        IgnoreWarning=true
+        Client4OCP=kubectl
+        PrintDateFormat="%Y-%m-%d %H:%M %Z"
+        ConsoleLog=/tmp/wkcbr.$$.tmp
+    }
+    getColor () {
+        if [[ ! -z $Monochrome ]]; then
+            echo ""
+        else
+            case $1 in
+                Red)        echo "\033[0;31m";;
+                Green)      echo "\033[0;32m";;
+                Yellow)     echo "\033[0;33m";;
+                BoldYellow) echo "\033[1;33m";;
+                Blue)       echo "\033[0;34m";;
+                BoldBlue)   echo "\033[1;34m";;
+                None)       echo "\033[0m";;
+            esac
+        fi
+    }
+    log () {    
+        echo -e "[$(date +"$PrintDateFormat")] $*$(getColor None)" 1>&2
+    }       
+    info () {
+        if [[ $LogMode != Terse || ! -z $2 ]]; then
+            log "$(getColor Blue)INFO: $1"
+        fi
+    }
+    pass () {
+        if [[ $LogMode != Terse || ! -z $2 ]]; then
+            log "$(getColor Green)PASS: $1"
+        fi
+        rm -f $ConsoleLog
+    }
+    warning () {
+        if [[ $LogMode != Terse || ! -z $2 ]]; then
+            log "$(getColor Yellow)WARNING: $1"
+            if [[ -f $ConsoleLog ]]; then
+                cat $ConsoleLog
+            fi
+        fi
+        rm -f $ConsoleLog
+        ObservedWarning=true
+    }
+    fail () {
+        log "$(getColor Red)FAIL: $*"
+        if [[ -f $ConsoleLog ]]; then
+            cat $ConsoleLog
+            rm -f $ConsoleLog
+        fi
+        ObservedFailure=true
+    }
+    colorText () {
+        echo -e -n "$*$(getColor None)"
+    }
+    boldBlue () {
+        colorText "$(getColor BoldBlue)$*"
+    }
+    boldYellow () {
+        colorText "$(getColor BoldYellow)$*"
+    }
+    yellow () {
+        colorText "$(getColor Yellow)$*"
+    }
+    listAssemblies () {
+        cat << EOF | grep -v "^#" | sed '/^\s*$/d'
+    CCS-WKC:Common Core Services - WKC:CCS,WKC,CoreWKC
+    CoreWKC:Watson Knowledge Catalog Core:WKC,CoreWKC
+    IIS:Information Server:WKC
+    WKC:Watson Knowledge Catalog:WKC
+    EOF
+    }
+    listModules () {
+        cat << EOF | grep -v "^#" | sed '/^\s*$/d'
+    CCS-WKC:release=0022-wkc-base-prereqs:WKC Base PreReqs
+    CCS-WKC:release=0027-wkc-base:WKC Base
+    CoreWKC:release=0071-wkc-prereqs:WKC Db2
+    CoreWKC:release=0075-wkc-lite:WKC Pro
+    IIS:release=0072-iis:Information Server
+    WKC:release=0073-ug:Unified Governance
+    EOF
+    }
+    listGroups () {
+        $1 << EOF | grep -v "^#" | sed '/^\s*$/d'
+    Access:Access Point:Specific
+    Others:Everything Else:Rest
+    Storage:Storage Layer:Specific
+    EOF
+    }
+    listObjects () {
+        cat << EOF | grep -v "^#" | sed '/^\s*$/d'
+    wdp-couchdb:sts:CCS-WKC::Storage
+    rabbitmq-ha:sts:CCS-WKC::Storage
+    redis-ha-server:sts:CCS-WKC::Storage
+    redis-ha-haproxy:deploy:CCS-WKC::Storage
+    catalog-api:deploy:CCS-WKC:Access:Access
+    dc-main:deploy:CCS-WKC:Access:
+    portal-catalog:deploy:CCS-WKC:Access:
+    wdp-db2:sts:CoreWKC:Storage:Storage
+    wkc-gov-ui:deploy:CoreWKC:Access:
+    iis-xmetarepo:deploy:IIS:Storage:Storage
+    igc-ui-react:deploy:WKC:Access:
+    EOF
+    }
+    queryDeploymentType () {
+        if [[ $($Client4OCP get sts wdp-db2 --no-headers --ignore-not-found | wc -l) -eq 0 ]]; then
+            echo CCS
+        elif [[ $($Client4OCP get deploy iis-xmetarepo --no-headers --ignore-not-found | wc -l) -eq 0 ]]; then
+            echo CoreWKC
+        else
+            echo WKC
+        fi
+    }
+    queryNonSpecificPods4Group () {
+        while IFS= read -r Module; do
+            if [[ $(listAssemblies | awk -F':' '{if($1==Assembly&&$3~Type) print $0}' \
+                        Assembly=$(cut -d':' -f1 <<< $Module) Type=$DeploymentType | wc -l) -eq 0 ]]; then
+                continue
+            fi
+            for Type in deploy sts; do
+                for Object in $($Client4OCP get $Type -l $(cut -d':' -f2 <<< $Module) --no-headers -o custom-columns=":metadata.name"); do
+                    if [[ $1 == ScaleDown ]]; then
+                        ThisGroup=$(listObjects | awk -F':' '{if($1==Object) print $4}' Object=$Object)
+                    elif [[ $1 == ScaleUp ]]; then
+                        ThisGroup=$(listObjects | awk -F':' '{if($1==Object) print $5}' Object=$Object)
+                    fi
+                    if [[ ${#ThisGroup} -eq 0 ]]; then
+                        echo $Object:$Type
+                    fi
+                done
+            done
+        done < <(listModules)
+    }
+    querySpecificPods4Group () {
+        while IFS= read -r Object; do
+            if [[ $1 == ScaleDown && $(cut -d':' -f4 <<< $Object) != $2 ]]; then
+                continue
+            elif [[ $1 == ScaleUp && $(cut -d':' -f5 <<< $Object) != $2 ]]; then
+                continue
+            elif [[ $(listAssemblies |\
+                      awk -F':' '{if($1==Assembly&&$3~Type) print $0}' \
+                          Assembly=$(cut -d':' -f3 <<< $Object) Type=$DeploymentType | wc -l) -eq 0 ]]; then
+                continue
+            fi
+            echo "$(cut -d':' -f1 <<< $Object):$(cut -d':' -f2 <<< $Object)"
+        done < <(listObjects)
+    }
+    queryPodsByGroup () {
+        if [[ $3 == Specific ]]; then
+            querySpecificPods4Group $1 $2
+        else
+            queryNonSpecificPods4Group $1
+        fi
+    }
+    processScaleRequest () {
+        if [[ $1 != ScaleDown && $1 != ScaleUp ]]; then
+            return
+        fi
+        DeploymentType=$(queryDeploymentType)
+        StyleType=$($Client4OCP get sts | awk '{print $2;exit}')
+        Format=" %-32s %-7s %s\n"
+        while IFS= read -r Group; do
+            log "Group: $(cut -d':' -f2 <<< $Group)"
+            unset Objects
+            for SelectedObject in $(queryPodsByGroup $1 $(cut -d':' -f1 <<< $Group) $(cut -d':' -f3 <<< $Group)); do
+                ObjectName=$(cut -d':' -f1 <<< $SelectedObject)
+                ObjectType=$(cut -d':' -f2 <<< $SelectedObject)
+                if [[ $1 == ScaleDown ]]; then
+                    if [[ $StyleType == READY ]]; then
+                        Scale=$($Client4OCP get $ObjectType $ObjectName --no-headers | awk '{print $2}' | cut -d'/' -f2)
+                    else
+                        Scale=$($Client4OCP get $ObjectType $ObjectName --no-headers | awk '{print $2}')
+                    fi
+                    if [[ $Scale -eq 0 ]]; then
+                        warning "Skipping $(boldYellow $ObjectName \($ObjectType\)) $(yellow as Scale is 0)" force
+                    else
+                        $Client4OCP annotate $ObjectType $ObjectName wkcbr/original-replicas=$Scale --overwrite=true > $ConsoleLog
+                        if [[ $? -ne 0 ]]; then
+                            fail "Failed to annotate $ObjectName ($ObjectType) with Replica Count, $Scale"
+                        else
+                            $Client4OCP scale $ObjectType $ObjectName --replicas=0 > $ConsoleLog
+                            if [[ $? -ne 0 ]]; then
+                                fail "Scale down $ObjectName ($ObjectType)"
+                            else
+                                pass "Scaled down $ObjectName ($ObjectType)"
+                                Objects+="$SelectedObject,"
+                            fi
+                        fi
+                    fi
+                elif [[ $1 == ScaleUp ]]; then
+                    Scale=$($Client4OCP get $ObjectType $ObjectName -o jsonpath='{.metadata.annotations.wkcbr/original-replicas}')
+                    if [[ -z $Scale ]]; then
+                        warning "Skipping $(boldYellow $ObjectName \($ObjectType\)) $(yellow as Scale was not annotated)" force
+                    elif [[ $Scale -eq 0 ]]; then
+                        warning "Skipping $(boldYellow $ObjectName \($ObjectType\)) $(yellow as Scale is 0)" force
+                    else
+                        $Client4OCP scale $ObjectType $ObjectName --replicas=$Scale > $ConsoleLog
+                        if [[ $? -ne 0 ]]; then
+                            fail "Scale up $ObjectName ($ObjectType) to $Scale"
+                        else
+                            pass "Scaled up $ObjectName ($ObjectType) to $Scale"
+                            Objects+="$SelectedObject,"
+                        fi
+                    fi
+                fi
+            done
+            ReportCounter=1
+            while true; do
+                rm -f $ConsoleLog
+                for SelectedObject in $(sed -e "s/,/ /g" <<< $Objects); do
+                    ObjectName=$(cut -d':' -f1 <<< $SelectedObject)
+                    ObjectType=$(cut -d':' -f2 <<< $SelectedObject)
+                    ObjectDetail=$($Client4OCP get $ObjectType $ObjectName --no-headers)
+                    if [[ $StyleType == READY ]]; then
+                        CurrentState=$(awk '{print $2}' <<< $ObjectDetail | awk -F'/' '{print $1}')
+                        DesiredState=$(awk '{print $2}' <<< $ObjectDetail | awk -F'/' '{print $2}')
+                    elif [[ $StyleType == DESIRED ]]; then
+                        DesiredState=$(awk '{print $2}' <<< $ObjectDetail)
+                        if [[ $ObjectType == deploy ]]; then
+                            CurrentState=$(awk '{print $5}' <<< $ObjectDetail)
+                        else
+                            CurrentState=$(awk '{print $3}' <<< $ObjectDetail)
+                        fi
+                    fi
+                    if [[ $1 == ScaleDown && $CurrentState -eq 0 ]]; then
+                        Objects=$(sed -e "s/$ObjectName:$ObjectType,//" <<< $Objects)
+                    elif [[ $1 == ScaleUp && $CurrentState -eq $DesiredState ]]; then
+                        Objects=$(sed -e "s/$ObjectName:$ObjectType,//" <<< $Objects)
+                    else
+                        printf "  $Format" $ObjectName $ObjectType "$CurrentState/$DesiredState" >> $ConsoleLog
+                    fi
+                done
+                if [[ ! -f $ConsoleLog ]]; then
+                    pass "Scaled $([[ $1 == ScaleDown ]] && echo Down || echo Up) Group, $(cut -d':' -f2 <<< $Group)\n" force
+                    break
+                elif [[ $ReportCounter -gt $WaitCounter ]]; then
+                    fail "Scale $([[ $1 == ScaleDown ]] && echo Down || echo Up) Group, $(cut -d':' -f2 <<< $Group) not complete in 20 mins\n"
+                    ObservedFailure=true
+                    break
+                elif [[ $ReportCounter -eq 1 || $(expr $ReportCounter % 6) -eq 0 ]]; then
+                    ObjectCount=$(wc -l $ConsoleLog | awk '{print $1}')
+                    info "Yet to Scale $([[ $1 == ScaleDown ]] && echo Down || echo Up) $ObjectCount objects" force
+                    if [[ $ObjectCount -le $ItemCount ]]; then
+                        printf "  $Format" Name                            Type   State
+                        printf "  $Format" =============================== ====== =====
+                        cat $ConsoleLog
+                    fi
+                fi
+                (( ReportCounter++ ))
+                sleep 10
+            done
+            if [[ ! -z $ObservedFailure ]]; then
+                break
+            elif [[ ! -z $ObservedWarning && -z $IgnoreWarning ]]; then
+                break
+            fi
+        done < <(listGroups $([[ $1 == ScaleDown ]] && echo cat || echo tac))
+    }
+    defineDefaults
+    processScaleRequest $1

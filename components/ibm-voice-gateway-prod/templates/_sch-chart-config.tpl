@@ -8,8 +8,10 @@ sch:
       orchestrator:
         name: "orchestrator"
     metering:
-      productName: {{ .Values.addon.displayName }}
+      productName: {{ .Values.addon.productName }}
       productID: {{ .Values.addon.productID }}
+      productMetric: 'THOUSAND_MONTHLY_MINUTES'
+      productChargedContainers: 'All'
 {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
       com.ibm.cloud.metering.selfmeter: "true"
 {{- end }}

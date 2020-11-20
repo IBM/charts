@@ -1,0 +1,67 @@
+{{- $compName := "rstudio-helm-chart-test" -}}
+kind: Pod
+apiVersion: v1
+metadata:
+  name: {{$compName}}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-{{$compName}}"
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+    app: "{{$compName}}"
+    release: "{{ .Release.Name }}"
+    chart: {{ .Chart.Name }}
+    heritage: tiller
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true         
+    runAsUser: {{ .Values.global.runAsUser }}
+  serviceAccount: {{ .Values.global.editor.sa }}
+  serviceAccountName: {{ .Values.global.editor.sa }}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - {{ .Values.global.architecture }}
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: run
+              operator: In
+              values:
+              - {{$compName}}
+        topologyKey: kubernetes.io/hostname
+  restartPolicy: Never
+  containers:
+    - name: {{$compName}}-container
+      image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.initJob.image.name }}:{{ .Values.initJob.image.tag }}
+      imagePullPolicy: IfNotPresent
+      resources:
+        limits:
+          cpu: "0.5"
+          memory: "512Mi"
+        requests:
+          cpu: "0.5"
+          memory: "512Mi"
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: false
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true             
+        runAsUser: {{ .Values.global.runAsUser }}
+        capabilities:
+          drop:
+          - ALL
+      command: [sh, -c]
+      args: ["/home/node/scripts/verifyRStudioInstall.sh"]
