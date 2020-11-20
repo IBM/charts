@@ -10,16 +10,28 @@ sch:
     components:
       secret:
         name: "secret"
+      upgradeBackupPVC:
+        name: "bar-pvc"
       enginePVC:
         name: "pvc"
       cachingPVC:
         name: "caching-pvc"
       initVolume:
         name: "init-volume"
+      barBackup:
+        name: "bar-backup"
+      barRestore:
+        name: "bar-restore"
       secretGen:
         name: "secret-gen"
       secretDel:
         name: "secret-del"
+      connRename:
+        name: "conn-rename"
+      pvcDel:
+        name: "pvc-del"
+      pvcGen:
+        name: "pvc-gen"
       metastore:
         name: "metastore"
       engine:
@@ -28,8 +40,8 @@ sch:
         name: "utils"
       worker:
         name: "worker"
-      bigsql:
-        name: "bigsql"
+      addInstanceOwner:
+        name: "add-instance-owner"
     pods:
       utils:
         name: "dv-utils"
@@ -47,12 +59,15 @@ sch:
         securityContext:
           runAsNonRoot: true
           runAsUser: 2824 # bigsql user
+          fsGroup: 43999
       metastorePodSecurityContext:
         hostNetwork: false
         hostPID: false
         hostIPC: false
         securityContext:
           runAsNonRoot: true
+          fsGroup: 43999
+        serviceAccountName: dv-sa
       utilsPodSecurityContext:
         hostNetwork: false
         hostPID: false
@@ -62,14 +77,14 @@ sch:
           runAsUser: 1000322824
           fsGroup: 43999
         serviceAccountName: dv-sa
-      secretJobPodSecurityContext:
+      commonUtilsJobPodSecurityContext:
         hostNetwork: false
         hostPID: false
         hostIPC: false
         securityContext:
           runAsNonRoot: true
         serviceAccountName: cpd-editor-sa
-      secretJobContainerSecurityContext:
+      commonUtilsJobContainerSecurityContext:
         securityContext:
           privileged: false
           readOnlyRootFilesystem: false
@@ -78,11 +93,21 @@ sch:
           capabilities:
             drop:
             - ALL
+      barPodSecurityContext:
+        hostNetwork: false
+        hostPID: false
+        hostIPC: false
+        securityContext:
+          fsGroup: 43999 # sysdv group
+          runAsNonRoot: true
+          runAsUser: 1000322824 # bigsql user
+        serviceAccountName: dv-bar-sa
       initVolumePodSecurityContext:
         hostNetwork: false
         hostPID: false
         hostIPC: false
         securityContext:
+          fsGroup: 43999 # sysdv group
           runAsNonRoot: true
           runAsUser: 1000322824 # bigsql user
         serviceAccountName: dv-sa
@@ -92,6 +117,16 @@ sch:
           readOnlyRootFilesystem: false
           allowPrivilegeEscalation: true
           runAsNonRoot: true
+          runAsUser: 1000322824 # bigsql user
+          capabilities:
+            add:
+            - AUDIT_WRITE
+            - DAC_OVERRIDE
+            - FOWNER
+            - SETGID
+            - SETUID
+            drop:
+            - ALL
       headPodSecurityContext:
         hostNetwork: false
         hostPID: false
@@ -118,7 +153,16 @@ sch:
           runAsUser: 1000322824 # bigsql user
           capabilities:
             add:
+            - AUDIT_WRITE
             - IPC_OWNER        # Needed for Db2
+            - SETGID
+            - SETUID
+            - CHOWN
+            - DAC_OVERRIDE
+            - KILL
+            - FOWNER
+            drop:
+            - ALL
       utilsContainerSecurityContext:
         securityContext:
           privileged: false
@@ -126,6 +170,14 @@ sch:
           allowPrivilegeEscalation: true
           runAsNonRoot: true
           runAsUser: 1000322824 # bigsql user
+          capabilities:
+            add:
+            - AUDIT_WRITE
+            - SETGID
+            - SETUID
+            - CHOWN
+            drop:
+            - ALL
       workerPodSecurityContext:
         hostNetwork: false
         hostPID: false
@@ -141,16 +193,23 @@ sch:
           readOnlyRootFilesystem: false
           allowPrivilegeEscalation: true
           runAsNonRoot: true
+          runAsUser: 1000322824 # bigsql user
           capabilities:
             add:
+            - AUDIT_WRITE
             - IPC_OWNER        # Needed for Db2
+            - SETGID
+            - SETUID
+            drop:
+            - ALL
     metering:
       productName: "IBM Data Virtualization"
-      productID: "ICP4D-IBMDataVirtualizationv141_00000"
-      productVersion: "1.4.1"
+      productID: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+      productVersion: "1.5.0"
       productMetric: "VIRTUAL_PROCESSOR_CORE"
       productChargedContainers: "All"
+      productCloudpakRatio: "1:1"
       cloudpakName: "IBM Cloud Pak for Data"
       cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
-      cloudpakVersion: "3.0.1"
+      cloudpakInstanceId: {{ .Values.zenCloudPakInstanceId }}
 {{- end -}}

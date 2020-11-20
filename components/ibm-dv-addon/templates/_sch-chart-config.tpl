@@ -16,6 +16,8 @@ sch:
         name: "homepage-quick-nav-extensions"
       navExtensions:
         name: "nav-extensions"
+      dvExtensionTranslations:
+        name: "extension-translations-job"
     security:
       addonPodSecurityContext:
         hostNetwork: false
@@ -46,13 +48,28 @@ sch:
           capabilities:
             drop:
             - ALL
+      dvExtensionTranslationsSecurityContext:
+        hostNetwork: false
+        hostPID: false
+        hostIPC: false
+        securityContext:
+          runAsNonRoot: true
+      dvExtensionTranslationsContainerSecurityContext:
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
     metering:
       productName: "IBM Data Virtualization"
-      productID: "ICP4D-IBMDataVirtualizationv141_00000"
-      productVersion: "1.4.1"
+      productID: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+      productVersion: "1.5.0"
       productMetric: "VIRTUAL_PROCESSOR_CORE"
       productChargedContainers: "All"
+      productCloudpakRatio: "1:1"
       cloudpakName: "IBM Cloud Pak for Data"
       cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
-      cloudpakVersion: "3.0.1"
+      cloudpakInstanceId: {{ .Values.global.cloudpakInstanceId }}
 {{- end -}}

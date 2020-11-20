@@ -1,91 +1,40 @@
+{{- include "sch.config.init" (list . "dvapi.sch.chart.config.values") -}}
+{{- $appName := .sch.chart.appName -}}
+{{- $compName := .sch.chart.components.dvapi.name -}}
+{{- $podName := .sch.chart.pods.dvapi.name -}}
+{{- $ServiceInstanceID := .Values.zenServiceInstanceId | int64 -}}
+{{- $ServiceInstanceUID := .Values.zenServiceInstanceUID | int64 -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
 {{- if .Values.deployName }}
   name: {{ .Values.deployName }}
 {{- else }}
-  name: {{ template "ibm-dv-api.name" . }}
+  name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
 {{- end }}
   labels:
-    ServiceInstanceID: {{ .Values.zenServiceInstanceId| int64 | quote }}
-    app: "dv"
-    app.kubernetes.io/name: "dv"
-    helm.sh/chart: "ibm-dv-api"
-    app.kubernetes.io/managed-by: "Tiller"
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    release: {{ .Release.Name }}
-    app.kubernetes.io/component: {{ template "ibm-dv-api.name" . }}
-    icpdata_dvapi: "true"
-    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}   
-    heritage: {{ .Release.Service }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 4 }}
 spec:
   selector:
     matchLabels:
-      ServiceInstanceID: {{ .Values.zenServiceInstanceId| int64 | quote }}
-      app: "dv"
-      app.kubernetes.io/name: "dv"
-      helm.sh/chart: "ibm-dv-api"
-      app.kubernetes.io/managed-by: "Tiller"
-      app.kubernetes.io/instance: {{ .Release.Name }}
-      release: {{ .Release.Name }}
-      app.kubernetes.io/component: {{ template "ibm-dv-api.name" . }}
-      icpdata_dvapi: "true"
-      release: {{ .Release.Name }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 6 }}
+
   template:
     metadata:
       labels:
-        ServiceInstanceID: {{ .Values.zenServiceInstanceId| int64 | quote }}
-        app: "dv"
-        app.kubernetes.io/name: "dv"
-        helm.sh/chart: "ibm-dv-api"
-        app.kubernetes.io/managed-by: "Tiller"
-        app.kubernetes.io/instance: {{ .Release.Name }}
-        release: {{ .Release.Name }}
-        app.kubernetes.io/component: {{ template "ibm-dv-api.name" . }}
-        icpdata_dvapi: "true"
-        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}   
-        heritage: {{ .Release.Service }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 8 }}
       annotations:
-        {{- range $key, $val := .Values.customAnnotations }}
-        {{ $key }}: {{ $val | quote }}
-        {{- end }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering nil nil nil) | indent 8 }}
     spec:
-      hostNetwork: false
-      hostPID: false
-      hostIPC: false
-    {{- if .Values.serviceAccountName }}
-      serviceAccountName: {{.Values.serviceAccountName }}
-    {{- else }}
-      serviceAccountName:  "dv-sa"
-    {{- end }}
-      securityContext:
-        runAsNonRoot: true
-{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
-        runAsUser: {{ .Values.runAsUser }}
-{{- end }}      
-    {{- with .Values.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
-    {{- end }}
+{{- include "sch.security.securityContext" (list . .sch.chart.security.defaultPodSecurityContext) | indent 6 }}
       affinity:
-      {{- include "dvapi.NodeAffinity" . | indent 8 }}
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
       containers:
-      - securityContext:
-          privileged: false
-          readOnlyRootFilesystem: false
-          allowPrivilegeEscalation: true
-          runAsNonRoot: true
-{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
-          runAsUser: {{ .Values.runAsUser }}
-{{- end }} 
-          capabilities:
-            drop:
-            - ALL
       {{- if .Values.deployName }}
-        name: {{ .Values.deployName }}
+      - name: {{ .Values.deployName }}
       {{- else }}
-        name: {{ .Chart.Name }}
-      {{- end }}           
+      - name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
+      {{- end }}          
       {{- if .Values.image.arch }}
         image: "{{ .Values.docker_registry_prefix }}/{{ .Values.image.docker_image }}:{{ .Values.image.tag }}-{{ .Values.image.arch }}"
       {{- else }}
@@ -97,6 +46,8 @@ spec:
           value: "{{ .Values.zenServiceInstanceId }}"
         - name: DV_DATABASE_SSL_ENABLE
           value: "{{ .Values.service.databaseSSLEnabled }}"
+        - name: JWT
+          value: "true"
         - name: DV_POD_NAMESPACE
           valueFrom:
             fieldRef:
@@ -112,36 +63,49 @@ spec:
         - name: secret-volume
           readOnly: true
           mountPath: "/etc/secret-volume"
-
+        - mountPath: /etc/internal-nginx-svc-tls
+          name: internal-nginx-svc-tls
+          readOnly: true
+        - mountPath: /etc/wdp-service-id-secret-volume
+          name: wdp-service-id-secret-volume
+          readOnly: true
+        - name: zen-service-broker-secret
+          mountPath: /etc/zen-service-broker-secret
+          readOnly: true
         ports:
           - name: dvapi-https
             containerPort: {{ .Values.service.port }}
             protocol: TCP
         livenessProbe:
-          exec:
-            command:
-            - cat
-            - /dv-api/config/config.prod.yaml
+          # exec:
+          #   command:
+          #   - cat
+          #   - /dv-api/config/config.prod.yaml
           # tcpSocket:
           #   port: dvapi-https
-          # httpGet:
-          #   scheme: HTTPS
-          #   path: /
-          #   port: dvapi-https
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          httpGet:
+            path: /docs
+            port: dvapi-https
+            scheme: HTTPS
         readinessProbe:
-          exec:
-            command:
-            - cat
-            - /dv-api/config/config.prod.yaml
+          # exec:
+          #   command:
+          #   - cat
+          #   - /dv-api/config/config.prod.yaml
           # tcpSocket:
           #   port: dvapi-https
-          # # httpGet:
-          #   scheme: HTTPS
-          #   path: /
-          #   port: dvapi-https
-        resources:
-          {{- toYaml .Values.resources | nindent 12 }}          
-          
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          httpGet:
+            path: /docs
+            port: dvapi-https
+            scheme: HTTPS
+{{- include "dv.helpers.resources" (list . .Values.resources.dvapi) | indent 8 }}  
+{{- include "sch.security.securityContext" (list . .sch.chart.security.dvapiContainerSecurityContext) | indent 8 }}                
       volumes:
       - name: dv-data
         persistentVolumeClaim:
@@ -155,16 +119,16 @@ spec:
         secret:
           defaultMode: 420
           secretName: dv-secret
-        
-      {{- with .Values.nodeSelector }}
-      nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-    {{- with .Values.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-    {{- end }}
-    {{- with .Values.tolerations }}
-      tolerations:
-        {{- toYaml . | nindent 8 }}
-    {{- end }}
+      - name: wdp-service-id-secret-volume
+        secret:
+          defaultMode: 420
+          secretName: wdp-service-id
+          optional: true
+      - name: internal-nginx-svc-tls
+        secret:
+          defaultMode: 420
+          secretName: internal-nginx-svc-tls
+      - name: zen-service-broker-secret
+        secret:
+          defaultMode: 420
+          secretName: zen-service-broker-secret

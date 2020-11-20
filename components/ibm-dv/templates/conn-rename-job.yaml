@@ -1,0 +1,67 @@
+{{- include "sch.config.init" (list . "dv.sch.chart.config.values") -}}
+{{- $appName := .sch.chart.appName -}}
+{{- $compName := .sch.chart.components.connRename.name -}}
+{{- $ServiceInstanceID := .Values.zenServiceInstanceId | int64 -}}
+{{- $ServiceInstanceUID := .Values.zenServiceInstanceUID | int64 -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "2"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering nil nil nil) | indent 8 }}
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.security.commonUtilsJobPodSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      restartPolicy: Never
+      containers:
+      - name: {{ $compName }}
+        image: "{{ .Values.docker_registry_prefix }}/{{ .Values.dvEngine.image.dockerImage }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - /bin/bash
+        - -c
+        - --
+        - /opt/dv/current/wkc/rename_dv_connection.sh
+        volumeMounts:
+        - mountPath: /mnt/PV/versioned
+          name: dv-data
+          subPath: "{{ .Chart.AppVersion }}"
+        - mountPath: /etc/wdp-service-id-secret-volume
+          name: wdp-service-id-secret-volume
+        - mountPath: /etc/wdp-policy-service-secret-volume
+          name: wdp-policy-service-secret-volume
+        - mountPath: /etc/internal-nginx-svc-tls
+          name: internal-nginx-svc-tls
+{{ include "dv.helpers.resources" (list . .Values.resources.commonUtilsJob) | indent 8 }}
+{{ include "sch.security.securityContext" (list . .sch.chart.security.commonUtilsJobContainerSecurityContext) | indent 8 }}
+      volumes:
+      - name: wdp-service-id-secret-volume
+        secret:
+          secretName: wdp-service-id
+          defaultMode: 288
+          optional: true
+      - name: wdp-policy-service-secret-volume
+        secret:
+          secretName: secret-wdp-policy-service
+          defaultMode: 256
+          optional: true
+      - name: internal-nginx-svc-tls
+        secret:
+          secretName: internal-nginx-svc-tls
+          defaultMode: 288
+          optional: true
+      - name: dv-data
+        persistentVolumeClaim:
+            claimName: {{ include "sch.names.appName" (list .) }}-pvc

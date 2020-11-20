@@ -1,7 +1,7 @@
-# IBM Data Virtualization API 1.4.1
+# IBM Data Virtualization API 1.5.0
 Data Virtualization integrates data sources across multiple types and locations and turns it into one logical data view. This virtual data lake makes the job of getting value out of your data easy.
 ## Introduction
-This chart configures and bootstraps Data Virtulization API 1.4.1 as add-on on a Kubernetes cluster with CP4D installed
+This chart configures and bootstraps Data Virtulization API 1.5.0 as add-on on a Kubernetes cluster with CP4D installed
 
 ## Chart Details
 This chart will do the following:
@@ -13,7 +13,7 @@ This chart will do the following:
 ## Prerequisites
 1. OpenShift Version >= 3.11
 2. Tiller version >= 2.9.0
-3. IBM Cloud Pak for Data >= 3.0.1
+3. IBM Cloud Pak for Data >= 3.5.0
 
 This chart does not require a PodDisruptionBudget
 
@@ -44,7 +44,7 @@ The following tables lists the configurable parameters of the ibm-dv-api chart a
 | `service.type`| k8s service type exposing ports, e.g.`ClusterIP` | `ClusterIP`|
 | `service.port`| Interal https port | `3300`|
 | `image.repository`| `dv-api` image| `store/ibmcorp/data_server_manager_dev`                         
-| `image.tag`| `dv-api` image tag| `1.4.0`|	
+| `image.tag`| `dv-api` image tag| `1.5.0`|	
 | `image.pullPolicy`| `dv-api` image pull policy| `Always`   |
 
 
@@ -55,7 +55,7 @@ Upgrades from previous chart releases are not supported for this version
 
 ## PodSecurityPolicy Requirements	
 
-This chart requires the same PodSecurityPolicy [`ibm-restricted-scc`](https://ibm.biz/cpkspec-scc) that Cloud Pak for Data asks to be bound to the target namespace
+This chart requires the same PodSecurityPolicy [`restricted`](https://ibm.biz/cpkspec-scc) that Cloud Pak for Data asks to be bound to the target namespace
 
 Custom PodSecurityPolicy definition:	
 ```	

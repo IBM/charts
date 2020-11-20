@@ -1,23 +1,29 @@
 {{- include "sch.config.init" (list . "dvCaching.sch.chart.config.values") -}}
 {{- $appName := .sch.chart.appName -}}
 {{- $compName := .sch.chart.components.caching.name -}}
+{{- $podName := .sch.chart.pods.caching.name -}}
 {{- $ServiceInstanceID := .Values.zenServiceInstanceId | int64 -}}
+{{- $ServiceInstanceUID := .Values.zenServiceInstanceUID | int64 -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
   labels:
-{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName)) | indent 4 }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName  "icpdsupport/podSelector" $podName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName)) | indent 6 }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName  "icpdsupport/podSelector" $podName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 6 }}
   template:
     metadata:
       labels:
-{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName)) | indent 8 }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName  "icpdsupport/podSelector" $podName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 8 }}
       annotations:
+        hook.activate.cpd.ibm.com/command: "[]"
+        hook.deactivate.cpd.ibm.com/command: "[]"
+        hook.quiesce.cpd.ibm.com/command: "[]"
+        hook.unquiesce.cpd.ibm.com/command: "[]"
 {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering nil nil nil) | indent 8 }}
     spec:
 {{- include "sch.security.securityContext" (list . .sch.chart.security.defaultPodSecurityContext) | indent 6 }}
@@ -33,12 +39,15 @@ spec:
             until [[ -f "/mnt/marker_files/.restored.txt" ]]; do sleep 5; done;
             echo Volume mount complete;
             echo Waiting for dv-0 to be ready;
-            until [[ -f "/mnt/marker_files/.dv_initialized" ]]; do sleep 5; done;
+            until [[ -f "/mnt/dataserver_marker_files/.dataserver_initialized" ]]; do sleep 5; done;
             echo dv-0 ready;
         volumeMounts:
           - mountPath: /mnt/marker_files
             name: dv-data
             subPath: {{ .Chart.AppVersion }}/marker_files
+          - mountPath: /mnt/dataserver_marker_files
+            name: dv-data
+            subPath: uc_dsserver_shared/config
 {{- include "dv.helpers.resources" (list . .Values.resources.caching) | indent 8 }}
       containers:
       - name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
@@ -77,6 +86,9 @@ spec:
         - mountPath: /mnt/PV/versioned/public
           name: dv-data
           subPath: {{ .Chart.AppVersion }}/public
+        - mountPath: /opt/dv/current/caching/logs
+          name: dv-data
+          subPath: {{ .Chart.AppVersion }}/logs/dv-caching-logs
         ports:
         - name: https
           containerPort: 8443
@@ -91,13 +103,15 @@ spec:
             scheme: HTTPS
           initialDelaySeconds: 60
           periodSeconds: 10
+          timeoutSeconds: 5
         readinessProbe:
           httpGet:
             path: /api/v1/swagger.json
             port: https
             scheme: HTTPS
-          initialDelaySeconds: 60
+          initialDelaySeconds: 50
           periodSeconds: 10
+          timeoutSeconds: 5
 {{- include "dv.helpers.resources" (list . .Values.resources.caching) | indent 8 }}
 {{- include "sch.security.securityContext" (list . .sch.chart.security.cachingContainerSecurityContext) | indent 8 }}
       terminationGracePeriodSeconds: {{.Values.hooks.gracePeriodShutdown}}

@@ -1,11 +1,11 @@
-# IBM Data Virtualization Caching 1.4.1
+# IBM Data Virtualization Caching 1.5.0
 
 Data Virtualization integrates data sources across multiple types and locations and turns it into one logical data view. This virtual data lake, simplifies the job of getting value out of your data.
 
 
 ## Introduction
 
-This chart configures and bootstraps Data Virtulization Caching 1.4.1 as add-on on a Kubernetes cluster with IBM Cloud Pak for Data installed
+This chart configures and bootstraps Data Virtulization Caching 1.5.0 as add-on on a Kubernetes cluster with IBM Cloud Pak for Data installed
 
 
 ## Chart Details
@@ -21,7 +21,7 @@ This chart will do the following:
 
 1. OpenShift Version >= 3.11
 1. Tiller version >= 2.9.0
-3. IBM Cloud Pak for Data >= 3.0.1
+3. IBM Cloud Pak for Data >= 3.5.0
 
 This chart does not require a PodDisruptionBudget
 
@@ -62,7 +62,7 @@ Upgrades from previous chart releases are not supported for this version
 
 ## PodSecurityPolicy Requirements	
 
-This chart requires the same PodSecurityPolicy [`ibm-restricted-scc`](https://ibm.biz/cpkspec-scc) that Cloud Pak for Data asks to be bound to the target namespace
+This chart requires the same PodSecurityPolicy [`restricted`](https://ibm.biz/cpkspec-scc) that Cloud Pak for Data asks to be bound to the target namespace
 
 Custom PodSecurityPolicy definition:	
 ```	

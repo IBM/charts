@@ -1,0 +1,108 @@
+{{- include "sch.config.init" (list . "dv.sch.chart.config.values") -}}
+{{- $appName := .sch.chart.appName -}}
+{{- $compName := .sch.chart.components.metastore.name -}}
+{{- $ServiceInstanceID := .Values.zenServiceInstanceId | int64 -}}
+{{- $ServiceInstanceUID := .Values.zenServiceInstanceUID | int64 -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 4 }}
+spec:
+  podManagementPolicy: Parallel
+  replicas: 1
+  serviceName: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 8 }}
+      annotations:
+        hook.activate.cpd.ibm.com/command: "[]"
+        hook.deactivate.cpd.ibm.com/command: "[]"
+        hook.quiesce.cpd.ibm.com/command: "[]"
+        hook.unquiesce.cpd.ibm.com/command: "[]"
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering nil nil nil) | indent 8 }}
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.security.metastorePodSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      initContainers:
+      - name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}-init
+        image: "{{ .Values.docker_registry_prefix }}/{{ .Values.dvInitVolume.image.dockerImage }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - /bin/sh
+        - -c
+        - --
+        - if [ ! -d /mnt/PV/versioned/mysql ]; then
+          tar -zxvf /versioned.tar.gz mnt/PV/versioned/mysql;
+          fi
+        volumeMounts:
+        - mountPath: /mnt/PV/versioned
+          name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}-data
+          subPath: "{{ .Chart.AppVersion }}"
+{{- include "dv.helpers.resources" (list . .Values.resources.mariadb) | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.security.metastoreContainerSecurityContext) | indent 8 }}
+      containers:
+      - name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
+        image: "{{ .Values.docker_registry_prefix }}/{{ .Values.dvMetastore.image.dockerImage }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /etc/init.d/mysql
+              - stop
+        livenessProbe:
+          exec:
+            command:
+            - /opt/dv/current/mariadb-scripts/mariadb_liveness.sh
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          failureThreshold: 10
+        readinessProbe:
+          exec:
+            command:
+            - /opt/dv/current/mariadb-scripts/mariadb_readiness.sh
+          periodSeconds: 10
+          failureThreshold: 10
+        volumeMounts:
+        - mountPath: /mnt/PV/versioned
+          name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}-data
+          subPath: "{{ .Chart.AppVersion }}"
+        - mountPath: /mnt/PV/versioned/marker_files
+          name: {{ include "sch.names.appName" (list .) }}-data
+          subPath: "{{ .Chart.AppVersion }}/marker_files"
+        - mountPath: /mnt/PV/versioned/upgrade-backup
+          name: {{ include "sch.names.appName" (list .) }}-data
+          subPath: "{{ .Chart.AppVersion }}/upgrade-backup"
+        - mountPath: "/etc/secret-volume"
+          name: secret-volume
+          readOnly: true
+        ports:
+        - containerPort: {{.Values.dvMetastore.mySqlPort}}
+{{- include "dv.helpers.resources" (list . .Values.resources.mariadb) | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.security.metastoreContainerSecurityContext) | indent 8 }}
+      volumes:
+      - name: dv-data
+        persistentVolumeClaim:
+            claimName: {{ include "sch.names.appName" (list .) }}-pvc
+      - name: secret-volume
+        secret:
+          secretName: {{ include "sch.names.appName" (list .) }}-{{ .sch.chart.components.secret.name }}
+          defaultMode: 288
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      {{- if .Values.persistence.useDynamicProvisioning }}
+      storageClassName: {{ .Values.persistence.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.persistence.size | quote }}

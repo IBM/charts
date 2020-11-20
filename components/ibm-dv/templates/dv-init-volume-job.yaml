@@ -2,17 +2,18 @@
 {{- $appName := .sch.chart.appName -}}
 {{- $compName := .sch.chart.components.initVolume.name -}}
 {{- $ServiceInstanceID := .Values.zenServiceInstanceId | int64 -}}
+{{- $ServiceInstanceUID := .Values.zenServiceInstanceUID | int64 -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
   labels:
-{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName)) | indent 4 }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 4 }}
 spec:
   template:
     metadata:
       labels:
-{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName)) | indent 8 }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 8 }}
       annotations:
 {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering nil nil nil) | indent 8 }}
     spec:
@@ -24,15 +25,17 @@ spec:
       - name: {{ $compName }}
         image: "{{ .Values.docker_registry_prefix }}/{{ .Values.dvInitVolume.image.dockerImage }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - bash
+        - -c
+        - --
+        - python3 -u /restore-volumes-script.py --operation restore --type versioned
         volumeMounts:
         - mountPath: /mnt/PV/versioned_pv_root
           name: dv-data
         - mountPath: /mnt/PV/versioned
           name: dv-data
           subPath: "{{ .Chart.AppVersion }}"
-        - mountPath: /mnt/PV/unversioned
-          name: dv-caching-data
-          subPath: unversioned
         - mountPath: /mnt/PV/versioned/uc_dsserver_shared
           name: dv-data
           subPath: uc_dsserver_shared
@@ -44,7 +47,4 @@ spec:
       volumes:
       - name: dv-data
         persistentVolumeClaim:
-            claimName: {{ if .Values.persistence.existingClaimName }}{{ .Values.persistence.existingClaimName }}{{- else }}{{ include "sch.names.appName" (list .) }}-pvc{{- end }}
-      - name: dv-caching-data
-        persistentVolumeClaim:
-            claimName: {{ if .Values.persistence.cachingpv.existingClaimName }}{{ .Values.persistence.cachingpv.existingClaimName }}{{- else }}{{ include "sch.names.appName" (list .) }}-caching-pvc{{- end }}
+            claimName: {{ include "sch.names.appName" (list .) }}-pvc
