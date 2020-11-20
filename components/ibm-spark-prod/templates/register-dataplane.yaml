@@ -7,42 +7,26 @@ metadata:
   name: "{{ .Values.environment.name }}-register-hb-dataplane"
   labels:
     app: "{{ .Values.environment.name }}-register-hb-dataplane"
-    chart: "{{ .Chart.Name }}"
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: helm
-    app.kubernetes.io/name: {{ .Release.Name }}
-    helm.sh/chart: "{{ .Chart.Name }}"
+{{- include "helm.labels" . | indent 4 }}
+{{- include "cloudpak.labels" . | indent 4 }}
+  annotations:
+{{- include "zenhelper.annotations" . | indent 8 }}
 spec:
   selector:
     matchLabels:
       app: "{{ .Values.environment.name }}-register-hb-dataplane"
-      chart: "{{ .Chart.Name }}"
-      heritage: {{ .Release.Service }}
-      release: {{ .Release.Name }}
+{{- include "helm.labels" . | indent 6 }}
+{{- include "cloudpak.labels" . | indent 6 }}
   template: # create pods using pod definition in this template
     metadata:
       annotations:
-        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
-        cloudpakVersion: "3.0.1"
-        cloudpakName: "IBM Cloud Pak for Data"
-        productMetric: "VIRTUAL_PROCESSOR_CORE"
-        productChargedContainers: "All"
-        productName: "Analytics Engine powered by Apache Spark"
-        productID: "ICP4D-Spark-00000"
-        productVersion: "3.0.1"
+{{- include "zenhelper.annotations" . | indent 8 }}
       # the name is not included in the meta data as a unique name is
       # generated from the deployment name
       labels:
         app: "{{ .Values.environment.name }}-register-hb-dataplane"
-        chart: "{{ .Chart.Name }}"
-        heritage: {{ .Release.Service }}
-        release: {{ .Release.Name }}
-        app.kubernetes.io/instance: {{ .Release.Name }}
-        app.kubernetes.io/managed-by: helm
-        app.kubernetes.io/name: {{ .Release.Name }}
-        helm.sh/chart: "{{ .Chart.Name }}"
+{{- include "helm.labels" . | indent 8 }}
+{{- include "cloudpak.labels" . | indent 8 }}
     spec:
       affinity:
         nodeAffinity:
@@ -54,6 +38,7 @@ spec:
                 values:
                 - {{ .Values.global.architecture }}
       serviceAccount: {{ .Values.sa.viewer }}
+      serviceAccountName: {{ .Values.sa.viewer }}
       securityContext:
         runAsUser: {{ .Values.user.uid }}
       hostNetwork: false
@@ -97,18 +82,27 @@ spec:
         resources:
           requests:
             cpu: {{ .Values.dataplaneReg.requests.cpu }}
-            memory: {{ .Values.dataplaneReg.limits.memory }}
+            memory: {{ .Values.dataplaneReg.requests.memory }}
           limits:
-            cpu: {{ .Values.microService.requests.cpu }}
-            memory: {{ .Values.microService.limits.memory }}
+            cpu: {{ .Values.dataplaneReg.limits.cpu }}
+            memory: {{ .Values.dataplaneReg.limits.memory }}
         command: ["/bin/bash", "-c"]
         args:
-          - "bash {{ .Values.dataplaneReg.scriptPath }}register-dataplane.sh {{ .Values.dataplaneReg.name }} {{ .Values.nginx.scheme }}://{{ .Values.environment.name }}-{{ .Values.nginx.name }}-external.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.nginx.containerPort }} {{ .Values.microService.scheme }}://{{ .Values.environment.name }}-control-plane:{{ .Values.microService.port }}/{{ .Values.dataPlaneManagerService.path }} {{ .Values.microService.dataplaneScheme }}://{{ .Values.environment.name }}-control-plane:{{ .Values.microService.dataplanePort }}/{{ .Values.helmBasedService.path }} {{ .Values.nfs.path }} {{ .Values.nfs.server }} {{ .Values.icp4d.nginxUrl }} {{ .Values.dataplaneReg.scriptPath }}"
+          - "bash {{ .Values.dataplaneReg.scriptPath }}register-dataplane.sh {{ .Values.dataplaneReg.name }} {{ .Values.nginx.scheme }}://{{ .Values.environment.name }}-{{ .Values.nginx.name }}-external {{ .Values.microService.scheme }}://{{ .Values.environment.name }}-control-plane:{{ .Values.microService.port }} {{ .Values.dataPlaneManagerService.path }} {{ .Values.helmBasedService.path }} {{ .Values.nfs.path }} {{ .Values.nfs.server }} {{ .Values.icp4d.nginxUrl }} {{ .Values.dataplaneReg.scriptPath }} {{ .Release.Namespace }} {{ .Values.nginx.containerPort }} {{ .Values.cleanupCron.scriptPath }} {{ .Values.cleanupCron.configPath }}"
         volumeMounts:
         - name: "{{ .Values.environment.name }}-{{ .Values.dataplaneReg.name }}-script"
           mountPath: "{{ .Values.dataplaneReg.scriptPath }}"
-      serviceAccount: {{ .Values.sa.viewer }}
+        - name: "{{ .Values.environment.name }}-cleanup-scripts"
+          mountPath: "{{ .Values.cleanupCron.scriptPath }}"
+        - name: "{{ .Values.environment.name }}-cleanup-configs"
+          mountPath: "{{ .Values.cleanupCron.configPath }}"
       volumes:
         - name: "{{ .Values.environment.name }}-{{ .Values.dataplaneReg.name }}-script"
           configMap:
             name: "{{ .Values.environment.name }}-{{ .Values.dataplaneReg.name }}-script"
+        - name: "{{ .Values.environment.name }}-cleanup-scripts"
+          configMap:
+            name: "{{ .Values.environment.name }}-cleanup-scripts"
+        - name: "{{ .Values.environment.name }}-cleanup-configs"
+          configMap:
+            name: "{{ .Values.environment.name }}-cleanup-configs"

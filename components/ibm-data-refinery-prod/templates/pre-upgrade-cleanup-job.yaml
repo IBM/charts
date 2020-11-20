@@ -1,0 +1,83 @@
+{{- $compName := "pre-upgrade-cleanup" -}}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: {{$compName}}
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-{{$compName}}"
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    {{- include "zenhelper.annotations" . | indent 4 }}
+spec:
+  template:
+    metadata:
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+      labels:
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        app.kubernetes.io/name: "{{ .Release.Name }}-{{$compName}}"
+        helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+        run: {{$compName}}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true         
+        runAsUser: {{ .Values.global.runAsUserPreUpgrade }}
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_compute: "true"
+      {{- end }}
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: run
+                  operator: In
+                  values:
+                  - {{$compName}}
+            topologyKey: kubernetes.io/hostname
+      restartPolicy: Never
+      volumes:
+      - name: user-home-mount
+        persistentVolumeClaim:
+          claimName: user-home-pvc
+      containers:
+        - name: {{$compName}}-container
+          image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.shaperPreinstall.image.name }}:{{ .Values.shaperPreinstall.image.tag }}
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              cpu: "0.5"
+              memory: "512Mi"
+            requests:
+              cpu: "0.5"
+              memory: "512Mi"
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true             
+            runAsUser: {{ .Values.global.runAsUserPreUpgrade }}
+            capabilities:
+              drop:
+              - ALL
+          volumeMounts:
+          - mountPath: /user-home
+            name: user-home-mount
+          command:
+          - "/bin/bash"
+          - -c
+          - "/shaper_server_patch.sh --preUpgradeCleanup=true"

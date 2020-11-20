@@ -1,0 +1,88 @@
+{{- if .Values.runtimes.preloadRuntimes }}
+{{- $compName := "preload-jupyter-gpu-py36" -}}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-preload"
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+    app: "{{ .Release.Name }}-preload"
+    chart: {{ .Chart.Name |quote }}
+    heritage: tiller
+    release: "{{ .Release.Name }}"
+  name: "{{$compName}}"
+  annotations:
+    {{- include "runtime_addon_gpupy36.cloudpak_annotations" . }}
+    "helm.sh/hook": "pre-install,pre-upgrade"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  parallelism: {{ .Values.runtimes.workerNodes }}
+  completions: {{ .Values.runtimes.workerNodes }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        app.kubernetes.io/name: "{{ .Release.Name }}-preload"
+        helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+        app: "{{ .Release.Name }}-preload"
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: tiller
+        component:  "{{$compName}}"
+        run: "{{$compName}}"
+        icpdsupport/app: "api"
+        icpdsupport/addOnId: "ws"
+      annotations:
+        {{- include "runtime_addon_gpupy36.cloudpak_annotations" . |indent 4 }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ include "global.arch" . }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: run
+                  operator: In
+                  values:
+                  - {{$compName}}
+            topologyKey: kubernetes.io/hostname
+      serviceAccountName: cpd-viewer-sa
+      automountServiceAccountToken: false
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsUser: 1000320999
+        runAsNonRoot: true
+      containers:
+        - name: "{{$compName}}-container"
+          image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.py36gpu.image.repository }}:{{ .Values.py36gpu.image.tag }}-{{ include "global.arch" . }}
+          imagePullPolicy: IfNotPresent
+          command: ["echo", "Image {{ .Values.py36gpu.image.repository }}:{{ .Values.py36gpu.image.tag }}-{{ include "global.arch" . }} preloaded"]
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+      restartPolicy: OnFailure
+{{- end }}

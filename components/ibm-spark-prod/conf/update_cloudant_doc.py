@@ -15,7 +15,7 @@ def get_request(url, user,passwd):
     c.setopt(pycurl.CONNECTTIMEOUT, 30)
     c.setopt(pycurl.TIMEOUT, 120)
     c.setopt(pycurl.USERPWD, "%s:%s" % (str(user), str(passwd)))
-    c.setopt(pycurl.SSL_VERIFYPEER, 0)   
+    c.setopt(pycurl.SSL_VERIFYPEER, 0)
     c.setopt(pycurl.SSL_VERIFYHOST, 0)
     c.perform()
     responseCode=c.getinfo(pycurl.HTTP_CODE)
@@ -26,7 +26,7 @@ def get_request(url, user,passwd):
         return responseCode, None
 
 #-------------------------------------------------------------------------------------------#
-# post request 
+# post request
 #-------------------------------------------------------------------------------------------#
 def post_request(url,user,passwd,data):
         c = pycurl.Curl()
@@ -35,17 +35,17 @@ def post_request(url,user,passwd,data):
         c.setopt(pycurl.TIMEOUT, 120)
         c.setopt(pycurl.HTTPHEADER, ['Content-Type: application/json','Accept: application/json'])
         c.setopt(pycurl.USERPWD, "%s:%s" % (str(user), str(passwd)))
-        c.setopt(pycurl.SSL_VERIFYPEER, 0)   
+        c.setopt(pycurl.SSL_VERIFYPEER, 0)
         c.setopt(pycurl.SSL_VERIFYHOST, 0)
         c.setopt(pycurl.POST, 1)
         c.setopt(pycurl.POSTFIELDS, data)
         c.perform()
         responseCode=c.getinfo(pycurl.HTTP_CODE)
         return responseCode
-    
+
 #-------------------------------------------------------------------------------------------#
-# put request 
-#-------------------------------------------------------------------------------------------#    
+# put request
+#-------------------------------------------------------------------------------------------#
 def put_request(url,user,passwd,data):
         response = StringIO.StringIO()
         c = pycurl.Curl()
@@ -54,7 +54,7 @@ def put_request(url,user,passwd,data):
         c.setopt(pycurl.TIMEOUT, 120)
         c.setopt(pycurl.HTTPHEADER, ['Content-Type: application/json','Accept: application/json'])
         c.setopt(pycurl.USERPWD, "%s:%s" % (str(user), str(passwd)))
-        c.setopt(pycurl.SSL_VERIFYPEER, 0)   
+        c.setopt(pycurl.SSL_VERIFYPEER, 0)
         c.setopt(pycurl.SSL_VERIFYHOST, 0)
         c.setopt(pycurl.CUSTOMREQUEST, "PUT")
         c.setopt(pycurl.POSTFIELDS, data)
@@ -99,7 +99,7 @@ for doc in docs["docs"]:
                 print "Failed to update document {}".format(doc["_id"])
                 exit_code = 2
             print "Refreshed document {}".format(doc["_id"])
-        
+
     else:
         payload = json.dumps(doc)
         response = put_request(cloudant_url+"/"+cloudant_db+"/"+doc["_id"], cloudant_user, cloudant_password,payload)

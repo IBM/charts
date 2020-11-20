@@ -1,0 +1,198 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}"
+    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    app: spaces
+  name: spaces #deployment name
+spec:
+  selector:
+    matchLabels:
+      app: spaces
+  revisionHistoryLimit: 5 #keep last 5 rs
+  replicas: 1 # tells deployment to run 2 pods matching the template
+  minReadySeconds: 10
+  #strategy is something we will use later
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
+  template: # create pods using pod definition in this template
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: spaces
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        app.kubernetes.io/name: "{{ .Release.Name }}"
+        helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+        icpdsupport/addOnId: ccs
+        icpdsupport/app: spaces
+      annotations:
+        hook.deactivate.cpd.ibm.com/command: "[]"
+        hook.activate.cpd.ibm.com/command: "[]"
+        cloudpakName: {{ .Values.global.annotations.cloudpakName }}
+        cloudpakId: {{ .Values.global.annotations.cloudpakId }}
+        productCloudpakRatio: {{ .Values.global.annotations.productCloudpakRatio }}
+        productID: {{ .Values.global.annotations.productID }}
+        productName: {{ .Values.global.annotations.productName }}
+        productMetric: {{ .Values.global.annotations.productMetric }}
+        productChargedContainers: {{ .Values.global.annotations.productChargedContainers }}
+        productVersion: {{ .Values.global.annotations.productVersion }}
+        cloudpakInstanceId: {{ .Values.global.cloudpakInstanceId }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.global.architecture }}
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+        - name: spaces
+          image: "{{ .Values.global.dockerRegistryPrefix}}/{{ .Values.spaces.image.repository }}:{{ .Values.spaces.image.tag }}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsUser: {{ .Values.global.user.id }}
+            runAsNonRoot: true
+            privileged: false
+            readOnlyRootFilesystem: false
+          envFrom:
+          - secretRef:
+              name: wdp-service-id
+          livenessProbe:
+            httpGet:
+              path: /v2/spaces/heartbeat
+              port: 9443
+              scheme: HTTPS
+            failureThreshold: 3
+            initialDelaySeconds: 15
+            periodSeconds: 60
+            successThreshold: 1
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /v2/spaces/heartbeat
+              port: 9443
+              scheme: HTTPS
+            failureThreshold: 3
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            successThreshold: 1
+            timeoutSeconds: 5
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - sleep
+                  - "5"
+          resources:
+            limits:
+              cpu: 1
+              memory: 1024Mi
+            requests:
+              cpu: 500m
+              memory: 512Mi
+          env:
+            - name: INTERNAL_NGINX_CERT
+              valueFrom:
+                secretKeyRef:
+                  key: certificate.pem
+                  name: internal-nginx-svc-tls
+            - name: CAMS_URL
+              valueFrom:
+                configMapKeyRef:
+                  key: host-url
+                  name: wdp-config
+            - name: DEPLOYMENT_PLATFORM
+              value: "private"
+            - name: DEPLOYMENT_PRIVATE
+              value: "local"
+            - name: DEPLOYMENTMODE
+              value: "icp"
+            - name: PM_20_ENABLED
+              value: "true"
+            - name: PM_20_URL
+              value: "https://internal-nginx-svc:12443"
+            - name: APP_LOG_LEVEL
+              value: TRACE
+            - name: ROOT_LOG_LEVEL
+              value: TRACE
+            - name: RMQ_CONNECTION
+              value: "spaces"
+            - name: CLOUDANT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: wdp-cloudant-url
+                  key: database-svc
+            - name: CLOUDANT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: wdp-cloudant-creds
+                  key: password
+            - name: CLOUDANT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: wdp-cloudant-creds
+                  key: username
+            - name: RMQ_HOST
+              valueFrom:
+                secretKeyRef:
+                  key: rabbitmq-url.txt
+                  name: rabbitmq-url
+            - name: JWTPUBLIC_KEY
+              value: "/user-home/public.pem"
+          ports:
+            - containerPort: 32191 #needed for inter container communication
+          volumeMounts:
+          - mountPath: /user-home
+            name: user-home-mount
+            readOnly: true
+            subPath: _global_/config/jwt/
+          - mountPath: /etc/wdp_certs
+            name: wdp-certs
+            readOnly: true
+          - mountPath: /opt/ibm/java/jre/lib/security/cacerts
+            name: nginx-tls
+            subPath: java-cacerts
+      terminationGracePeriodSeconds: 120
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      volumes:
+      - name: user-home-mount
+        persistentVolumeClaim:
+          claimName: user-home-pvc
+      - name: nginx-tls
+        secret:
+          defaultMode: 420
+          secretName: spaces-nginx-secrets
+      - name: wdp-certs
+        projected:
+          defaultMode: 420
+          sources:
+          - secret:
+              items:
+              - key: cert.pem
+                path: rabbitmq.cert.pem
+              name: rabbitmq-ha-cert
+              optional: true

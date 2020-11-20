@@ -1,0 +1,31 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ccs-post-install-delete-config
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "99"
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  post-delete.sh: |
+    # delete jobs
+    echo "ccs-post-install-delete-job deleting the jobs";
+    kubectl delete job ccs-post-install-delete-job ccs-post-install-job global-connections-migration-job -n $NAMESPACE;
+    kubectl delete jobs --selector=group=wkc-jobs    
+ 
+    # delete configmaps
+    echo "ccs-post-install-delete-config deleting the configmaps";
+    kubectl delete cm ccs-post-install-delete-config ccs-post-install-config wkc-backup-restore cpd-wkc-aux-qu-cm -n $NAMESPACE;  
+
+    exit 0;
+{{- end }}

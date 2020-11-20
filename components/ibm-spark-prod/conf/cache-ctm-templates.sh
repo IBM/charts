@@ -11,7 +11,7 @@ get_method(){
     message=$2
 
     response=$(curl -s -k -w "%{http_code}"  $url?overwrite=true -X GET -H "Content-Type: application/json")
-    
+
     response_code=${response: -3}
     if [[ "$response_code" == "200" ]]
     then

@@ -5,14 +5,11 @@ metadata:
   name: {{ .Values.environment.name }}-terminating-pod-cleanup-cron
   labels: 
     name: {{ .Values.environment.name }}-terminating-pod-cleanup-cron
-    chart: "{{ .Chart.Name }}"
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
     app: {{ .Values.environment.name }}-terminating-pod-cleanup-cron
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: helm
-    app.kubernetes.io/name: {{ .Release.Name }}
-    helm.sh/chart: "{{ .Chart.Name }}"
+{{- include "helm.labels" . | indent 4 }}
+{{- include "cloudpak.labels" . | indent 4 }}
+  annotations:
+{{- include "zenhelper.annotations" . | indent 4 }}
 spec:
   schedule: "{{ .Values.terminatingPodCleanupCron.schedule }}"
   concurrencyPolicy: Forbid
@@ -24,25 +21,13 @@ spec:
       activeDeadlineSeconds: 1800
       template:
         metadata:
+          annotations:
+{{- include "zenhelper.annotations" . | indent 12 }}
           labels: 
             name: {{ .Values.environment.name }}-terminating-pod-cleanup-cron
-            chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-            heritage: {{ .Release.Service }}
-            release: {{ .Release.Name }}
             app: {{ .Values.environment.name }}-terminating-pod-cleanup-cron
-            app.kubernetes.io/instance: {{ .Release.Name }}
-            app.kubernetes.io/managed-by: helm
-            app.kubernetes.io/name: {{ .Release.Name }}
-            helm.sh/chart: "{{ .Chart.Name }}"
-          annotations:
-            cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
-            cloudpakVersion: "3.0.1"
-            cloudpakName: "IBM Cloud Pak for Data"
-            productMetric: "VIRTUAL_PROCESSOR_CORE"
-            productChargedContainers: "All"
-            productName: "Analytics Engine powered by Apache Spark"
-            productID: "ICP4D-Spark-00000"
-            productVersion: "3.0.1"
+{{- include "helm.labels" . | indent 12 }}
+{{- include "cloudpak.labels" . | indent 12 }}
         spec:
             securityContext:
               runAsUser: {{ .Values.user.uid }}
@@ -73,18 +58,37 @@ spec:
                 readOnlyRootFilesystem: false
               resources:
                 requests:
-                  cpu: {{ .Values.microService.requests.cpu200 }}
-                  memory: {{ .Values.microService.requests.memory256 }}
+                  cpu: {{ .Values.terminatingPodCleanupCron.requests.cpu }}
+                  memory: {{ .Values.terminatingPodCleanupCron.requests.memory }}
                 limits:
-                  cpu: {{ .Values.microService.requests.cpu200 }}
-                  memory: {{ .Values.microService.limits.memory256 }}
+                  cpu: {{ .Values.terminatingPodCleanupCron.limits.cpu }}
+                  memory: {{ .Values.terminatingPodCleanupCron.limits.memory }}
               command: ["/bin/sh", "-c"]
               args : ["bash {{ .Values.cleanupCron.scriptPath }}/cleanup-terminating-pod.sh"]
               volumeMounts:
               - name: "{{ .Values.environment.name }}-cleanup-scripts"
                 mountPath: "{{ .Values.cleanupCron.scriptPath }}"
+              readinessProbe:
+                exec:
+                  command:
+                  - ls
+                  - {{ .Values.cleanupCron.scriptPath }}/cleanup-terminating-pod.sh
+                initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+                periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+                failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+                timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+              livenessProbe:
+                exec:
+                  command:
+                  - ls
+                  - {{ .Values.cleanupCron.scriptPath }}/cleanup-terminating-pod.sh
+                initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+                periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+                failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+                timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
             restartPolicy: "Never"
             serviceAccount: {{ .Values.sa.editor }}
+            serviceAccountName: {{ .Values.sa.editor }}
             volumes:
             - name: "{{ .Values.environment.name }}-cleanup-scripts"
               configMap:
