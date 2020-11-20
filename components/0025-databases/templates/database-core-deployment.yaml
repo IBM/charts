@@ -1,0 +1,102 @@
+{{- if .Values.global.databases }}
+{{- $compName := "database-core" -}}
+{{- $cloudpakInstanceId := .Values.global.cloudpakInstanceId -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # Unique key of the Deployment instance
+  name: zen-database-core
+  labels:
+      {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+spec:
+  # 1 Pods should exist at all times.
+  replicas: {{ .Values.zenDatabaseCore.replicas }}
+  strategy:
+     type: RollingUpdate
+     rollingUpdate:
+       maxSurge: 1
+       maxUnavailable: 0
+  # Keep record of 2 revisions for rollback
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      {{- include "zenhelper.labels" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+        # Apply this label to pods and default
+        # the Deployment label selector to this value
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+        enabled: "true"
+      annotations:
+        {{- include "0025.annotations" (list . $compName $cloudpakInstanceId) | indent 8 }}
+    spec:
+      securityContext:
+        runAsUser: 1000321000
+      serviceAccountName: {{ .Values.global.database.sa }}
+      terminationGracePeriodSeconds: 0
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+      containers:
+      - name: zen-database-core
+        {{ if .Values.global.use_external_prefix }}
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenDatabaseCore.image.repository }}:{{ .Values.global.image.tag }}"
+        {{ else }}
+        image: "{{ .Values.zenDatabaseCore.image.repository }}:{{ .Values.zenDatabaseCore.image.tag }}"
+        {{ end }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        ports:
+        - containerPort: 3023
+          name: db-core-port
+        livenessProbe:
+          httpGet:
+            path: /databases
+            port: 3023
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /databases
+            port: 3023
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        env:
+        - name: TILLER_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: TILLER_PORT
+          value: {{ .Values.zenDatabaseCore.tillerPort | quote }}
+        - name: NO_TLS
+          value: {{ .Values.zenDatabaseCore.noTls | quote }}
+        - name: ICPD_CONTROLPLANE_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+{{ toYaml .Values.zenDatabaseCore.resources | indent 12 }}
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        {{- if (not .Values.zenDatabaseCore.noTls ) }}
+        - mountPath: /certs
+          name: helm-secret
+          readOnly: true
+        {{- end }}
+        - mountPath: /etc/internal-tls
+          name: internal-tls
+      restartPolicy: Always
+      volumes:
+      {{- include "zenhelper.user-home-pvc" .  | indent 6 }}
+        {{- if (not .Values.zenDatabaseCore.noTls ) }}
+      - name: helm-secret
+        secret:
+          defaultMode: 420
+          secretName: helm-secret
+        {{- end }}
+      - name: internal-tls
+        secret:
+          secretName: internal-tls
+{{ end }}

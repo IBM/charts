@@ -1,0 +1,23 @@
+{{- $compName := "zen-databases" -}}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: zen-databases-configmap
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+    icpdata_addon: "true"
+data:
+  nginx.conf: |
+    location /zen-databases/ {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      proxy_set_header Host $host;
+      proxy_pass http://zen-databases-svc:3004/;
+    }
+
+    location /icp4data/api/v1/databases/ {
+      if ($request_method != 'OPTIONS') {
+        access_by_lua_file /nginx_data/checkjwt.lua;
+      }
+      proxy_pass http://database-core-svc:3023/databases/;
+      proxy_read_timeout 120m;
+    }
