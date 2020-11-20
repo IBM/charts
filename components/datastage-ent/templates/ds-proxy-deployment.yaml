@@ -1,0 +1,86 @@
+{{ include "sch.config.init" (list . "sch.chart.config.values" ) }}
+{{ $compName := "ds-proxy" -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $compName)) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ds-nginx-proxy
+  labels:
+{{ $labels | indent 4 }}
+{{ include "ds.additional.labels" (list .) | indent 4 }}
+spec:
+  progressDeadlineSeconds: 1600
+  replicas: {{ .Values.proxy.replicas }}
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $compName | quote }}
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+{{ $labels | indent 8 }}
+{{ include "ds.additional.labels" (list .) | indent 8 }}
+{{- include "ds.pod.labels" . | indent 8 }}
+      annotations:
+      {{- include "ds-product-metering" . | indent 8 }}
+    spec:
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "image-secret" . | indent 6 }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.release.image.ds.proxy.runAsUser | int64 }}
+      serviceAccountName: {{ .Values.release.image.ds.proxy.serviceAccountName }}
+      volumes:
+      - configMap:
+          name: ds-proxy-cm
+        name: nginx-conf
+      - name: tls
+        secret:
+          secretName: {{ .Values.proxy.tlsSecretName }}
+      containers:
+        - name: nginx
+          image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.release.image.ds.proxy.repository }}:{{ .Values.release.image.ds.proxy.tag }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.release.image.pullPolicy | quote }}
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            successThreshold: 1
+            tcpSocket:
+              port: 8443
+            timeoutSeconds: 1
+          ports:
+          - name: tls-port
+            containerPort: 8443
+            protocol: TCP
+          resources:
+{{ toYaml .Values.proxy.resources | indent 12 }}
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            successThreshold: 1
+            tcpSocket:
+              port: 8443
+            timeoutSeconds: 1
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ .Values.release.image.ds.proxy.runAsUser | int64 }}
+            capabilities:
+              drop:
+              - ALL
+          volumeMounts:
+          - mountPath: /etc/nginx/nginx.conf
+            name: nginx-conf
+            subPath: nginx.conf
+          - mountPath: /home/dsadm/certs
+            name: tls
+            readOnly: true

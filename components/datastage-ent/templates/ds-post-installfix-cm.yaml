@@ -1,0 +1,82 @@
+{{ include "sch.config.init" (list . "sch.chart.config.values" ) }}
+{{ $compName := "ds-post-installfix" -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ds-post-installfix-cm 
+  labels:
+{{ $labels | indent 4 }}
+{{ include "ds.additional.labels" (list .) | indent 4 }}
+data:
+  ds-post-installfix.sh: |
+    set -x 
+    set +e 
+    echo "DS Post-install job..." 
+    echo "Fix Ops Console" 
+    IS_SERVER=is-servicesdocker 
+    DS_ENGINE=is-en-conductor-0.en-cond 
+    IS_PORT=9446 
+    IS_ADMIN=isadmin 
+    IIS_HOME=/opt/IBM/InformationServer 
+    ASBNODE_HOME=${IIS_HOME}/ASBNode 
+    DSADM=dsadm 
+    cd /opt/IBM/InformationServer/Server/DSODB 
+    if [[ ! -s DSODBConnect.cfg ]]; then
+         if [[ -f DSODBConnect.tmpl ]]; then 
+           ${ASBNODE_HOME}/bin/RegistrationCommand.sh -user isadmin -password ${ISADMIN_PASSWORD} -gcf -repository dsodb -cf ${IIS_HOME}/Server/DSODB/DSODBConnect.tmpl -results ${IIS_HOME}/Server/DSODB/DSODBConnect.cfg
+           su - dsadm -c "source ${IIS_HOME}/Server/DSEngine/dsenv; ${IIS_HOME}/Server/DSODB/bin/DSAppWatcher.sh -start"
+         fi
+    fi  
+    echo "Fix dsadm perms..." 
+    cd /opt/IBM/InformationServer/ASBNode/bin
+    set +x #echo off
+    ./DirectoryCommand.sh -user isadmin -password "$ISADMIN_PASSWORD" -url "https://is-servicesdocker:9446" -datastage_server is-en-conductor-0.en-cond -add_ds_credentials "isadmin\$!~\!"
+    set -x #echo on
+    echo "./DirectoryCommand.sh -user isadmin -password *** -url https://is-servicesdocker:9446 -datastage_server is-en-conductor-0.en-cond -add_ds_credentials isadmin\$!~\!"
+    set +x #echo off
+    ./DirectoryCommand.sh -user isadmin -password $ISADMIN_PASSWORD -url "https://is-servicesdocker:9446" -datastage_server is-en-conductor-0.en-cond -set_default_ds_credentials "dsadm~$DSADM_PASSWORD" 
+    set -x #echo on
+    echo "./DirectoryCommand.sh -user isadmin -password **** -url https://is-servicesdocker:9446 -datastage_server is-en-conductor-0.en-cond -set_default_ds_credentials dsadm~****" 
+    cd /opt/IBM/InformationServer/Server/DSEngine
+    . ./dsenv
+    bin/uv -admin -stop
+    bin/uv -admin -start
+    if [[ -d /opt/IBM/InformationServer/Server/PXEngine/etc ]]; then
+      cd /opt/IBM/InformationServer/Server/PXEngine/etc 
+      if [[ -f create_secrets.sh ]]; then
+      ./create_secrets.sh && grep -q  'export[ ]*APT_SSL_CONNECTIONS=1' /opt/IBM/InformationServer/Server/DSEngine/dsenv ||  echo "export APT_SSL_CONNECTIONS=1" >> /opt/IBM/InformationServer/Server/DSEngine/dsenv
+      fi
+    fi
+    sleep 5 
+    exit 0
+  ds-post-installfixrun.sh: |
+    set -x
+    set +e
+    # wait for conductor and iis pods to be ready 
+    wait_pods_ready() {
+       counter=0
+       while true
+       do
+          count=`kubectl -n {{ .Release.Namespace }} get pods -l 'app in (iis-en-cond, iis-services)' | grep  '0/1' | wc -l`
+          echo "Waiting for ${count} pods to be ready"
+          if [ $count -eq 0 ]
+          then
+             break;
+          fi
+          counter=$((counter + 1))
+          # wait up to 5m
+          if [ $counter -gt 15 ]
+          then
+             echo "Wait time exceeded."
+             break;
+         fi
+         sleep 20
+       done
+    }
+    wait_pods_ready
+    /bin/cp -f /wkc/ds-post-installfix.sh /tmp/ds-post-installfix.sh
+    kubectl cp /tmp/ds-post-installfix.sh is-en-conductor-0:/tmp/ds-post-installfix.sh
+    kubectl exec is-en-conductor-0 -- /bin/bash -c "/tmp/ds-post-installfix.sh"
+    sleep 10
+    exit 0

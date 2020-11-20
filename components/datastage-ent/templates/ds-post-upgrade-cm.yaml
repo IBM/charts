@@ -1,0 +1,22 @@
+{{ include "sch.config.init" (list . "sch.chart.config.values" ) }}
+{{ $compName := "ds-post-upgrade" -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ds-post-upgrade-cm 
+  labels:
+{{ $labels | indent 4 }}
+{{ include "ds.additional.labels" (list .) | indent 4 }}
+data:
+  ds-post-upgrade.sh: |
+    set -x
+    set +e
+    echo DS Post-upgrade pod...
+    echo "Restart conductor pod"
+    kubectl scale sts is-en-conductor --replicas=0
+    kubectl delete po is-en-conductor-0 --force --grace-period=0 2>/dev/null
+    sleep 5
+    kubectl scale sts is-en-conductor --replicas=1
+    exit 0
+
