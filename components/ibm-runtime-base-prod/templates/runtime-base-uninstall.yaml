@@ -1,0 +1,71 @@
+{{- $compName := "post-delete-runtime-base-hook" -}}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: post-delete-runtime-base-hook
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+    app.kubernetes.io/name: post-delete-runtime-base-hook
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  annotations:
+    "helm.sh/hook": "pre-delete"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "0"
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+        app.kubernetes.io/name: post-delete-runtime-base-hook
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsUser: 1000321000
+      serviceAccountName: cpd-admin-sa
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+      containers:
+      - name: post-delete-runtime-base-hook-container
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.utilsApi.image.repository }}:{{ .Values.utilsApi.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["sh", "-c", "sh /post-delete-scripts/post-delete.sh -n ${NAMESPACE}"]
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+{{ toYaml .Values.utilsApi.resources | indent 10 }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000321000
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /post-delete-scripts
+          name: post-delete-scripts
+        - mountPath: /tmp
+          name: user-home-mount
+          subPath: tmp
+      volumes:
+      - name: post-delete-scripts
+        configMap:
+          name: runtime-base-uninstall-configmap
+      - name: user-home-mount
+        persistentVolumeClaim:
+          claimName: "user-home-pvc"
+      restartPolicy: OnFailure

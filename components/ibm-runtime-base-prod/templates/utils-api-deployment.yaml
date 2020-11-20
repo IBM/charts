@@ -1,0 +1,106 @@
+{{- $compName := "utils-api" -}}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: utils-api
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+    app.kubernetes.io/name: utils-api
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "zenhelper.labels" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+        app.kubernetes.io/name: utils-api
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+      annotations:
+        {{- include "zenhelper.annotations" .  | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsUser: 1000320999
+      serviceAccountName: cpd-editor-sa
+      terminationGracePeriodSeconds: 0
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_storage: "true"
+      {{- end }}
+      containers:
+      - name: utils-api-container
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.utilsApi.image.repository }}:{{ .Values.utilsApi.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["sh", "-c", "/utils-api/scripts/startup.sh"]
+        env:
+        - name: NAMESPACE
+          value: "{{ .Release.Namespace }}"
+        - name: DSX_NGINX_SVC_URL
+          value: "https://internal-nginx-svc:12443"
+        - name: HAPROXY_IMAGE
+          value: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.hiHaProxy.image.repository}}:{{ .Values.hiHaProxy.image.tag}}
+        resources:
+{{ toYaml .Values.utilsApi.resources | indent 12 }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000320999
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /user-home/_global_/config/jwt
+          name: user-home-mount
+          subPath: _global_/config/jwt
+          readOnly: true
+        - mountPath: /etc/certificate
+          name: certificate
+        - mountPath: /cc-home
+          name: cc-home-mount
+        - mountPath: /etc/utils-api/secrets
+          name: config
+        ports:
+        - containerPort: 8443
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /utils-api/monitor
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /utils-api/monitor
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 15
+          periodSeconds: 20
+      volumes:
+      - name: certificate
+        secret:
+          secretName: ca-certificate-chain-trust
+      - name: config
+        secret:
+          secretName: https-cert-key-secret
+      - name: cc-home-mount
+        persistentVolumeClaim:
+          claimName: "cc-home-pvc"
+      {{- include "zenhelper.user-home-pvc" .  | indent 6 }}

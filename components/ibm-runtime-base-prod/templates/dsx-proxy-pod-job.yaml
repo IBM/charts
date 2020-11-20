@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dsx-core-configmap
+  labels:
+    {{- include "zenhelper.labels" (list . "") | indent 4 }}
+    icpdata_addon: "true"
+    icpdata_addon_version: "3.0.1"
+    app.kubernetes.io/name: dsx-core-configmap
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+data:
+  dsx-hi-server.json: |
+    {
+      "displayName": "DSX Hadoop Integration Proxy",
+      "description": "Proxy pod for forwarding DSXL python jobs to a registered remote DSX Hadoop Integration edge node.",
+      "annotations": [
+        {
+          "name": "productID",
+          "value": "ICP4D-addon-DataSciencePremium_HadoopIntegration_Job"
+        },
+        {
+          "name": "productName",
+          "value": "{{ .Values.annotations.productName }}"
+        },
+        {
+          "name": "productVersion",
+          "value": "{{ .Values.annotations.productVersion }}"
+        },
+        {
+          "name": "cloudpakId",
+          "value": "{{ .Values.annotations.cloudpakId }}"
+        },
+        {
+          "name": "cloudpakName",
+          "value": "{{ .Values.annotations.cloudpakName }}"
+        },
+        {
+          "name": "cloudpakVersion",
+          "value": "{{ .Values.annotations.cloudpakVersion }}"
+        },
+        {
+          "name": "productChargedContainers",
+          "value": "{{ .Values.annotations.productChargedContainers }}"
+        },
+        {
+          "name": "productMetric",
+          "value": "{{ .Values.annotations.productMetric }}"
+        }
+      ],
+      "author": "IBM",
+      "tested": true,
+      "isService": false,
+      "isHidden": true,
+      "runtimeType": "dsx-hi",
+      "replicas": 1,
+      "image": "{{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.dsxHIProxy.image.repository }}:{{ .Values.dsxHIProxy.image.tag }}",
+      "privileged": false,
+      "command": ["/proxy_job"],
+      "env": [
+        {
+          "name": "JOB_EXEC_COMMAND",
+          "value": "[\"/proxy_job\"]"
+        },
+        {
+          "name": "HI_PROXY_LOG_LEVEL",
+          "value": "INFO"
+        }
+      ],
+      "volumes": [
+        {
+          "volume": "proxy-pod-scripts",
+          "mountPath": "/cc-home/.scripts/proxy-pods/dsx-hi",
+          "subPath": ".scripts/proxy-pods/dsx-hi",
+          "claimName": "cc-home-pvc",
+          "readOnly": true
+        },
+        {
+          "volume": "spawner-scripts",
+          "mountPath": "/cc-home/.scripts/system/spawner",
+          "subPath": ".scripts/system/spawner",
+          "claimName": "cc-home-pvc",
+          "readOnly": true
+        },
+        {
+          "volume": "common-helper-scripts",
+          "mountPath": "/cc-home/.scripts/common-helpers",
+          "subPath": ".scripts/common-helpers",
+          "claimName": "cc-home-pvc",
+          "readOnly": true
+        },
+        {
+          "volume": "custom-certs",
+          "mountPath": "/cc-home/_global_/security/customer-truststores",
+          "subPath": "_global_/security/customer-truststores",
+          "claimName": "cc-home-pvc",
+          "readOnly": true
+        },
+        {
+          "volume": "remote-images",
+          "mountPath": "/cc-home/_global_/.remote-images/dsx-hi",
+          "subPath": "_global_/.remote-images/dsx-hi",
+          "claimName": "cc-home-pvc",
+          "readOnly": true
+        }
+      ],
+      "lifecycle": {
+        "preStop": {
+          "exec": {
+            "command": ["/scripts/job_cancel.sh"]
+          }
+        }
+      },
+      "resources": {
+        "cpu": {
+          "request": {{ .Values.spawnerApiK8s.resources.rtdef.requests.cpu }},
+          "minimum": {{ .Values.spawnerApiK8s.resources.rtdef.requests.cpu }}
+        },
+        "gpu": {
+          "request": -1,
+          "minimum": 0
+        },
+        "memory": {
+          "request": {{ .Values.spawnerApiK8s.resources.rtdef.requests.memory }},
+          "minimum": {{ .Values.spawnerApiK8s.resources.rtdef.requests.memory }}
+        },
+        "duration": {
+          "value": -1,
+          "units": "unix"
+        }
+      }
+    }
+  files: |
+    [
+      {
+        "dest": "/user-home/_global_/config/.runtime-definitions/ibm/dsx-hi-server.json",
+        "contentKey": "dsx-hi-server.json"
+      }
+    ]

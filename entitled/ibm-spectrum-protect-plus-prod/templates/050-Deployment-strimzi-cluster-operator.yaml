@@ -1,0 +1,257 @@
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "baas.fullname" . }}-strimzi-cluster-operator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "baas.fullname" . }}-strimzi-cluster-operator
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ include "baas.appversion" . }}
+    app.kubernetes.io/component: strimzi
+    app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+    helm.sh/chart: {{ .Chart.Name }}
+spec:
+  replicas: {{ .Values.kafkaOperator.replicaCount }}
+  selector:
+    matchLabels:
+      name: {{ include "baas.fullname" . }}-strimzi-cluster-operator
+      strimzi.io/kind: cluster-operator
+  template:
+    metadata:
+      annotations:
+        productID: {{ include "baas.productID" . }}
+        productName: {{ include "baas.productName" . }}
+        productVersion: {{ include "baas.productVersion" . }}
+        productMetric: {{ include "baas.productMetric" . }}
+      labels:
+        name: {{ include "baas.fullname" . }}-strimzi-cluster-operator
+        strimzi.io/kind: cluster-operator
+        app.kubernetes.io/name: {{ include "baas.name" . }}-strimzi-cluster-operator
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/version: {{ include "baas.appversion" . }}
+        app.kubernetes.io/component: strimzi
+        app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+        helm.sh/chart: {{ .Chart.Name }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      serviceAccountName: {{ include "baas.fullname" . }}-strimzi-cluster-operator
+      securityContext:
+        {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 1001
+        {{- end }}
+        runAsNonRoot: true
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+      containers:
+      - name: {{ include "baas.fullname" . }}-strimzi-cluster-operator
+        {{- if .Values.imageRegistryNamespace }}
+        image: {{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.kafkaOperator.image.name }}:{{ .Values.kafkaOperator.image.tag }}
+        {{- else }}
+        image: {{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.kafkaOperator.image.name }}:{{ .Values.kafkaOperator.image.tag }}
+        {{- end }}
+        imagePullPolicy: Always
+        ports:
+        - containerPort: {{ .Values.kafkaOperator.image.port }}
+          name: http
+        args:
+        - /opt/strimzi/bin/cluster_operator_run.sh
+        env:
+        - name: STRIMZI_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: STRIMZI_FULL_RECONCILIATION_INTERVAL_MS
+          value: "120000"
+        - name: STRIMZI_OPERATION_TIMEOUT_MS
+          value: "300000"
+        - name: STRIMZI_DEFAULT_TLS_SIDECAR_ENTITY_OPERATOR_IMAGE
+          {{- if .Values.imageRegistryNamespace }}
+          value: {{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.kafka25.image.name }}:{{ .Values.kafka25.image.tag }}
+          {{- else }}
+          value: {{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.kafka25.image.name }}:{{ .Values.kafka25.image.tag }}
+          {{- end }}
+        - name: STRIMZI_DEFAULT_TLS_SIDECAR_KAFKA_IMAGE
+          {{- if .Values.imageRegistryNamespace }}
+          value: {{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.kafka25.image.name }}:{{ .Values.kafka25.image.tag }}
+          {{- else }}
+          value: {{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.kafka25.image.name }}:{{ .Values.kafka25.image.tag }}
+          {{- end }}
+        - name: STRIMZI_DEFAULT_KAFKA_EXPORTER_IMAGE
+          {{- if .Values.imageRegistryNamespace }}
+          value: {{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.kafka25.image.name }}:{{ .Values.kafka25.image.tag }}
+          {{- else }}
+          value: {{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.kafka25.image.name }}:{{ .Values.kafka25.image.tag }}
+          {{- end }}
+        - name: STRIMZI_DEFAULT_CRUISE_CONTROL_IMAGE
+          {{- if .Values.imageRegistryNamespace }}
+          value: {{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.kafka25.image.name }}:{{ .Values.kafka25.image.tag }}
+          {{- else }}
+          value: {{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.kafka25.image.name }}:{{ .Values.kafka25.image.tag }}
+          {{- end }}
+        - name: STRIMZI_DEFAULT_TLS_SIDECAR_CRUISE_CONTROL_IMAGE
+          {{- if .Values.imageRegistryNamespace }}
+          value: {{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.kafka25.image.name }}:{{ .Values.kafka25.image.tag }}
+          {{- else }}
+          value: {{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.kafka25.image.name }}:{{ .Values.kafka25.image.tag }}
+          {{- end }}
+        - name: STRIMZI_KAFKA_IMAGES
+          value: |
+            {{- if .Values.imageRegistryNamespace }}
+            2.4.0={{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.kafka24.image.name }}:{{ .Values.kafka24.image.tag }}
+            {{- else }}
+            2.4.0={{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.kafka24.image.name }}:{{ .Values.kafka24.image.tag }}
+            {{- end }}
+            {{- if .Values.imageRegistryNamespace }}
+            2.5.0={{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.kafka25.image.name }}:{{ .Values.kafka25.image.tag }}
+            {{- else }}
+            2.5.0={{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.kafka25.image.name }}:{{ .Values.kafka25.image.tag }}
+            {{- end }}
+        - name: STRIMZI_KAFKA_CONNECT_IMAGES
+          value: |
+            {{- if .Values.imageRegistryNamespace }}
+            2.4.0={{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.kafka24.image.name }}:{{ .Values.kafka24.image.tag }}
+            {{- else }}
+            2.4.0={{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.kafka24.image.name }}:{{ .Values.kafka24.image.tag }}
+            {{- end }}
+            {{- if .Values.imageRegistryNamespace }}
+            2.5.0={{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.kafka25.image.name }}:{{ .Values.kafka25.image.tag }}
+            {{- else }}
+            2.5.0={{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.kafka25.image.name }}:{{ .Values.kafka25.image.tag }}
+            {{- end }}
+        - name: STRIMZI_KAFKA_CONNECT_S2I_IMAGES
+          value: |
+            {{- if .Values.imageRegistryNamespace }}
+            2.4.0={{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.kafka24.image.name }}:{{ .Values.kafka24.image.tag }}
+            {{- else }}
+            2.4.0={{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.kafka24.image.name }}:{{ .Values.kafka24.image.tag }}
+            {{- end }}
+            {{- if .Values.imageRegistryNamespace }}
+            2.5.0={{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.kafka25.image.name }}:{{ .Values.kafka25.image.tag }}
+            {{- else }}
+            2.5.0={{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.kafka25.image.name }}:{{ .Values.kafka25.image.tag }}
+            {{- end }}
+        - name: STRIMZI_KAFKA_MIRROR_MAKER_IMAGES
+          value: |
+            {{- if .Values.imageRegistryNamespace }}
+            2.4.0={{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.kafka24.image.name }}:{{ .Values.kafka24.image.tag }}
+            {{- else }}
+            2.4.0={{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.kafka24.image.name }}:{{ .Values.kafka24.image.tag }}
+            {{- end }}
+            {{- if .Values.imageRegistryNamespace }}
+            2.5.0={{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.kafka25.image.name }}:{{ .Values.kafka25.image.tag }}
+            {{- else }}
+            2.5.0={{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.kafka25.image.name }}:{{ .Values.kafka25.image.tag }}
+            {{- end }}
+        - name: STRIMZI_KAFKA_MIRROR_MAKER_2_IMAGES
+          value: |
+            {{- if .Values.imageRegistryNamespace }}
+            2.4.0={{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.kafka24.image.name }}:{{ .Values.kafka24.image.tag }}
+            {{- else }}
+            2.4.0={{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.kafka24.image.name }}:{{ .Values.kafka24.image.tag }}
+            {{- end }}
+            {{- if .Values.imageRegistryNamespace }}
+            2.5.0={{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.kafka25.image.name }}:{{ .Values.kafka25.image.tag }}
+            {{- else }}
+            2.5.0={{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.kafka25.image.name }}:{{ .Values.kafka25.image.tag }}
+            {{- end }}
+        - name: STRIMZI_DEFAULT_TOPIC_OPERATOR_IMAGE
+          # operator
+          {{- if .Values.imageRegistryNamespace }}
+          value: {{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.kafkaOperator.image.name }}:{{ .Values.kafkaOperator.image.tag }}
+          {{- else }}
+          value: {{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.kafkaOperator.image.name }}:{{ .Values.kafkaOperator.image.tag }}
+          {{- end }}
+        - name: STRIMZI_DEFAULT_USER_OPERATOR_IMAGE
+          # operator
+          {{- if .Values.imageRegistryNamespace }}
+          value: {{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.kafkaOperator.image.name }}:{{ .Values.kafkaOperator.image.tag }}
+          {{- else }}
+          value: {{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.kafkaOperator.image.name }}:{{ .Values.kafkaOperator.image.tag }}
+          {{- end }}
+        - name: STRIMZI_DEFAULT_KAFKA_INIT_IMAGE
+          # operator
+          {{- if .Values.imageRegistryNamespace }}
+          value: {{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.kafkaOperator.image.name }}:{{ .Values.kafkaOperator.image.tag }}
+          {{- else }}
+          value: {{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.kafkaOperator.image.name }}:{{ .Values.kafkaOperator.image.tag }}
+          {{- end }}
+        - name: STRIMZI_DEFAULT_KAFKA_BRIDGE_IMAGE
+          # bridge
+          {{- if .Values.imageRegistryNamespace }}
+          value: {{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.baasKafkaBridge.image.name }}:{{ .Values.baasKafkaBridge.image.tag }}
+          {{- else }}
+          value: {{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.baasKafkaBridge.image.name }}:{{ .Values.baasKafkaBridge.image.tag }}
+          {{- end }}
+        - name: STRIMZI_CUSTOM_KAFKA_BRIDGE_SERVICE_LABELS
+          value: |
+            discovery.3scale.net=true
+        - name: STRIMZI_CUSTOM_KAFKA_BRIDGE_SERVICE_ANNOTATIONS
+          value: |
+            discovery.3scale.net/scheme=http
+            discovery.3scale.net/port={{ .Values.kafkaOperator.image.port }}
+            discovery.3scale.net/path=/
+            discovery.3scale.net/description-path=/openapi
+        - name: STRIMZI_LOG_LEVEL
+          value: "{{ .Values.productLoglevel }}"
+        {{- if or (.Values.isICP) (.Values.imageRegistrySecret) }} 
+        - name: STRIMZI_IMAGE_PULL_SECRETS 
+        {{- end }}
+          {{- if .Values.isICP }}
+          value: sa-{{ .Release.Namespace }}
+          {{- end }}
+          {{- if .Values.imageRegistrySecret }}
+          value: {{ .Values.imageRegistrySecret }}
+          {{- end }}
+        - name: STRIMZI_IMAGE_PULL_POLICY
+          value: {{ .Values.kafkaOperator.image.pullPolicy }}
+        {{- if .Values.kafkaOperator.livenessProbe.enabled}}
+        livenessProbe:
+          httpGet:
+            path: /healthy
+            port: http
+          initialDelaySeconds: {{ .Values.kafkaOperator.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.kafkaOperator.livenessProbe.periodSeconds }}
+          successThreshold: 1
+          timeoutSeconds: 1
+        {{- end }}
+        {{ if .Values.kafkaOperator.readinessProbe.enabled }}
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: {{ .Values.kafkaOperator.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.kafkaOperator.readinessProbe.periodSeconds }}
+          successThreshold: 1
+          timeoutSeconds: 1
+        {{- end }}
+        resources:
+          limits:
+            cpu: {{ .Values.kafkaOperator.resources.limits.cpu }}
+            memory: {{ .Values.kafkaOperator.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.kafkaOperator.resources.requests.cpu }}
+            memory: {{ .Values.kafkaOperator.resources.requests.memory }}
+        securityContext:
+          {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 1001
+          {{- end }}
+          runAsNonRoot: true
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+  strategy:
+    type: Recreate
+{{- end }}

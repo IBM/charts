@@ -1,0 +1,81 @@
+{{- $compName := "post-delete-volume-setup-hook" -}}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: post-delete-volume-setup-hook
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+    app.kubernetes.io/name: post-delete-volume-setup-hook
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  annotations:
+    "helm.sh/hook": "post-delete"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-weight": "0"
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+        app.kubernetes.io/name: post-delete-volume-setup-hook
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsUser: 1000320999
+      serviceAccountName: cpd-viewer-sa
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+      containers:
+      - name: post-delete-cc-home-cleanup-container
+        image: registry.access.redhat.com/ubi8/ubi:8.1-397
+        imagePullPolicy: IfNotPresent
+        command: ["sh", "-c", "rm -rf /cc-home/.recycleBin /cc-home/.tmp /cc-home/.scripts /cc-home/*"]
+        resources:
+{{ toYaml .Values.dsxRequisite.resources | indent 10 }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000320999
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /cc-home
+          name: cc-home-mount
+      - name: post-delete-user-home-cleanup-container
+        image: registry.access.redhat.com/ubi8/ubi:8.1-397
+        imagePullPolicy: IfNotPresent
+        command: ["sh", "-c", "rm -rf /user-home/_global_/config/.runtime-definitions && rm -rf /user-home/_global_/config/conda && rm -rf /user-home/tmp"]
+        resources:
+{{ toYaml .Values.dsxRequisite.resources | indent 10 }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000321000
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+      volumes:
+      - name: cc-home-mount
+        persistentVolumeClaim:
+          claimName: "cc-home-pvc"
+      - name: user-home-mount
+        persistentVolumeClaim:
+          claimName: "user-home-pvc"
+      restartPolicy: OnFailure

@@ -22,7 +22,7 @@ spec:
   ingress:
   - from:
     - ipBlock:
-        cidr: "{{ .Values.clusterCIDR }}"
+        cidr: "{{ .Values.networkPolicy.clusterCIDR }}"
   - from:
     - ipBlock:
         cidr: "{{ .Values.SPPips }}/32"
@@ -31,11 +31,13 @@ spec:
       port: {{ .Values.sppagent.service.port }}
   egress:
   - to:
+    {{- range .Values.networkPolicy.clusterAPIServerips }}
     - ipBlock:
-        cidr: "{{ .Values.clusterAPIServerips }}/32"
+        cidr: {{ . }}/32
+    {{- end }}
     ports:
     - protocol: TCP
-      port: {{ .Values.clusterAPIServerport }}
+      port: {{ .Values.networkPolicy.clusterAPIServerport }}
   - to:
     - ipBlock:
         cidr: "{{ .Values.SPPips }}/32"
@@ -68,9 +70,9 @@ spec:
   - to:
     - podSelector:
         matchLabels:
-          app.kubernetes.io/name: {{ include "baas.name" . }}
-          app.kubernetes.io/version: {{ include "baas.appversion" . }}
-          app.kubernetes.io/component: kafka
+          strimzi.io/cluster: {{ include "baas.fullname" . }}
+          strimzi.io/kind: Kafka
+          strimzi.io/name:  {{ include "baas.fullname" . }}-kafka
     ports:
     - protocol: TCP
       port: {{ .Values.kafka.service.serverPort }}

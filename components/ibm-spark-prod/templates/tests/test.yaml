@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: spark-hb-test
+  annotations:
+    "helm.sh/hook": test-success 
+  labels:
+    release: test
+    app.kubernetes.io/instance: test
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: test
+    helm.sh/chart: "{{ .Chart.Name }}"
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - {{ .Values.global.architecture }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false 
+  containers:
+  - args:
+    - while true;do sleep 100000s;done
+    command:
+    - /bin/bash
+    - -c
+    image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.jkg.image }}:{{ .Values.spark.image.tag24 }}"
+    name: test
+    resources:
+      limits:
+        cpu: 20m
+        memory: 64Mi
+      requests:
+        cpu: 20m
+        memory: 64Mi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      runAsUser: {{ .Values.user.uid }}
+      runAsNonRoot: true
+      privileged: false
+      readOnlyRootFilesystem: false
+    volumeMounts:
+    - mountPath: /vol/
+      name: pvc
+      readOnly: false
+  securityContext:
+    runAsUser: 1000320999
+  serviceAccount: cpd-viewer-sa
+  volumes:
+  - name: pvc
+    persistentVolumeClaim:
+      claimName: volumes-cl-ben-vol-pvc
