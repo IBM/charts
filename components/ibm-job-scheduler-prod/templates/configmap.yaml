@@ -9,17 +9,33 @@ metadata:
 {{ toYaml .Values.global.annotations | trim | indent 4 }}
     {{- end }}
   labels:
-    app: {{ (index $imagesListDetails "job-trigger").image.repository }}
+    icpdsupport/addOnId: {{ .Values.global.addOnId | quote }}
+    icpdsupport/app: api
     chart: {{ template "watson-studio.chart" $ }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
     icpdata_addon: "true"
-    icpdata_addon_version: "3.0.1"
+    icpdata_addon_version: "3.5.0"
     helm.sh/chart: {{ template "watson-studio.chart" $ }}
     app.kubernetes.io/name: {{ .Chart.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/instance: {{ .Release.Name }}
 data:
+  extensions: |
+    [
+      {
+        "extension_point_id": "left_menu_item",
+        "extension_name": "dap-header-service-jobs",
+        "display_name": "{{`{{.global_nav_services_jobs}}`}}",
+        "order_hint": 200,
+        "match_permissions": "",
+        "meta": {},
+        "details": {
+          "parent_folder": "dap-header-projects",
+          "href": "/jobs/operations"
+        }
+      }
+    ]
   nginx.conf: |
     set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
     location /v2/jobs {
@@ -46,6 +62,10 @@ data:
       "description": "Pod for forwarding curl call to schedule the job.",
       "annotations": [
         {
+          "name": "cloudpakInstanceId",
+          "value": "{{ .Values.global.cloudpakInstanceId | default "set_during_install" }}"
+        },
+        {
           "name": "cloudpakName",
           "value": "{{ .Values.global.annotations.cloudpakName }}"
         },
@@ -54,16 +74,8 @@ data:
           "value": "{{ .Values.global.annotations.cloudpakId }}"
         },
         {
-          "name": "cloudpakVersion",
-          "value": "{{ .Values.global.annotations.cloudpakVersion }}"
-        },
-        {
-          "name": "productMetric",
-          "value": "{{ .Values.global.annotations.productMetric }}"
-        },
-        {
-          "name": "productChargedContainers",
-          "value": "{{ .Values.global.annotations.productChargedContainers }}"
+          "name": "productCloudpakRatio",
+          "value": "{{ .Values.global.annotations.productCloudpakRatio }}"
         },
         {
           "name": "productID",
@@ -74,8 +86,26 @@ data:
           "value": "{{ .Values.global.annotations.productName }}"
         },
         {
+          "name": "productMetric",
+          "value": "{{ .Values.global.annotations.productMetric }}"
+        },
+        {
+          "name": "productChargedContainers",
+          "value": "{{ .Values.global.annotations.productChargedContainers }}"
+        },
+        {
           "name": "productVersion",
           "value": "{{ .Values.global.annotations.productVersion }}"
+        }
+      ],
+      "labels": [
+        {
+          "name": "icpdsupport/addOnId",
+          "value": {{ .Values.global.addOnId | quote }}
+        },
+        {
+          "name": "icpdsupport/app",
+          "value": "api"
         }
       ],
       "author": "IBM",

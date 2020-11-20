@@ -1,0 +1,46 @@
+{{- if .Values.nginx }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ws-dataview-routes
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: {{.Chart.Name}}
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+    icpdata_addon: "true"
+    icpdata_addon_version: {{.Chart.AppVersion | quote }}
+    app: watson-studio-nginx
+    chart: {{ template "dataview.chart" $ }}
+    release: {{ $.Chart.Name }}
+    heritage: {{ .Release.Service }}
+{{- if $.Values.global.annotations }}
+  annotations:
+    hook.deactivate.cpd.ibm.com/command: "[]"
+    hook.activate.cpd.ibm.com/command: "[]"
+{{- if ($.Values.global.cloudpakInstanceId) }}
+    cloudpakInstanceId: {{ .Values.global.cloudpakInstanceId | default "" | quote }}
+{{- end }}
+{{ toYaml $.Values.global.annotations | trim | indent 4 }}
+{{- end }}
+data:
+  nginx.conf: |
+    set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
+    location /dataview {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $wdp_dataview wdp-dataview.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline' 'unsafe-eval'; font-src 'self' fonts.gstatic.com; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$wdp_dataview:443;
+    }
+    location /v2/dataview {
+      proxy_set_header Host $host;
+      set $dataview_api_service dataview-api-service.$nsdomain;
+      proxy_pass https://$dataview_api_service:443;
+    }
+{{- end }}

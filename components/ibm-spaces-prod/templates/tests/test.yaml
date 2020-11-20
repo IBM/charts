@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Values.deployAppName }}-verify
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: {{ .Values.deployAppName }}-verify
+    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    app: {{ .Values.deployAppName }}-verify
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    heritage: "{{ .Release.Service }}"
+    release: "{{ .Release.Name }}"
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+              - {{ .Values.global.architecture }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  serviceAccountName: cpd-viewer-sa
+  containers:
+    - name: {{ .Values.deployAppName }}-verify
+      image: "{{ .Values.global.dockerRegistryPrefix}}/{{ .Values.spaces.image.repository }}:{{ .Values.spaces.image.tag }}"
+      securityContext:
+        privileged: false
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: {{ .Values.global.user.id }}
+        readOnlyRootFilesystem: false
+        capabilities:
+          drop:
+            - ALL
+      command: [sh, -c]
+      args:
+        - |
+          response=$(curl -k -s -o /dev/null -w "%{response_code}" https://{{ .Values.deployAppName }}service/v2/spaces/heartbeat)
+          if [ $response -ne 200 ]; then
+            echo "HTTP response $response accessing the Spaces service"
+            exit 1
+          else
+            echo "Spaces service is up"
+          fi
+      resources:
+        limits:
+          cpu: "0.5"
+          memory: "256Mi"
+        requests:
+          cpu: "0.5"
+          memory: "256Mi"
+  restartPolicy: Never

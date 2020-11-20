@@ -1,0 +1,40 @@
+{{- if .Values.nginx }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spaces-routes
+  labels:
+    icpdata_addon: "true"
+    app: spaces-routes
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}"
+    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    icpdata_addon_version: {{.Chart.AppVersion | quote }}
+data:
+  nginx.conf: |
+    set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
+    set $spaces_service spacesservice;
+    
+    location ~ ^/v2/spaces {
+      proxy_pass https://$spaces_service.$nsdomain:443;
+      proxy_set_header Host $host;
+      proxy_pass_request_headers      on;
+    }
+    
+    location ~ ^/v2/asset_exports {
+      proxy_pass https://$spaces_service.$nsdomain:443;
+      proxy_set_header Host $host;
+      proxy_pass_request_headers      on;
+    }
+    
+    location ~ ^/v2/asset_imports {
+      proxy_pass https://$spaces_service.$nsdomain:443;
+      proxy_set_header Host $host;
+      proxy_pass_request_headers      on;
+    }
+    
+{{- end }}

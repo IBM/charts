@@ -1,0 +1,108 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: post-install-upgrade-spaces-wml-global-asset-type
+  labels:
+    app: post-install-upgrade-spaces-wml-global-asset-type
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}"
+    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}" 
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      name: post-install-upgrade-spaces-wml-global-asset-type
+      labels:
+        app: post-install-upgrade-spaces-wml-global-asset-type
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        app.kubernetes.io/name: "{{ .Release.Name }}"
+        helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+        icpdsupport/addOnId: ccs 
+        icpdsupport/app: spaces         
+      annotations:
+        hook.deactivate.cpd.ibm.com/command: "[]"
+        hook.activate.cpd.ibm.com/command: "[]"
+        cloudpakName: {{ .Values.global.annotations.cloudpakName }}
+        cloudpakId: {{ .Values.global.annotations.cloudpakId }}
+        productCloudpakRatio: {{ .Values.global.annotations.productCloudpakRatio }}
+        productID: {{ .Values.global.annotations.productID }}
+        productName: {{ .Values.global.annotations.productName }}
+        productMetric: {{ .Values.global.annotations.productMetric }}
+        productChargedContainers: {{ .Values.global.annotations.productChargedContainers }}
+        productVersion: {{ .Values.global.annotations.productVersion }}
+        cloudpakInstanceId: {{ .Values.global.cloudpakInstanceId }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - {{ .Values.global.architecture }}
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+        - name: post-install-upgrade-spaces-wml-global-asset-type
+          image: "{{ .Values.global.dockerRegistryPrefix}}/{{ .Values.wmlAssetTypes.image.repository }}:{{ .Values.wmlAssetTypes.image.tag }}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsUser: {{ .Values.global.user.id }}
+            runAsNonRoot: true
+            privileged: false
+            readOnlyRootFilesystem: false
+          command: ["/bin/sh","-c"]
+          args: ["/opt/ibm/ml-repository/bin/createGlobalAssetType.sh"]
+          envFrom:
+            - secretRef:
+                name: wdp-service-id
+          env:
+            - name: INTERNAL_NGINX_CERT
+              valueFrom:
+                secretKeyRef:
+                  key: certificate.pem
+                  name: internal-nginx-svc-tls
+            - name: WDP_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  key: host-url
+                  name: wdp-config
+            - name: DEPLOYMENT_PLATFORM
+              value: private
+            - name: WMLENV
+              value: prod
+            - name: MEMORY
+              value: "1024"
+          volumeMounts:
+            - name: config-volume
+              mountPath: /opt/ibm/ml-repository/conf          
+          resources:
+            limits:
+              cpu: 1
+              memory: 1Gi
+            requests:
+              cpu: 500m
+              memory: 1Gi
+      restartPolicy: OnFailure
+      volumes:
+        - name: config-volume
+          configMap:
+            name: spacesjobconfigmap

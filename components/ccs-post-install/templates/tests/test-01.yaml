@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-ccs-post-install-test"
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}-{{ randAlphaNum 5 }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    release: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - amd64  
+            - ppc64le   
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  containers:
+  - name: {{ .Release.Name }}-ccs-post-install-test
+    image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.hookJob.image.repository }}:{{ .Values.hookJob.image.tag }}    
+    command: ['/bin/sh']
+    args: ['-c', 'kubectl get po | grep ccs-post-install-job']
+    securityContext:
+      privileged: false
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        memory: "{{ .Values.hookJob.resources.requests.memory }}"
+        cpu: "{{ .Values.hookJob.resources.requests.cpu }}"
+      limits:
+        memory: "{{ .Values.hookJob.resources.limits.memory }}"
+        cpu: "{{ .Values.hookJob.resources.limits.cpu }}"
+  restartPolicy: Never  

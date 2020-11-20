@@ -1,0 +1,122 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cpd-wkc-aux-qu-cm
+  labels:
+    cpdfwk.aux-kind: qu
+    cpdfwk.component: wkc
+    cpdfwk.managed-by: ibm-cpd-sre
+    cpdfwk.module: wkc-aux
+    cpdfwk.name: wkc-aux-qu-cm
+    cpdfwk.vendor: ibm
+    cpdfwk.version: 1.0.0
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }} 
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  aux-meta: |-
+    name: wkc-aux
+    description: This is auxiliary meta for quiesce and unquiesce operation for WKC
+    version: 1.0.0
+    component: wkc
+    aux-kind: qu
+    support-instances: false
+    priority-order: 1000
+    managed-resources:
+      - resource-kind: job
+        labels: group=wkc-jobs
+      - resource-kind: deployment
+        labels: 'release in (0022-wkc-base-prereqs, 0027-wkc-base, 0075-wkc-lite, 0072-iis, 0073-ug)'
+      - resource-kind: statefulset
+        labels: 'release in (0022-wkc-base-prereqs, 0071-wkc-prereqs, 0072-iis, 0073-ug)'
+  quiesce-job: |-
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      generateName: wkc-quiesce-job-
+      labels:
+        app: wkc-quiesce-job
+        group: wkc-jobs
+    spec:
+      template:
+        spec:
+          serviceAccountName: cpd-admin-sa
+          containers:
+            - name: wkc-br-job-pod
+              image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.hookJob.image.repository }}:{{ .Values.hookJob.image.tag }}
+              imagePullPolicy: Always
+              command: ["/bin/bash", "-c", "/bar-scripts/wkc-backup-restore.sh ScaleDown"]
+              volumeMounts:
+              - mountPath: /bar-scripts
+                name: bar-volume1
+              securityContext:
+                privileged: false
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: false
+                runAsNonRoot: true
+                capabilities:
+                  drop:
+                  - ALL
+              env:
+                - name: NAMESPACE
+                  value: ${CPD_FWK_NAMESPACE}
+          volumes:
+           - name: bar-volume1
+             configMap:
+                name: wkc-backup-restore
+                defaultMode: 0755
+          restartPolicy: Never
+  quiesce-meta: |-
+    exec-job:
+      job-key: quiesce-job
+      timeout: 1200s
+  unquiesce-job: |-
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      generateName: wkc-unquiesce-job-
+      labels:
+        app: wkc-unquiesce-job
+        group: wkc-jobs
+    spec:
+      template:
+        spec:
+          serviceAccountName: cpd-admin-sa
+          containers:
+            - name: wkc-br-job-pod
+              image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.hookJob.image.repository }}:{{ .Values.hookJob.image.tag }}
+              imagePullPolicy: Always
+              command: ["/bin/bash", "-c", "/bar-scripts/wkc-backup-restore.sh ScaleUp"]
+              volumeMounts:
+              - mountPath: /bar-scripts
+                name: bar-volume1
+              securityContext:
+                privileged: false
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: false
+                runAsNonRoot: true
+                capabilities:
+                  drop:
+                  - ALL
+              env:
+                - name: NAMESPACE
+                  value: ${CPD_FWK_NAMESPACE}
+          volumes:
+           - name: bar-volume1
+             configMap:
+                name: wkc-backup-restore
+                defaultMode: 0755
+          restartPolicy: Never
+  unquiesce-meta: |-
+    exec-job:
+      job-key: unquiesce-job
+      timeout: 1200s

@@ -47,6 +47,8 @@ spec:
         app.kubernetes.io/managed-by: {{$Release.Service | quote }}
         app.kubernetes.io/instance: {{$Release.Name | quote }}
         app.kubernetes.io/name: {{$.Chart.Name}}
+        icpdsupport/addOnId: ws
+        icpdsupport/app: {{ $microservice }}
         helm.sh/chart: {{$.Chart.Name}}-{{$.Chart.Version | replace "+" "_" }}
         app: {{ $microservice }}
         chart: {{ template "watson-studio.chart" $ }}
@@ -55,6 +57,11 @@ spec:
         environment: {{ $.Values.microservice.deployment.env }}
 {{- if and ($.Values.global.annotations) (eq $.Values.microservice.deployment.env "icp4d") }}
       annotations:
+        hook.deactivate.cpd.ibm.com/command: "[]"
+        hook.activate.cpd.ibm.com/command: "[]"
+{{- if ($.Values.global.cloudpakInstanceId) }}
+        cloudpakInstanceId: {{ $.Values.global.cloudpakInstanceId }}
+{{- end }}
 {{ toYaml $.Values.global.annotations | trim | indent 8 }}
 {{- end }}
     spec:
@@ -102,8 +109,13 @@ spec:
             memory: {{ $.Values.microservice.deployment.requests.memory }}
             cpu: {{ $.Values.microservice.deployment.requests.cpu }}
           limits:
+{{- if (eq $microservice "asset-files-api") }}
+            memory: 8Gi
+            cpu: 1
+{{- else }}
             memory: {{ $.Values.microservice.deployment.limits.memory }}
             cpu: {{ $.Values.microservice.deployment.limits.cpu }}
+{{- end }}
         ports:
         - containerPort: {{ $.Values.microservice.port }}
           protocol: TCP
