@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .Values.environment.name }}-rsyslog-config"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    name: "{{ .Values.environment.name }}-rsyslog-config"
+    app: "{{ .Values.environment.name }}-rsyslog-config"
+{{- include "helm.labels" . | indent 4 }}
+{{- include "cloudpak.labels" . | indent 4 }}
+data:
+  rsyslog.conf: |
+    module(load="imfile" PollingInterval="10")
+    $DefaultNetstreamDriverCAFile /etc/internal-tls/certificate.pem
+    $DefaultNetstreamDriverCertFile /etc/internal-tls/tls.crt
+    $DefaultNetstreamDriverKeyFile /etc/internal-tls/tls.key
+
+
+    input(type="imfile"
+          File="{{ .Values.configs.auditEventLogFile }}"
+          Tag="serviceName"
+          Facility="user")
+
+    action(type="omfwd"
+           Target="{{ .Values.rsyslog.targetHost }}.NS_DOMAIN"
+           Port="{{ .Values.rsyslog.port }}"
+           Protocol="tcp"
+           StreamDriver="gtls"
+           StreamDriverMode="1"
+           StreamDriverAuthMode="{{ .Values.rsyslog.driverAuthMode }}"
+           StreamDriverPermittedPeers="*.NS_DOMAIN")

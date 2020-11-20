@@ -1,4 +1,4 @@
-{{- $compName := "rstudio-post-delete-hook-pod" -}}
+{{- $compName := "rstudio-post-delete-hook" -}}
 kind: Job
 apiVersion: batch/v1
 metadata:
@@ -12,12 +12,12 @@ metadata:
     chart: {{ .Chart.Name |quote }}
     heritage: tiller
     release: "{{ .Release.Name }}"
+    icpdsupport/app: "ui"
+    icpdsupport/addOnId: "rstudio"
   annotations:
     "helm.sh/hook": "post-delete"
-    "helm.sh/hook-delete-policy": hook-succeeded
-    {{- if .Values.global.annotations }}
-{{ toYaml .Values.global.annotations | trim | indent 4 }}
-    {{- end }}
+    "helm.sh/hook-delete-policy": "hook-succeeded,before-hook-creation"
+    {{- include "runtime_addon_rstudio.cloudpak_annotations" . }}
 spec:
   parallelism: 1
   completions: 1
@@ -33,6 +33,10 @@ spec:
         release: "{{ .Release.Name }}"
         heritage: "{{ .Release.Service }}"
         component: "{{$compName}}"
+        icpdsupport/app: "ui"
+        icpdsupport/addOnId: "rstudio"
+      annotations:
+        {{- include "runtime_addon_rstudio.cloudpak_annotations" . | indent 8 }}
     spec:       
       serviceAccount: cpd-admin-sa
       serviceAccountName: cpd-admin-sa
@@ -42,15 +46,31 @@ spec:
       hostIPC: false
       securityContext:    
         runAsNonRoot: true
-        runAsUser: 1000321000
+        runAsUser:  1000321000
       affinity:
-        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.global.architecture }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: run
+                  operator: In
+                  values:
+                  - {{$compName}}
+            topologyKey: kubernetes.io/hostname
       containers:
         - name: post-delete
-          image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.rstudioServer.image.name }}:{{ .Values.rstudioServer.image.tag }}
+          image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.initJob.image.name }}:{{ .Values.initJob.image.tag }}
           imagePullPolicy: IfNotPresent
           command: ["/bin/bash"]
-          args: ["/scripts/icp4d/post-delete.sh"]
+          args: ["/scripts/postDeleteCleanup.sh"]
           env: 
           - name: NAMESPACE
             valueFrom:

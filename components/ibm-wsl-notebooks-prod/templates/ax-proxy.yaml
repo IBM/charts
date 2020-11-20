@@ -1,0 +1,118 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  annotations:
+    {{- include "notebooks.cloudpak_annotations" . }}
+  name: "ax-proxy-routes"
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: notebooks
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+    icpdata_addon: "true"
+    icpdata_addon_version: {{ (split "+" .Chart.Version)._0 }}
+    app: notebooks
+    release: {{ .Release.Name | quote }}
+    chart: {{ .Chart.Name | quote }}
+    heritage: tiller
+data:
+  nginx.conf: |
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    # client_max_body_size 1024M; --> set to 0 in root nginx config
+    server_tokens off;
+
+    # set vars for hostnames for dynamic routing
+    set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
+    set $job_manager https://cdsx-notebooks-job-manager-service.$nsdomain:443;
+    set $nb_converter https://cdsx-jupyter-notebooks-converter-service.$nsdomain:443;
+    set $notebooks_ui https://ws-notebooks-ui-service.$nsdomain:443;
+    set $notebooks_api https://wdp-notebooks-api-service.$nsdomain:443;
+
+    location /v1/notebook_executions {
+      proxy_set_header Host $host;
+      proxy_pass $job_manager;
+    }
+    location /v2/notebook_executions {
+      proxy_set_header Host $host;
+      proxy_pass $job_manager;
+    }
+    location /v2/notebooks {
+      proxy_set_header Host $host;
+      proxy_pass $notebooks_api;
+    }
+    location /analytics/notebooks {
+      proxy_set_header Host $host;
+      proxy_pass $notebooks_ui;
+    }
+
+    # Paths to pages served by ws-notebooks-ui
+    location ~ "^/analytics/notebooks/v2/new-notebook(.*)" {
+      proxy_pass $notebooks_ui;
+    }
+
+    # Static, HMR and api calls of ws-notebooks-ui
+    location ~ "^/analytics/notebooks/v2/static/(.*)" {
+      proxy_pass $notebooks_ui;
+    }
+
+    location ~ "^/analytics/notebooks/v2/api/(.*)" {
+      proxy_pass $notebooks_ui;
+    }
+
+    # Static calls of dap-notebooks-ui
+    location ~ "^/analytics/notebooks/(\w{8}-\w{6}?)/(.*)(?:ico|css|js|gif|jpe?g|png|svg)" {
+      proxy_cache_key $scheme$host$request_uri;
+      proxy_cache notebook;
+      proxy_pass $notebooks_ui;
+      expires 86400;
+      add_header Pragma public;
+      add_header Cache-Control "public, must-revalidate, proxy-revalidate";
+    }
+
+    location ~* "/data/jupyter/(.*)/tree" {
+      return 404;
+    }
+
+    location ~ "^/data/jupyter(2)?/(.*)/nbextensions/brunel_ext/(?<cachevar>.*(?:ico|css|js|gif|jpe?g|png|svg)$)" {
+      gzip_min_length 1000;
+      gzip_proxied any;
+      gzip_types
+        text/plain
+        text/css
+        text/js
+        text/javascript
+        application/javascript
+        application/x-javascript
+        image/png
+        image/x-icon
+        image/svg+xml
+      proxy_cache_key $scheme$host$cachevar$args;
+      proxy_cache jupyter;
+      proxy_pass $nb_converter;
+      expires 86400;
+      add_header Pragma public;
+      add_header Cache-Control "public, must-revalidate, proxy-revalidate";
+    }
+
+    location ~* "/data/jupyter(2)?/(\w{8}-\w{4}-\w{4}-\w{4}-\w{12}?)/tree" {
+      return 404;
+    }
+
+    location ~* "/data/jupyter(2)?/(\w{8}-\w{4}-\w{4}-\w{4}-\w{12}?)/terminals" {
+      return 404;
+    }
+
+    location ~* "/data/jupyter(2)?/(\w{8}-\w{4}-\w{4}-\w{4}-\w{12}?)/api/shutdown" {
+      return 404;
+    }
+
+    location ~ /data/notebooks/converter/jupyter/monitor {
+      proxy_pass $nb_converter;
+    }
+
+    location ~ /data/notebooks/converter/(?:jupyter|assets)/ {
+      if ($args !~ 'access_token') {
+        access_by_lua_file /nginx_data/checkjwt.lua;
+      }
+      proxy_pass $nb_converter;
+    }

@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: runtime-addon-py36-verify
+  namespace: {{ .Release.Namespace | quote }}
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "runtime-addon-py36-verify"
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+    app: "runtime-addon-py36-verify"
+    chart: "{{ .Chart.Name }}"
+    heritage: tiller
+    release: "{{ .Release.Name }}"
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  serviceAccountName: cpd-viewer-sa
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - {{ include "global.arch" . }}
+  containers:
+    - name: "runtime-addon-py36-verify"
+      image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.py36main.image.repository }}:{{ .Values.py36main.image.tag }}-{{ include "global.arch" . }}
+      securityContext:
+        privileged: false
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 1000320999
+        readOnlyRootFilesystem: false
+        capabilities:
+          drop:
+            - ALL
+      command: [sh, -c]
+      args:
+        - |
+          if [[ ! -f /tmp/runtime-addon-cm/nginx.conf ]]; then
+            echo "nginx.conf not found in runtime-addon-py36 config map"
+            exit 1
+          else
+            echo "nginx.conf found in runtime-addon-py36 config map"
+          fi
+          if [[ ! -f /tmp/runtime-addon-cm/jupyter-py36-server.json ]]; then
+            echo "jupyter-py36-server.json not found in runtime-addon-py36 config map"
+            exit 1
+          else
+            echo "jupyter-py36-server.json found in runtime-addon-py36 config map"
+          fi
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi
+      volumeMounts:
+        - name: runtime-addon-cm
+          mountPath: /tmp/runtime-addon-cm
+  restartPolicy: Never
+  volumes:
+    - name: runtime-addon-cm
+      configMap:
+        name: runtime-addon-py36

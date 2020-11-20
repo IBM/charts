@@ -5,44 +5,30 @@ metadata:
   name: {{ .Values.environment.name }}-init-preload-jkg-image
   annotations:
     "helm.sh/hook-delete-policy": "hook-succeeded,hook-failed"
+    "hook.deactivate.cpd.ibm.com/command": "[]"
+    "hook.activate.cpd.ibm.com/command": "[]"
   labels:
     app: {{ .Values.environment.name }}-init-preload-jkg-image
-    chart: "{{ .Chart.Name }}"
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: helm
-    app.kubernetes.io/name: {{ .Release.Name }}
-    helm.sh/chart: "{{ .Chart.Name }}"
+{{- include "helm.labels" . | indent 4 }}
+{{- include "cloudpak.labels" . | indent 4 }}
     run: {{ .Values.environment.name }}-init-preload-jkg-image
 spec:
   backoffLimit: 2
   activeDeadlineSeconds: 7200
-  parallelism: {{ .Values.jkg.cronjob.jobReplica }}
-  completions: {{ .Values.jkg.job.jobCompletion }}
+  parallelism: {{ .Values.preloadImage.cronjob.jobReplica }}
+  completions: {{ .Values.preloadImage.job.jobCompletion }}
   template:
     metadata:
+      annotations:
+{{- include "zenhelper.annotations" . | indent 8 }}
       labels:
         app: {{ .Values.environment.name }}-init-preload-jkg-image
-        chart: "{{ .Chart.Name }}"
-        heritage: {{ .Release.Service }}
-        release: {{ .Release.Name }}
-        app.kubernetes.io/instance: {{ .Release.Name }}
-        app.kubernetes.io/managed-by: helm
-        app.kubernetes.io/name: {{ .Release.Name }}
-        helm.sh/chart: "{{ .Chart.Name }}"
+{{- include "helm.labels" . | indent 8 }}
+{{- include "cloudpak.labels" . | indent 8 }}
         run: {{ .Values.environment.name }}-init-preload-jkg-image
-      annotations:
-        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
-        cloudpakVersion: "3.0.1"
-        cloudpakName: "IBM Cloud Pak for Data"
-        productMetric: "VIRTUAL_PROCESSOR_CORE"
-        productChargedContainers: "All"
-        productName: "Analytics Engine powered by Apache Spark"
-        productID: "ICP4D-Spark-00000"
-        productVersion: "3.0.1"
     spec:
       serviceAccount: {{ .Values.sa.viewer }}
+      serviceAccountName: {{ .Values.sa.viewer }}
       restartPolicy: OnFailure
       securityContext:
         runAsUser: {{ .Values.user.uid }}
@@ -69,7 +55,7 @@ spec:
             topologyKey: kubernetes.io/hostname
       containers:
       - name: {{ .Values.environment.name }}-preload-jkg-image1
-        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.jkg.image }}:{{ .Values.spark.image.tag23 }}"
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.preloadImage.image }}:{{ .Values.spark.image.tag30 }}"
         imagePullPolicy: {{ .Values.microService.pullPolicy }}
         securityContext:
           runAsUser: {{ .Values.user.uid }}
@@ -82,14 +68,14 @@ spec:
               - ALL
         resources:
           requests:
-            cpu: {{ .Values.microService.requests.nocpu }}
-            memory: {{ .Values.microService.requests.nomemory }}
+            cpu: {{ .Values.preloadImage.requests.cpu }}
+            memory: {{ .Values.preloadImage.requests.memory }}
           limits:
-            cpu: {{ .Values.microService.requests.nocpu }}
-            memory: {{ .Values.microService.limits.nomemory }}
-        command: ["echo", "Image {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.jkg.image }}:{{ .Values.spark.image.tag23 }} preloaded"]
+            cpu: {{ .Values.preloadImage.limits.cpu }}
+            memory: {{ .Values.preloadImage.limits.memory }}
+        command: ["echo", "Image {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.preloadImage.image }}:{{ .Values.spark.image.tag30 }} preloaded"]
       - name: {{ .Values.environment.name }}-preload-jkg-image2
-        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.jkg.image }}:{{ .Values.spark.image.tag24 }}"
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.preloadImage.image }}:{{ .Values.spark.image.tag24 }}"
         securityContext:
           runAsUser: {{ .Values.user.uid }}
           allowPrivilegeEscalation: false
@@ -101,9 +87,9 @@ spec:
               - ALL
         resources:
           requests:
-            cpu: {{ .Values.microService.requests.nocpu }}
-            memory: {{ .Values.microService.requests.nomemory }}
+            cpu: {{ .Values.preloadImage.requests.cpu }}
+            memory: {{ .Values.preloadImage.requests.memory }}
           limits:
-            cpu: {{ .Values.microService.requests.nocpu }}
-            memory: {{ .Values.microService.limits.nomemory }}
-        command: ["echo", "Image {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.jkg.image }}:{{ .Values.spark.image.tag24 }} preloaded"]
+            cpu: {{ .Values.preloadImage.limits.cpu }}
+            memory: {{ .Values.preloadImage.limits.memory }}
+        command: ["echo", "Image {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.preloadImage.image }}:{{ .Values.spark.image.tag24 }} preloaded"]

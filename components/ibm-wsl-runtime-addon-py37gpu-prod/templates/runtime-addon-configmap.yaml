@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  annotations:
+    {{- include "runtime_addon_py37gpu.cloudpak_annotations" . }}
+  name: "runtime-addon-py37gpu"
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-configmap"
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+    icpdata_addon: "true"
+    icpdata_addon_version: {{ (split "+" .Chart.Version)._0 }}
+    release: "{{ .Release.Name }}"
+    app: "{{ .Release.Name }}-configmap"
+    chart: {{ .Chart.Name |quote }}
+    heritage: tiller
+data:
+  jupyter-py37gpu-server.json: {{ tpl (.Files.Get "definitions/jupyter-py37gpu-server.json") . | quote }}
+  jupyter-lab-py37gpu-server.json: {{ tpl (.Files.Get "definitions/jupyter-lab-py37gpu-server.json") . | quote }}
+  nginx.conf: |
+    set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
+    location ~ ^/dsx-jupyter-py37gpu/ibmdsxuser-(.*?)/(.*?)/(.*?)/logs(.*) {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      rewrite ^/dsx-jupyter-py37gpu/ibmdsxuser-(.*?)/(.*?)/(.*?)/logs(.*)$ /dsx-jupyter-py37gpu/ibmdsxuser-$1/$2/$3/logs$4 break;
+      proxy_pass https://$3-svc.$nsdomain:8889;
+      proxy_read_timeout 10m;
+    }
+    location ~ ^/dsx-jupyter-py37gpu/ibmdsxuser-(.*?)/(.*?)/(.*?)/(.*) {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      rewrite ^/dsx-jupyter-py37gpu/ibmdsxuser-(.*?)/(.*?)/(.*?)/(.*)$ /dsx-jupyter-py37gpu/ibmdsxuser-$1/$2/$3/$4 break;
+      proxy_pass https://$3-svc.$nsdomain:8888;
+      proxy_read_timeout 10m;
+    }
+    location ~ ^/dsx-jupyter-lab-py37gpu/ibmdsxuser-(.*?)/(.*?)/(.*?)/logs(.*) {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      rewrite ^/dsx-jupyter-lab-py37gpu/ibmdsxuser-(.*?)/(.*?)/(.*?)/logs(.*)$ /dsx-jupyter-lab-py37gpu/ibmdsxuser-$1/$2/$3/logs$4 break;
+      proxy_pass https://$3-svc.$nsdomain:8889;
+      proxy_read_timeout 10m;
+    }
+    location ~ ^/dsx-jupyter-lab-py37gpu/ibmdsxuser-(.*?)/(.*?)/(.*?)/(.*) {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      rewrite ^/dsx-jupyter-lab-py37gpu/ibmdsxuser-(.*?)/(.*?)/(.*?)/(.*)$ /dsx-jupyter-lab-py37gpu/ibmdsxuser-$1/$2/$3/$4 break;
+      proxy_pass https://$3-svc.$nsdomain:8888;
+      proxy_read_timeout 10m;
+    }
+  files: |
+    [ { "dest": "/user-home/_global_/config/.runtime-definitions/ibm/jupyter-py37gpu-server.json",
+        "contentKey": "jupyter-py37gpu-server.json" },
+      { "dest": "/user-home/_global_/config/.runtime-definitions/ibm/jupyter-lab-py37gpu-server.json",
+        "contentKey": "jupyter-lab-py37gpu-server.json" }
+    ]
+  add-ons.json: |
+    {
+      "jupyter-py37-gpu": {
+        "details": {
+          "premium": false,
+          "internal": true,
+          "priority": 75
+        },
+        "versions": {
+          "3.5.0": {
+            "state": "enabled",
+            "details": {
+            }
+          }
+        }
+      }
+    }

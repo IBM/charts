@@ -1,0 +1,69 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  annotations:
+    {{- include "runtime_addon_py36.cloudpak_annotations" . }}
+  name: "runtime-addon-py36"
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-configmap"
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+    icpdata_addon: "true"
+    icpdata_addon_version: {{ (split "+" .Chart.Version)._0 }}
+    release: "{{ .Release.Name }}"
+    app: "{{ .Release.Name }}-configmap"
+    chart: {{ .Chart.Name | quote }}
+    heritage: tiller
+data:
+  jupyter-py36-server.json: {{ tpl (.Files.Get "definitions/jupyter-py36-server.json") . | quote }}
+  jupyter-lab-server.json: {{ tpl (.Files.Get "definitions/jupyter-lab-server.json") . | quote }}
+  nginx.conf: |
+    set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
+    location ~ ^/dsx-jupyter-py36/ibmdsxuser-(.*?)/(.*?)/(.*?)/logs(.*) {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      rewrite ^/dsx-jupyter-py36/ibmdsxuser-(.*?)/(.*?)/(.*?)/logs(.*)$ /dsx-jupyter-py36/ibmdsxuser-$1/$2/$3/logs$4 break;
+      proxy_pass https://$3-svc.$nsdomain:8889;
+      proxy_read_timeout 10m;
+    }
+    location ~ ^/dsx-jupyter-py36/ibmdsxuser-(.*?)/(.*?)/(.*?)/(.*) {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      rewrite ^/dsx-jupyter-py36/ibmdsxuser-(.*?)/(.*?)/(.*?)/(.*)$ /dsx-jupyter-py36/ibmdsxuser-$1/$2/$3/$4 break;
+      proxy_pass https://$3-svc.$nsdomain:8888;
+      proxy_read_timeout 10m;
+    }
+    location ~ ^/dsx-jupyter-lab/ibmdsxuser-(.*?)/(.*?)/(.*?)/logs(.*) {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      rewrite ^/dsx-jupyter-lab/ibmdsxuser-(.*?)/(.*?)/(.*?)/logs(.*)$ /dsx-jupyter-lab/ibmdsxuser-$1/$2/$3/logs$4 break;
+      proxy_pass https://$3-svc.$nsdomain:8889;
+      proxy_read_timeout 10m;
+    }
+    location ~ ^/dsx-jupyter-lab/ibmdsxuser-(.*?)/(.*?)/(.*?)/(.*) {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      rewrite ^/dsx-jupyter-lab/ibmdsxuser-(.*?)/(.*?)/(.*?)/(.*)$ /dsx-jupyter-lab/ibmdsxuser-$1/$2/$3/$4 break;
+      proxy_pass https://$3-svc.$nsdomain:8888;
+      proxy_read_timeout 10m;
+    }
+  files: |
+    [
+      { "dest": "/user-home/_global_/config/.runtime-definitions/ibm/jupyter-py36-server.json",
+        "contentKey": "jupyter-py36-server.json" },
+      { "dest": "/user-home/_global_/config/.runtime-definitions/ibm/jupyter-lab-server.json",
+        "contentKey": "jupyter-lab-server.json" }
+    ]

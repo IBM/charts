@@ -1,0 +1,75 @@
+{{- $imagesList := .Files.Get "imagesList.yaml" }}
+{{- $imagesListDetails := fromYaml $imagesList }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: scheduler-post-upgrade-pod
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": "post-upgrade"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "100"
+    hook.deactivate.cpd.ibm.com/command: "[]"
+    hook.activate.cpd.ibm.com/command: "[]"
+    cloudpakInstanceId: {{ .Values.global.cloudpakInstanceId | default "set_during_install" }} 
+    {{- if .Values.global.annotations }}
+{{ toYaml .Values.global.annotations | trim | indent 4 }}
+    {{- end }}
+  labels:
+    name: scheduler-post-upgrade-pod
+    icpdsupport/addOnId: {{ .Values.global.addOnId | quote }}
+    icpdsupport/app: api
+    chart: {{ template "watson-studio.chart" $ }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    helm.sh/chart: {{ template "watson-studio.chart" $ }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+              - amd64
+  containers:
+  - name: scheduler-post-upgrade-pod
+    image: "{{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ (index $imagesListDetails "job-trigger").image.repository }}:{{ .Values.global.imageTag }}"
+    imagePullPolicy: {{ (index $imagesListDetails "job-trigger").image.pullPolicy }}
+    command: ["/bin/bash"]
+    args: ["/post-upgrade-scripts/scheduler-post-upgrade.sh"]
+    env:
+    - name: NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+    - name: CUSTOM_DOMAIN
+      value: "{{ .Values.host }}:{{ .Values.hostPort }}"
+    volumeMounts:
+    - mountPath: /post-upgrade-scripts
+      name: post-upgrade-scripts
+    securityContext:
+      privileged: false
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 1000321000
+      readOnlyRootFilesystem: false
+      capabilities:
+        drop:
+        - ALL
+    resources:
+{{ toYaml .Values.postDelete.resources | trim | indent 6 }}
+  volumes:
+  - name: post-upgrade-scripts
+    configMap:
+      name: scheduler-post-upgrade-configmap
+  serviceAccountName: {{ .Values.postDelete.serviceAccountName }}
+  restartPolicy: OnFailure
+  terminationGracePeriodSeconds: 0

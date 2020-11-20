@@ -9,13 +9,15 @@ global:
     pullSecrets: ''
   disableSslCertValidation: false
 
+license: false
+
 arch: 'amd64'
 runAsUser: 1001
 schConfigName: 'voice-gateway.sch.chart.config.values'
 
 addon:
-  displayName: 'IBM Voice Gateway Addon for IBM Cloud Pak for Data'
-  productID: 'ICP4D-addon-511663905c334c15af94787db60e564b-voice-gateway'
+  productName: 'IBM Voice Gateway Addon for IBM Cloud Pak for Data'
+  productID: '511663905c334c15af94787db60e564b'
   icon: 'https://broker.voiceagent.cloud.ibm.com/images/vgaas_icon_32.svg'
   version: ''
   shortDescription: 'Watson Voice Gateway provides a way to integrate a set of orchestrated Watson services with a public or private telephone network by using the Session Initiation Protocol (SIP). It also provides support for SMS integration via twilio.'
@@ -34,13 +36,16 @@ sip:
   ## Node labels for sip pod assignment
   ## ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector
   nodeSelector: {}
-  resources:
-    requests:
-      cpu: 250m
-      memory: 250Mi
-    limits:
-      cpu: 2000m
-      memory: 8Gi
+  mediaRelay:
+    resources:
+      requests:
+        cpu: 0.5
+        memory: 1Gi
+  sipOrchestrator:
+    resources:
+      requests:
+        cpu: 1.0
+        memory: 1Gi
 
   codecs:
     g729:
@@ -49,14 +54,11 @@ sip:
         repository: '{{ (tpl ( .Values.global.image.repository | toString ) . ) | trimSuffix "/" }}/'
         name: 'voice-gateway-codec-g729'
         containerName: 'vgw-codec-g729'
-        tag: '1.0.6.0'
+        tag: '1.0.7.0'
       resources:
         requests:
-          cpu: 250m
-          memory: 250Mi
-        limits:
-          cpu: 1000m
-          memory: 4Gi
+          cpu: 0.5
+          memory: 1Gi
       envVariables:
         webSocketServerPort: 9001
         logLevel: 'INFO'
@@ -67,12 +69,12 @@ image:
     repository: '{{ (tpl ( .Values.global.image.repository | toString ) . ) | trimSuffix "/" }}/'
     name: 'voice-gateway-so'
     containerName: 'vgw-sip-orchestrator'
-    tag: '1.0.6.0'
+    tag: '1.0.7.0'
   mediaRelay:
     repository: '{{ (tpl ( .Values.global.image.repository | toString ) . ) | trimSuffix "/" }}/'
     name: 'voice-gateway-mr'
     containerName: 'vgw-media-relay'
-    tag: '1.0.6.0'
+    tag: '1.0.7.0'
   pullPolicy: 'IfNotPresent'
 
 persistence:
@@ -81,12 +83,12 @@ persistence:
     enablePersistentRecordings: false
     name: 'recordings'
     storageClassName: '{{ tpl ( .Values.global.storageClassName | toString ) . }}'
-    size: 2Gi
+    size: 15Gi
   logsVolume:
     enablePersistentLogs: false
     name: 'persistent-logs'
     storageClassName: '{{ tpl ( .Values.global.storageClassName | toString ) . }}'
-    size: 2Gi
+    size: 10Gi
 
 mediaRelayEnvVariables:
   sdpAddress: ''
@@ -198,14 +200,14 @@ sms:
     servicePort: 30087
     containerPortTls: 9443
     servicePortTls: 30047
-    tag: '1.0.6.0'
+    tag: '1.0.7.0'
     pullPolicy: 'IfNotPresent'
   resources:
     requests:
-      cpu: 250m
+      cpu: 0.25
       memory: 250Mi
     limits:
-      cpu: 2000m
+      cpu: 2.0
       memory: 8Gi
   networkPolicy:
     smsProviderPort: 80
@@ -232,7 +234,7 @@ sms:
         enable: false
         name: 'usage-reports'
         storageClassName: '{{ tpl ( .Values.global.storageClassName | toString ) . }}'
-        size: 2Gi
+        size: 1Gi
 
   # Tracing and logging
   logging:
@@ -303,17 +305,10 @@ sms:
     transcriptionReportingMaxBackupFiles: 1000
     maxEventsToBatch: 500
 
-# Test container
-test:
-  image:
-    repository: '{{ (tpl ( .Values.global.image.repository | toString ) . ) | trimSuffix "/" }}/'
-    name: 'opencontent-common-utils'
-    tag: '1.1.7-amd64'
-    pullPolicy: 'IfNotPresent'
-
+# DVT Test image
 dvt:
   image:
     repository: '{{ (tpl ( .Values.global.image.repository | toString ) . ) | trimSuffix "/" }}/'
     name: 'voice-gateway-dvt'
-    tag: '1.0.6.0'
+    tag: '1.0.7.0'
     pullPolicy: 'IfNotPresent'

@@ -1,0 +1,227 @@
+{{- $compName := "wdp-shaper" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "wdp-shaper"
+  annotations:
+    {{- include "zenhelper.annotations" . | indent 4 }}
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-{{$compName}}"
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- include "zenhelper.labels" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+      labels:
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        app.kubernetes.io/name: "{{ .Release.Name }}-{{$compName}}"
+        helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.global.runAsUser }}
+      serviceAccount: {{ .Values.global.viewer.sa }}
+      serviceAccountName: {{ .Values.global.viewer.sa }}
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+      volumes:
+      - name: certificate
+        secret:
+          secretName: internal-nginx-svc-tls
+      containers:
+      - name: "wdp-shaper-container" 
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.wdpShaper.image.name }}:{{ .Values.wdpShaper.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true             
+          runAsUser: {{ .Values.global.runAsUser }}
+          capabilities:
+            drop:
+            - ALL
+        livenessProbe:
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          httpGet:
+            path: {{ .Values.environment.wdpShaper.bmAppVersionEndPoint }}
+            port: {{ .Values.ports.targetPort }}
+            scheme: HTTPS
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+        ports:
+        - containerPort: {{ .Values.ports.targetPort }}
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          httpGet:
+            path: {{ .Values.environment.wdpShaper.bmAppVersionEndPoint }}
+            port: {{ .Values.ports.targetPort }}
+            scheme: HTTPS
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+        resources:
+          limits:
+            cpu: {{ .Values.resources.limits.cpu }}
+            memory: {{ .Values.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.resources.requests.cpu }}
+            memory: {{ .Values.resources.requests.memory }}
+        volumeMounts:
+        - mountPath: /etc/certificate
+          name: certificate
+        env:
+          - name: NODE_EXTRA_CA_CERTS
+            value: /etc/certificate/certificate.pem
+          {{- if .Values.environment.wdpHostDomain }}
+          - name: "GATEWAY_HOST"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.environment.wdpHostDomain.configMapName }}
+                key: {{ .Values.environment.wdpHostDomain.hostKey }}
+          - name: "ICP4D_HOST"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.environment.wdpHostDomain.configMapName }}
+                key: {{ .Values.environment.wdpHostDomain.icp4dHostKey }}
+          {{- end }}      
+          - name: GATEWAY_URL
+            value: {{ .Values.environment.gatewayUrl | quote }}
+          - name: WDP_UI_PROXY_URL
+            value: {{ .Values.environment.wdpUiProxyUrl | quote }}
+          - name: COMPONENT_ID
+            value: {{ .Values.environment.wdpShaper.componentId | quote }}
+          - name: IAM_URL
+            value: {{ .Values.environment.iamUrl | quote }}
+          {{- if .Values.environment.icp4dUrl }}
+          - name: ICP4D_URL
+            value: {{ .Values.environment.icp4dUrl | quote }}
+          {{- end }}  
+          - name: ENVIRONMENT_TYPE
+            value: {{ .Values.environment.environmentType | quote }}
+          {{- if .Values.environment.wdpHostDomain }}
+          - name: CUSTOM_DOMAIN
+            value: $(GATEWAY_HOST)
+          - name: ZEN_DOMAIN
+            value: $(ICPD_HOST)
+          {{- end }}
+          - name: PRODUCTION
+            value: {{ .Values.environment.production | quote }}
+          - name: ENVIRONMENT_NAME
+            value: {{ .Values.environment.environmentName | quote }}
+          - name: BM_APP_NAME
+            value: {{ .Values.environment.wdpShaper.bmAppName | quote }}
+          - name: BM_APP_HOST
+            value: {{ .Values.environment.wdpShaper.bmAppHost | quote }}
+          - name: BM_APP_VERSION_ENDPOINT
+            value: {{ .Values.environment.wdpShaper.bmAppVersionEndPoint | quote }}
+          - name: SERVICE_INSTANCE_GUID
+            value: {{ .Values.environment.wdpShaper.serviceInstanceGuid | quote }}
+          - name: IBM_PRODUCT
+            value: {{ .Values.environment.productName | quote }}
+          - name: DATA_CENTER
+            value: {{ .Values.environment.dataCenter | quote }}
+          - name: BM_DOMAIN
+            value: {{ .Values.environment.bmDomain | quote }}
+          - name: DEPLOY_TARGET
+            value: {{ .Values.environment.deployTarget | quote }}
+          - name: CONTAINER_MEMORY
+            value: {{ .Values.environment.containerMemory | quote }}
+          - name: ENABLE_SUDO
+            value: {{ .Values.environment.enableSudo | quote }}
+          - name: DEPLOYMENT_TARGET
+            value: {{ .Values.environment.deploymentTarget | quote }}
+          - name: WDP_SHAPER_URL
+            value: {{ .Values.environment.wdpShaperUrl | quote }}
+          - name: DOMAIN
+            value: {{ .Values.environment.domain | quote }}
+          - name: CF_DOMAIN
+            value: {{ .Values.environment.cfDomain | quote }}
+          - name: ENTRY
+            value: {{ .Values.environment.wdpShaper.entry | quote }}
+          - name: STAGE
+            value: {{ .Values.environment.stage | quote }}
+          - name: NODE_ENV
+            value: {{ .Values.environment.nodeEnv | quote }}
+          - name: NODE_MODULES_CACHE
+            value: {{ .Values.environment.nodeModulesCache | quote }}
+          - name: config__ocpuenv_override
+            value: {{ .Values.environment.configOcpuEnvOverride | quote }}
+          - name: config__shaperRoutesEnabled
+            value: {{ .Values.environment.configShaperRoutesEnabled | quote }}            
+          - name: config__opencpuenv
+            value: {{ .Values.environment.configOpencpuEnv | quote }}
+          - name: config__opencpuenvs__ugi__url
+            value: {{ .Values.environment.configOpencpuEnvsUgiUrl | quote }}
+          - name: CF_STAGING_TIMEOUT
+            value: {{ .Values.environment.cfStagingTimeout | quote }}
+          - name: ENABLE_MONITORING
+            value: {{ .Values.environment.enableMonitoring | quote }}
+          - name: config__entitlements
+            value: {{ .Values.environment.configEntitlements | quote }}
+          - name: JVM_ARGS
+            value: {{ .Values.environment.wdpShaper.jvmArgs | quote }}
+          - name: ENABLE_NEWRELIC
+            value: {{ .Values.environment.enableNewRelic | quote }}
+          - name: {{ .Values.environment.authIamIdClientId.name | quote }}
+            value: {{ .Values.environment.authIamIdClientId.value | quote }}
+          - name: {{ .Values.environment.authIamIdClientSecret.name | quote }}
+            valueFrom:
+              secretKeyRef:
+                key: {{ .Values.environment.authIamIdClientSecret.key | quote }}
+                name: {{ .Values.environment.authIamIdClientSecret.secret | quote }}
+          - name: {{ .Values.environment.configSessionKey.name | quote }}
+            valueFrom:
+              secretKeyRef:
+                key: {{ .Values.environment.configSessionKey.key | quote }}
+                name: {{ .Values.environment.configSessionKey.secret | quote }}
+          - name: {{ .Values.environment.configSessionSecret.name | quote }}
+            valueFrom:
+              secretKeyRef:
+                key: {{ .Values.environment.configSessionSecret.key | quote }}
+                name: {{ .Values.environment.configSessionSecret.secret | quote }}
+          - name: {{ .Values.environment.configIcdRedisUrl.name | quote }}
+            valueFrom:
+              secretKeyRef:
+                key: {{ .Values.environment.configIcdRedisUrl.key | quote }}
+                name: {{ .Values.environment.configIcdRedisUrl.secret | quote }}
+          - name: {{ .Values.environment.configIcdRedisTlsServer.name | quote }}
+            value: {{ .Values.environment.configIcdRedisTlsServer.value | quote }}
+          - name: {{ .Values.environment.configIcdRedisCertificate.name | quote }}
+            valueFrom:
+              secretKeyRef:
+                key: {{ .Values.environment.configIcdRedisCertificate.key | quote }}
+                name: {{ .Values.environment.configIcdRedisCertificate.secret | quote }}
+          - name: {{ .Values.environment.configIcdRedisCryptoPassword.name | quote }}
+            valueFrom:
+              secretKeyRef:
+                key: {{ .Values.environment.configIcdRedisCryptoPassword.key | quote }}
+                name: {{ .Values.environment.configIcdRedisCryptoPassword.secret | quote }}
+          - name: {{ .Values.environment.configSegmentWriteKey.name | quote }}
+            valueFrom:
+              secretKeyRef:
+                key: {{ .Values.environment.configSegmentWriteKey.key | quote }}
+                name: {{ .Values.environment.configSegmentWriteKey.secret | quote }}
+          - name: {{ .Values.environment.wdpServiceIdCredential.name | quote }}
+            valueFrom:
+              secretKeyRef:
+                key: {{ .Values.environment.wdpServiceIdCredential.key | quote }}
+                name: {{ .Values.environment.wdpServiceIdCredential.secret | quote }}
+                optional: true

@@ -1,4 +1,3 @@
-
 #!/usr/bin/python
 '''
 Script to cleanup spark jobs
@@ -16,7 +15,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # ---------------------------------------------  FUNCTIONS -------------------------------------------- #
 def purge_active_jobs(job_service_url,instance_id,hb_endpoint,purge_time):
     print("Purge request for instance {}".format(instance_id))
-    j_response = requests.get("{}/{}/jobs/meta/list?state=ACTIVE".format(job_service_url, instance_id), headers=headers, verify=False)
+    j_response = requests.get("{}/{}/jobs/meta/list?state=ACTIVE".format(job_service_url, instance_id), headers=headers, verify=False, timeout=120)
     if j_response.status_code == 200:
         jobs = j_response.json()
         for job in jobs:
@@ -39,7 +38,7 @@ def purge_active_jobs(job_service_url,instance_id,hb_endpoint,purge_time):
             else:
                 job_state = job["jobState"]
                 print("Found Job State {}".format(job_state))
-            
+
             if (job_state == "FAILED") or (job_state == "FINISHED"):
                 if "start_time" in job:
                     job_time = job["start_time"]
@@ -65,7 +64,7 @@ def purge_active_jobs(job_service_url,instance_id,hb_endpoint,purge_time):
                   return 0
                 except (requests.Timeout, requests.ConnectionError, KeyError) as e:
                   print("Timeout occurred - move forward")
-                
+
             if (job_state == "FAILED") or (job_state == "FINISHED"):
               print("job_time : {}".format(job_time))
               date_time_str = job_time.split('.')[0]
@@ -88,7 +87,7 @@ def purge_active_jobs(job_service_url,instance_id,hb_endpoint,purge_time):
         print("Failed to get jobs in state : ACTIVE. HTTP Code : {}".format(j_response.status_code))
 
 def purge_failed_or_delete_failed_jobs(job_service_url,instance_id,hb_endpoint,purge_time):
-    j_response = requests.get("{}/{}/jobs/meta/list?state=FAILED&state=DELETE_FAILED".format(job_service_url, instance_id), headers=headers, verify=False)
+    j_response = requests.get("{}/{}/jobs/meta/list?state=FAILED&state=DELETE_FAILED".format(job_service_url, instance_id), headers=headers, verify=False, timeout=120)
     if j_response.status_code == 200:
         jobs = j_response.json()
 
@@ -106,8 +105,8 @@ def purge_failed_or_delete_failed_jobs(job_service_url,instance_id,hb_endpoint,p
               print("Timeout occurred in deleting JOB {} - move forward".format(job_id))
     else:
         print("Failed to get jobs in state : FAILED,DELETE_FAILED. HTTP Code : {}".format(j_response.status_code))
-        
-        
+
+
 # ---------------------------------------------  PARSE ARGS ------------------------------------------- #
 parser = argparse.ArgumentParser()
 parser.add_argument("instance_manager_url", help="Instance manager url to get instance details")
@@ -123,21 +122,21 @@ hb_endpoint = args.hb_endpoint
 job_service_url = args.job_service_url
 
 purge_time_file = args.purge_time_file
-    
+
 print("Start HB Jobs cleanup")
-    
+
 with open(purge_time_file) as json_file:
-    data = json.load(json_file) 
+    data = json.load(json_file)
     purge_time = data["spark"]["idleTimeBeforeShutdown"]
     purge_time = purge_time
     print("setting purge time : {}mins".format(purge_time))
 
 
 headers = {'Content-Type':'application/json','Accept':'application/json'}
-response = requests.get("{}/list".format(instance_manager_url), headers=headers, verify=False)
+response = requests.get("{}/list".format(instance_manager_url), headers=headers, verify=False, timeout=120)
 if response.status_code == 200:
     instances = response.json()
-    
+
     for instance in instances:
         instance_id = instance["_id"]
         print("Get the instance details for instance {}".format(instance_id))
@@ -145,11 +144,11 @@ if response.status_code == 200:
             api_key = None
         else:
             api_key = instance["api_key"]
-        
+
         headers = {'Accept':'application/json','X-Api-Key':api_key}
-        
+
         if purge_time == -1:
-            purge_failed_or_delete_failed_jobs(job_service_url,instance_id,hb_endpoint,purge_time)    
+            purge_failed_or_delete_failed_jobs(job_service_url,instance_id,hb_endpoint,purge_time)
         else:
             purge_active_jobs(job_service_url,instance_id,hb_endpoint,purge_time)
             purge_failed_or_delete_failed_jobs(job_service_url,instance_id,hb_endpoint,purge_time)

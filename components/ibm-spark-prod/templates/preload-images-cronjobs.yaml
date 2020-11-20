@@ -5,17 +5,14 @@ metadata:
   name: {{ .Values.environment.name }}-preload-jkg-image
   labels: 
     name: {{ .Values.environment.name }}-preload-jkg-image
-    chart: "{{ .Chart.Name }}"
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
     run: {{ .Values.environment.name }}-preload-jkg-image
     app: {{ .Values.environment.name }}-preload-jkg-image
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: helm
-    app.kubernetes.io/name: {{ .Release.Name }}
-    helm.sh/chart: "{{ .Chart.Name }}"
+{{- include "helm.labels" . | indent 4 }}
+{{- include "cloudpak.labels" . | indent 4 }}
+  annotations:
+{{- include "zenhelper.annotations" . | indent 4 }}
 spec:
-  schedule: "{{ .Values.jkg.cronjob.schedule }}"
+  schedule: "{{ .Values.preloadImage.cronjob.schedule }}"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 1
@@ -23,93 +20,114 @@ spec:
     spec:
       backoffLimit: 1
       activeDeadlineSeconds: 600
-      parallelism: {{ .Values.jkg.cronjob.jobReplica }}
-      completions: {{ .Values.jkg.cronjob.jobCompletion }}
+      parallelism: {{ .Values.preloadImage.cronjob.jobReplica }}
+      completions: {{ .Values.preloadImage.cronjob.jobCompletion }}
       template:
-         metadata:
-           labels: 
-             name: {{ .Values.environment.name }}-preload-jkg-image
-             chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-             heritage: {{ .Release.Service }}
-             release: {{ .Release.Name }}
-             run: {{ .Values.environment.name }}-preload-jkg-image
-             app: {{ .Values.environment.name }}-preload-jkg-image
-             app.kubernetes.io/instance: {{ .Release.Name }}
-             app.kubernetes.io/managed-by: helm
-             app.kubernetes.io/name: {{ .Release.Name }}
-             helm.sh/chart: "{{ .Chart.Name }}"
-           annotations:
-             cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
-             cloudpakVersion: "3.0.1"
-             cloudpakName: "IBM Cloud Pak for Data"
-             productMetric: "VIRTUAL_PROCESSOR_CORE"
-             productChargedContainers: "All"
-             productName: "Analytics Engine powered by Apache Spark"
-             productID: "ICP4D-Spark-00000"
-             productVersion: "3.0.1"
-         spec:
-           serviceAccount: {{ .Values.sa.viewer }}
-           securityContext:
-              runAsUser: {{ .Values.user.uid }}
-           affinity:
-             nodeAffinity:
-               requiredDuringSchedulingIgnoredDuringExecution:
-                 nodeSelectorTerms:
-                 - matchExpressions:
-                   - key: beta.kubernetes.io/arch
-                     operator: In
-                     values:
-                     - {{ .Values.global.architecture }}
-             podAntiAffinity:
-               requiredDuringSchedulingIgnoredDuringExecution:
-               - labelSelector:
-                   matchExpressions:
-                     - key: run
-                       operator: In
-                       values: 
-                       - {{ .Values.environment.name }}-preload-jkg-image
-                 topologyKey: kubernetes.io/hostname
-           hostNetwork: false
-           hostPID: false
-           hostIPC: false
-           containers:
-           - name: {{ .Values.environment.name }}-preload-jkg-image1
-             image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.jkg.image }}:{{ .Values.spark.image.tag23 }}"
-             imagePullPolicy: IfNotPresent
-             securityContext:
-                allowPrivilegeEscalation: false
-                capabilities:
-                  drop:
-                  - ALL 
-                runAsUser: {{ .Values.user.uid }}
-                runAsNonRoot: true
-                privileged: false
-                readOnlyRootFilesystem: false
-             resources:
-               requests:
-                 cpu: {{ .Values.microService.requests.nocpu }}
-                 memory: {{ .Values.microService.requests.nomemory }}
-               limits:
-                 cpu: {{ .Values.microService.requests.nocpu }}
-                 memory: {{ .Values.microService.limits.nomemory }}
-             command: ["echo", "Image {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.jkg.image }}:{{ .Values.spark.image.tag23 }} preloaded"]
-           - name: {{ .Values.environment.name }}-preload-jkg-image2
-             image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.jkg.image }}:{{ .Values.spark.image.tag24 }}"
-             securityContext:
-                allowPrivilegeEscalation: false
-                capabilities:
-                  drop:
-                  - ALL 
-                runAsUser: {{ .Values.user.uid }}
-                runAsNonRoot: true
-                privileged: false
-                readOnlyRootFilesystem: false
-             resources:
-               requests:
-                 cpu: {{ .Values.microService.requests.nocpu }}
-                 memory: {{ .Values.microService.requests.nomemory }}
-               limits:
-                 cpu: {{ .Values.microService.requests.nocpu }}
-                 memory: {{ .Values.microService.limits.nomemory }}
-             command: ["echo", "Image {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.jkg.image }}:{{ .Values.spark.image.tag24 }} preloaded"]
-           restartPolicy: OnFailure
+        metadata:
+          annotations:
+{{- include "zenhelper.annotations" . | indent 12 }}
+          labels:
+            name: {{ .Values.environment.name }}-preload-jkg-image
+            run: {{ .Values.environment.name }}-preload-jkg-image
+            app: {{ .Values.environment.name }}-preload-jkg-image
+{{- include "helm.labels" . | indent 12 }}
+{{- include "cloudpak.labels" . | indent 12 }}
+        spec:
+          serviceAccount: {{ .Values.sa.viewer }}
+          serviceAccountName: {{ .Values.sa.viewer }}
+          securityContext:
+             runAsUser: {{ .Values.user.uid }}
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                    - {{ .Values.global.architecture }}
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector:
+                  matchExpressions:
+                    - key: run
+                      operator: In
+                      values:
+                      - {{ .Values.environment.name }}-preload-jkg-image
+                topologyKey: kubernetes.io/hostname
+          hostNetwork: false
+          hostPID: false
+          hostIPC: false
+          containers:
+          - name: {{ .Values.environment.name }}-preload-jkg-image1
+            image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.preloadImage.image }}:{{ .Values.spark.image.tag30 }}"
+            imagePullPolicy: IfNotPresent
+            securityContext:
+               allowPrivilegeEscalation: false
+               capabilities:
+                 drop:
+                 - ALL
+               runAsUser: {{ .Values.user.uid }}
+               runAsNonRoot: true
+               privileged: false
+               readOnlyRootFilesystem: false
+            resources:
+              requests:
+                cpu: {{ .Values.preloadImage.requests.cpu }}
+                memory: {{ .Values.preloadImage.requests.memory }}
+              limits:
+                cpu: {{ .Values.preloadImage.limits.cpu }}
+                memory: {{ .Values.preloadImage.limits.memory }}
+            command: ["echo", "Image {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.preloadImage.image }}:{{ .Values.spark.image.tag30 }} preloaded"]
+            readinessProbe:
+              exec:
+                command:
+                - ls
+              initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+              periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+              failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+              timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            livenessProbe:
+              exec:
+                command:
+                - ls
+              initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+              periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+              failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+              timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          - name: {{ .Values.environment.name }}-preload-jkg-image2
+            image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.preloadImage.image }}:{{ .Values.spark.image.tag24 }}"
+            securityContext:
+               allowPrivilegeEscalation: false
+               capabilities:
+                 drop:
+                 - ALL
+               runAsUser: {{ .Values.user.uid }}
+               runAsNonRoot: true
+               privileged: false
+               readOnlyRootFilesystem: false
+            resources:
+              requests:
+                cpu: {{ .Values.preloadImage.requests.cpu }}
+                memory: {{ .Values.preloadImage.requests.memory }}
+              limits:
+                cpu: {{ .Values.preloadImage.limits.cpu }}
+                memory: {{ .Values.preloadImage.limits.memory }}
+            command: ["echo", "Image {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.preloadImage.image }}:{{ .Values.spark.image.tag24 }} preloaded"]
+            readinessProbe:
+              exec:
+                command:
+                - ls
+              initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+              periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+              failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+              timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            livenessProbe:
+              exec:
+                command:
+                - ls
+              initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+              periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+              failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+              timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          restartPolicy: OnFailure

@@ -24,5 +24,6 @@
 
 | Chart | Date | Kubernetes Version Required | Breaking Changes | Details |
 | ----- | ---- | --------------------------- | ---------------- | ------- |
+| 3.5.23 | Nov 20, 2020 | >= 1.11 | None | Added support for Openshift 4.5|
 | 3.0.32 | May 5, 2020 | >= 1.11 | None | Added support for Openshift 4.3|
 | 3.0.0 | Nov 22, 2019 | >= 1.9 | None | Initial release of this chart.|

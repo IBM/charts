@@ -6,13 +6,8 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     app: "{{ .Values.environment.name }}-{{ .Values.nginx.name }}-external"
-    chart: "{{ .Chart.Name }}"
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: helm
-    app.kubernetes.io/name: {{ .Release.Name }}
-    helm.sh/chart: "{{ .Chart.Name }}"
+{{- include "helm.labels" . | indent 4 }}
+{{- include "cloudpak.labels" . | indent 4 }}
 spec:
   ports:
   - name: proxy
@@ -30,41 +25,25 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     app: "{{ .Values.environment.name }}-{{ .Values.nginx.name }}-external"
-    chart: "{{ .Chart.Name }}"
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: helm
-    app.kubernetes.io/name: {{ .Release.Name }}
-    helm.sh/chart: "{{ .Chart.Name }}"
+{{- include "helm.labels" . | indent 4 }}
+{{- include "cloudpak.labels" . | indent 4 }}
+  annotations:
+{{- include "zenhelper.annotations" . | indent 4 }}
 spec:
   selector:
     matchLabels:
       app: "{{ .Values.environment.name }}-{{ .Values.nginx.name }}-external"
-      chart: "{{ .Chart.Name }}"
-      heritage: {{ .Release.Service }}
-      release: {{ .Release.Name }}
+{{- include "helm.labels" . | indent 6 }}
+{{- include "cloudpak.labels" . | indent 6 }}
   replicas: {{ default 1 .Values.global.replicaCount }}
   template:
     metadata:
       annotations:
-        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
-        cloudpakVersion: "3.0.1"
-        cloudpakName: "IBM Cloud Pak for Data"
-        productMetric: "VIRTUAL_PROCESSOR_CORE"
-        productChargedContainers: "All"
-        productName: "Analytics Engine powered by Apache Spark"
-        productID: "ICP4D-Spark-00000"
-        productVersion: "3.0.1"
+{{- include "zenhelper.annotations" . | indent 8 }}
       labels:
         app: {{ .Values.environment.name }}-{{ .Values.nginx.name }}-external
-        chart: {{ .Chart.Name }}
-        heritage: {{ .Release.Service }}
-        release: {{ .Release.Name }}
-        app.kubernetes.io/instance: {{ .Release.Name }}
-        app.kubernetes.io/managed-by: helm
-        app.kubernetes.io/name: {{ .Release.Name }}
-        helm.sh/chart: "{{ .Chart.Name }}"
+{{- include "helm.labels" . | indent 8 }}
+{{- include "cloudpak.labels" . | indent 8 }}
     spec:
       affinity:
         nodeAffinity:
@@ -76,6 +55,7 @@ spec:
                 values:
                 - {{ .Values.global.architecture }}
       serviceAccount: {{ .Values.sa.viewer }}
+      serviceAccountName: {{ .Values.sa.viewer }}
       securityContext:
         runAsUser: {{ .Values.user.uid }}
       hostNetwork: false
@@ -98,7 +78,7 @@ spec:
         - containerPort: {{ .Values.nginx.containerPort }}
           protocol: TCP
         command: ["/bin/bash", "-c"]
-        args: ["/usr/sbin/nginx"]
+        args: ["/tmp/nginx-resolver.sh {{ .Values.nginxRepo.nginxConfPath }};/usr/sbin/nginx"]
         readinessProbe:
           tcpSocket:
             port: {{ .Values.nginx.containerPort }}
@@ -119,7 +99,7 @@ spec:
             memory: {{ .Values.nginx.limitMemory }}
         volumeMounts:
         - name: {{ .Values.environment.name }}-{{ .Values.nginx.name }}-configmap
-          mountPath: /etc/nginx/
+          mountPath: {{ .Values.nginxRepo.nginxConfPath }}
       volumes:
         - name: {{ .Values.environment.name }}-{{ .Values.nginx.name }}-configmap
           configMap:

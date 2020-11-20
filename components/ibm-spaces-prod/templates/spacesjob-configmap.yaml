@@ -1,0 +1,229 @@
+apiVersion: v1
+data:
+  log4j2.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!-- This is the log configuration for ml repository v4 on Cloud -->
+    <Configuration status="WARN" name="ML Repository">
+        <Appenders>
+            <Console name="Console" target="SYSTEM_OUT">
+                <PatternLayout>
+                    <Pattern>%d{yy/MM/dd HH:mm:ss.SSS}|%-5p|%C.$%M(%F:%L)|%X{Request-ID}|%m%n</Pattern>
+                </PatternLayout>
+            </Console>
+            <Console name="AccessConsole" target="SYSTEM_OUT">
+                <PatternLayout>
+                    <Pattern>%m%n</Pattern>
+                </PatternLayout>
+            </Console>
+            <!-- this is a daily file for all log messages that don't go elsewhere -->
+            <RollingFile name="DailyRollingFile"
+                        fileName="/opt/ibm/ml-repository/logs/ml-repository.log"
+                        filePattern="/opt/ibm/ml-repository/logs/ml-repository-%d{yyyy-MM-dd}.log.gz">
+                <PatternLayout>
+                    <Pattern>%d{yy/MM/dd HH:mm:ss.SSS}|%-5p|%C.$%M(%F:%L)|%X{Request-ID}|%m%n</Pattern>
+                </PatternLayout>
+                <Policies>
+                    <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                </Policies>
+                <DefaultRolloverStrategy max="30"/>
+            </RollingFile>
+            <!-- this is a file for security messages -->
+            <RollingFile name="SecurityFile"
+                        fileName="/opt/ibm/ml-repository/logs/ml-repository-security.log"
+                        filePattern="/opt/ibm/ml-repository/logs/ml-repository-security-%d{yyyy-MM-dd}.log.gz">
+                <PatternLayout>
+                    <Pattern>%d{yy/MM/dd HH:mm:ss.SSS}|%-5p|%C.$%M(%F:%L)|%X{Request-ID}|%m%n</Pattern>
+                </PatternLayout>
+                <Policies>
+                    <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                </Policies>
+                <DefaultRolloverStrategy max="30"/>
+            </RollingFile>
+            <!-- this is a file for HTTP and database calls -->
+            <RollingFile name="AccessFile"
+                        fileName="/opt/ibm/ml-repository/logs/ml-repository-access.log"
+                        filePattern="/opt/ibm/ml-repository/logs/ml-repository-access-%d{yyyy-MM-dd}.log.gz">
+                <PatternLayout>
+                    <Pattern>AccessLog: %m%n</Pattern>
+                </PatternLayout>
+                <Policies>
+                    <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                </Policies>
+                <DefaultRolloverStrategy max="30"/>
+            </RollingFile>
+            <!-- this is a file for exceptions -->
+            <RollingFile name="ExceptionsFile"
+                        fileName="/opt/ibm/ml-repository/logs/ml-repository-exceptions.log"
+                        filePattern="/opt/ibm/ml-repository/logs/ml-repository-exceptions-%d{yyyy-MM-dd}.log.gz">
+                <PatternLayout>
+                    <Pattern>%d{yy/MM/dd HH:mm:ss.SSS}|%-5p|%X{Request-ID}|%m%n</Pattern>
+                </PatternLayout>
+                <Policies>
+                    <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                </Policies>
+                <DefaultRolloverStrategy max="30"/>
+            </RollingFile>
+        </Appenders>
+        <!-- note that everything goes to the console so that we have it in LogDNA -->
+        <!-- SLF4J: ERROR, WARN, INFO, DEBUG, TRACE (ALL or OFF) -->
+        <Loggers>
+            <Logger name="security" level="DEBUG" additivity="false">
+                <AppenderRef ref="Console" level="INFO"/>
+                <AppenderRef ref="SecurityFile"/>
+            </Logger>
+            <Logger name="com.ibm.analytics.wml.utils.security" level="DEBUG" additivity="false">
+                <AppenderRef ref="Console" level="INFO"/>
+                <AppenderRef ref="SecurityFile"/>
+            </Logger>
+            <Logger name="com.ibm.analytics.wml.ml-repository.security" level="DEBUG" additivity="false">
+                <AppenderRef ref="Console" level="INFO"/>
+                <AppenderRef ref="SecurityFile"/>
+            </Logger>
+            <Logger name="http-access" level="DEBUG" additivity="false">
+                <AppenderRef ref="AccessConsole" level="INFO"/>
+                <AppenderRef ref="AccessFile"/>
+            </Logger>
+            <Logger name="exception-logger" level="DEBUG" additivity="false">
+                <AppenderRef ref="Console" level="INFO"/>
+                <AppenderRef ref="ExceptionsFile"/>
+            </Logger>
+            <Logger name="com.ibm.cloud.objectstorage" level="INFO"/>
+            <Logger name="com.ibm.analytics.wml.utils.clients.http" level="DEBUG"/>
+            <Logger name="com.ibm.analytics.wml.utils.clients.reporting" level="WARN"/>
+            <Logger name="org.apache.http" level="INFO"/>
+            <Root level="DEBUG">
+                <AppenderRef ref="Console"/>
+                <AppenderRef ref="DailyRollingFile"/>
+            </Root>
+        </Loggers>
+    </Configuration>
+  ml-repository-service.conf: |
+    service {
+      validateTokenService.ml.pubkey.path = "/opt/ibm/ml-repository/keys/mltoken.pub"
+      validateTokenService.icp.pubkey.path = "/user-home/_global_/config/jwt/public.pem"
+      wml.auth = "AUTH_ICP"
+      wml {
+        host = "internal-nginx-svc"
+        port = 12443
+        private {
+          host = "internal-nginx-svc"
+          port = 12443
+        }
+      }
+      platform {
+          host = "internal-nginx-svc"
+          port = 12443
+          private {
+            host = "internal-nginx-svc"
+            port = 12443
+         }   
+      }
+      ml-repository {
+        timeout = 105 seconds
+        instances.timeout = 100 seconds
+        bulkSize = 100
+        http.port = 18803
+      }
+      ssl {
+        port = 18803
+        keystore {
+          path = "/opt/ibm/ml-repository/keys/keystore.jks"
+          type = "JKS"
+          password = ${KEYSTORE_PASSWORD}
+        }
+      }
+      iam {
+        url = "dummy"
+        pdp {
+          serviceName = "pm-20-devops"
+          apiKey = ""
+        }
+      }
+      wml_instances {
+        url = "https://internal-nginx-svc:12443/ml/v4/instances"
+        retry {
+          count = 2
+          time_cap = 2000
+          delay = 1000
+       }
+     }
+    }
+    ml-event-client {
+      topicSpace = "ml-repository"
+      message-hub {
+        brokers = ""
+        user = ""
+        password = ""
+      }
+    }
+    akka {
+      loglevel = "INFO"
+      loggers = ["akka.event.slf4j.Slf4jLogger"]
+      http {
+        host-connection-pool {
+          max-connections = 256
+          max-open-requests = 1024
+          max-retries = 0
+        }
+        server {
+          max-connections = 1024
+          idle-timeout = 150 seconds
+          request-timeout = 130 seconds
+          pipelining-limit = 1
+          linger-timeout = 180 seconds
+        }
+        client {
+          connecting-timeout = 30 seconds
+          idle-timeout = infinite
+          parsing {
+            max-content-length = 1024m
+          }
+        }
+      }
+    }
+    # Used by the service for outbound calls to other services
+    outbound-dispatcher {
+      type = Dispatcher
+      executor = "thread-pool-executor"
+      thread-pool-executor {
+        fixed-pool-size = 256
+      }
+      throughput = 1
+    }
+    # Used by the service for the incoming API calls
+    endpoints-dispatcher {
+      type = "Dispatcher"
+      executor = "fork-join-executor"
+      
+      fork-join-executor {
+        parallelism-min = 16
+        parallelism-factor = 3.0
+        parallelism-max = 512
+      }
+      
+      thread-pool-executor {
+        keep-alive-time = 60s
+        core-pool-size-min = 8
+        core-pool-size-factor = 3.0
+        core-pool-size-max = 64
+        max-pool-size-min = 8
+        max-pool-size-factor  = 3.0
+        max-pool-size-max = 64
+        task-queue-size = -1
+        task-queue-type = "linked"
+        
+        allow-core-timeout = on
+      }
+    }
+kind: ConfigMap
+metadata:
+  name: spacesjobconfigmap
+  labels:
+    app: spacesjobconfigmap
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}"
+    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"    

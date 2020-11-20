@@ -4,14 +4,15 @@
 Create the default zen base chart annotations
 */}}
 {{- define "zenhelper.annotations" }}
-cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
-cloudpakName: "IBM Cloud Pak for Data"
-cloudpakVersion: "3.0.1"
-productChargedContainers: "All"
-productMetric: "VIRTUAL_PROCESSOR_CORE"
-productName: "IBM Common Core Services for IBM Cloud Pak for Data"
-productID: "ICP4D-Common-Core-Services-3-0-1"
-productVersion: "3.0.1"
+cloudpakName: IBM Cloud Pak for Data
+cloudpakInstanceId: {{ .Values.global.cloudpakInstanceId }}
+cloudpakId: eb9998dcc5d24e3eb5b6fb488f750fe2
+productCloudpakRatio: 1:1
+productID: eb9998dcc5d24e3eb5b6fb488f750fe2
+productName: IBM Cloud Pak for Data Control Plane
+productVersion: 1.2.1.0
+productMetric: VIRTUAL_PROCESSOR_CORE
+productChargedContainers: All
 {{- end }}
 
 
@@ -52,14 +53,14 @@ podAntiAffinity:
 {{- end }}
 
 {{- define "zenhelper.nodeArchAffinity" }}
-nodeAffinity:
-  requiredDuringSchedulingIgnoredDuringExecution:
-    nodeSelectorTerms:
-    - matchExpressions:
-      - key: beta.kubernetes.io/arch
-        operator: In
-        values:
-          - {{ .Values.global.architecture }}
+# nodeAffinity:
+#   requiredDuringSchedulingIgnoredDuringExecution:
+#     nodeSelectorTerms:
+#     - matchExpressions:
+#       - key: beta.kubernetes.io/arch
+#         operator: In
+#         values:
+#           - {{ .Values.global.architecture }}
 {{- end }}
 {{- define "zenhelper.user-home-pvc" }}
 - name: user-home-mount

@@ -1,0 +1,126 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: preinstall-spaces-cacert
+  labels:
+    app: preinstall-spaces-cacret
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}"
+    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    "helm.sh/hook-weight": "3"
+spec:
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      name: preinstall-spaces-cacert
+      labels:
+        app: reinstall-spaces-cacret
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        app.kubernetes.io/name: "{{ .Release.Name }}"
+        helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+        icpdsupport/addOnId: ccs 
+        icpdsupport/app: spaces         
+      annotations:
+        hook.deactivate.cpd.ibm.com/command: "[]"
+        hook.activate.cpd.ibm.com/command: "[]"
+        cloudpakName: {{ .Values.global.annotations.cloudpakName }}
+        cloudpakId: {{ .Values.global.annotations.cloudpakId }}
+        productCloudpakRatio: {{ .Values.global.annotations.productCloudpakRatio }}
+        productID: {{ .Values.global.annotations.productID }}
+        productName: {{ .Values.global.annotations.productName }}
+        productMetric: {{ .Values.global.annotations.productMetric }}
+        productChargedContainers: {{ .Values.global.annotations.productChargedContainers }}
+        productVersion: {{ .Values.global.annotations.productVersion }}
+        cloudpakInstanceId: {{ .Values.global.cloudpakInstanceId }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - {{ .Values.global.architecture }}
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      restartPolicy: Never
+      volumes:
+      - name: internal-nginx-svc-tls
+        secret:
+          defaultMode: 420
+          secretName: internal-nginx-svc-tls
+      containers:
+        - name: "spaces-wml-kubectl"
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.wmlPreinstall.image.repository }}:{{ .Values.wmlPreinstall.image.tag }}"
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ .Values.global.user.id }}
+            capabilities:
+              drop:
+              - ALL
+          volumeMounts:
+          - name: internal-nginx-svc-tls
+            mountPath: /tmp/spaces/nginx-cert.pem
+            subPath: certificate.pem
+          - name: internal-nginx-svc-tls
+            mountPath: /tmp/spaces/nginx-tls.crt
+            subPath: tls.crt
+          resources:
+            limits:
+              cpu: "0.5"
+              memory: "512Mi"
+            requests:
+              cpu: "0.5"
+              memory: "512Mi"
+          command:
+          - "/bin/bash"
+          - -c
+          - |
+            
+            secret_exists() {
+                  set +e
+                  kubectl -n {{ .Release.Namespace }} get secret $1 > /dev/null 2>&1
+                  echo $?
+                  set -e
+            } 
+            nginxCertFound=$(secret_exists 'spaces-nginx-secrets')
+            if [ $nginxCertFound -ne 0 ]
+            then
+                 cp /opt/ibm/java/jre/lib/security/cacerts /tmp/
+                 cp /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /tmp/
+                 chmod 666 /tmp/cacerts /tmp/tls-ca-bundle.pem
+                 keytool -import -trustcacerts -keystore /tmp/cacerts -storepass changeit -alias nginx -import -file /tmp/spaces/nginx-tls.crt -noprompt
+                 javaCrt=`cat /tmp/cacerts | base64 | tr -d '\n'`
+                 cat <<EOF1 | kubectl -n {{ .Release.Namespace }} create -f - 
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: "spaces-nginx-secrets"
+              labels:
+                app: spaces
+                chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+                release: "{{ .Release.Name }}"
+                heritage: "{{ .Release.Service }}"
+            type: Opaque
+            data: 
+              java-cacerts: ${javaCrt}
+            EOF1
+            fi

@@ -13,12 +13,12 @@ metadata:
     chart: {{ .Chart.Name |quote }}
     heritage: tiller
     release: "{{ .Release.Name }}"
+    icpdsupport/app: "ui"
+    icpdsupport/addOnId: "rstudio"
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
-    "helm.sh/hook-delete-policy": hook-succeeded
-    {{- if .Values.global.annotations }}
-{{ toYaml .Values.global.annotations | trim | indent 4 }}
-    {{- end }}
+    "helm.sh/hook-delete-policy": "hook-succeeded,before-hook-creation"
+    {{- include "runtime_addon_rstudio.cloudpak_annotations" . }}
 spec:
   parallelism: {{ .Values.runtimes.workerNodes }}
   completions: {{ .Values.runtimes.workerNodes }}
@@ -35,13 +35,20 @@ spec:
         heritage: "{{ .Release.Service }}"
         component: "{{$compName}}"
         run: "{{$compName}}"
+        icpdsupport/app: "ui"
+        icpdsupport/addOnId: "rstudio"
+      annotations:
+        {{- include "runtime_addon_rstudio.cloudpak_annotations" . | indent 8 }}
     spec:
-      {{- if .Values.global.baseInstaller }}
-      nodeSelector:
-        is_compute: "true"
-      {{- end }}
       affinity:
-        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.global.architecture }}
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:

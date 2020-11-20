@@ -1,0 +1,93 @@
+{{- $imagesList := .Files.Get "imagesList.yaml" }}
+{{- $imagesListDetails := fromYaml $imagesList }}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: jobs-ui-extension-translations
+{{- if and (.Values.global.annotations) (eq .Values.microservice.deployment.env "icp4d") }}
+  annotations:
+{{ toYaml .Values.global.annotations | trim | indent 4 }}
+{{- end }}
+  labels:
+    app: jobs-ui-extension-translations
+    run: jobs-ui-extension-translations
+    icpdsupport/addOnId: {{ .Values.global.addOnId | quote }}
+    icpdsupport/app: api
+    chart: {{ template "watson-studio.chart" $ }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    icpdata_addon: "true"
+    icpdata_addon_version: "3.5.0"
+    helm.sh/chart: {{ template "watson-studio.chart" $ }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  template:
+    metadata:
+      labels:
+        app: jobs-ui-extension-translations
+        run: jobs-ui-extension-translations
+        icpdsupport/addOnId: {{ .Values.global.addOnId | quote }}
+        icpdsupport/app: api
+        chart: {{ template "watson-studio.chart" $ }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        icpdata_addon: "true"
+        icpdata_addon_version: "3.5.0"
+        helm.sh/chart: {{ template "watson-studio.chart" $ }}
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+{{- if and (.Values.global.annotations) (eq .Values.microservice.deployment.env "icp4d") }}
+      annotations:
+        cloudpakInstanceId: {{ .Values.global.cloudpakInstanceId | default "set_during_install" }}
+        hook.deactivate.cpd.ibm.com/command: "[]"
+        hook.activate.cpd.ibm.com/command: "[]"
+{{ toYaml .Values.global.annotations | trim | indent 8 }}
+{{- end }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccount: "cpd-editor-sa"
+      serviceAccountName: "cpd-editor-sa"
+      restartPolicy: Never
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      containers:
+        - name: jobs-ui-extension-translations
+          image: "{{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ (index $imagesListDetails "job-trigger").image.repository }}:{{ .Values.global.imageTag }}"
+          imagePullPolicy: {{ (index $imagesListDetails "job-trigger").image.pullPolicy }}
+          command: ["/bin/sh","-c"]
+          args: ["whoami && id && /home/node/scripts/update-translation-extensions.sh"]
+          workingDir: /
+          env:
+          - name: ZEN_SERVICE_BROKER_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: zen-service-broker-secret
+                key: token
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000320900
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+              - ALL
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "4Gi"
+            requests:
+              cpu: "100m"
+              memory: "128Mi"

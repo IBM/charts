@@ -1,0 +1,73 @@
+{{- $files := $.Files }}
+{{- $imagesList := $files.Get "imagesList.yaml" }}
+{{- $imageDetails := fromYaml $imagesList }}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "wml-ui-test"
+{{- if and ($.Values.global.annotations) (eq $.Values.microservice.deployment.env "icp4d") }}
+  annotations:
+    helm.sh/hook: test-success
+{{ toYaml $.Values.global.annotations | trim | indent 4 }}
+{{- end }}
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: {{.Chart.Name}}
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+    app: wml-ui-test
+    chart: {{ template "watson-studio.chart" $ }}
+    release: {{ $.Chart.Name }}
+    run: "wml-ui-test"
+    heritage: {{ $.Release.Service }}
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        app.kubernetes.io/name: {{.Chart.Name}}
+        icpdsupport/addOnId: ccs
+        icpdsupport/app: ui
+        helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+        app: wml-ui-test
+        chart: wml-ui-test
+        component: wml-ui-test
+        release: {{ $.Chart.Name }}
+        heritage: {{ .Release.Service }}
+{{- if and ($.Values.global.annotations) (eq $.Values.microservice.deployment.env "icp4d") }}
+      annotations:
+        hook.deactivate.cpd.ibm.com/command: "[]"
+        hook.activate.cpd.ibm.com/command: "[]"
+{{- if ($.Values.global.cloudpakInstanceId) }}
+        cloudpakInstanceId: {{ $.Values.global.cloudpakInstanceId }}
+{{- end }}
+{{ toYaml $.Values.global.annotations | trim | indent 8 }}
+{{- end }}
+    spec:
+      serviceAccount: "cpd-editor-sa"
+      serviceAccountName: "cpd-editor-sa"
+      restartPolicy: Never
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      containers:
+        - name: "{{ $.Chart.Name }}-test"
+          image: "{{ $.Values.global.dockerRegistryPrefix }}/{{ (index $imageDetails "wml-ui-job").image.repository }}:{{ $.Values.global.imageTag }}"
+          imagePullPolicy: Always
+          command: ["/bin/sh","-c"]
+          args: ["curl -ik https://internal-nginx-svc:12443/ml-runtime/monitor", "status=$(curl -s -o /dev/null -w '%{http_code}' -k https://internal-nginx-svc:12443/ml-runtime/monitor) && [[ $status == 200 ]]"]
+          workingDir: /
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "4Gi"
+            requests:
+              cpu: "100m"
+              memory: "128Mi"

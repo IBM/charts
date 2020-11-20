@@ -1,0 +1,139 @@
+{{- $compName := "dataview-api-service" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "dataview-api-service"
+  labels:
+    name: {{ $compName }}
+    app: {{ $compName }}
+    chart: {{ $compName }}
+    component: {{ $compName }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-{{$compName}}"
+    helm.sh/chart: {{$.Chart.Name}}-{{$.Chart.Version | replace "+" "_" }}
+    icpdsupport/addOnId: "ccs"
+    icpdsupport/app: {{ $compName }}
+{{- if $.Values.global.annotations }}
+  annotations:
+    hook.deactivate.cpd.ibm.com/command: "[]"
+    hook.activate.cpd.ibm.com/command: "[]"
+{{- if ($.Values.global.cloudpakInstanceId) }}
+    cloudpakInstanceId: {{ .Values.global.cloudpakInstanceId | default "" | quote }}
+{{- end }}
+{{ toYaml $.Values.global.annotations | trim | indent 4 }}
+{{- end }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ $compName }}
+      release: {{ .Release.Name }}
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      name: {{ $compName }}
+      labels:
+        name: {{ $compName }}
+        app: {{ $compName }}
+        chart: {{ $compName }}
+        component: {{ $compName }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/name: "{{ .Release.Name }}-{{$compName}}"
+        helm.sh/chart: {{$.Chart.Name}}-{{$.Chart.Version | replace "+" "_" }}
+        icpdsupport/app: {{ $compName }}
+        icpdsupport/addOnId: "ccs"
+{{- if .Values.global.annotations }}
+      annotations:
+        hook.deactivate.cpd.ibm.com/command: "[]"
+        hook.activate.cpd.ibm.com/command: "[]"
+{{- if ($.Values.global.cloudpakInstanceId) }}
+        cloudpakInstanceId: {{ .Values.global.cloudpakInstanceId | default "" | quote }}
+{{- end }}
+{{ toYaml $.Values.global.annotations | trim | indent 8 }}
+{{- end }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccount: {{ .Values.service.viewer.sa }}
+      serviceAccountName: {{ .Values.service.viewer.sa }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - {{ .Values.resources.architecture }}
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      volumes:
+        - name: certificate
+          secret:
+             secretName: internal-nginx-svc-tls
+      containers:
+        - name: {{ $compName }}
+          image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.dataviewApiService.image.name }}:{{ .Values.dataviewApiService.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+          - name: https
+            containerPort: {{ .Values.container.apiHttpsPort }}
+            protocol: TCP
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000320999
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              cpu: {{ .Values.resources.limits.cpu }}
+              memory: {{ .Values.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .Values.resources.requests.memory }}      
+          livenessProbe:
+            httpGet:
+              path: /about.json
+              port: 9000
+              scheme: HTTP
+            initialDelaySeconds: 90
+            timeoutSeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /about.json
+              port: 9000
+              scheme: HTTP
+            initialDelaySeconds: 89
+            timeoutSeconds: 10
+            periodSeconds: 30
+          env:
+            {{- toYaml .Values.env | nindent 12 }}
+          volumeMounts:
+            - mountPath: /etc/certificate
+              name: certificate
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}

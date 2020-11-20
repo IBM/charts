@@ -1,31 +1,36 @@
+# Change license to true to indicate you have read and agree to license agreements
+license: false
 global:
   architecture: amd64
-  annotations:
-    cloudpakName: "IBM Cloud Pak for Data"
-    cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
-    cloudpakVersion: "3.0.1"
-    productMetric: "VIRTUAL_PROCESSOR_CORE"
-    productChargedContainers: "All"
-    productID: "ICP4D-Data-Refinery-3-0-1"
-    productName: "IBM Data Refinery Service for IBM Cloud Pak for Data"
-    productVersion: "3.0.1"
-  runAsUser: "1000320999" 
+  runAsUser: "1000320999"
+  runAsUserPreUpgrade: "1000321000"
   viewer:
     sa: "cpd-viewer-sa"
+  editor:
+    sa: "cpd-editor-sa"
 runtimes:
   workerNodes: 40
   preloadRuntimes: true
 image:
   pullPolicy: IfNotPresent
 replicas: 1
-shaperServer:
+updateSecrets: true
+wdpShaper:
   image:
-    name: shaper-server
-    tag: 3.0.561-amd64
+    name: wdp-shaper
+    tag: 3.2.183-amd64
+shaperPreinstall:
+  image:
+    name: shaper-preinstall
+    tag: 3.5.750-amd64
 wdpDataprep:
   image:
     name: wdp-dataprep
-    tag: 3.0.9-amd64
+    tag: 3.2.56-amd64
+shaperServer:
+  image:
+    name: shaper-server
+    tag: 3.5.750-amd64
 resources:
   limits:
     cpu: 1000m
@@ -37,18 +42,26 @@ ports:
   targetPort: 8443
   externalPort: 443
 livenessProbe:
-  initialDelaySeconds: 180
-  timeoutSeconds: 15
+  initialDelaySeconds: 20
+  timeoutSeconds: 5
   periodSeconds: 120
   successThreshold: 1
   failureThreshold: 10
 readinessProbe:
-  initialDelaySeconds: 120
-  timeoutSeconds: 15
+  initialDelaySeconds: 20
+  timeoutSeconds: 5
   periodSeconds: 60
   successThreshold: 1
   failureThreshold: 10
 environment:
+  wdpShaper:
+    bmAppName: "wdp-shaper"
+    bmAppHost: "wdp-shaper"
+    bmAppVersionEndPoint: "shaper/version"
+    serviceInstanceGuid: "wdp-shaper"
+    jvmArgs: "-Djava.security.properties=/opt/ibm/wlp/usr/servers/defaultServer/apps/expanded/wdp-shaper.war/resources/keystore.properties"
+    componentId: "wdp-shaper"
+    entry: "wdp-shaper"
   wdpDataprep:
     bmAppName: "wdp-dataprep"
     bmAppHost: "wdp-dataprep"
@@ -71,10 +84,12 @@ environment:
   containerMemory: "2Gi"
   enableSudo: "true"
   enableNewRelic: "false"
+  wdpUiProxyUrl: "$(GATEWAY_HOST)"
   environmentName: "ypprod"
   environmentType: "yp"
   deployTarget: "icp4data"
   deploymentTarget: "icp4data"
+  wdpShaperUrl: "$(GATEWAY_HOST)"
   domain: "ng.bluemix.net"
   cfDomain: "ng.bluemix.net"
   stage: "prod"
@@ -82,6 +97,10 @@ environment:
   nodeModulesCache: false
   enableMonitoring: false
   configEntitlements: true
+  configOcpuEnvOverride: true
+  configShaperRoutesEnabled: false
+  configOpencpuEnv: "staging"
+  configOpencpuEnvsUgiUrl: ""
   cfStagingTimeout: 30
   production: "true"
   wdpDataprepUrl: "$(GATEWAY_HOST)"
@@ -91,8 +110,7 @@ environment:
   usageApiUrl: "https://$(GATEWAY_HOST)"
   authIamIdClientId:
     name: auth__iamId__clientId
-    secret: secret-wdp-shaper
-    key: SHAPER_CLIENT_KEY
+    value: dc_refinery
   authIamIdClientSecret:
     name: auth__iamId__clientSecret
     secret: secret-wdp-shaper
@@ -105,14 +123,21 @@ environment:
     name: config__session__secret
     secret: secret-wdp-shaper
     key: SHAPER_SESSION_SECRET
-  configComposeRedisUrl:
-    name: config__composeRedis__url
-    secret: redis-url
-    key: redis-url.txt    
-  configComposeRedisEncryptionKey:
-    name: config__composeRedis__encryptionKey
+  configIcdRedisUrl:
+    name: config__icdRedis__url
+    secret: redis-ha
+    key: redis-url-ssl
+  configIcdRedisTlsServer:
+    name: config__icdRedis__tlsServer 
+    value: redis-ha-master-svc
+  configIcdRedisCertificate:
+    name: config__icdRedis__certificate
+    secret: redis-ha-cert
+    key: cacertb64.pem
+  configIcdRedisCryptoPassword:
+    name: config__icdRedis__cryptoPassword
     secret: secret-wdp-shaper
-    key: SHAPER_REDIS_ENCRYPTION_KEY
+    key: SHAPER_REDIS_CRYPTO_PASSWORD
   configSegmentWriteKey:
     name: config__segmentWriteKey
     secret: secret-wdp-shaper

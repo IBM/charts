@@ -179,7 +179,7 @@ The ‘cluster-admin’ role is required to deploy IBM Voice Gateway.
        apikey: <entitlement-key>
        namespace: ""
        name: base-registry
-     - url: cp.icr.io
+     - url: cp.icr.io/cp
        username: "cp"
        apikey: <entitlement-key>
        namespace: ""
@@ -323,41 +323,39 @@ The following table lists the configurable parameters of the ibm-voice-gateway-p
 | `arch.amd64`                                                   | Architecture preference for target worker node        | `3 - Most preferred`            |
 | `sip.enable`                                                   | Enable Voice Gateway                                  | `true`                          |
 | `sip.nodeSelector`                                                   | Node Selector label                                  | `n/a`                          |
-| `sip.resources.requests.cpu`                                                   | CPU resource request                                  | `1000m`                          |
-| `sip.resources.requests.memory`                                                   | Memory resource request                                  | `4Gi`                          |
-| `sip.resources.limits.cpu`                                                   | CPU resource limit                                  | `2000m`                          |
-| `sip.resources.limits.memory`                                                   | Memory resource limit                                  | `8Gi`                          |
+| `sip.mediaRelay.resources.requests.cpu`                                                   | CPU resource request for Media Relay container              | `0.5`    |
+| `sip.mediaRelay.resources.requests.memory`                                                   | Memory resource request for Media Relay container          | `1Gi`    |
+| `sip.sipOrchestrator.resources.requests.cpu`                                                   | CPU resource request for Sip Orchestrator container            | `1.0`    |
+| `sip.sipOrchestrator.resources.requests.memory`                                                   | Memory resource request for Sip Orchestrator container    | `1Gi`    |
 | `replicaCount`                                                 | Number of replicas                                    | `1`                             |
 | `tenantConfigSecretName`                                       | Tenant Config secret name                             | `vgw-tenantconfig-secret`       |
 | `image.sipOrchestrator.repository`                             | Docker registry for Sip Orchestrator image                           | `cp.icr.io/cp`       |
 | `image.sipOrchestrator.name`                             | Sip Orchestrator docker image name                           | `voice-gateway-so`       |
 | `image.sipOrchestrator.containerName`                          | Sip Orchestrator container name                       | `vgw-sip-orchestrator`          |
-| `image.sipOrchestrator.tag`                                    | Sip Orchestrator docker image tag                     | `1.0.6.0`                       |
+| `image.sipOrchestrator.tag`                                    | Sip Orchestrator docker image tag                     | `1.0.7.0`                       |
 | `image.mediaRelay.repository`                                  | Docker registry for Media Relay image                                | `cp.icr.io/cp`       |
 | `image.mediaRelay.name`                                  | Media Relay docker image name                                | `voice-gateway-mr`       |
 | `image.mediaRelay.containerName`                               | Media Relay container name                            | `vgw-media-relay`               |
-| `image.mediaRelay.tag`                                         | Media Relay docker image tag                          | `1.0.6.0`                       |
+| `image.mediaRelay.tag`                                         | Media Relay docker image tag                          | `1.0.7.0`                       |
 | `image.pullPolicy`                                             | Image pull policy                                     | `IfNotPresent`                        |
 | `sip.codecs.g729.enable`                                       | Enable G729 Codec Service                   | `false`                           |
 | `sip.codecs.image.repository`                                       | Docker image repository to pull G729 Codec Service docker image     | `cp.icr.io/cp`                           |
 | `sip.codecs.image.name`                                       | G729 Codec Service docker image name                   | `voice-gateway-codec-g729`                           |
 | `sip.codecs.image.containerName`                                       | G729 Codec Service container name                   | `vgw-codec-g729`                           |
-| `sip.codecs.image.tag`                                       | G729 Codec Service docker image tag                   | `1.0.6.0`                           |
-| `sip.codecs.g729.resources.requests.cpu`                                                   | CPU resource request                                  | `1000m`                          |
-| `sip.codecs.g729.resources.requests.memory`                                                   | Memory resource request                                  | `4Gi`                          |
-| `sip.codecs.g729.resources.limits.cpu`                                                   | CPU resource limit                                  | `2000m`                          |
-| `sip.codecs.g729.resources.limits.memory`                                                   | Memory resource limit                                  | `8Gi`                          |
+| `sip.codecs.image.tag`                                       | G729 Codec Service docker image tag                   | `1.0.7.0`                           |
+| `sip.codecs.g729.resources.requests.cpu`                                                   | CPU resource request                                  | `0.5`                          |
+| `sip.codecs.g729.resources.requests.memory`                                                   | Memory resource request                                  | `1Gi`                          |
 | `sip.codecs.g729.envVariables.webSocketServerPort`                                                   | Server port to use for G729 Codec Service                                 | `9001`                          |
 | `sip.codecs.g729.envVariables.logLevel`                                                   | Log level for G729 Codec Service                              | `INFO`                          |
 | `persistence.useDynamicProvisioning`                           | Dynamic provisioning setup                            | `true`                         |
 | `persistence.recordingsVolume.enablePersistentRecordings`      | Enable persistent volume for recordings               | `false`                         |
 | `persistence.recordingsVolume.name`                            | Name of the persistent volume claim                   | `recordings`                    |
 | `persistence.recordingsVolume.storageClassName`                | Existing storage class name                           | `n/a`                           |
-| `persistence.recordingsVolume.size`                            | Size of the volume claim                              | `2Gi`                           |
+| `persistence.recordingsVolume.size`                            | Size of the volume claim                              | `15Gi`                           |
 | `persistence.logsVolume.enablePersistentLogs`                  | Enable persistent volume for logs                     | `false`                         |
 | `persistence.logsVolume.name`                                  | Name of the persistent volume claim                   | `persistent-logs`               |
 | `persistence.logsVolume.storageClassName`                      | Existing storage class name                           | `n/a`                           |
-| `persistence.logsVolume.size`                                  | Size of the volume claim                              | `2Gi`                           |
+| `persistence.logsVolume.size`                                  | Size of the volume claim                              | `10Gi`                           |
 | `mediaRelayEnvVariables.sdpAddress`                      | Media Relay SDP Address                                   | `n/a`                       |
 | `mediaRelayEnvVariables.mediaRelayWsHost`                      | Media Relay WS Host                                   | `0.0.0.0`                       |
 | `mediaRelayEnvVariables.mediaRelayWsPort`                      | Media Relay WS Port                                   | `8080`                          |
@@ -426,12 +424,16 @@ The following table lists the configurable parameters of the ibm-voice-gateway-p
 | `sms.image.repository`                                         | Docker Registry for SMS Gateway image                                | `cp.icr.io/cp`      |
 | `sms.image.name`                                         | SMS Gateway docker image name                                | `voice-gateway-sms`      |
 | `sms.image.containerName`                                      | SMS Gateway container name                            | `vgw-sms-gateway`               |
-| `sms.image.tag`                                                | SMS Gateway docker image tag                          | `1.0.6.0`                       |
+| `sms.image.tag`                                                | SMS Gateway docker image tag                          | `1.0.7.0`                       |
 | `sms.image.containerPort`                                      | SMS Gateway for TCP                                   | `9080`                          |
 | `sms.image.servicePort`                                      | Service Port for TCP connection                                   | `30087`                          |
 | `sms.image.containerPortTls`                                   | SMS Gateway for TLS                                   | `9443`                          |
 | `sms.image.servicePortTls`                                   | Service Port for TLS connection                                   | `30047`                          |
 | `sms.image.pullPolicy`                                         | Image pull policy                                     | `IfNotPresent`                  |
+| `sms.resources.requests.cpu`                                                   | CPU resource request for SMS container              | `0.25`    |
+| `sms.resources.requests.memory`                                                   | Memory resource request for SMS container          | `250Mi`    |
+| `sms.resources.limits.cpu`                                                   | CPU resource limit for SMS container            | `2.0`    |
+| `sms.resources.limits.memory`                                                   | Memory resource limit for SMS container    | `8Gi`    |
 | `sms.networkPolicy.smsProviderPort`                  | SMS Provider Port                                     | `80`                  |
 | `sms.networkPolicy.smsProviderPortTls`             | SMS Provider TLS Port                                     | `443`                  |
 | `sms.networkPolicy.disableNonSecurePort`                    | Disable Non Secure Port. Recommended to be enabled in Production Environment                      | `false`                  |
@@ -447,7 +449,7 @@ The following table lists the configurable parameters of the ibm-voice-gateway-p
 | `sms.persistence.volume.usageReports.enable`                   | Enable persistent volume for usageReports             | `false`                         |
 | `sms.persistence.volume.usageReports.name`                     | Name of the persistent volume claim                   | `usage-reports`                 |
 | `sms.persistence.volume.usageReports.storageClassName`         | Existing storage class name                           | `n/a`                           |
-| `sms.persistence.volume.usageReports.size`                     | Size of the volume claim                              | `2Gi`                           |
+| `sms.persistence.volume.usageReports.size`                     | Size of the volume claim                              | `1Gi`                           |
 | `sms.logging.level`                                            | Log Level                                             | `info`                          |
 | `sms.logging.maxFiles`                                         | Log Max Files                                         | `5`                             |
 | `sms.logging.maxFileSize`                                      | Log Max File Size                                     | `100`                           |
@@ -482,13 +484,9 @@ The following table lists the configurable parameters of the ibm-voice-gateway-p
 | `sms.reporting.usageReportingMaxBackupFiles`                   | Max Usage report backup files                         | `100 `                          |
 | `sms.reporting.transcriptionReportingMaxBackupFiles`           | Max transcription report backup files                 | `1000`                          |
 | `sms.reporting.maxEventsToBatch`                               | Max reporting events in one publish                   | `500`                           |
-| `test.image.repository`                                         | Docker Registry for test image                                | `cp.icr.io/cp`      |
-| `test.image.name`                                         | Test docker image name                                | `opencontent-common-utils`      |
-| `test.image.tag`                                                | Test docker image tag                          | `1.1.7-amd64`                       |
-| `test.image.pullPolicy`                                                | Test docker image pullPolicy                          | `IfNotPresent`                       |
 | `dvt.image.repository`                                         | Docker Registry for DVT image                                | `cp.icr.io/cp`      |
 | `dvt.image.name`                                         | DVT docker image name                                | `voice-gateway-dvt`      |
-| `dvt.image.tag`                                                | DVT docker image tag                          | `1.0.6.0`                       |
+| `dvt.image.tag`                                                | DVT docker image tag                          | `1.0.7.0`                       |
 | `dvt.image.pullPolicy`                                                | DVT docker image pullPolicy                          | `IfNotPresent`                       |
 
 
