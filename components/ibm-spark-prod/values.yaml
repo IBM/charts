@@ -1,0 +1,251 @@
+# This is a YAML-formatted file.
+
+environment:
+  name: spark-hb
+  
+sa:
+  editor: cpd-editor-sa
+  viewer: cpd-viewer-sa
+  
+user:
+  uid: 1000320999
+  zensysId: 1000321000
+
+icp4d:
+  nginxUrl: https://internal-nginx-svc:12443/v2/spark
+  environmentUrl: https://internal-nginx-svc:12443
+  isFipsEnabled: "false"
+  
+charts:
+  createKernel: create-kernel-icp4d-1.1.1.tgz
+  createJobV1: spark-submit-job-1.1.1.tgz
+  createJobV2: spark-submit-job-v2-icp4d-1.1.1.tgz
+  createJobV3: spark-submit-job-v3-icp4d-1.1.1.tgz
+  deleteKernel: delete-kernel-icp4d-1.1.1.tgz
+  
+# Use by image-secret.yaml
+global:
+  dockerRegistryPrefix: docker-registry.default.svc:5000/hummingbird/
+  containerPlatform: "icp"
+  architecture: amd64
+  ibmProduct: ""
+  replicaCount: ""
+
+# Use by micro-service-confidential-properties.yaml, micro-service-configmap.yaml
+iam:
+  serviceToken: iam_dummy_token
+  dataplane:
+    serviceToken: iam_dummy_token
+
+db:
+  version: 1
+
+spark:
+  image:
+    tag: 3.0.30-x86_64
+    tag23: 2.3.4-v15-x86_64
+    tag24: 2.4.4-v15-x86_64
+
+dbSpec:
+  scriptPath: /opt/ibm/entrypoint/
+  image: spark-hb-db-spec
+
+
+zenMetastore:
+  user: spark_user
+  hostname: zen-metastoredb-public
+  port: 26257
+  dbName: spark
+  ssl: require
+  caCert: /opt/hb/confidential_config/zenmetastore_certs/ca.crt
+  clientCert: /opt/hb/confidential_config/zenmetastore_certs/client.spark_user.crt
+  clientKey: /opt/hb/confidential_config/zenmetastore_certs/client.spark_user.key
+  clientKeyPkcs8: /opt/hb/confidential_config/zenmetastore_certs/client.spark_user.key.pk8
+
+zenUserHomeVol:
+  name: user-home-pvc
+  metaStoreCertPath: "_global_/security/metastore"
+  jwtCertPath: "_global_/config/jwt"
+
+cleanupCron:
+  image: spark-hb-python
+  scriptPath: /root/scripts
+  configPath: /root/cron_config
+kernelCleanupCron:
+  schedule: "*/30 * * * *"
+
+jobCleanupCron:
+  schedule: "*/30 * * * *"
+  
+terminatingPodCleanupCron:
+  schedule: "*/30 * * * *"
+  
+# Use by micro-services
+  
+kernelService:
+  path: ae
+  contextRoot: "ae/v1"
+  
+jobService:
+  pathV2: jobService/v2
+  contextRoot: "jobService"
+
+instanceManagerService:
+  path: instance_manager/v1/instance
+  contextRoot: "instance_manager/v1"
+
+dataPlaneManagerService:
+  path: dataplane_manager/v1/dataplane
+  
+helmBasedService:
+  path: helmDeployer/v1/deployerDataPlane
+
+zenCore: 
+  tillerEndpoint: http://zen-core-api-svc:3333/v2/release
+  
+serviceBroker: 
+  type: cpd
+
+helmRepo:
+  image: spark-hb-helm-repo
+  port: 9080
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 64Mi
+    
+helmReadinessProbe:
+  initialDelaySeconds: "1"
+  periodSeconds: "1"
+  failureThreshold: "120"
+helmLivenessProbe:
+  initialDelaySeconds: "60"
+  periodSeconds: "30"
+  failureThreshold: "120"
+    
+microService:
+  image: spark-hb-control-plane
+  scheme: https
+  dataplaneScheme: http
+  confidentialProperties: /opt/hb/confidential_config
+  deploymentConfigPath: /opt/hb/deployment_config
+  resourceLimitPath: /opt/hb/resource_limit
+  wdpPropertiesPath: /opt/hb/confidential_config/wdp
+  serviceBrokerTokenPath: /opt/hb/confidential_config/cpd_service_broker
+  zenMetastoreCerts: /opt/hb/confidential_config/zenmetastore_certs
+  jwtCerts: /opt/hb/confidential_config/jwt
+  pathPrefix: /opt/hb
+  trustStorePath: /opt/ibm/java/jre/lib/security
+  wdpSecretName: wdp-service-id
+  serviceBrokerTokenSecret: zen-service-broker-secret
+  port: 9443
+  pullPolicy: Always
+  requests:
+    cpu: 1.2
+    cpu200: "200m"
+    cpu100: "100m" 
+    nocpu: "0m"
+    memory: "2Gi"
+    memory256: "256Mi"
+    memory128: "128Mi"
+    nomemory: "0Mi"
+  limits:
+    cpu: 1.2
+    cpu100: "100m"
+    memory: "2Gi"
+    memory256: "256Mi"
+    memory128: "128Mi"
+    nomemory: "0Mi"
+  readinessProbeScheme: HTTPS
+  isLocalMode: true
+  svcType: ""
+  dataplanePort: ""
+readinessProbe:
+  initialDelaySeconds: "180"
+  periodSeconds: "30"
+  failureThreshold: "15"
+  timeoutSeconds: "5"
+livenessProbe:
+  initialDelaySeconds: "300"
+  periodSeconds: "60"
+  failureThreshold: "120"
+  timeoutSeconds: "10"
+
+# list of icp4d supported templates
+templates:
+  list: spark-2.3.0-jaas-v2-icp4d-template,spark-2.3.0-rstudio-icp4d-template,spark-2.3.0-shaper-v2-icp4d-template,spark-2.3.0-wml-icp4d-template
+
+# data plane registration details
+dataplaneReg:
+  name: dataplane
+  image: spark-hb-db-spec
+  scriptPath: /opt/ibm/entrypoint/
+  requests:
+    cpu: 20m
+  limits:
+    memory: 64Mi
+  readinessProbe:
+    initialDelaySeconds: "300"
+    periodSeconds: "30"
+    failureThreshold: "120"
+  livenessProbe:
+    initialDelaySeconds: "300"
+    periodSeconds: "60"
+    failureThreshold: "120"
+  
+  
+# trust store properties
+trustStore:
+  password: changeit
+  image: spark-hb-truststore-util
+  icp4dCertPath: /opt/hb/icp4d-certs
+  certSecretName: internal-nginx-svc-tls 
+  certFileName: certificate.pem
+  scriptPath: /opt/ibm/entrypoint/
+  icp4dTsSecretName: spark-hb-java-trust-store
+  osCertSecretName: spark-hb-os-trust-store
+
+# data plane nfs details
+nfs:
+  path: /dummyPath/data1
+  server: dummy.adn.networklayer.com
+
+nginxRepo:
+  resolver: "kubernetes.default"
+
+nginx:
+  name: "nginx"
+  scheme: http
+  image: "spark-hb-nginx"
+  requestCpu: "100m"
+  requestMemory: "128Mi"
+  limitCpu: "100m"
+  limitMemory: "128Mi"
+  containerPort: "9999"
+  port: "9999"
+  workerProcess: "5"
+  workerConnection: "1024"
+  readinessProbe:
+    initialDelaySeconds: "1"
+    periodSeconds: "1"
+    failureThreshold: "120"
+  livenessProbe:
+    initialDelaySeconds: "120"
+    periodSeconds: "30"
+
+sparkMaster:
+  component: "spark-master"
+
+jkg:
+  component: "jkg"
+  image: spark-hb-jkg
+  job:
+    jobCompletion: 32
+  cronjob:
+    jobReplica: 40
+    jobCompletion: 20
+    schedule: "0 */2 * * *"
+
+sparkHistory:
+  image: spark-hb-jkg

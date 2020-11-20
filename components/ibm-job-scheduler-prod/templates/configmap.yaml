@@ -1,0 +1,120 @@
+{{- $imagesList := .Files.Get "imagesList.yaml" }}
+{{- $imagesListDetails := fromYaml $imagesList }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ws-job-scheduler-configmap
+  annotations:
+    {{- if .Values.global.annotations }}
+{{ toYaml .Values.global.annotations | trim | indent 4 }}
+    {{- end }}
+  labels:
+    app: {{ (index $imagesListDetails "job-trigger").image.repository }}
+    chart: {{ template "watson-studio.chart" $ }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    icpdata_addon: "true"
+    icpdata_addon_version: "3.0.1"
+    helm.sh/chart: {{ template "watson-studio.chart" $ }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  nginx.conf: |
+    set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
+    location /v2/jobs {
+      proxy_set_header Host $host;
+      set $jobs_api jobs-api.$nsdomain;
+      proxy_pass https://$jobs_api:443;
+    }
+    location /jobs {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $jobs_ui jobs-ui.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header X-Content-Type-Options "nosniff";
+      add_header X-Frame-Options "sameorigin";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$jobs_ui:443;
+    }
+
+  job-trigger-server.json: |
+    {
+      "displayName": "Scheduler Job",
+      "description": "Pod for forwarding curl call to schedule the job.",
+      "annotations": [
+        {
+          "name": "cloudpakName",
+          "value": "{{ .Values.global.annotations.cloudpakName }}"
+        },
+        {
+          "name": "cloudpakId",
+          "value": "{{ .Values.global.annotations.cloudpakId }}"
+        },
+        {
+          "name": "cloudpakVersion",
+          "value": "{{ .Values.global.annotations.cloudpakVersion }}"
+        },
+        {
+          "name": "productMetric",
+          "value": "{{ .Values.global.annotations.productMetric }}"
+        },
+        {
+          "name": "productChargedContainers",
+          "value": "{{ .Values.global.annotations.productChargedContainers }}"
+        },
+        {
+          "name": "productID",
+          "value": "{{ .Values.global.annotations.productID }}"
+        },
+        {
+          "name": "productName",
+          "value": "{{ .Values.global.annotations.productName }}"
+        },
+        {
+          "name": "productVersion",
+          "value": "{{ .Values.global.annotations.productVersion }}"
+        }
+      ],
+      "author": "IBM",
+      "tested": true,
+      "isService": false,
+      "isHidden": true,
+      "runtimeType": "job-trigger",
+      "replicas": 1,
+      "image": "{{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ (index $imagesListDetails "job-trigger").image.repository }}:{{ .Values.global.imageTag }}",
+      "privileged": false,
+      "command": ["sh", "/home/node/scripts/job-trigger.sh"],
+      "volumes": [
+        {
+          "volume": "user-home",
+          "mountPath": "/user-home",
+          "claimName": "user-home-pvc"
+        }
+      ],
+      "resources": {
+        "cpu": {
+          "request": -1,
+          "minimum": 100
+        },
+        "gpu": {
+          "request": -1,
+          "minimum": 0
+        },
+        "memory": {
+          "request": -1,
+          "minimum": 64
+        },
+        "duration": {
+          "value": -1,
+          "units": "unix"
+        }
+      }
+    }
+  files: |
+    [ {
+        "dest": "/user-home/_global_/config/.runtime-definitions/ibm/job-trigger-server.json",
+        "contentKey": "job-trigger-server.json" }
+    ]

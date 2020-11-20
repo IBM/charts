@@ -23,6 +23,7 @@ spec:
         productID: {{ include "baas.productID" . }}
         productName: {{ include "baas.productName" . }}
         productVersion: {{ include "baas.productVersion" . }}
+        productMetric: {{ include "baas.productMetric" . }}
       labels:
         app.kubernetes.io/name: {{ include "baas.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
@@ -41,10 +42,11 @@ spec:
                 values:
                 - {{ .Values.arch }}
       securityContext:
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
         runAsUser: 1000
-        runAsGroup: 1000
-        runAsNonRoot: true
         fsGroup: 1000
+{{- end }}
+        runAsNonRoot: true
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -80,7 +82,11 @@ spec:
             command:
               - /bin/bash
               - -c
+              {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+              - /usr/bin/testcsa -i
+              {{- else }}
               - /usr/bin/testcsa
+              {{- end }}
           initialDelaySeconds: {{ .Values.sdl.readinessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.sdl.readinessProbe.periodSeconds }}
           timeoutSeconds: {{ .Values.sdl.readinessProbe.timeoutSeconds }}
@@ -91,7 +97,11 @@ spec:
             command:
               - /bin/bash
               - -c
+              {{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+              - /usr/bin/testcsa -i
+              {{- else }}
               - /usr/bin/testcsa
+              {{- end }}
           initialDelaySeconds: {{ .Values.sdl.livenessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.sdl.livenessProbe.periodSeconds }}
           timeoutSeconds: {{ .Values.sdl.livenessProbe.timeoutSeconds }}
@@ -116,6 +126,9 @@ spec:
         - name: tls-key-crt
           mountPath: /etc/tls-key-crt
           readOnly: true
+        - name: tls-service-ca
+          mountPath: /etc/tls-crt
+          readOnly: true
       volumes:
       - name: credentials
         secret:
@@ -127,6 +140,20 @@ spec:
           defaultMode: 292
       - name: tls-key-crt
         secret:
+{{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          secretName: {{ include "baas.fullname" . }}-scheduler-tls
+{{- else }}
           secretName: {{ include "baas.fullname" . }}-key-crt
+{{- end }}
           defaultMode: 256
+      - name: tls-service-ca
+{{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        configMap:
+          name: {{ include "baas.fullname" . }}-service-ca
+          defaultMode: 292
+{{- else }}
+        secret:
+          secretName: {{ include "baas.fullname" . }}-crt
+          defaultMode: 256
+{{- end }}
       serviceAccountName: {{ include "baas.fullname" . }}-scheduler

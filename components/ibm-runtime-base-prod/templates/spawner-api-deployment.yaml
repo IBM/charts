@@ -1,0 +1,134 @@
+{{- $compName := "spawner-api" -}}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: spawner-api
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+    app.kubernetes.io/name: spawner-api
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+spec:
+  strategy:
+    type: RollingUpdate
+  replicas: 2
+  selector:
+    matchLabels:
+      {{- include "zenhelper.labels" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+        app.kubernetes.io/name: spawner-api
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsUser: {{ .Values.spawnerApiK8s.runAsUser }}
+      serviceAccountName: {{ .Values.spawnerApiK8s.runAsSvcAccount }}
+      terminationGracePeriodSeconds: 0
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_storage: "true"
+      {{- end }}
+      containers:
+      - name: spawner-api-container
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.spawnerApiK8s.image.repository }}:{{ .Values.spawnerApiK8s.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        env:
+        - name: SPAWNER_DEFS_PATH
+          value: "/user-home/_global_/config/.runtime-definitions/ibm"
+        - name: SPAWNER_USER_DEFS_PATH
+          value: "/user-home/_global_/config/.runtime-definitions/custom"
+        - name: SPAWNER_REMOTE_HOSTS_PATH
+          value: "/cc-home/_global_/config/.remote-hosts"
+        - name: SPAWNER_GPU_DRIVERS_PATH
+          value: "/var/lib/nvidia-docker"
+        - name: SPAWNER_GPU_RESOURCE_KEY
+          value: nvidia.com/gpu
+        - name: SPAWNER_GPU_DRIVER_MOUNTS_DISABLED
+          value: "true"
+        - name: PROJECTS_API_SVC_HOST
+          value: "https://internal-nginx-svc:12443"
+        - name: ASSET_FILES_API_SVC_HOST
+          value: "https://internal-nginx-svc:12443"
+        - name: RUNTIME_DEFS_API_SVC_HOST
+          value: "https://internal-nginx-svc:12443"
+        - name: RUNTIME_ENVS_API_SVC_HOST
+          value: "https://internal-nginx-svc:12443"
+        - name: USERMGMT_HOST
+          value: "https://internal-nginx-svc:12443/api/v1/usermgmt"
+        - name: SPAWNER_LOG_LEVEL
+          value: INFO
+        - name: APP_ENV_CUSTOM_SERVICE_TO_SERVICE_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: wdp-service-id
+              key: service-id-credentials
+        - name: NAMESPACE
+          value: {{.Release.Namespace}}
+        - name: SPAWN_AS_SERVICE_ACCOUNT
+          value: {{ .Values.spawnerApiK8s.spawnAsSvcAccount | quote }}
+        - name: SPAWN_AS_USER_ID
+          value: {{ .Values.spawnerApiK8s.spawnAsUser | quote }}
+        {{- if .Values.global.baseInstaller }}
+        - name: DSXL_INSTALLER
+          value: "baseInstaller"
+        {{- end }}
+        ports:
+        - containerPort: 8443
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /spawner/monitor
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /spawner/monitor
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        volumeMounts:
+        - mountPath: /etc/certificate
+          name: certificate
+        - mountPath: /user-home/_global_/config/jwt
+          name: user-home-mount
+          readOnly: true
+          subPath: _global_/config/jwt
+        - mountPath: /tmp
+          name: user-home-mount
+          subPath: tmp
+        - mountPath: /etc/spawner/secrets
+          name: config
+        resources:
+{{ toYaml .Values.spawnerApiK8s.resources.yaml | indent 10 }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: {{ .Values.spawnerApiK8s.runAsUser }}
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: certificate
+        secret:
+          secretName: ca-certificate-chain-trust
+      - name: config
+        secret:
+          secretName: https-cert-key-secret
+      {{- include "zenhelper.user-home-pvc" .  | indent 6 }}
