@@ -1,0 +1,96 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ .Values.environment.name }}-kernel-cleanup-cron
+  labels: 
+    name: {{ .Values.environment.name }}-kernel-cleanup-cron
+    chart: "{{ .Chart.Name }}"
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app: {{ .Values.environment.name }}-kernel-cleanup-cron
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: {{ .Release.Name }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+spec:
+  schedule: "{{ .Values.kernelCleanupCron.schedule }}"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 0
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 1800
+      template:
+        metadata:
+          labels: 
+            name: {{ .Values.environment.name }}-kernel-cleanup-cron
+            chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+            heritage: {{ .Release.Service }}
+            release: {{ .Release.Name }}
+            app: {{ .Values.environment.name }}-kernel-cleanup-cron
+            app.kubernetes.io/instance: {{ .Release.Name }}
+            app.kubernetes.io/managed-by: helm
+            app.kubernetes.io/name: {{ .Release.Name }}
+            helm.sh/chart: "{{ .Chart.Name }}"
+          annotations:
+            cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+            cloudpakVersion: "3.0.1"
+            cloudpakName: "IBM Cloud Pak for Data"
+            productMetric: "VIRTUAL_PROCESSOR_CORE"
+            productChargedContainers: "All"
+            productName: "Analytics Engine powered by Apache Spark"
+            productID: "ICP4D-Spark-00000"
+            productVersion: "3.0.1"
+        spec:
+            securityContext:
+              runAsUser: {{ .Values.user.uid }}
+            affinity:
+              nodeAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  nodeSelectorTerms:
+                    - matchExpressions:
+                      - key: beta.kubernetes.io/arch
+                        operator: In
+                        values:
+                          - {{ .Values.global.architecture }}
+            hostNetwork: false
+            hostPID: false
+            hostIPC: false
+            containers:
+            - name: {{ .Values.environment.name }}-kernel-cleanup-cron
+              image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.cleanupCron.image }}:{{ .Values.spark.image.tag }}"
+              imagePullPolicy: {{ .Values.microService.pullPolicy }}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - ALL 
+                runAsUser: {{ .Values.user.uid }}
+                runAsNonRoot: true
+                privileged: false
+                readOnlyRootFilesystem: false
+              resources:
+                requests:
+                  cpu: {{ .Values.microService.requests.cpu100 }}
+                  memory: {{ .Values.microService.requests.memory128 }}
+                limits:
+                  cpu: {{ .Values.microService.requests.cpu100 }}
+                  memory: {{ .Values.microService.limits.memory128 }}
+              command: ["/bin/sh", "-c"]
+              args : ["python {{ .Values.cleanupCron.scriptPath }}/purge_idle_failed_kernel.py {{ .Values.microService.scheme }}://{{ .Values.environment.name }}-control-plane:{{ .Values.microService.port }}/{{ .Values.instanceManagerService.path }} {{ .Values.icp4d.nginxUrl }}/{{ .Values.kernelService.path }} {{ .Values.microService.scheme }}://{{ .Values.environment.name }}-control-plane:{{ .Values.microService.port }}/{{ .Values.kernelService.contextRoot }} {{ .Values.cleanupCron.configPath }}/idleshutdown.config"]
+              volumeMounts:
+              - name: "{{ .Values.environment.name }}-cleanup-configs"
+                mountPath: "{{ .Values.cleanupCron.configPath }}"
+              - name: "{{ .Values.environment.name }}-cleanup-scripts"
+                mountPath: "{{ .Values.cleanupCron.scriptPath }}"
+            restartPolicy: "Never"
+            serviceAccount: {{ .Values.sa.viewer }}
+            volumes:
+            - name: "{{ .Values.environment.name }}-cleanup-configs"
+              configMap:
+                name: "{{ .Values.environment.name }}-cleanup-configs"
+            - name: "{{ .Values.environment.name }}-cleanup-scripts"
+              configMap:
+                name: "{{ .Values.environment.name }}-cleanup-scripts"

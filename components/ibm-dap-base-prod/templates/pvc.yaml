@@ -1,0 +1,32 @@
+{{- if has "asset-files-api" $.Values.microservicelist }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: file-api-claim
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: {{.Chart.Name}}
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+    app: watson-studio-pvc
+    chart: {{ template "watson-studio.chart" $ }}
+    release: {{ $.Chart.Name }}
+    heritage: {{ .Release.Service }}
+{{- if and ($.Values.global.annotations) (eq $.Values.microservice.deployment.env "icp4d") }}
+  annotations:
+{{ toYaml $.Values.global.annotations | trim | indent 4 }}
+{{- end }}
+spec:
+  accessModes:
+  - ReadWriteMany
+  {{ if .Values.global.storageClassName }}
+  storageClassName: {{ default nil .Values.global.storageClassName | quote }}
+  {{- else if .Values.global.persistence.useDynamicProvisioning }}
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+  {{ else }}
+  storageClassName: ""
+{{- end }}
+  resources:
+    requests:
+      storage: 30Gi
+{{- end }}

@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spawner-configmap
+  labels:
+    {{- include "zenhelper.labels" (list . "") | indent 4 }}
+    icpdata_addon: "true"
+    icpdata_addon_version: "3.0.1"
+    app.kubernetes.io/name: spawner-configmap
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+data:
+  nginx.conf: |
+    set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
+    location /spawner/ {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      proxy_set_header Host $host:31843;
+      set $spawner_api spawner-api-svc.$nsdomain;
+      proxy_pass https://$spawner_api:443;
+    }
+    location /jobs/headless {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      proxy_set_header Host $host:31843;
+      set $spawner_api spawner-api-svc.$nsdomain;
+      proxy_pass https://$spawner_api:443;
+    }
+    location /dsx-utils/v1/dsxhi/configuration/validate {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      rewrite ^/dsx-utils/(.*?)$ /$1 break;
+      proxy_pass https://utils-api-svc:8443;
+    }
+    location /dsx-utils/v1/dsxhi/registrations {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      rewrite ^/dsx-utils/(.*?)$ /$1 break;
+      proxy_pass https://utils-api-svc:8443;
+    }
+    location /dsx-utils/quota {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      rewrite ^/dsx-utils/(.*?)$ /$1 break;
+      proxy_pass https://utils-api-svc:8443;
+    }
+    location /dsx-utils/ {
+      access_by_lua_file /nginx_data/checkjwt-admin.lua;
+      rewrite ^/dsx-utils/(.*?)$ /$1 break;
+      proxy_pass https://utils-api-svc:8443;
+    }
+    location ~ ^/ibm-dsxhi-(.*?)/(.*) {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host:$server_port/ibm-dsxhi-$1;
+      rewrite ^/ibm-dsxhi-(.*?)/(.*)$ /$2 break;
+      proxy_pass https://ibm-dsxhi-$1-svc.$nsdomain:8443;
+    }

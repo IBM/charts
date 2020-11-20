@@ -1,0 +1,74 @@
+{{- if .Values.secret }}
+{{- $files := $.Files }}
+{{- $imagesList := $files.Get "imagesList.yaml" }}
+{{- $imageDetails := fromYaml $imagesList }}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "change-pvc-permissions"
+{{- if and ($.Values.global.annotations) (eq $.Values.microservice.deployment.env "icp4d") }}
+  annotations:
+{{ toYaml $.Values.global.annotations | trim | indent 4 }}
+{{- end }}
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: {{.Chart.Name}}
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+    app: change-pvc-permissions
+    chart: {{ template "watson-studio.chart" $ }}
+    release: {{ $.Chart.Name }}
+    run: "change-pvc-permissions"
+    heritage: {{ $.Release.Service }}
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        app.kubernetes.io/name: {{.Chart.Name}}
+        helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+        app: change-pvc-permissions
+        chart: change-pvc-permissions
+        component: change-pvc-permissions
+        release: change-pvc-permissions
+        heritage: {{ .Release.Service }}
+{{- if and ($.Values.global.annotations) (eq $.Values.microservice.deployment.env "icp4d") }}
+      annotations:
+{{ toYaml $.Values.global.annotations | trim | indent 8 }}
+{{- end }}
+    spec:
+      serviceAccount: "cpd-admin-sa"
+      serviceAccountName: "cpd-admin-sa"
+      restartPolicy: Never
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      containers:
+        - name: "change-pvc-permissions"
+          image: "{{ $.Values.global.dockerRegistryPrefix }}/{{ (index $imageDetails "cp4d-ws-secrets-job").image.repository }}:{{ $.Values.global.imageTag }}"
+          imagePullPolicy: Always
+          workingDir: /
+          volumeMounts:
+          - mountPath: "/mnt/asset_file_api"
+            name: asset-files-api-claim
+          resources:
+            limits:
+              cpu: "0.1"
+              memory: "128Mi"
+            requests:
+              cpu: "0.1"
+              memory: "128Mi"
+          command: ["/bin/sh","-c"]
+          args: ["ls -lah /mnt/ && echo ===== && echo ===== && sudo mkdir -p /mnt/asset_file_api/projects && sudo mkdir -p /mnt/asset_file_api/catalogs && sudo mkdir -p /mnt/asset_file_api/spaces && sudo mkdir -p /mnt/asset_file_api/tmp && sudo chown -R node:node /mnt/asset_file_api && ls -lah /mnt/"]
+      volumes:
+        - name: asset-files-api-claim
+          persistentVolumeClaim:
+            claimName: "file-api-claim"
+{{- end }}

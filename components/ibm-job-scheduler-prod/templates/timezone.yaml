@@ -1,0 +1,23 @@
+{{- $imagesList := .Files.Get "imagesList.yaml" }}
+{{- $imagesListDetails := fromYaml $imagesList }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: timezone
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    {{- if .Values.global.annotations }}
+{{ toYaml .Values.global.annotations | trim | indent 4 }}
+    {{- end }}
+  labels:
+    app: {{ (index $imagesListDetails "job-trigger").image.repository }}
+    chart: {{ template "watson-studio.chart" $ }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    helm.sh/chart: {{ template "watson-studio.chart" $ }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  masterTimezone: "{{ .Values.global.masterTimezone }}"

@@ -1,0 +1,126 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.environment.name }}-{{ .Values.nginx.name }}-external
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: "{{ .Values.environment.name }}-{{ .Values.nginx.name }}-external"
+    chart: "{{ .Chart.Name }}"
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: {{ .Release.Name }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+spec:
+  ports:
+  - name: proxy
+    port: {{ .Values.nginx.containerPort }}
+    protocol: TCP
+    targetPort: {{ .Values.nginx.port }}
+  selector:
+    app: {{ .Values.environment.name }}-{{ .Values.nginx.name }}-external
+---
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.environment.name }}-{{ .Values.nginx.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: "{{ .Values.environment.name }}-{{ .Values.nginx.name }}-external"
+    chart: "{{ .Chart.Name }}"
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: {{ .Release.Name }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+spec:
+  selector:
+    matchLabels:
+      app: "{{ .Values.environment.name }}-{{ .Values.nginx.name }}-external"
+      chart: "{{ .Chart.Name }}"
+      heritage: {{ .Release.Service }}
+      release: {{ .Release.Name }}
+  replicas: {{ default 1 .Values.global.replicaCount }}
+  template:
+    metadata:
+      annotations:
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion: "3.0.1"
+        cloudpakName: "IBM Cloud Pak for Data"
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productChargedContainers: "All"
+        productName: "Analytics Engine powered by Apache Spark"
+        productID: "ICP4D-Spark-00000"
+        productVersion: "3.0.1"
+      labels:
+        app: {{ .Values.environment.name }}-{{ .Values.nginx.name }}-external
+        chart: {{ .Chart.Name }}
+        heritage: {{ .Release.Service }}
+        release: {{ .Release.Name }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: helm
+        app.kubernetes.io/name: {{ .Release.Name }}
+        helm.sh/chart: "{{ .Chart.Name }}"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.global.architecture }}
+      serviceAccount: {{ .Values.sa.viewer }}
+      securityContext:
+        runAsUser: {{ .Values.user.uid }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+      - name : {{ .Values.environment.name }}-{{ .Values.nginx.name }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsUser: {{ .Values.user.uid }}
+          runAsNonRoot: true
+          privileged: false
+          readOnlyRootFilesystem: false
+        imagePullPolicy: {{ .Values.microService.pullPolicy }}
+        image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.nginx.image }}:{{ .Values.spark.image.tag }}
+        ports:
+        - containerPort: {{ .Values.nginx.containerPort }}
+          protocol: TCP
+        command: ["/bin/bash", "-c"]
+        args: ["/usr/sbin/nginx"]
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.nginx.containerPort }}
+          initialDelaySeconds: {{ .Values.nginx.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.nginx.readinessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.nginx.readinessProbe.failureThreshold }}
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.nginx.containerPort }}
+          initialDelaySeconds: {{ .Values.nginx.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.nginx.livenessProbe.periodSeconds }}
+        resources:
+          requests:
+            cpu: {{ .Values.nginx.requestCpu }}
+            memory: {{ .Values.nginx.requestMemory }}
+          limits:
+            cpu: {{ .Values.nginx.limitCpu }}
+            memory: {{ .Values.nginx.limitMemory }}
+        volumeMounts:
+        - name: {{ .Values.environment.name }}-{{ .Values.nginx.name }}-configmap
+          mountPath: /etc/nginx/
+      volumes:
+        - name: {{ .Values.environment.name }}-{{ .Values.nginx.name }}-configmap
+          configMap:
+            name: {{ .Values.environment.name }}-{{ .Values.nginx.name }}-configmap

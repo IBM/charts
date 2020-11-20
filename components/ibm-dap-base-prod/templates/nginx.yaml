@@ -1,0 +1,469 @@
+{{- if .Values.nginx }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ws-base-routes
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: {{.Chart.Name}}
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+    icpdata_addon: "true"
+    icpdata_addon_version: {{.Chart.AppVersion | quote }}
+    app: watson-studio-nginx
+    chart: {{ template "watson-studio.chart" $ }}
+    release: {{ $.Chart.Name }}
+    heritage: {{ .Release.Service }}
+{{- if and ($.Values.global.annotations) (eq $.Values.microservice.deployment.env "icp4d") }}
+  annotations:
+{{ toYaml $.Values.global.annotations | trim | indent 4 }}
+{{- end }}
+data:
+  add-ons.json: |
+    {
+      "ccs": {
+        "add_on_type": "component",
+        "versions": {
+          "2.5.0.0": {
+            "state": "enabled"
+          }
+        }
+      }
+    }
+  extensions: |
+    [
+      {
+        "extension_point_id": "left_menu_item",
+        "extension_name": "dap-header-projects",
+        "display_name": "{{`{{.global_nav_projects}}`}}" ,
+        "order_hint": 200,
+        "match_permissions": "",
+        "meta": {},
+        "details": {
+          "icon": "nav/icons/unified-projects",
+          "href": "/zen/#/projectList"
+        }
+      },
+      {
+        "extension_point_id": "left_menu_item",
+        "extension_name": "dap-collect-my-data",
+        "display_name": "{{`{{.global_nav_my_data}}`}}",
+        "order_hint": 100,
+        "match_permissions": "",
+        "meta": {},
+        "details": {
+          "parent_folder": "dap-header-collect",
+          "href": "/zen/#/mydata"
+        }
+      },
+      {
+        "extension_point_id": "homepage_card",
+        "extension_name": "homepage_card_notifications",
+        "order_hint": 250,
+        "meta": {},
+        "details": {
+          "title": "{{`{{.global_common_core_homepage_card_notifications_title }}`}}",
+          "template_type": "iframe",
+          "source_url": "/embedded-cards/notifications"
+        }
+      },
+      {
+        "extension_point_id": "homepage_card",
+        "extension_name": "homepage_card_projects",
+        "order_hint": 200,
+        "meta": {},
+        "details": {
+          "title": "{{`{{.global_common_core_homepage_card_recent_projects_title}}`}}",
+          "template_type": "iframe",
+          "source_url": "/embedded-cards/recent-projects"
+        }
+      },
+      {
+        "extension_point_id": "homepage_getting_started",
+        "extension_name": "common_core_homepage_getting_started_create_analytics_project",
+        "order_hint": 210,
+        "details": {
+          "label": "{{`{{.global_common_core_homepage_getting_started_create_analytics_project_label}}`}}",
+          "nav_link": "/projects/new-project?context=icp4data"
+        }
+      }
+    ]
+  nginx.conf: |
+    set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
+{{- if not (eq .Values.global.ibmProduct "zen") }}
+    location / {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+{{- end }}
+    location /home {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+    location /auth {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+    location /postauth {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+    location /settings {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+    location /projects {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+    location /dashboards {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_dashboards portal-dashboards.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_dashboards:443;
+    }
+    location /notifications {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+    location /common-error-page {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+    location /connections {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+    location /analytics/rstudio {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+    location /spaces {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+    location ~ ^/api/(?!(v.*)) {
+      keepalive_timeout 600;
+      send_timeout 600;
+      proxy_connect_timeout 600;
+      proxy_send_timeout 600;
+      proxy_read_timeout 600;
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+    location /css {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+    location /js {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+    location /fonts {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+    location /graphics {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+    location /events {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+    location /embedded-cards {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+    location /socket.io {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+    location ^~ /ap-components.min {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+    location ^~ /react-mde {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_main portal-main.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_main:443;
+    }
+    location /transactional/v2/projects {
+      proxy_set_header Host $host;
+      proxy_read_timeout 180s;
+      set $portal_main portal-main.$nsdomain;
+      proxy_pass https://$portal_main:443;
+    }
+    location /v2/projects {
+      proxy_set_header Host $host;
+      set $ngp_projects_api ngp-projects-api.$nsdomain;
+      proxy_pass https://$ngp_projects_api:443;
+    }
+    location /v2/user_profiles {
+      proxy_set_header Host $host;
+      set $portal_common_api portal-common-api.$nsdomain;
+      proxy_pass https://$portal_common_api:443;
+    }
+    location /v2/event_logs {
+      proxy_set_header Host $host;
+      set $event_logger_api event-logger-api.$nsdomain;
+      proxy_pass https://$event_logger_api:443;
+    }
+    location /job-manager {
+      proxy_set_header Host $host;
+      set $portal_job_manager portal-job-manager.$nsdomain;
+      proxy_pass https://$portal_job_manager:443;
+    }
+    location /v1/nav {
+      proxy_set_header Host $host;
+      set $portal_common_api portal-common-api.$nsdomain;
+      proxy_pass https://$portal_common_api:443;
+    }
+    location /v1/community_content {
+      proxy_set_header Host $host;
+      set $portal_common_api portal-common-api.$nsdomain;
+      proxy_pass https://$portal_common_api:443;
+    }
+    location /v1/accounts {
+      proxy_set_header Host $host;
+      set $portal_common_api portal-common-api.$nsdomain;
+      proxy_pass https://$portal_common_api:443;
+    }
+    location /v2/entitlements {
+      proxy_set_header Host $host;
+      set $portal_common_api portal-common-api.$nsdomain;
+      proxy_pass https://$portal_common_api:443;
+    }
+{{- if not (eq .Values.global.ibmProduct "zen") }}
+    location /internal-nav.js {
+      proxy_set_header Host $host;
+      set $portal_common_api portal-common-api.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      more_clear_input_headers Accept-Encoding;
+      proxy_pass https://$portal_common_api:443/v2/nav/js/nav.min.js;
+    }
+    location = /v2/nav/js/nav.min.js {
+      set $portal_common_api portal-common-api.$nsdomain;
+      content_by_lua_block {
+        local cjson = require "cjson"
+        local addonsSubquery = ngx.location.capture("/zen-data/v1/addons");
+        local addonsResponse = addonsSubquery.body;
+        local addonsObj = cjson.decode(addonsResponse);
+        local addonsCommaList = addonsObj.requestObj;
+        local addonsList = "if (!window.addons ) {\n  window.addons = {}\n}\n";
+        for k, v in ipairs(addonsCommaList) do
+            local addonObjString = v.Type:gsub("% ", "_");
+            addonObjString = addonObjString:gsub("%-", "_");
+            addonsList = addonsList .. "window.addons." .. addonObjString .. " = true;\n";
+        end
+        local nav = ngx.location.capture("/internal-nav.js");
+        ngx.say(addonsList .. nav.body);
+      }
+    }
+    location /v2/nav {
+      proxy_set_header Host $host;
+      set $portal_common_api portal-common-api.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_common_api:443;
+    }
+{{- end }}
+    location /v1/notifications {
+      proxy_set_header Host $host;
+      set $portal_notifications portal-notifications.$nsdomain;
+      proxy_pass https://$portal_notifications:443;
+    }
+    location /v2/asset_files {
+      proxy_set_header Host $host;
+      keepalive_timeout 650;
+      send_timeout 600;
+      proxy_connect_timeout 600;
+      proxy_send_timeout 600;
+      proxy_read_timeout 600;
+      set $asset_files_api asset-files-api.$nsdomain;
+      proxy_pass https://$asset_files_api:443;
+    }
+    location /v2/dashboards {
+      proxy_set_header Host $host;
+      set $dap_dashboards_api dap-dashboards-api.$nsdomain;
+      proxy_pass https://$dap_dashboards_api:443;
+    }
+{{- end }}

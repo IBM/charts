@@ -1,0 +1,148 @@
+apiVersion: kafka.strimzi.io/v1beta1
+kind: Kafka
+metadata:
+  name: {{ include "baas.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "baas.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ include "baas.appversion" . }}
+    app.kubernetes.io/component: strimzi
+    app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+    helm.sh/chart: {{ .Chart.Name }}
+spec:
+  kafka:
+    version: 2.5.0
+    replicas: {{ .Values.kafka.replicaCount }}
+    listeners:
+      plain:
+        networkPolicyPeers:
+          - namespaceSelector: {}
+          - podSelector:
+              matchLabels:
+                app.kubernetes.io/name: {{ include "baas.name" . }}
+                app.kubernetes.io/version: {{ include "baas.appversion" . }}
+                app.kubernetes.io/component: spp-agent
+          - podSelector:
+              matchLabels:
+                app.kubernetes.io/name: {{ include "baas.name" . }}
+                app.kubernetes.io/version: {{ include "baas.appversion" . }}
+                app.kubernetes.io/component: datamover
+      tls: {}
+    config:
+      offsets.topic.replication.factor: 1
+      transaction.state.log.replication.factor: 1
+      transaction.state.log.min.isr: 1
+      log.message.format.version: "2.5"
+    storage:
+      type: ephemeral
+    resources:
+      limits:
+        memory: {{ .Values.kafka.resources.limits.memory }}
+        cpu: {{ .Values.kafka.resources.limits.cpu }}
+      requests:
+        memory: {{ .Values.kafka.resources.requests.memory }}
+        cpu: {{ .Values.kafka.resources.requests.cpu }}
+    template:
+      bootstrapService:
+        metadata:
+          labels:
+            app.kubernetes.io/name: {{ include "baas.name" . }}
+            app.kubernetes.io/instance: {{ .Release.Name }}
+            app.kubernetes.io/version: {{ include "baas.appversion" . }}
+            app.kubernetes.io/component: kafka
+            app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+            helm.sh/chart: {{ .Chart.Name }}
+            release: "{{ .Release.Name }}"
+      brokersService:
+        metadata:
+          labels:
+            app.kubernetes.io/name: {{ include "baas.name" . }}
+            app.kubernetes.io/instance: {{ .Release.Name }}
+            app.kubernetes.io/version: {{ include "baas.appversion" . }}
+            app.kubernetes.io/component: kafka
+            app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+            helm.sh/chart: {{ .Chart.Name }}
+            release: "{{ .Release.Name }}"
+      statefulset:
+        metadata:
+          labels:
+            app.kubernetes.io/name: {{ include "baas.name" . }}
+            app.kubernetes.io/instance: {{ .Release.Name }}
+            app.kubernetes.io/version: {{ include "baas.appversion" . }}
+            app.kubernetes.io/component: kafka
+            app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+            helm.sh/chart: {{ .Chart.Name }}
+      pod:
+        metadata:
+          labels:
+            app.kubernetes.io/name: {{ include "baas.name" . }}
+            app.kubernetes.io/instance: {{ .Release.Name }}
+            app.kubernetes.io/version: {{ include "baas.appversion" . }}
+            app.kubernetes.io/component: kafka
+            app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+            helm.sh/chart: {{ .Chart.Name }}
+        securityContext:
+          {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 1001
+          fsGroup: 1001
+          {{- end }}
+          runAsNonRoot: true
+  zookeeper:
+    replicas: 3
+    storage:
+      type: ephemeral
+    resources:
+      limits:
+        memory: {{ .Values.kafka.resources.limits.memory }}
+        cpu: {{ .Values.kafka.resources.limits.cpu }}
+      requests:
+        memory: {{ .Values.kafka.resources.requests.memory }}
+        cpu: {{ .Values.kafka.resources.requests.cpu }}
+    template:
+      statefulset:
+        metadata:
+          labels:
+            app.kubernetes.io/name: {{ include "baas.name" . }}
+            app.kubernetes.io/instance: {{ .Release.Name }}
+            app.kubernetes.io/version: {{ include "baas.appversion" . }}
+            app.kubernetes.io/component: kafka
+            app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+            helm.sh/chart: {{ .Chart.Name }}
+      pod:
+        metadata:
+          labels:
+            app.kubernetes.io/name: {{ include "baas.name" . }}
+            app.kubernetes.io/instance: {{ .Release.Name }}
+            app.kubernetes.io/version: {{ include "baas.appversion" . }}
+            app.kubernetes.io/component: kafka
+            app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+            helm.sh/chart: {{ .Chart.Name }}
+        securityContext:
+          {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 1001
+          fsGroup: 1001
+          {{- end }}
+          runAsNonRoot: true
+  entityOperator:
+    topicOperator:
+      watchedNamespace: {{ .Release.Namespace }}
+      reconciliationIntervalSeconds: 90
+      resources:
+        limits:
+          memory: {{ .Values.kafka.resources.limits.memory }}
+          cpu: {{ .Values.kafka.resources.limits.cpu }}
+        requests:
+          memory: {{ .Values.kafka.resources.requests.memory }}
+          cpu: {{ .Values.kafka.resources.requests.cpu }}
+    userOperator: 
+      watchedNamespace: {{ .Release.Namespace }}
+      reconciliationIntervalSeconds: 120
+      resources:
+        limits:
+          memory: {{ .Values.kafka.resources.limits.memory }}
+          cpu: {{ .Values.kafka.resources.limits.cpu }}
+        requests:
+          memory: {{ .Values.kafka.resources.requests.memory }}
+          cpu: {{ .Values.kafka.resources.requests.cpu }}
+

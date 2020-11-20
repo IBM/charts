@@ -1,0 +1,85 @@
+{{- if .Values.runtimes.preloadRuntimes }}
+{{- $compName := "preload-rstudio" -}}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: {{$compName}}
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-preload"
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+    app: "{{ .Release.Name }}-preload"
+    chart: {{ .Chart.Name |quote }}
+    heritage: tiller
+    release: "{{ .Release.Name }}"
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded
+    {{- if .Values.global.annotations }}
+{{ toYaml .Values.global.annotations | trim | indent 4 }}
+    {{- end }}
+spec:
+  parallelism: {{ .Values.runtimes.workerNodes }}
+  completions: {{ .Values.runtimes.workerNodes }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        app.kubernetes.io/name: "{{ .Release.Name }}-preload"
+        helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+        app: "{{ .Release.Name }}-preload"
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: "{{$compName}}"
+        run: "{{$compName}}"
+    spec:
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_compute: "true"
+      {{- end }}
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: run
+                  operator: In
+                  values:
+                  - {{$compName}}
+            topologyKey: kubernetes.io/hostname
+      serviceAccount: {{ .Values.global.viewer.sa }}
+      serviceAccountName: {{ .Values.global.viewer.sa }}
+      automountServiceAccountToken: false
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsUser: {{ .Values.global.runAsUser }}
+        runAsNonRoot: true
+      containers:
+        - name: {{$compName}}-container
+          image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.rstudioServer.image.name }}:{{ .Values.rstudioServer.image.tag }}
+          imagePullPolicy: IfNotPresent
+          command: ["echo", "Image {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.rstudioServer.image.name }}:{{ .Values.rstudioServer.image.tag }} preloaded"]
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true             
+            runAsUser: {{ .Values.global.runAsUser }}
+            capabilities:
+              drop:
+              - ALL    
+      restartPolicy: OnFailure
+{{- end }}

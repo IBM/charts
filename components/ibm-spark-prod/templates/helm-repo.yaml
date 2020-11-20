@@ -1,0 +1,122 @@
+# Default values for helmRepo-repo deployment.
+# This is a YAML-formatted file.
+
+apiVersion: apps/v1 # for versions before 1.8.0 use apps/v1beta1
+kind: Deployment
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ .Values.environment.name }}-helm-repo
+  labels:
+    app: {{ .Values.environment.name }}-helm-repo
+    chart: "{{ .Chart.Name }}"
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: {{ .Release.Name }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Values.environment.name }}-helm-repo
+      chart: "{{ .Chart.Name }}"
+      heritage: {{ .Release.Service }}
+      release: {{ .Release.Name }}
+  replicas: {{ default 1 .Values.global.replicaCount }} # tells deployment to run 1 pods matching the template
+  template: # create pods using pod definition in this template
+    metadata:
+      annotations:
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion: "3.0.1"
+        cloudpakName: "IBM Cloud Pak for Data"
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productChargedContainers: "All"
+        productName: "Analytics Engine powered by Apache Spark"
+        productID: "ICP4D-Spark-00000"
+        productVersion: "3.0.1"
+      # the name is not included in the meta data as a unique name is
+      # generated from the deployment name
+      labels:
+        app: {{ .Values.environment.name }}-helm-repo
+        chart: "{{ .Chart.Name }}"
+        heritage: {{ .Release.Service }}
+        release: {{ .Release.Name }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: helm
+        app.kubernetes.io/name: {{ .Release.Name }}
+        helm.sh/chart: "{{ .Chart.Name }}"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.global.architecture }}
+      serviceAccount: {{ .Values.sa.viewer }}
+      securityContext:
+        runAsUser: {{ .Values.user.uid }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+      - name: "{{ .Values.environment.name }}-helm-repo"
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.helmRepo.image }}:{{ .Values.spark.image.tag }}"
+        imagePullPolicy: {{ .Values.microService.pullPolicy }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsUser: {{ .Values.user.uid }}
+          runAsNonRoot: true
+          privileged: false
+          readOnlyRootFilesystem: false
+        resources:
+          requests:
+            cpu: {{ .Values.helmRepo.requests.cpu }}
+            memory: {{ .Values.helmRepo.requests.memory }}
+          limits:
+            cpu: {{ .Values.helmRepo.requests.cpu }}
+            memory: {{ .Values.helmRepo.limits.memory }}
+        ports:
+        - containerPort: {{ .Values.helmRepo.port }}
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.helmRepo.port }}
+          initialDelaySeconds: {{.Values.helmReadinessProbe.initialDelaySeconds}}
+          periodSeconds: {{.Values.helmReadinessProbe.periodSeconds}}
+          failureThreshold: {{.Values.helmReadinessProbe.failureThreshold}}
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.helmRepo.port }}
+          initialDelaySeconds: {{.Values.helmLivenessProbe.initialDelaySeconds}}
+          periodSeconds: {{.Values.helmLivenessProbe.periodSeconds}}
+          failureThreshold: {{.Values.helmLivenessProbe.failureThreshold}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: {{ .Values.environment.name }}-helm-repo
+    chart: "{{ .Chart.Name }}"
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: {{ .Release.Name }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+  name: {{ .Values.environment.name }}-helm-repo-headless
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: {{ .Values.environment.name }}-helm-repo
+    chart: "{{ .Chart.Name }}"
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+  clusterIP: None
+  ports:
+  - port: {{ .Values.helmRepo.port }}
+    protocol: TCP

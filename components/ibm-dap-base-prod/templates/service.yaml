@@ -1,0 +1,108 @@
+{{- $values := .Values }}
+{{- $chart := .Chart }}
+{{- $Release := .Release }}
+{{- $files := $.Files }}
+{{- if $.Values.microservice.service.enabled }}
+{{- $specialServiceList := $files.Get "specialServiceList.yaml" }}
+{{- $specialServiceListDetails := fromYaml $specialServiceList }}
+{{- if $.Values.microservicelist }}
+{{- range $microservice := $.Values.microservicelist }}
+{{- if eq $microservice "portal-studio" }}
+{{- range $serviceName := $specialServiceListDetails.service.portal_studio }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $serviceName }}
+  labels:
+    app.kubernetes.io/managed-by: {{$Release.Service | quote }}
+    app.kubernetes.io/instance: {{$Release.Name | quote }}
+    app.kubernetes.io/name: {{$.Chart.Name}}
+    helm.sh/chart: {{$.Chart.Name}}-{{$.Chart.Version | replace "+" "_" }}
+    app: {{ $microservice | trunc 63 | trimSuffix "-" | quote }}
+    chart: {{ printf "%s-%s" $chart.Name $chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+    release: {{ $.Chart.Name }}
+    heritage: {{ $Release.Service }}
+{{- if and ($.Values.global.annotations) (eq $.Values.microservice.deployment.env "icp4d") }}
+  annotations:
+{{ toYaml $.Values.global.annotations | trim | indent 4 }}
+{{- end }}
+spec:
+  sessionAffinity: {{ $.Values.microservice.service.sessionAffinity }}
+  type: {{ $values.microservice.service.type }}
+  selector:
+    app: {{ $microservice | trunc 63 | trimSuffix "-" | quote }}
+    release: {{ $.Chart.Name }}
+  ports:
+  - name: {{ $microservice | lower | quote }}
+    protocol: TCP
+    port: {{ $values.microservice.service.port }}
+    targetPort: {{ $values.microservice.port }}
+{{ printf "%s" "---" }}
+{{- end }}
+{{- end }}
+{{- if eq $microservice "ae-main" }}
+{{- range $serviceName := $specialServiceListDetails.service.ae_main }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $serviceName }}
+  labels:
+    app.kubernetes.io/managed-by: {{$Release.Service | quote }}
+    app.kubernetes.io/instance: {{$Release.Name | quote }}
+    app.kubernetes.io/name: {{$.Chart.Name}}
+    helm.sh/chart: {{$.Chart.Name}}-{{$.Chart.Version | replace "+" "_" }}
+    app: {{ $microservice | trunc 63 | trimSuffix "-" | quote }}
+    chart: {{ printf "%s-%s" $chart.Name $chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+    release: {{ $.Chart.Name }}
+    heritage: {{ $Release.Service }}
+{{- if and ($.Values.global.annotations) (eq $.Values.microservice.deployment.env "icp4d") }}
+  annotations:
+{{ toYaml $.Values.global.annotations | trim | indent 4 }}
+{{- end }}
+spec:
+  sessionAffinity: {{ $.Values.microservice.service.sessionAffinity }}
+  type: {{ $values.microservice.service.type }}
+  selector:
+    app: {{ $microservice | trunc 63 | trimSuffix "-" | quote }}
+    release: {{ $.Chart.Name }}
+  ports:
+  - name: {{ $microservice | lower | quote }}
+    protocol: TCP
+    port: {{ $values.microservice.service.port }}
+    targetPort: {{ $values.microservice.port }}
+{{ printf "%s" "---" }}
+{{- end }}
+{{- else }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $microservice }}
+  labels:
+    app.kubernetes.io/managed-by: {{$Release.Service | quote }}
+    app.kubernetes.io/instance: {{$Release.Name | quote }}
+    app.kubernetes.io/name: {{$.Chart.Name}}
+    helm.sh/chart: {{$.Chart.Name}}-{{$.Chart.Version | replace "+" "_" }}
+    app: {{ $microservice  }}
+    chart: {{ template "watson-studio.chart" $ }}
+    release: {{ $.Chart.Name }}
+    heritage: {{ $Release.Service }}
+{{- if and ($.Values.global.annotations) (eq $.Values.microservice.deployment.env "icp4d") }}
+  annotations:
+{{ toYaml $.Values.global.annotations | trim | indent 4 }}
+{{- end }}
+spec:
+  sessionAffinity: {{ $.Values.microservice.service.sessionAffinity }}
+  type: {{ $values.microservice.service.type }}
+  selector:
+    app: {{ $microservice }}
+    release: {{ $.Chart.Name }}
+  ports:
+  - name: {{ $microservice | lower | quote }}
+    protocol: TCP
+    port: {{ $values.microservice.service.port }}
+    targetPort: {{ $values.microservice.port }}
+{{ printf "%s" "---" }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
