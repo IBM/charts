@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}
+  labels:
+    name: {{ .Chart.Name }}
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}
+    component: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}
+spec:
+  selector:
+    matchLabels:
+      name: {{ .Chart.Name }}
+      app: {{ .Chart.Name }}
+      chart: {{ .Chart.Name }}
+      component: {{ .Chart.Name }}
+      release: {{ .Release.Name }}
+      heritage: {{ .Release.Service }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/managed-by: {{ .Release.Service }}
+      app.kubernetes.io/name: {{ .Chart.Name }}
+      helm.sh/chart: {{ .Chart.Name }}
+  replicas: {{ default .Values.replicaCount .Values.global.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      name: {{ .Chart.Name }}
+      annotations:
+{{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 8 }}
+{{- end }}
+        nginx.org/client-max-body-size: "1000m"
+      labels:
+        name: {{ .Chart.Name }}
+        app: {{ .Chart.Name }}
+        chart: {{ .Chart.Name }}
+        component: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        helm.sh/chart: {{ .Chart.Name }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccount: {{ .Values.service.viewer.sa }}
+      serviceAccountName: {{ .Values.service.viewer.sa }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - {{ .Values.resources.architecture }}
+      containers:
+        - name: service
+          image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+          env:
+            - name: IAMID_KEYS_ENDPOINT
+              value: {{ .Values.env.iam.url }}
+            - name: PROJECT_CONTEXT_VALIDATION_ENDPOINT
+              value: {{ .Values.env.projectContext.url }}
+            - name: DEPLOYED_ON_WS_LOCAL
+              value: "TRUE"
+            - name: NGINX_SERVICE_SSL_CERTIFICATE_FILE_PATH
+              value: /etc/certificate/certificate.pem
+          ports:
+            - name: https
+              containerPort: {{ .Values.container.httpsPort }}
+              protocol: TCP
+            - name: http
+              containerPort: {{ .Values.container.httpPort }}
+              protocol: TCP
+          volumeMounts:
+            - name: certificate
+              mountPath: /etc/certificate  
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000320999
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              cpu: {{ .Values.resources.cpu }}
+              memory: {{ .Values.resources.memory }}
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .Values.resources.requests.memory }}
+          readinessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /mdlvr/monitor
+              port: {{ .Values.container.httpsPort }}
+            initialDelaySeconds: 90
+            timeoutSeconds: 10
+            periodSeconds: 30
+          livenessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /mdlvr/monitor
+              port: {{ .Values.container.httpsPort }}
+            initialDelaySeconds: 90
+            timeoutSeconds: 10
+            periodSeconds: 30
+          command: ["/bin/sh", "-c"]
+          args: ["/startup.sh"]
+      volumes:
+        - name: certificate
+          secret:
+            secretName: internal-nginx-svc-tls

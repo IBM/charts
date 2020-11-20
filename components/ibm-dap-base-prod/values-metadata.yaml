@@ -1,0 +1,133 @@
+global:
+  __metadata:
+      label: "global configs"
+      description: "global configurations"
+  pullPolicy: IfNotPresent
+  ibmProduct: ws
+  includeDate: false
+  deploymentTarget: icp4data
+  persistence:
+    storageClassName: ''
+    useDynamicProvisioning: true
+  annotations:
+    cloudpakName: IBM Cloud Pak for Data
+    cloudpakId: eb9998dcc5d24e3eb5b6fb488f750fe2
+    cloudpakVersion: "3.0.0"
+    productMetric: VIRTUAL_PROCESSOR_CORE
+    productChargedContainers: All
+    productID: ICP4D-Common-Core-Services-3-0-0
+    productName: IBM Common Core Services for IBM Cloud Pak for Data
+    productVersion: "3.0.0"
+  showK8sMgmt: true
+  serviceAccount: cpd-viewer-sa
+  runAsUser: "1000320999"
+  imageTag: v3.0.0 
+# List of microservices that need to be deployed
+microservicelist:
+    __metadata:
+      label: "microservicelist configs"
+      description: "list of microservices included in the package"
+
+nginx:
+  __metadata:
+      label: "nginx config"
+      description: "enables building nginx"
+secret:
+  __metadata:
+      label: "secret config"
+      description: "enables building secret"
+
+# host information
+host:
+  __metadata:
+      label: "host config"
+      description: "host configurations"
+hostPort:
+  __metadata:
+      label: "hostPort config"
+      description: "hostPort configurations"
+
+# common microservice details
+microservice:
+  __metadata:
+      label: "microservice config"
+      description: "microservice configurations"
+  name: false # Required: Has to be replaced by command line argument --set
+  rootPath: /monitor # Required: Needs to be passed from helm command, default set to /monitor
+  port: 8443
+  scheme: HTTPS
+  # namespace: dap-core # override based on region of deployment, put in envars if needed
+  
+  # deployment information for microservice
+  deployment:
+    enabled: true
+    envVariableFile: "envvar.yaml"
+    replicaCount: 3 # We can make this parameter customizable. Min 3 replicas to map one to each MZR zone
+    minReadySeconds: 5 # Each pod needs to be available for min 5 seconds to be considered Ready, prevents bad version to be rolled out
+    progressDeadline: 480 # Each deployment has at most 8 minutes to be considered ready or it will fall back, same timeout as helm
+    limits:
+      cpu: "500m"
+      memory: "4Gi"
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    probes:
+      readinessProbe:
+        initialDelaySeconds: 80 # Seconds before making the first readinessProbe check after container restarted
+        timeoutSeconds: 5 # Seconds after the probe timesout
+        failureThreshold: 3 # How many failures
+        successThreshold: 1
+      livenessProbe:
+        successThreshold: 1
+        periodSeconds: 30 # How often to try the probe 
+        failureThreshold: 5
+        timeoutSeconds: 5
+        initialDelaySeconds: 480
+    env: icp4d
+    strategy:
+      type: RollingUpdate
+      maxSurge: 100% # Refers to the percentage of pod instances that we allow to exist above the desired replicaCount, needed for deployments
+      maxUnavailable: 40% # Refers to the percentage of pod instances that can be unavailable at any given point in time relative to replicaCount
+
+  # Service information fpr microservice
+  service:
+    type: ClusterIP
+    sessionAffinity: ClientIP
+    port: 443
+    enabled: true
+
+# eventually this chart will install ingress
+ingress:
+  __metadata:
+      label: "ingress settings"
+      description: "ingress configurations"
+  enabled: false 
+  host: None
+  tls:
+    enabled: false
+    secret: dataplatform-tls
+
+# TODO[Angad]: get rid of this and use regular config maps
+cloudant:
+  __metadata:
+      label: "cloudant settings"
+      description: "cloudant configurations"
+  domain: couchdb-ha-svc:6984
+
+# Default information for a microservice
+namespace:
+  __metadata:
+      label: "namespace settings"
+      description: "namespace configurations"
+  enabled: false
+  name: dap-core
+
+propertyPrefix:
+  __metadata:
+      label: "property Prefix"
+      description: "propertyPrefix setting"
+buildEdition:
+  __metadata:
+      label: "build Edition "
+      description: "buildEdition setting"
+

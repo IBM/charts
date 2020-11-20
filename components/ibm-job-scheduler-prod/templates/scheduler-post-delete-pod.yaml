@@ -1,0 +1,68 @@
+{{- $imagesList := .Files.Get "imagesList.yaml" }}
+{{- $imagesListDetails := fromYaml $imagesList }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: scheduler-post-delete-pod
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": "post-delete"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "100"
+    {{- if .Values.global.annotations }}
+{{ toYaml .Values.global.annotations | trim | indent 4 }}
+    {{- end }}
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ template "watson-studio.chart" $ }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    helm.sh/chart: {{ template "watson-studio.chart" $ }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+              - amd64
+  containers:
+  - name: scheduler-post-delete-pod
+    image: "{{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ (index $imagesListDetails "job-trigger").image.repository }}:{{ .Values.global.imageTag }}"
+    imagePullPolicy: {{ (index $imagesListDetails "job-trigger").image.pullPolicy }}
+    command: ["/bin/bash"]
+    args: ["/post-delete-scripts/scheduler-post-delete.sh"]
+    env:
+    - name: NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+    volumeMounts:
+    - mountPath: /post-delete-scripts
+      name: post-delete-scripts
+    securityContext:
+      privileged: false
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 1000321000
+      readOnlyRootFilesystem: false
+      capabilities:
+        drop:
+        - ALL
+    resources:
+{{ toYaml .Values.postDelete.resources | trim | indent 6 }}
+  volumes:
+  - name: post-delete-scripts
+    configMap:
+      name: scheduler-post-delete-configmap
+  serviceAccountName: {{ .Values.postDelete.serviceAccountName }}
+  restartPolicy: OnFailure
+  terminationGracePeriodSeconds: 0

@@ -1,0 +1,36 @@
+{{- if .Values.nginx }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: portal-ml-dl-routes
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: {{.Chart.Name}}
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+    icpdata_addon: "true"
+    icpdata_addon_version: {{.Chart.AppVersion | quote }}
+    app: watson-studio-nginx
+    chart: {{ template "watson-studio.chart" $ }}
+    release: {{ $.Chart.Name }}
+    heritage: {{ .Release.Service }}
+{{- if and ($.Values.global.annotations) (eq $.Values.microservice.deployment.env "icp4d") }}
+  annotations:
+{{ toYaml $.Values.global.annotations | trim | indent 4 }}
+{{- end }}
+data:
+  nginx.conf: |
+    set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
+    location /ml {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $portal_ml_dl portal-ml-dl.$nsdomain;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline';  connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$portal_ml_dl:443;
+    }
+{{- end }}

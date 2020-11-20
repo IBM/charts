@@ -23,11 +23,15 @@ Expand the name of the chart.
 {{- end -}}
 
 {{- define "baas.productVersion" -}}
-{{- printf "%s" "10.1.6" -}}
+{{- printf "%s" .Chart.AppVersion -}}
 {{- end -}}
 
 {{- define "baas.productID" -}}
 {{- printf "%s" "aaa070ab7a3a4af398f6b01a0e5f8e03" -}}
+{{- end -}}
+
+{{- define "baas.productMetric" -}}
+{{- printf "%s" "GIGABYTE" -}}
 {{- end -}}
 
 {{/*
@@ -53,4 +57,14 @@ Create chart name and version as used by the chart label.
 */}}
 {{- define "baas.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+license  parameter must be set to true
+*/}}
+{{- define "{{ .Chart.Name }}.licenseValidate" -}}
+  {{ $license := .Values.license }}
+  {{- if $license  -}}
+    true
+  {{- end -}}
 {{- end -}}

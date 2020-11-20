@@ -1,0 +1,171 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: runtime-base-uninstall-configmap
+  labels:
+    {{- include "zenhelper.labels" (list . "") | indent 4 }}
+    app.kubernetes.io/name: runtime-base-uninstall-configmap
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  annotations:
+    {{- include "zenhelper.annotations" . | indent 4 }}
+data:
+  post-delete.sh: |
+    #!/bin/sh
+
+    set -e
+    scriptdir=`dirname ${BASH_SOURCE}`
+    cd ${scriptdir}
+    scriptdir=$(pwd)
+
+    while getopts ":fn:" opt; do
+    case $opt in
+      n)
+        nstoclean=$OPTARG
+        ;;
+    esac
+    done
+
+    if [ -z "${nstoclean}" ]; then
+    echo "Usage: ./post-delete.sh -n <namespace> "
+    exit 1
+    fi
+
+    tmpout="/tmp/.clean_out"
+
+    deletions=false
+    function countDeletes {
+
+    if cat "${tmpout}" | grep "No resources" > /dev/null 2>&1 ; then
+      echo " (None)"
+    else
+      delcount=$(cat "${tmpout}" | grep -v "Immediate deletion" | wc -l)
+      if [ "${delcount}" == "0" ]; then
+        echo " (None)"
+      else
+        echo " ${delcount}"
+        deletions=true
+      fi
+    fi
+
+    }
+
+    # Clean up (delete) residual k8s test objects of the specified type in the specified
+    # namespace, in prep for a fresh round of tests.
+    function purgeK8sArtifacts {
+
+    testNS=$1
+    artifactType=$2
+    searchKey=$3
+
+    echo -n "Cleaning up residual \"${searchKey}\" $artifactType from previous runs ... "
+    kubectl get $artifactType -n $testNS 2>${tmpout} | grep "${searchKey}" |
+    while read artifactInfo;
+    do
+      read -r -a infoarr <<< "${artifactInfo}"
+      currartifact=${infoarr[0]}
+      if kubectl delete $artifactType -n $testNS --force \
+        --grace-period=0 ${infoarr[0]} > "${tmpout}" 2>&1 ; then
+        deletions=true
+      fi
+    done
+    countDeletes
+    }
+
+    echo "======================================================================="
+    echo ""
+    echo "[ Beginning k8s cleanup for namespace '${nstoclean}' ... ]"
+
+    echo ""
+    rttypes="jupyter-py36 jupyter-py35 jupyter-gpu-py35 jupyter shaper rstudio zeppelin"
+    for rt in $rttypes;
+    do
+    echo -n "Attempting to delete deployments of type '$rt' ... "
+    kubectl -n "${nstoclean}" delete deploy -l type="$rt" > "${tmpout}"
+    countDeletes
+    echo -n "Attempting to delete services of type '$rt' ... "
+    kubectl -n "${nstoclean}" delete svc -l type="$rt" > "${tmpout}"
+    countDeletes
+    done
+
+    echo ""
+    echo -n "Attempting to delete deployments (-l deployment) ... "
+    kubectl -n "${nstoclean}" delete deploy -l deployment > "${tmpout}"
+    countDeletes
+    echo -n "Attempting to delete deployments (-l system) ... "
+    kubectl -n "${nstoclean}" delete deploy -l system > "${tmpout}"
+    countDeletes
+    echo -n "Attempting to delete services (-l deployment) ... "
+    kubectl -n "${nstoclean}" delete svc -l deployment > "${tmpout}"
+    countDeletes
+    echo -n "Attempting to delete services (-l system) ... "
+    kubectl -n "${nstoclean}" delete svc -l system > "${tmpout}"
+    countDeletes
+
+    echo ""
+    echo -n "Attempting to delete jobs (job=true) ... "
+    kubectl -n "${nstoclean}" delete job -l job=true > "${tmpout}"
+    countDeletes
+    echo -n "Attempting to delete jobs (headless=true) ... "
+    kubectl -n "${nstoclean}" delete job -l headless=true > "${tmpout}"
+    countDeletes
+    echo -n "Attempting to delete cronjobs (job=true) ... "
+    kubectl -n "${nstoclean}" delete cronjob -l job=true > "${tmpout}"
+    countDeletes
+    echo -n "Attempting to delete cronjobs (headless=true) ... "
+    kubectl -n "${nstoclean}" delete cronjob -l headless=true > "${tmpout}"
+    countDeletes
+    echo -n "Attempting to delete secrets ..."
+    kubectl -n "${nstoclean}" delete secret -l created-by=spawner > "${tmpout}"
+    countDeletes
+
+    echo ""
+    if [ "${deletions}" == "true" ]; then
+    echo "Waiting for deletions to complete..."
+    sleep 35
+    fi
+
+    deletions=false
+    echo -n "Forcing deletion of any remaining pods (runtime=true) ... "
+    kubectl -n "${nstoclean}" delete pod -l runtime=true \
+    --force --grace-period=0 1> "${tmpout}" 2> /dev/null
+    countDeletes
+    echo -n "Forcing deletion of any remaining pods (job=true) ... "
+    kubectl -n "${nstoclean}" delete pod -l job=true \
+    --force --grace-period=0 1> "${tmpout}" 2> /dev/null
+    countDeletes
+    echo -n "Forcing deletion of any remaining pods (-l deployment) ... "
+    kubectl -n "${nstoclean}" delete pod -l deployment \
+    --force --grace-period=0 1> "${tmpout}" 2> /dev/null
+    countDeletes
+    echo -n "Forcing deletion of any remaining pods (-l system) ... "
+    kubectl -n "${nstoclean}" delete pod -l system \
+    --force --grace-period=0 1> "${tmpout}" 2> /dev/null
+    countDeletes
+
+    echo ""
+    if [ "${deletions}" == "true" ]; then
+    echo "Waiting for force-deletions to take effect ..."
+    sleep 35
+    fi
+
+    echo "Checking what's left ..."
+    echo -n "  # Pods with runtime=true: "
+    kubectl -n "${nstoclean}" get pod -l runtime=true > "${tmpout}" 2>&1
+    countDeletes
+    echo -n "  # Pods with job=true: "
+    kubectl -n "${nstoclean}" get pod -l job=true > "${tmpout}" 2>&1
+    countDeletes
+    echo -n "  # Pods with -l deployment: "
+    kubectl -n "${nstoclean}" get pod -l deployment > "${tmpout}" 2>&1
+    countDeletes
+    echo -n "  # Pods with -l system: "
+    kubectl -n "${nstoclean}" get pod -l system > "${tmpout}" 2>&1
+    countDeletes
+
+    echo ""
+    echo "[ Cleanup complete. ]"
+    echo ""
+    rm -rf /tmp/.clean_out
+    echo "======================================================================="

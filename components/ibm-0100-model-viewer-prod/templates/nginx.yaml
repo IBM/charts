@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: model-viewer-routes
+  labels:
+    icpdata_addon: "true"
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}
+    component: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}
+    icpdata_addon_version: "3.0.1"
+  annotations:
+{{- if .Values.global.podAnnotations }}
+{{ toYaml .Values.global.podAnnotations | trim | indent 4 }}
+{{- end }}
+data:
+  nginx.conf: |
+    set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
+    location /model-viewer/ {
+      proxy_set_header Host $host;
+      set $modelviewer ibm-0100-model-viewer-prod.$nsdomain;
+      rewrite ^/model-viewer(.*) $1 break;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Content-Security-Policy "default-src 'self' data: 'unsafe-inline'; connect-src 'self' wss://$host;";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      proxy_pass https://$modelviewer:{{ .Values.container.httpsPort }};
+    }

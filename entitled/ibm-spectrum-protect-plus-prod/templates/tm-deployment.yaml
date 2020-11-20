@@ -23,6 +23,7 @@ spec:
         productID: {{ include "baas.productID" . }}
         productName: {{ include "baas.productName" . }}
         productVersion: {{ include "baas.productVersion" . }}
+        productMetric: {{ include "baas.productMetric" . }}
       labels:
         app.kubernetes.io/name: {{ include "baas.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
@@ -44,10 +45,11 @@ spec:
       hostPID: false
       hostIPC: false
       securityContext:
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
         runAsUser: 1000
-        runAsGroup: 1000
-        runAsNonRoot: true
         fsGroup: 1000
+{{- end }}
+        runAsNonRoot: true
       containers:
       - name: {{ include "baas.fullname" . }}-transaction-manager-redis
         {{- if .Values.imageRegistryNamespace }}
@@ -64,8 +66,9 @@ spec:
             memory: "50Mi"
         imagePullPolicy: {{ .Values.tmredis.image.pullPolicy }}
         securityContext:
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
           runAsUser: 1001
-          runAsGroup: 1001
+{{- end }}
           runAsNonRoot: true
           privileged: false
           readOnlyRootFilesystem: false
@@ -134,23 +137,27 @@ spec:
           readOnly: true
         {{- if .Values.tmw.readinessProbe.enabled}}
         readinessProbe:
-          httpGet:
-            path: /
-            port: {{ .Values.tmw.image.port }}
-            scheme: HTTPS
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - "ls"
           initialDelaySeconds: {{ .Values.tmw.readinessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.tmw.readinessProbe.periodSeconds }}
           failureThreshold: {{ .Values.tmw.readinessProbe.failureThreshold }}
+          timeoutSeconds: {{ .Values.tmw.readinessProbe.timeoutSeconds }}
         {{- end }} 
         {{- if .Values.tmw.livenessProbe.enabled}}
         livenessProbe:
-          httpGet:
-            path: /
-            port: {{ .Values.tmw.image.port }}
-            scheme: HTTPS
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - "ls"
           initialDelaySeconds: {{ .Values.tmw.livenessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.tmw.livenessProbe.periodSeconds }}
           failureThreshold: {{ .Values.tmw.livenessProbe.failureThreshold }}
+          timeoutSeconds: {{ .Values.tmw.livenessProbe.timeoutSeconds }}
         {{- end }}
 
       - name: {{ include "baas.fullname" . }}-transaction-manager
@@ -200,11 +207,18 @@ spec:
           readOnly: true
         {{- if .Values.tm.readinessProbe.enabled}}
         readinessProbe:
+{{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          httpGet:
+            path: /
+            port: {{ .Values.tm.service.port }}
+            scheme: HTTPS
+{{- else }}
           exec:
             command:
             - /bin/bash
             - -c
             - /usr/bin/testtm
+{{- end }}
           failureThreshold: {{ .Values.tm.readinessProbe.failureThreshold }}
           initialDelaySeconds: {{ .Values.tm.readinessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.tm.readinessProbe.periodSeconds }}
@@ -212,11 +226,18 @@ spec:
         {{- end }}
         {{- if .Values.tm.livenessProbe.enabled}}
         livenessProbe:
+{{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          httpGet:
+            path: /
+            port: {{ .Values.tm.service.port }}
+            scheme: HTTPS
+{{- else }}
           exec:
             command:
             - /bin/bash
             - -c
             - /usr/bin/testtm
+{{- end }}
           failureThreshold: {{ .Values.tm.livenessProbe.failureThreshold }}
           initialDelaySeconds: {{ .Values.tm.livenessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.tm.livenessProbe.periodSeconds }}
@@ -229,7 +250,11 @@ spec:
           defaultMode: 256
       - name: tls-key-crt
         secret:
+{{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          secretName: {{ include "baas.fullname" . }}-transaction-manager-tls
+{{- else }}
           secretName: {{ include "baas.fullname" . }}-key-crt
+{{- end }}
           defaultMode: 256
       - name: baas
         configMap:

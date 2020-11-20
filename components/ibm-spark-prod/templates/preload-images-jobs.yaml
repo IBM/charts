@@ -1,0 +1,109 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ .Values.environment.name }}-init-preload-jkg-image
+  annotations:
+    "helm.sh/hook-delete-policy": "hook-succeeded,hook-failed"
+  labels:
+    app: {{ .Values.environment.name }}-init-preload-jkg-image
+    chart: "{{ .Chart.Name }}"
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: {{ .Release.Name }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+    run: {{ .Values.environment.name }}-init-preload-jkg-image
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 7200
+  parallelism: {{ .Values.jkg.cronjob.jobReplica }}
+  completions: {{ .Values.jkg.job.jobCompletion }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.environment.name }}-init-preload-jkg-image
+        chart: "{{ .Chart.Name }}"
+        heritage: {{ .Release.Service }}
+        release: {{ .Release.Name }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: helm
+        app.kubernetes.io/name: {{ .Release.Name }}
+        helm.sh/chart: "{{ .Chart.Name }}"
+        run: {{ .Values.environment.name }}-init-preload-jkg-image
+      annotations:
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion: "3.0.1"
+        cloudpakName: "IBM Cloud Pak for Data"
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productChargedContainers: "All"
+        productName: "Analytics Engine powered by Apache Spark"
+        productID: "ICP4D-Spark-00000"
+        productVersion: "3.0.1"
+    spec:
+      serviceAccount: {{ .Values.sa.viewer }}
+      restartPolicy: OnFailure
+      securityContext:
+        runAsUser: {{ .Values.user.uid }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.global.architecture }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: run
+                  operator: In
+                  values: 
+                  - {{ .Values.environment.name }}-init-preload-jkg-image
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - name: {{ .Values.environment.name }}-preload-jkg-image1
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.jkg.image }}:{{ .Values.spark.image.tag23 }}"
+        imagePullPolicy: {{ .Values.microService.pullPolicy }}
+        securityContext:
+          runAsUser: {{ .Values.user.uid }}
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          privileged: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+              - ALL
+        resources:
+          requests:
+            cpu: {{ .Values.microService.requests.nocpu }}
+            memory: {{ .Values.microService.requests.nomemory }}
+          limits:
+            cpu: {{ .Values.microService.requests.nocpu }}
+            memory: {{ .Values.microService.limits.nomemory }}
+        command: ["echo", "Image {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.jkg.image }}:{{ .Values.spark.image.tag23 }} preloaded"]
+      - name: {{ .Values.environment.name }}-preload-jkg-image2
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.jkg.image }}:{{ .Values.spark.image.tag24 }}"
+        securityContext:
+          runAsUser: {{ .Values.user.uid }}
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          privileged: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+              - ALL
+        resources:
+          requests:
+            cpu: {{ .Values.microService.requests.nocpu }}
+            memory: {{ .Values.microService.requests.nomemory }}
+          limits:
+            cpu: {{ .Values.microService.requests.nocpu }}
+            memory: {{ .Values.microService.limits.nomemory }}
+        command: ["echo", "Image {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.jkg.image }}:{{ .Values.spark.image.tag24 }} preloaded"]

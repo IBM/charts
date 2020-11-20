@@ -1,0 +1,49 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "baas.fullname" . }}-minio
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "baas.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ include "baas.appversion" . }}
+    app.kubernetes.io/component: minio
+    app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+    helm.sh/chart: {{ .Chart.Name }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "baas.name" . }}
+      app.kubernetes.io/version: {{ include "baas.appversion" . }}
+      app.kubernetes.io/component: minio
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: {{ include "baas.name" . }}
+          app.kubernetes.io/version: {{ include "baas.appversion" . }}
+          app.kubernetes.io/component: minio
+    ports:
+    - protocol: TCP
+      port: {{ .Values.minio.service.serverPort }}
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: {{ include "baas.name" . }}
+          app.kubernetes.io/version: {{ include "baas.appversion" . }}
+          app.kubernetes.io/component: minio
+    ports:
+    - port: {{ .Values.minio.service.serverPort }}
+      protocol: TCP
+  # Kubernetes DNS      
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53

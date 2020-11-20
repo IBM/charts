@@ -1,0 +1,92 @@
+# This is a YAML-formatted file.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: "{{ .Values.environment.name }}-cleanup-resources"
+  annotations:
+    "helm.sh/hook": "post-delete"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-weight": "5"
+  labels:
+    app: "{{ .Values.environment.name }}-cleanup-resources"
+    chart: "{{ .Chart.Name }}"
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: {{ .Release.Name }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+spec:
+  backoffLimit: 4
+  template:
+    metadata:
+      labels:
+        app: "{{ .Values.environment.name }}-cleanup-resources"
+        chart: "{{ .Chart.Name }}"
+        heritage: {{ .Release.Service }}
+        release: {{ .Release.Name }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: helm
+        app.kubernetes.io/name: {{ .Release.Name }}
+        helm.sh/chart: "{{ .Chart.Name }}"
+      annotations:
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion: "3.0.1"
+        cloudpakName: "IBM Cloud Pak for Data"
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productChargedContainers: "All"
+        productName: "Analytics Engine powered by Apache Spark"
+        productID: "ICP4D-Spark-00000"
+        productVersion: "3.0.1"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.global.architecture }}
+      restartPolicy: "OnFailure"
+      serviceAccount: {{ .Values.sa.editor }}
+      securityContext:
+        runAsUser: {{ .Values.user.uid }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+      - name: "{{ .Values.environment.name }}-cleanup-resources"
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsUser: {{ .Values.user.uid }}
+          runAsNonRoot: true
+          privileged: false
+          readOnlyRootFilesystem: false
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.trustStore.image }}:{{ .Values.spark.image.tag }}"
+        command: ["/bin/bash", "-c"]
+        args :
+        - "bash {{ .Values.microService.pathPrefix }}/scripts/cleanup-resources.sh"
+        imagePullPolicy: {{ .Values.microService.pullPolicy }}
+        resources:
+          requests:
+            cpu: {{ .Values.microService.requests.cpu100 }}
+            memory: {{ .Values.microService.requests.memory128 }}
+          limits:
+            cpu: {{ .Values.microService.limits.cpu100 }}
+            memory: {{ .Values.microService.limits.memory128 }}
+        volumeMounts:
+        - name: "{{ .Values.environment.name }}-cleanup-resources-script"
+          mountPath: "{{ .Values.microService.pathPrefix }}/scripts"
+      volumes:
+        - name: "{{ .Values.environment.name }}-cleanup-resources-script"
+          configMap:
+            name: "{{ .Values.environment.name }}-cleanup-resources-script"
+            items:
+            - key: "cleanup-resources.sh"
+              path: "cleanup-resources.sh"

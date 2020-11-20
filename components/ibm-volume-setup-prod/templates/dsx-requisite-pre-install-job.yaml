@@ -1,0 +1,54 @@
+{{- $compName := "dsx-requisite-pre-install-job" -}}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: dsx-requisite-pre-install-job
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+    app.kubernetes.io/name: dsx-requisite-pre-install-job
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+        app.kubernetes.io/name: dsx-requisite-pre-install-job
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsUser: 1000320999
+      serviceAccountName: cpd-viewer-sa
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+      containers:
+      - name: dsx-requisite-pre-install-job-container
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.dsxRequisite.image.repository }}:{{ .Values.dsxRequisite.image.tag }}
+        resources:
+{{ toYaml .Values.dsxRequisite.resources | indent 10 }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000320999
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /cc-home
+          name: cc-home-mount
+      volumes:
+      - name: cc-home-mount
+        persistentVolumeClaim:
+          claimName: "cc-home-pvc"
+      restartPolicy: OnFailure

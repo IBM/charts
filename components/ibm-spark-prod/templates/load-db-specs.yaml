@@ -1,0 +1,93 @@
+# This is a YAML-formatted file.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: "{{ .Values.environment.name }}-load-db-specs"
+  annotations:
+    "helm.sh/hook": "pre-install,pre-upgrade"
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    app: "{{ .Values.environment.name }}-load-db-specs"
+    chart: "{{ .Chart.Name }}"
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: {{ .Release.Name }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+spec:
+  template:
+    metadata:
+      labels:
+        app: "{{ .Values.environment.name }}-load-db-specs"
+        chart: "{{ .Chart.Name }}"
+        heritage: {{ .Release.Service }}
+        release: {{ .Release.Name }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: helm
+        app.kubernetes.io/name: {{ .Release.Name }}
+        helm.sh/chart: "{{ .Chart.Name }}"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.global.architecture }}
+      restartPolicy: "OnFailure"
+      serviceAccount: {{ .Values.sa.viewer }}
+      securityContext:
+        runAsUser: {{ .Values.user.zensysId }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+      - name: "{{ .Values.environment.name }}-load-db-specs"
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsUser: {{ .Values.user.zensysId }}
+          runAsNonRoot: true
+          privileged: false
+          readOnlyRootFilesystem: false
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.dbSpec.image }}:{{ .Values.spark.image.tag }}"
+        imagePullPolicy: {{ .Values.microService.pullPolicy }}
+        resources:
+          requests:
+            cpu: {{ .Values.microService.requests.cpu200 }}
+            memory: {{ .Values.microService.limits.memory256 }}
+          limits:
+            cpu: {{ .Values.microService.requests.cpu200 }}
+            memory: {{ .Values.microService.limits.memory256 }}
+        env:
+          - name: DB_URL
+            value: "postgresql://{{ .Values.zenMetastore.user }}@{{ .Values.zenMetastore.hostname }}:{{ .Values.zenMetastore.port }}/{{ .Values.zenMetastore.dbName }}?sslmode={{ .Values.zenMetastore.ssl }}&sslrootcert={{ .Values.zenMetastore.caCert }}&sslcert={{ .Values.zenMetastore.clientCert }}&sslkey={{ .Values.zenMetastore.clientKey }}"       
+        command: ["/bin/bash", "-c"]
+        args:
+          - "bash {{ .Values.dbSpec.scriptPath }}load-db-specs.sh {{ .Values.dbSpec.scriptPath }} {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.dbSpec.image }} {{ .Values.db.version }}"
+        volumeMounts:
+        - name: "{{ .Values.environment.name }}-load-db-specs-script"
+          mountPath: "{{ .Values.dbSpec.scriptPath }}"
+        - name: "{{ .Values.environment.name }}-zen-user-home-pvc"
+          mountPath: "{{ .Values.microService.zenMetastoreCerts }}"
+          subPath: "{{ .Values.zenUserHomeVol.metaStoreCertPath }}"
+          readOnly: true
+      serviceAccount: {{ .Values.sa.viewer }}
+      volumes:
+        - name: "{{ .Values.environment.name }}-zen-user-home-pvc"
+          persistentVolumeClaim:
+            claimName: "{{ .Values.zenUserHomeVol.name }}"
+        - name: "{{ .Values.environment.name }}-load-db-specs-script"
+          configMap:
+            name: "{{ .Values.environment.name }}-load-db-specs-script"
+        - name: "{{ .Values.environment.name }}-zen-metstore-certs"
+          secret:
+            secretName: "{{ .Values.microService.serviceBrokerTokenSecret }}"

@@ -1,0 +1,81 @@
+{{- if .Values.runtimes.preloadRuntimes }}
+{{- $compName := "preload-shaper" -}}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: {{$compName}}
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-{{$compName}}"
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded
+    {{- if .Values.global.annotations }}
+{{ toYaml .Values.global.annotations | trim | indent 4 }}
+    {{- end }}
+spec:
+  parallelism: {{ .Values.runtimes.workerNodes }}
+  completions: {{ .Values.runtimes.workerNodes }}
+  template:
+    metadata:
+      annotations:
+        {{- if .Values.global.annotations }}
+{{ toYaml .Values.global.annotations | trim | indent 8 }}
+        {{- end }}
+      labels:
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        app.kubernetes.io/name: "{{ .Release.Name }}-{{$compName}}"
+        helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+        run: {{$compName}}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true         
+        runAsUser: {{ .Values.global.runAsUser }}
+      serviceAccount: {{ .Values.global.viewer.sa }}
+      serviceAccountName: {{ .Values.global.viewer.sa }}
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_compute: "true"
+      {{- end }}
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: run
+                  operator: In
+                  values:
+                  - {{$compName}}
+            topologyKey: kubernetes.io/hostname
+      containers:
+        - name: {{$compName}}-container
+          image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.shaperServer.image.name }}:{{ .Values.shaperServer.image.tag }}
+          imagePullPolicy: IfNotPresent
+          command: ["echo", "Image {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.shaperServer.image.name }}:{{ .Values.shaperServer.image.tag }} preloaded"]
+          resources:
+            limits:
+              cpu: "0.1"
+              memory: "128Mi"
+            requests:
+              cpu: "0.1"
+              memory: "128Mi"
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true             
+            runAsUser: {{ .Values.global.runAsUser }}
+            capabilities:
+              drop:
+              - ALL 
+      restartPolicy: OnFailure
+{{- end }}

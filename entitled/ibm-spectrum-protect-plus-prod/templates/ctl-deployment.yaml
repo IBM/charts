@@ -1,3 +1,7 @@
+{{- $isValid := .Values.license }}
+{{- if not (eq $isValid true) }}
+{{- fail "\n\nERROR - The license must be accepted by setting the license key to true.\n" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -23,6 +27,7 @@ spec:
         productID: {{ include "baas.productID" . }}
         productName: {{ include "baas.productName" . }}
         productVersion: {{ include "baas.productVersion" . }}
+        productMetric: {{ include "baas.productMetric" . }}
       labels:
         app.kubernetes.io/name: {{ include "baas.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
@@ -44,10 +49,11 @@ spec:
       hostPID: false
       hostIPC: false
       securityContext:
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
         runAsUser: 1000
-        runAsGroup: 1000
-        runAsNonRoot: true
         fsGroup: 1000
+{{- end }}
+        runAsNonRoot: true
       containers:
       - name: {{ include "baas.fullname" . }}-controller
         {{- if .Values.imageRegistryNamespace }}

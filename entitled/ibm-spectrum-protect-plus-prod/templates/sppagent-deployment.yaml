@@ -23,6 +23,7 @@ spec:
         productID: {{ include "baas.productID" . }}
         productName: {{ include "baas.productName" . }}
         productVersion: {{ include "baas.productVersion" . }}
+        productMetric: {{ include "baas.productMetric" . }}
       labels:
         app.kubernetes.io/name: {{ include "baas.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
@@ -63,6 +64,7 @@ spec:
               port: {{ .Values.sppagent.service.port }}
             initialDelaySeconds: {{ .Values.sppagent.readinessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.sppagent.readinessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.sppagent.readinessProbe.failureThreshold }}
           {{- end }}
           {{- if .Values.sppagent.livenessProbe.enabled}}
           livenessProbe:
@@ -70,6 +72,7 @@ spec:
               port: {{ .Values.sppagent.service.port }}
             initialDelaySeconds: {{ .Values.sppagent.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.sppagent.livenessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.sppagent.livenessProbe.failureThreshold }}
           {{- end }}
           imagePullPolicy: {{ .Values.sppagent.image.pullPolicy }}
           securityContext:
@@ -120,8 +123,15 @@ spec:
       - name: baas
         configMap:
           name: {{ include "baas.fullname" . }}-configmap
+{{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+      - name: tls-crt
+        configMap:
+          name: {{ include "baas.fullname" . }}-service-ca
+          defaultMode: 292
+{{- else }}
       - name: tls-crt
         secret:
           secretName: {{ include "baas.fullname" . }}-crt
           defaultMode: 256
+{{- end }}
       serviceAccountName: {{ include "baas.fullname" . }}-spp-agent

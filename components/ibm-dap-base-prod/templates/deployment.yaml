@@ -1,0 +1,191 @@
+{{- $Release := .Release }}
+{{- if $.Values.microservicelist }}
+{{- if $.Values.microservice.deployment.enabled }}
+{{- range $microservice := $.Values.microservicelist }}
+{{- $files := $.Files }}
+{{- $fileContent := $files.Get $.Values.microservice.deployment.envVariableFile }}
+{{- $envVars := fromYaml $fileContent }}
+{{- $envVarsList := toYaml (index $envVars $.Values.microservice.deployment.env) }}
+{{- $imagesList := $files.Get "imagesList.yaml" }}
+{{- $microserviceListDetails := fromYaml $imagesList }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $microservice }}
+  labels:
+    app.kubernetes.io/managed-by: {{$Release.Service | quote }}
+    app.kubernetes.io/instance: {{$Release.Name | quote }}
+    app.kubernetes.io/name: {{$.Chart.Name}}
+    helm.sh/chart: {{$.Chart.Name}}-{{$.Chart.Version | replace "+" "_" }}
+    app: {{ $microservice }}
+    chart: {{ template "watson-studio.chart" $ }}
+    release: {{ $.Chart.Name }}
+    heritage: {{ $Release.Service }}
+{{- if and ($.Values.global.annotations) (eq $.Values.microservice.deployment.env "icp4d") }}
+  annotations:
+{{ toYaml $.Values.global.annotations | trim | indent 4 }}
+{{- end }}
+spec:
+{{- if (eq $microservice "asset-files-api") }}
+  replicas: 1
+{{- else }}
+  replicas: {{ $.Values.microservice.deployment.replicaCount }}
+{{- end }}
+  strategy:
+    rollingUpdate:
+      maxSurge: {{ $.Values.microservice.deployment.strategy.maxSurge }}
+      maxUnavailable: {{ $.Values.microservice.deployment.strategy.maxUnavailable }}
+    type: {{ $.Values.microservice.deployment.strategy.type | quote }}
+  selector:
+    matchLabels:
+      app: {{ $microservice }}
+      release: {{ $.Chart.Name }}
+      environment: {{ $.Values.microservice.deployment.env }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: {{$Release.Service | quote }}
+        app.kubernetes.io/instance: {{$Release.Name | quote }}
+        app.kubernetes.io/name: {{$.Chart.Name}}
+        helm.sh/chart: {{$.Chart.Name}}-{{$.Chart.Version | replace "+" "_" }}
+        app: {{ $microservice }}
+        chart: {{ template "watson-studio.chart" $ }}
+        release: {{ $.Chart.Name }}
+        heritage: {{ $Release.Service }}
+        environment: {{ $.Values.microservice.deployment.env }}
+{{- if and ($.Values.global.annotations) (eq $.Values.microservice.deployment.env "icp4d") }}
+      annotations:
+{{ toYaml $.Values.global.annotations | trim | indent 8 }}
+{{- end }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ $microservice }}
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+      containers:
+      - name: {{ $microservice }}
+        image: "{{ $.Values.global.dockerRegistryPrefix }}/{{ (index $microserviceListDetails $microservice).image.repository }}:{{ $.Values.global.imageTag }}"
+{{- if ($.Values.global.pullPolicy) }}
+        imagePullPolicy: {{ $.Values.global.pullPolicy }}
+{{- else }}
+        imagePullPolicy: {{ (index $microserviceListDetails $microservice).image.pullPolicy }}
+{{- end }}
+        securityContext:
+          runAsUser: {{ $.Values.global.runAsUser }}
+          capabilities:
+            drop:
+            - ALL
+          allowPrivilegeEscalation: false
+          privileged: false
+          runAsNonRoot: true
+        resources:
+          requests:
+            memory: {{ $.Values.microservice.deployment.requests.memory }}
+            cpu: {{ $.Values.microservice.deployment.requests.cpu }}
+          limits:
+            memory: {{ $.Values.microservice.deployment.limits.memory }}
+            cpu: {{ $.Values.microservice.deployment.limits.cpu }}
+        ports:
+        - containerPort: {{ $.Values.microservice.port }}
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: {{ $.Values.microservice.rootPath | quote }}
+            port: {{ $.Values.microservice.port }}
+            scheme: {{ $.Values.microservice.scheme | quote }}
+          initialDelaySeconds: {{ $.Values.microservice.deployment.probes.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ $.Values.microservice.deployment.probes.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ $.Values.microservice.deployment.probes.readinessProbe.failureThreshold }}
+          successThreshold: {{ $.Values.microservice.deployment.probes.readinessProbe.successThreshold }}
+        livenessProbe:
+          httpGet:
+            path: {{ $.Values.microservice.rootPath | quote }}
+            port: {{ $.Values.microservice.port }}
+            scheme: {{ $.Values.microservice.scheme | quote }}
+          periodSeconds: {{ $.Values.microservice.deployment.probes.livenessProbe.periodSeconds }}
+          successThreshold: {{ $.Values.microservice.deployment.probes.livenessProbe.successThreshold }}
+          failureThreshold: {{ $.Values.microservice.deployment.probes.livenessProbe.failureThreshold }}
+          timeoutSeconds: {{ $.Values.microservice.deployment.probes.livenessProbe.timeoutSeconds }}
+          initialDelaySeconds: {{ $.Values.microservice.deployment.probes.livenessProbe.initialDelaySeconds }}
+        env: 
+          {{ tpl $envVarsList $ | indent 10 | trim}}
+{{- if (eq $microservice "asset-files-api") }}
+        volumeMounts:
+        - mountPath: "/mnt/asset_file_api"
+          name: file-api-pv
+        - mountPath: "/tmp"
+          name: file-api-pv
+          subPath: tmp
+        - mountPath: "/mnt/user-home/_global_/config"
+          name: cc-home-pv
+          subPath: _global_/config
+        - mountPath: "/mnt/user-home/_global_/dbdrivers"
+          name: user-home-pv
+          subPath: _global_/dbdrivers
+        - mountPath: "/mnt/user-home/_global_/.scripts"
+          name: user-home-pv
+          subPath: _global_/.scripts  
+        - mountPath: /etc/certificate
+          name: certificate
+      volumes:
+        - name: file-api-pv
+          persistentVolumeClaim:
+            claimName: file-api-claim
+        - name: user-home-pv
+          persistentVolumeClaim:
+            claimName: user-home-pvc
+        - name: cc-home-pv
+          persistentVolumeClaim:
+            claimName: cc-home-pvc
+        - name: certificate
+          secret:
+            secretName: ca-certificate-chain-trust
+{{- else if (eq $microservice "event-logger-api") }}
+        volumeMounts:
+        - mountPath: /etc/certificate
+          name: certificate
+        - mountPath: "/mnt/event-logger-api/projects"
+          name: file-api-pv
+          subPath: projects
+      volumes:
+        - name: certificate
+          secret:
+            secretName: ca-certificate-chain-trust
+        - name: file-api-pv
+          persistentVolumeClaim:
+            claimName: file-api-claim
+{{- else }}
+        volumeMounts:
+        - mountPath: /etc/certificate
+          name: certificate
+      volumes:
+        - name: certificate
+          secret:
+            secretName: ca-certificate-chain-trust
+{{- end }}
+      serviceAccountName: {{ $.Values.global.serviceAccount }}
+  minReadySeconds: {{ $.Values.microservice.deployment.minReadySeconds }}
+  progressDeadlineSeconds: {{ $.Values.microservice.deployment.progressDeadline }}
+{{ printf "%s" "---" }}
+{{- end -}}
+{{- end -}}
+{{- end -}}

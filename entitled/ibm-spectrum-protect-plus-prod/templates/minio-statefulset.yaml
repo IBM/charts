@@ -1,0 +1,143 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "baas.fullname" . }}-minio
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "baas.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ include "baas.appversion" . }}
+    app.kubernetes.io/component: minio
+    app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+    helm.sh/chart: {{ .Chart.Name }}
+spec:
+  serviceName: {{ template "baas.fullname" . }}
+  replicas: {{ .Values.minio.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "baas.name" . }}
+      app.kubernetes.io/component: minio
+      app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+  template:
+    metadata:
+      annotations:
+        productID: {{ include "baas.productID" . }}
+        productName: {{ include "baas.productName" . }}
+        productVersion: {{ include "baas.productVersion" . }}
+        productMetric: {{ include "baas.productMetric" . }}
+      labels:
+        app.kubernetes.io/name: {{ include "baas.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/version: {{ include "baas.appversion" . }}
+        app.kubernetes.io/component: minio
+        app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+        helm.sh/chart: {{ .Chart.Name }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      volumes:
+      - name: storage
+        persistentVolumeClaim:
+          claimName: minio-pv-claim
+      - name: config
+        emptyDir: {}
+      - name: tls-key-crt
+        secret:
+{{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          secretName: {{ include "baas.fullname" . }}-minio-tls
+{{- else }}
+          secretName: {{ include "baas.fullname" . }}-key-crt
+{{- end }}
+          defaultMode: 256
+      securityContext:
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+{{- end }}
+        runAsNonRoot: true
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+      - name: {{ include "baas.fullname" . }}-minio
+        {{- if .Values.imageRegistryNamespace }}
+        image: {{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.minio.image.name }}:{{ .Values.minio.image.tag }}
+        {{- else }}             
+        image: {{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.minio.image.name }}:{{ .Values.minio.image.tag }}
+        {{- end }}
+        imagePullPolicy: {{ .Values.minio.image.pullPolicy }}
+        args:
+        - server
+        - /storage
+        - --config-dir=/config
+        ports:
+        - containerPort: {{ .Values.minio.service.serverPort }}
+        volumeMounts:
+        - name: storage
+          mountPath: "/storage"
+        - name: config
+          mountPath: "/config"
+        - name: tls-key-crt
+          mountPath: "/etc/tls-key-crt"
+          readOnly: true
+        resources:
+          limits:
+            memory: {{ .Values.minio.resources.limits.memory }}
+            cpu: {{ .Values.minio.resources.limits.cpu }}
+          requests:
+            memory: {{ .Values.minio.resources.requests.memory }}
+            cpu: {{ .Values.minio.resources.requests.cpu }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL		
+        env:
+        - name: MINIO_ACCESS_KEY
+          valueFrom: 
+            secretKeyRef:
+              name: baas-secret
+              key: miniouser
+        - name: MINIO_SECRET_KEY
+          valueFrom: 
+            secretKeyRef:
+              name: baas-secret
+              key: miniopassword
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+              apiVersion: v1
+        {{- if .Values.minio.readinessProbe.enabled}}
+        readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: {{ .Values.minio.service.serverPort }}
+              scheme: HTTPS
+            initialDelaySeconds: {{ .Values.minio.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.minio.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.minio.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.minio.readinessProbe.failureThreshold }}
+        {{- end }}
+        {{- if .Values.minio.livenessProbe.enabled}}
+        livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: {{ .Values.minio.service.serverPort }}
+              scheme: HTTPS
+            initialDelaySeconds: {{ .Values.minio.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.minio.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.minio.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.minio.livenessProbe.failureThreshold }}
+        {{- end }}
+      serviceAccountName: {{ include "baas.fullname" . }}-minio

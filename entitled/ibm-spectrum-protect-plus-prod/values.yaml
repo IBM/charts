@@ -18,6 +18,9 @@
 ## ----------------------------------
 ## General BaaS deployment parameters
 ## ----------------------------------
+# Change the value of license to true to indicate acceptance of license
+# https://www-03.ibm.com/software/sla/sladb.nsf/searchlis/?searchview&searchorder=4&searchmax=0&query=(5737-F11)
+license: false
 #requiredDuringSchedulingIgnoredDuringExecution nodeAffinity parameter 
 arch: "amd64"
 # isOCP is a boolean variable to enable (true) or disable (false=default) template modifications specific to OpenShift (OCP) 
@@ -57,16 +60,31 @@ imageRegistrySecret: "baas-registry-secret"
 SPPips: ""
 # SPPport is the port of the IBM Spectrum Protect Plus server for BaaS to connect to
 SPPport: "443"
+# veleroNamespace is the namespace of the required velero installation
+veleroNamespace: ""
+# StorageClass that is used to create the Minio PVC
+minioStorageClass: ""
 
 ## --------------------------------------------------------
 ## Internal BaaS components - networkpolicy
 ## --------------------------------------------------------
-# CLUSTER CIDR 
-clusterCIDR: ""
-# kubernetes cluster api server ip address
-clusterAPIServerips: ""
-# kubernetes cluster api server
-clusterAPIServerport: "6443"
+networkPolicy:
+  # CLUSTER CIDR
+  # IF Kubernetes
+  # RUN COMMAND "kubectl cluster-info dump | grep -m 1 cluster-cidr" TO FIND IT
+  # IF OpenShift
+  # RUN COMMAND "oc get network -o yaml | grep -A1 clusterNetwork:" TO FIND IT
+  # Use the IP Address CIDR
+  clusterCIDR: ""
+  # CLUSTER API SERVER IP ADDRESS
+  # CLUSTER API SERVER PORT
+  # RUN "kubectl get endpoints -n default -o yaml kubernetes" - Replace kubectl with oc in OpenShift
+  # Use any of the provided addresses listed under addresses.
+  # For example, "kubectl get endpoints -n default -o yaml kubernetes"
+  clusterAPIServerips: 
+    - 0.0.0.0
+  clusterAPIServerport: "6443"
+
 # kubernetes cluster name
 clusterName: "kubernetes"
 
@@ -87,7 +105,7 @@ tm:
   replicaCount: 1  
   image:
     name: baas-transaction-manager
-    tag: 10.1.6
+    tag: 10.1.7
     pullPolicy: Always
     port: 5000
     portName: "tm"
@@ -110,25 +128,27 @@ tm:
 tmw:
   image:
     name: baas-transaction-manager-worker
-    tag: 10.1.6
+    tag: 10.1.7
     pullPolicy: Always
     port: 5000
     portName: "tm-worker"
   readinessProbe:
     enabled: true
     initialDelaySeconds: 5
-    periodSeconds: 10
+    periodSeconds: 90
     failureThreshold: 5
+    timeoutSeconds: 30
   livenessProbe:
     enabled: true
-    initialDelaySeconds: 10
-    periodSeconds: 20
+    initialDelaySeconds: 60
+    periodSeconds: 120
     failureThreshold: 5
+    timeoutSeconds: 30
 
 tmredis:
   image:
     name: baas-transaction-manager-redis
-    tag: 10.1.6
+    tag: 10.1.7
     pullPolicy: Always
   readinessProbe:
     enabled: true
@@ -146,7 +166,7 @@ ctl:
   replicaCount: 1  
   image:
     name: baas-controller
-    tag: 10.1.6
+    tag: 10.1.7
     pullPolicy: Always
   readinessProbe:
     enabled: true
@@ -164,7 +184,7 @@ sdl:
   rpo: 10
   image:
     name: baas-scheduler
-    tag: 10.1.6
+    tag: 10.1.7
     pullPolicy: Always
   service:
     port: 8000
@@ -184,14 +204,14 @@ sdl:
 dm:
   image:
     name: baas-datamover
-    tag: 10.1.6
+    tag: 10.1.7
 
 # BaaS sppagent
 sppagent:
   replicaCount: 1
   image:
     name: baas-spp-agent
-    tag: 10.1.6
+    tag: 10.1.7
     port: 22
     portName: "ssh"
     pullPolicy: Always
@@ -200,34 +220,95 @@ sppagent:
     portName: ssh
   readinessProbe:
     enabled: true
-    initialDelaySeconds: 30
-    periodSeconds: 120
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    failureThreshold: 3
   livenessProbe:
     enabled: true
-    initialDelaySeconds: 30
-    periodSeconds: 120
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    failureThreshold: 4
 
-# BaaS kafka
-kafka:
+# BaaS strimzi Kafka operators
+kafkaOperator:
   replicaCount: 1
   image:
-    name: baas-kafka
-    tag: 10.1.6
+    name: baas-kafka-operator
+    tag: 10.1.7
+    pullPolicy: Always
+    port: 8080    
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 30
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 30
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 384Mi
+    requests:
+      cpu: 200m
+      memory: 384Mi
+
+kafka25:
+  image: 
+    name: baas-kafka-2.5
+    tag: 10.1.7
+
+kafka24:
+  image:
+    name: baas-kafka-2.4
+    tag: 10.1.7
+
+baasKafkaBridge:
+  image:
+    name: baas-kafka-bridge
+    tag: 10.1.7
+    
+# BaaS kafka
+kafka:
+  openshift:
+    # Available update channels:
+    # stable
+    # amq-streams-1.x
+    # amq-streams-1.5.x
+    channel: stable
+    # Available update approval strategy:
+    # Manual
+    # Automatic
+    approval: Automatic
+  replicaCount: 1
+  service:
+    serverPort: 9092
+  resources:
+    limits:
+      memory: 1Gi
+      cpu: 2
+    requests:
+      memory: 400Mi
+      cpu: 300m
+    
+# BaaS minio
+minio:
+  replicaCount: 1
+  image:
+    name: baas-minio
+    tag: 10.1.7
     pullPolicy: Always
   service:
-    serverName: listener
-    serverPort: 9092
-    targetServerPort: 9092
-    clientName: zookeeper
-    clientPort: 2181
-    targetClientPort: 2181
+    serverName: server
+    serverPort: 9000
+    targetServerPort: 9000
   resources:
     limits:
       memory: 3Gi
       cpu: 3
     requests:
       memory: 600Mi
-      cpu: 500m
+      cpu: 100m
   readinessProbe:
     enabled: true
     initialDelaySeconds: 30
@@ -245,7 +326,7 @@ kafka:
 certmon:
   image:
     name: baas-cert-monitor
-    tag: 10.1.6
+    tag: 10.1.7
     pullPolicy: Always
 
 ## -----------------------------

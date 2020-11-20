@@ -1,0 +1,140 @@
+{{- if .Values.microservicelist }}
+{{- if .Values.microservice.deployment.enabled }}
+{{- $imagesList := .Files.Get "imagesList.yaml" }}
+{{- $imagesListDetails := fromYaml $imagesList }}
+{{- $fileContent := .Files.Get .Values.microservice.deployment.envVariableFile }}
+{{- $envVars := fromYaml $fileContent }}
+{{- $envVarsList := toYaml (index $envVars .Values.microservice.deployment.env) }}
+{{- range $microservice := .Values.microservicelist }}
+{{- if ne $microservice "job-trigger" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $microservice }}
+  annotations:
+    {{- if $.Values.global.annotations }}
+{{ toYaml $.Values.global.annotations | trim | indent 4 }}
+    {{- end }}
+  labels:
+    app: {{ $microservice }}
+    chart: {{ template "watson-studio.chart" $ }}
+    release: {{ $.Release.Name }}
+    heritage: {{ $.Release.Service }}
+    helm.sh/chart: {{ template "watson-studio.chart" $ }}
+    app.kubernetes.io/name: {{ $.Chart.Name }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+spec:
+  replicas: {{ $.Values.microservice.deployment.replicaCount }}
+  strategy:
+    rollingUpdate:
+      maxSurge: {{ $.Values.microservice.deployment.strategy.maxSurge }}
+      maxUnavailable: {{ $.Values.microservice.deployment.strategy.maxUnavailable }}
+    type: {{ $.Values.microservice.deployment.strategy.type | quote }}
+  selector:
+    matchLabels:
+      app: {{ $microservice }}
+      release: {{ $.Release.Name }}
+      environment: {{ $.Values.microservice.deployment.env }}
+  template:
+    metadata:
+      labels:
+        app: {{ $microservice }}
+        chart: {{ template "watson-studio.chart" $ }}
+        release: {{ $.Release.Name }}
+        heritage: {{ $.Release.Service }}
+        environment: {{ $.Values.microservice.deployment.env }}
+        helm.sh/chart: {{ template "watson-studio.chart" $ }}
+        app.kubernetes.io/name: {{ $.Chart.Name }}
+        app.kubernetes.io/managed-by: {{ $.Release.Service }}
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+{{- if and ($.Values.global.annotations) (eq $.Values.microservice.deployment.env "icp4d") }}
+      annotations:
+{{ toYaml $.Values.global.annotations | trim | indent 8 }}
+{{- end }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ $microservice }}
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+      containers:
+      - name: {{ $microservice }}
+        image: "{{ if $.Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" $.Values.global.dockerRegistryPrefix }}/{{ end }}{{ (index $imagesListDetails $microservice).image.repository }}:{{ $.Values.global.imageTag }}"
+        imagePullPolicy: {{ (index $imagesListDetails $microservice).image.pullPolicy }}
+        securityContext:
+          runAsUser: {{ $.Values.global.runAsUser }}
+          capabilities:
+            drop:
+            - ALL
+          allowPrivilegeEscalation: false
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+        resources:
+          requests:
+            memory: {{ $.Values.microservice.deployment.requests.memory }}
+            cpu: {{ $.Values.microservice.deployment.requests.cpu }}
+          limits:
+            memory: {{ $.Values.microservice.deployment.limits.memory }}
+            cpu: {{ $.Values.microservice.deployment.limits.cpu }}
+        ports:
+        - containerPort: {{ $.Values.microservice.port }}
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: {{ $.Values.microservice.rootPath | quote }}
+            port: {{ $.Values.microservice.port }}
+            scheme: {{ $.Values.microservice.scheme | quote }}
+          initialDelaySeconds: {{ $.Values.microservice.deployment.probes.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ $.Values.microservice.deployment.probes.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ $.Values.microservice.deployment.probes.readinessProbe.failureThreshold }}
+          successThreshold: {{ $.Values.microservice.deployment.probes.readinessProbe.successThreshold }}
+        livenessProbe:
+          httpGet:
+            path: {{ $.Values.microservice.rootPath | quote }}
+            port: {{ $.Values.microservice.port }}
+            scheme: {{ $.Values.microservice.scheme | quote }}
+          periodSeconds: {{ $.Values.microservice.deployment.probes.livenessProbe.periodSeconds }}
+          successThreshold: {{ $.Values.microservice.deployment.probes.livenessProbe.successThreshold }}
+          failureThreshold: {{ $.Values.microservice.deployment.probes.livenessProbe.failureThreshold }}
+          timeoutSeconds: {{ $.Values.microservice.deployment.probes.livenessProbe.timeoutSeconds }}
+          initialDelaySeconds: {{ $.Values.microservice.deployment.probes.livenessProbe.initialDelaySeconds }}
+        env: 
+          {{ tpl $envVarsList $ | indent 10 | trim}}
+          - name: NODE_EXTRA_CA_CERTS
+            value: /etc/certificate/certificate.pem
+        volumeMounts:
+        - mountPath: "/etc/certificate"
+          name: certificate
+      volumes:
+        - name: certificate
+          secret:
+            secretName: ca-certificate-chain-trust
+      serviceAccount: {{ $.Values.global.serviceAccount }}
+      serviceAccountName: {{ $.Values.global.serviceAccountName }}
+  minReadySeconds: {{ $.Values.microservice.deployment.minReadySeconds }}
+  progressDeadlineSeconds: {{ $.Values.microservice.deployment.progressDeadline }}
+{{ printf "%s" "---" }}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

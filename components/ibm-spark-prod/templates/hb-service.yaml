@@ -1,0 +1,192 @@
+
+# This is a YAML-formatted file.
+
+apiVersion: apps/v1 # for versions before 1.8.0 use apps/v1beta1
+kind: Deployment
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: "{{ .Values.environment.name }}-control-plane"
+  labels:
+    app: "{{ .Values.environment.name }}-control-plane"
+    chart: "{{ .Chart.Name }}"
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: {{ .Release.Name }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+spec:
+  selector:
+    matchLabels:
+      app: "{{ .Values.environment.name }}-control-plane"
+      chart: "{{ .Chart.Name }}"
+      heritage: {{ .Release.Service }}
+      release: {{ .Release.Name }}
+  replicas: {{ default 1 .Values.global.replicaCount }} # tells deployment to run X pods matching the template
+  template: # create pods using pod definition in this template
+    metadata:
+      annotations:
+        cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion: "3.0.1"
+        cloudpakName: "IBM Cloud Pak for Data"
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
+        productChargedContainers: "All"
+        productName: "Analytics Engine powered by Apache Spark"
+        productID: "ICP4D-Spark-00000"
+        productVersion: "3.0.1"
+      # the name is not included in the meta data as a unique name is
+      # generated from the deployment name
+      labels:
+        app: "{{ .Values.environment.name }}-control-plane"
+        chart: "{{ .Chart.Name }}"
+        heritage: {{ .Release.Service }}
+        release: {{ .Release.Name }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: helm
+        app.kubernetes.io/name: {{ .Release.Name }}
+        helm.sh/chart: "{{ .Chart.Name }}"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.global.architecture }}
+      securityContext:
+        runAsUser: {{ .Values.user.zensysId }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+      - name: "{{ .Values.environment.name }}-control-plane"
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsUser: {{ .Values.user.zensysId }}
+          runAsNonRoot: true
+          privileged: false
+          readOnlyRootFilesystem: false
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.microService.image }}:{{ .Values.spark.image.tag }}"
+        imagePullPolicy: {{ .Values.microService.pullPolicy }}
+        resources:
+          requests:
+            cpu: {{ .Values.microService.requests.cpu }}
+            memory: {{ .Values.microService.requests.memory }}
+          limits:
+            cpu: {{ .Values.microService.limits.cpu }}
+            memory: {{ .Values.microService.limits.memory }}
+        ports:
+        - containerPort: {{ .Values.microService.port }}
+          protocol: TCP
+        volumeMounts:
+        - name: "{{ .Values.environment.name }}-cp-confidential-properties"
+          mountPath: "{{ .Values.microService.confidentialProperties }}"
+          readOnly: true
+        - name: "{{ .Values.environment.name }}-cp-deployment-properties"
+          mountPath: "{{ .Values.microService.deploymentConfigPath }}"
+{{ if .Values.microService.isLocalMode }}
+        - name: "{{ .Values.environment.name }}-resource-limit-properties"
+          mountPath: "{{ .Values.microService.resourceLimitPath }}"
+        - name: "{{ .Values.environment.name }}-cp-wdp-secret"
+          mountPath: "{{ .Values.microService.wdpPropertiesPath }}"
+        - name: "{{ .Values.environment.name }}-zen-user-home-pvc"
+          mountPath: "{{ .Values.microService.zenMetastoreCerts }}"
+          subPath: "{{ .Values.zenUserHomeVol.metaStoreCertPath }}"
+          readOnly: true
+        - name: "{{ .Values.environment.name }}-zen-user-home-pvc"
+          mountPath: "{{ .Values.microService.jwtCerts }}"
+          subPath: "{{ .Values.zenUserHomeVol.jwtCertPath }}"
+          readOnly: true
+        - name: "{{ .Values.trustStore.icp4dTsSecretName }}"
+          mountPath: "{{ .Values.microService.trustStorePath }}/cacerts"
+          subPath: cacerts
+          readOnly: true
+        - name: "service-broker-token"
+          mountPath: "{{ .Values.microService.serviceBrokerTokenPath }}"
+{{ end }}
+        readinessProbe:
+          httpGet:
+            path: "{{ .Values.kernelService.path }}/ping"
+            port: {{ .Values.microService.port }}
+            scheme: {{ .Values.microService.readinessProbeScheme }}
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+        livenessProbe:
+          exec:
+            command:
+            - ls
+            - /opt/hb/deployment_config/deployment.properties
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }} 
+      serviceAccount: {{ .Values.sa.editor }}   
+      volumes:
+        - name: "{{ .Values.environment.name }}-cp-confidential-properties"
+          secret:
+            secretName: "{{ .Values.environment.name }}-confidential-properties" 
+        - name: "{{ .Values.environment.name }}-cp-deployment-properties"
+          configMap:
+            name: "{{ .Values.environment.name }}-deployment-properties"
+            items:
+            - key: "deployment-properties"
+              path: "deployment.properties"
+{{ if .Values.microService.isLocalMode }}
+        - name: "{{ .Values.environment.name }}-resource-limit-properties"
+          configMap:
+            name: "{{ .Values.environment.name }}-resource-limit"
+            items:
+            - key: "resource-limit-properties"
+              path: "resource-limit.properties"
+        - name: "{{ .Values.environment.name }}-cp-wdp-secret"
+          secret:
+            secretName: "{{ .Values.microService.wdpSecretName }}"
+            items:
+            - key: service-id-credentials
+              path: wdp.properties
+        - name: "{{ .Values.environment.name }}-zen-user-home-pvc"
+          persistentVolumeClaim:
+            claimName: "{{ .Values.zenUserHomeVol.name }}"
+        - name: "{{ .Values.trustStore.icp4dTsSecretName }}"
+          secret:
+            secretName: "{{ .Values.trustStore.icp4dTsSecretName }}"
+        - name: "service-broker-token"
+          secret:
+            secretName: "{{ .Values.microService.serviceBrokerTokenSecret }}"
+            items:
+            - key: token
+              path: cpd_service_broker.properties
+{{ end }}
+---
+apiVersion: v1
+kind: Service
+metadata: 
+  labels:
+    app: "{{ .Values.environment.name }}-control-plane"
+    chart: "{{ .Chart.Name }}"
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: {{ .Release.Name }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+  name: "{{ .Values.environment.name }}-control-plane"
+  namespace: {{ .Release.Namespace }}
+spec: 
+  selector:
+    app: "{{ .Values.environment.name }}-control-plane"
+    chart: "{{ .Chart.Name }}"
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+  type: {{ .Values.microService.svcType }}
+  ports: 
+  - port: {{ .Values.microService.port }}
+    protocol: TCP
+    targetPort: {{ .Values.microService.port }}

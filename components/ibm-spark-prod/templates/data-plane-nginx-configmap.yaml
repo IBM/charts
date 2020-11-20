@@ -1,0 +1,200 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .Values.environment.name }}-{{ .Values.nginx.name }}-configmap"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    icpdata_addon_version: {{ .Chart.AppVersion }}
+    name: "{{ .Values.environment.name }}-{{ .Values.nginx.name }}-configmap"
+    chart: "{{ .Chart.Name }}"
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app: "{{ .Values.environment.name }}-{{ .Values.nginx.name }}-configmap"
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: {{ .Release.Name }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+data:
+    nginx.conf: |-
+      daemon off;
+      error_log  /var/log/nginx/error.log;
+      worker_processes {{ .Values.nginx.workerProcess }};
+      events { worker_connections  {{ .Values.nginx.workerConnection }}; }
+
+      http {
+          log_format apm '"$time_local" client=$remote_addr '
+                         'remote_addr=$remote_addr'
+                         'remote_user=$remote_user'
+                         'method=$request_method'
+                         'request="$request" '
+                         'request_length=$request_length '
+                         'status=$status'
+                         'bytes_sent=$bytes_sent '
+                         'body_bytes_sent=$body_bytes_sent '
+                         'referer=$http_referer '
+                         'user_agent="$http_user_agent" '
+                         'upstream_addr=$upstream_addr '
+                         'upstream_status=$upstream_status '
+                         'request_time=$request_time '
+                         'upstream_response_time=$upstream_response_time '
+                         'upstream_connect_time=$upstream_connect_time '
+                         'upstream_header_time=$upstream_header_time';
+
+          sendfile                on;
+          tcp_nopush              on;
+          tcp_nodelay             on;
+          client_header_timeout   2m;
+          client_body_timeout     2m;
+          proxy_connect_timeout   600;
+          proxy_send_timeout      600;
+          proxy_read_timeout      600;
+          send_timeout            600;
+
+
+          server {
+            listen {{ .Values.nginx.containerPort }};
+            {{- if ne .Values.global.containerPlatform "openshift" }}
+            resolver {{ .Values.nginxRepo.resolver }} valid=1s;
+            {{- else }}
+            resolver kubernetes.default valid=1s;
+            {{- end }}
+            proxy_intercept_errors on;
+            access_log /var/log/nginx/apm.log apm;
+            
+            location = /internal {
+            	internal;            
+            	proxy_pass              {{ .Values.microService.scheme }}://{{ .Values.environment.name }}-control-plane:{{ .Values.microService.port }}/access/v1/apikey/authorize_dataplane;
+            	proxy_set_header X-Forwarded-User $http_authorization;
+            	proxy_set_header Authorization $http_authorization;
+            	proxy_set_header        Content-Length "";
+            	proxy_set_header X-Original-Request $request;
+            	proxy_http_version 1.1;
+            }
+            	
+            location ~ /(.*)/jkg/(.*)$ {
+                #auth_request     /internal;
+                #auth_request_set $auth_status $upstream_status;
+                set $serv  http://{{ .Values.jkg.component }}-headless-$1.{{ .Release.Namespace }}.svc.cluster.local:8888/$2;
+                proxy_pass  $serv;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header Host $host;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-NginX-Proxy true;
+
+                # WebSocket support
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+                proxy_read_timeout 86400;
+            }
+            location ~ /(.*)/v1/jobs/(.*)$ {
+                #auth_request     /internal;
+                #auth_request_set $auth_status $upstream_status;
+                set $serv  http://{{ .Values.sparkMaster.component }}-headless-$1.{{ .Release.Namespace }}.svc.cluster.local:6066/v1/submissions/$2;
+                proxy_pass  $serv;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header Host $host;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-NginX-Proxy true;
+
+            }
+            
+            location ~ /(.*)/v2/jobs/(.*)$ {
+                #auth_request     /internal;
+                #auth_request_set $auth_status $upstream_status;
+                set $serv  http://{{ .Values.sparkMaster.component }}-headless-$1.{{ .Release.Namespace }}.svc.cluster.local:8080/$2/;
+                proxy_pass  $serv;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header Host $host;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-NginX-Proxy true;
+
+            }
+            location ~ /helmDeployer/(.*)$ {
+                #auth_request     /internal;
+                #auth_request_set $auth_status $upstream_status;
+                set $serv  {{ .Values.microService.scheme }}://{{ .Values.environment.name }}-control-plane:{{ .Values.microService.port }}/helmDeployer/$1;
+                proxy_pass  $serv;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header Host $host;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-NginX-Proxy true;
+            }
+
+            location ~ /(.*)/sparkui/(.*)$ {
+                set $kernel_id $1;
+                set $serv http://spark-master-headless-$kernel_id.{{ .Release.Namespace }}.svc.cluster.local:8080/$2$is_args$args;
+                proxy_pass   $serv;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header Accept-Encoding "";
+                sub_filter 'href="/"' 'href="/$kernel_id/sparkui/"';
+                sub_filter 'Back to Master</a></p>' '</a><a href="/$kernel_id/sparkui/">Back to Master</a></p>';
+                sub_filter "/proxy/app" "/$kernel_id/sparkui/proxy/app";
+                sub_filter '"/static/' '"/$kernel_id/sparkui/static/';
+                sub_filter "/proxy/worker" "/$kernel_id/sparkui/proxy/worker";
+                sub_filter_once off;
+                error_page 301 302 303 = @sparkhandler;
+            }
+            location @sparkhandler {
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header Accept-Encoding "";
+                set $original_uri $uri;
+                set $orig_loc $upstream_http_location;
+                set $spark_master_url http://spark-master-headless-$kernel_id.{{ .Release.Namespace }}.svc.cluster.local:8080;
+                if ($orig_loc ~* "(.*)/proxy/(.*)"){
+                  set $new_uri $spark_master_url/proxy/$2;
+                }
+                if ($orig_loc ~* "(.*)/app/(.*)"){
+                  set $new_uri $spark_master_url/app/$2;
+                }
+                proxy_pass $new_uri;
+                sub_filter 'href="/"' 'href="/$kernel_id/sparkui/"';
+                sub_filter 'Back to Master</a></p>' '</a><a href="/$kernel_id/sparkui/">Back to Master</a></p>';
+                sub_filter '"/static/' '"/$kernel_id/sparkui/static/';
+                sub_filter "/proxy/app" "/$kernel_id/sparkui/proxy/app";
+                sub_filter "/proxy/worker" "/$kernel_id/sparkui/proxy/worker";
+                sub_filter_once off;
+            }
+            location @historyhandler {
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header Accept-Encoding "";
+                set $original_uri $uri;
+                set $orig_loc $upstream_http_location/;
+                #return 200 "$original_uri $uri   loc $orig_loc $upstream_http_location     $is_args    $args";
+                proxy_pass $orig_loc$is_args$args;
+                sub_filter '"/static/' '"/$1/historyui/static/';
+                sub_filter "/jobs/job/" "/jobs/job";
+                sub_filter "/stages/stage/" "/stages/stage";
+                sub_filter "/history/" "/$1/historyui/history/";
+                sub_filter "/proxy/" "/$1/historyui/proxy/";
+                sub_filter 'href="/?showIncomplete' 'href="/$1/historyui/?showIncomplete';
+                sub_filter_types application/javascript;
+                sub_filter 'return "/log"' 'return "/$1/historyui/log"';
+                sub_filter_once off;
+
+            } 
+            location ~ /(.*)/historyui(.*)$ {
+                proxy_pass   http://spark-history-headless-$1.{{ .Release.Namespace }}.svc.cluster.local:18080$2;
+                proxy_set_header Accept-Encoding "";
+                sub_filter '"/static/' '"/$1/historyui/static/';
+                sub_filter "/history/" "/$1/historyui/history/";
+                sub_filter "/proxy/" "/$1/historyui/proxy/";
+                sub_filter 'href="/?showIncomplete' 'href="/$1/historyui/?showIncomplete';
+                sub_filter "/stages/stage/" "/stages/stage";
+                sub_filter "/jobs/job/" "/jobs/job";
+                sub_filter 'getJSON(uiRoot + "/api' 'getJSON(uiRoot + "/$1/historyui/api';
+                sub_filter 'attempt["log"] = uiRoot + "/api' 'attempt["log"] = uiRoot + "/$1/historyui/api';
+                sub_filter_types application/javascript;
+                sub_filter 'return "/log"' 'return "/$1/historyui/log"';
+                sub_filter_once off;
+                error_page 301 302 303 = @historyhandler;
+
+            }
+          }
+      }

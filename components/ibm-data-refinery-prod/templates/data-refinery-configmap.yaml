@@ -1,0 +1,142 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shaper-configmap
+  annotations:
+    {{- if .Values.global.annotations }}
+{{ toYaml .Values.global.annotations | trim | indent 4 }}
+    {{- end }}
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-configmap"
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }}
+    {{ include "zenhelper.labels" (list . "" (dict "icpdata_addon" "true")) | indent 4 }}
+    icpdata_addon_version: {{.Chart.AppVersion | quote }}
+  namespace: {{ .Release.Namespace }}
+data:
+  add-ons.json: |
+    {
+      "rshaper": {
+        "details": {
+{{- if hasKey .Values "global" }}
+{{- if hasKey .Values.global "ibmProduct" }}
+{{- if eq .Values.global.ibmProduct "ws" }}
+          "product_docs":"https://www.ibm.com/support/knowledgecenter/SSHGWL_2.1.0/wsj/refinery/refining_data.html",
+          "images": null,
+{{- end }}
+{{- end }}
+{{- end }}
+          "premium": false
+        },
+        "versions": {
+          "3.0.1": {
+            "state": "enabled",
+            "details": {
+              "plan_name": "Professional"
+            }
+          }
+        }
+      }
+    }
+  shaper-server.json: |
+    {
+      "displayName": "Data Refinery",
+      "description": "Data Refinery with OpenCPU and R support",
+      "author": "IBM",
+      "tested": true,
+      "isService": true,
+      "runtimeType": "shaper",
+      "features": ["environment"],
+      "portMappings": [
+        {
+          "servicePort": 8446,
+          "containerPort": 8446,
+          "protocol": "TCP"
+        }
+      ],
+      "replicas": 1,
+      "image": "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.shaperServer.image.name }}:{{ .Values.shaperServer.image.tag }}",
+      "privileged": false,
+      "command": ["/scripts/startup_icp4data.sh"],
+      "volumes": [
+        {
+          "volume": "scripts",
+          "mountPath": "/cc-home/.scripts",
+          "subPath": ".scripts",
+          "claimName": "cc-home-pvc",
+          "readOnly": true
+        },
+        {
+          "volume": "customer-truststores",
+          "mountPath": "/cc-home/_global_/security/customer-truststores",
+          "subPath": "_global_/security/customer-truststores",
+          "claimName": "cc-home-pvc",
+          "readOnly": true
+        }
+      ],
+      "probes": {
+        "liveness": {
+          "path": "/shaper/ocpu/library/v2viz/info",
+          "scheme": "https",
+          "port": 8446,
+          "initialDelaySeconds": 120,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        },
+        "readiness": {
+          "path": "/shaper/ocpu/library/v2viz/info",
+          "scheme": "https",
+          "port": 8446,
+          "initialDelaySeconds": 15,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        }
+      },
+      "resources": {
+        "cpu": {
+          "request": 2000,
+          "minimum": 2000
+        },
+        "gpu": {
+          "request": -1,
+          "minimum": 0
+        },
+        "memory": {
+          "request": 5120,
+          "minimum": 5120
+        },
+        "duration": {
+          "value": -1,
+          "units": "unix"
+        }
+      }
+    }
+  nginx.conf: |
+    set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
+    set $wdp_dataprep wdp-dataprep-svc.$nsdomain;
+    location ~ ^/dsx-shaper/ibmdsxuser-(.*?)/(.*?)/(.*?)/(.*) {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      rewrite ^/dsx-shaper/ibmdsxuser-(.*?)/(.*?)/(.*?)/(.*)$ /shaper/$4 break;
+      proxy_pass https://$3-svc.$nsdomain:8446;
+      proxy_read_timeout 10m;
+    }
+    location /refinery {
+     proxy_set_header Host $host;
+     proxy_pass https://$wdp_dataprep:443;
+    }
+    location /v2/data_flow_spark {
+     proxy_set_header Host $host;
+     proxy_pass https://$wdp_dataprep:443;
+    }
+  files: |
+    [
+      {
+        "dest": "/user-home/_global_/config/.runtime-definitions/ibm/shaper-server.json",
+        "contentKey": "shaper-server.json"
+      }
+    ]
