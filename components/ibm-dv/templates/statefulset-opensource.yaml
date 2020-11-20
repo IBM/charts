@@ -3,30 +3,52 @@
 {{- $compName := .sch.chart.components.utils.name -}}
 {{- $podName := .sch.chart.pods.utils.name -}}
 {{- $ServiceInstanceID := .Values.zenServiceInstanceId | int64 -}}
+{{- $ServiceInstanceUID := .Values.zenServiceInstanceUID | int64 -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
   labels:
-{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName)) | indent 4 }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 4 }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName)) | indent 6 }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 6 }}
   serviceName: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
   updateStrategy:
     type: RollingUpdate
   template:
     metadata:
       labels:
-{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName)) | indent 8 }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 8 }}
       annotations:
+        hook.activate.cpd.ibm.com/command: "[]"
+        hook.deactivate.cpd.ibm.com/command: "[]"
+        hook.quiesce.cpd.ibm.com/command: "[]"
+        hook.unquiesce.cpd.ibm.com/command: "[]"
 {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering nil nil nil) | indent 8 }}
     spec:
 {{- include "sch.security.securityContext" (list . .sch.chart.security.utilsPodSecurityContext) | indent 6 }}
       affinity:
 {{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      initContainers:
+        - name: {{ include "sch.names.appName" (list .) }}-{{ .sch.chart.components.utils.name }}-init
+          image: "{{ .Values.docker_registry_prefix }}/{{ .Values.dvInitVolume.image.dockerImage }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+          - /bin/sh
+          - -c
+          - --
+          - if [ ! -d /mnt/PV/unversioned/hadoop ]; then
+            python3 -u /restore-volumes-script.py --operation restore --type unversioned --overwrite;
+            fi;
+          volumeMounts:
+            - mountPath: /mnt/PV/unversioned
+              name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}-data
+              subPath: unversioned
+{{- include "dv.helpers.resources" (list . .Values.resources.opensource) | indent 10 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.security.initVolumeContainerSecurityContext) | indent 10 }}
       containers:
       - name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
         image: "{{ .Values.docker_registry_prefix }}/{{ .Values.dvEngine.image.dockerImage }}:{{ .Values.image.tag }}"
@@ -47,7 +69,7 @@ spec:
           initialDelaySeconds: 300
           periodSeconds: 120
           failureThreshold: 10
-          timeoutSeconds: 15
+          timeoutSeconds: 40
         readinessProbe:
           exec:
             command:
@@ -65,7 +87,7 @@ spec:
           name: dv-data
           subPath: "{{ .Chart.AppVersion }}"
         - mountPath: /mnt/PV/unversioned
-          name: dv-caching-data
+          name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}-data
           subPath: unversioned
         - mountPath: /tmp/opensource_container_resources
           name: dv-pod-info-opensource
@@ -91,10 +113,7 @@ spec:
       volumes:
       - name: dv-data
         persistentVolumeClaim:
-            claimName: {{ if .Values.persistence.existingClaimName }}{{ .Values.persistence.existingClaimName }}{{- else }}{{ include "sch.names.appName" (list .) }}-pvc{{- end }}
-      - name: dv-caching-data
-        persistentVolumeClaim:
-            claimName: {{ if .Values.persistence.cachingpv.existingClaimName }}{{ .Values.persistence.cachingpv.existingClaimName }}{{- else }}{{ include "sch.names.appName" (list .) }}-caching-pvc{{- end }}
+            claimName: {{ include "sch.names.appName" (list .) }}-pvc
       - name: dv-pod-info-opensource
         downwardAPI:
           items:
@@ -106,3 +125,14 @@ spec:
         secret:
           secretName: {{ include "sch.names.appName" (list .) }}-{{ .sch.chart.components.secret.name }}
           defaultMode: 288
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      {{- if .Values.persistence.useDynamicProvisioning }}
+      storageClassName: {{ .Values.persistence.cachingpv.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.persistence.cachingpv.size | quote }}

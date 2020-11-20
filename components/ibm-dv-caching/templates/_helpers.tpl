@@ -21,6 +21,6 @@ Create default Data Virtualization annotations
 */}}
 {{- define "dv.annotations" }}
 productName: "IBM Data Virtualization"
-productID: "ICP4D-IBMDataVirtualizationv141_00000"
-productVersion: "1.4.1"
+productID: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+productVersion: "1.5.0"
 {{- end }}

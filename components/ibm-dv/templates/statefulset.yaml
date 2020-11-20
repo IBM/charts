@@ -2,18 +2,18 @@
 {{- $appName := .sch.chart.appName -}}
 {{- $compName := .sch.chart.components.engine.name -}}
 {{- $podName := .sch.chart.pods.engine.name -}}
-{{- $bigsqlComp := .sch.chart.components.bigsql.name -}}
 {{- $ServiceInstanceID := .Values.zenServiceInstanceId | int64 -}}
+{{- $ServiceInstanceUID := .Values.zenServiceInstanceUID | int64 -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
   labels:
-{{ include "sch.metadata.labels.standard" (list . $compName (dict $bigsqlComp $bigsqlComp "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName)) | indent 4 }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "type" "engine" "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 4 }}
 spec:
   selector:
     matchLabels:
-{{ include "sch.metadata.labels.standard" (list . $compName (dict $bigsqlComp $bigsqlComp "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName)) | indent 6 }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "type" "engine" "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 6 }}
   serviceName: {{ include "sch.names.appName" (list .) }}
   replicas: 1
   updateStrategy:
@@ -21,8 +21,12 @@ spec:
   template:
     metadata:
       labels:
-{{ include "sch.metadata.labels.standard" (list . $compName (dict $bigsqlComp $bigsqlComp "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName)) | indent 8 }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "type" "engine" "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 8 }}
       annotations:
+        hook.activate.cpd.ibm.com/command: "[]"
+        hook.deactivate.cpd.ibm.com/command: "[]"
+        hook.quiesce.cpd.ibm.com/command: "[]"
+        hook.unquiesce.cpd.ibm.com/command: "[]"
 {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering nil nil nil) | indent 8 }}
     spec:
 {{- include "sch.security.securityContext" (list . .sch.chart.security.headPodSecurityContext) | indent 6 }}
@@ -34,6 +38,29 @@ spec:
               matchExpressions:
               - key: dv-dedicated
                 operator: Exists
+      initContainers:
+        - name: {{ include "sch.names.appName" (list .) }}-{{ .sch.chart.components.engine.name }}-init
+          image: "{{ .Values.docker_registry_prefix }}/{{ .Values.dvInitVolume.image.dockerImage }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+          - /bin/sh
+          - -c
+          - --
+          - if [ ! -d /mnt/PV/unversioned/hadoop/bigsql/bigsql ]; then
+            python3 -u /restore-volumes-script.py --operation restore --type unversioned --overwrite;
+            fi;
+            if [ ! -d /mnt/PV/versioned/ibm/bigsql/database/bigdb/bigsql ]; then
+            sudo tar -zxvf /versioned.tar.gz mnt/PV/versioned/ibm/bigsql;
+            fi;
+          volumeMounts:
+            - mountPath: /mnt/PV/unversioned
+              name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}-data
+              subPath: unversioned
+            - mountPath: /mnt/PV/versioned
+              name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}-data
+              subPath: "{{ .Chart.AppVersion }}"
+{{- include "dv.helpers.resources" (list . .Values.resources.dv) | indent 10 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.security.initVolumeContainerSecurityContext) | indent 10 }}
       containers:
         - name: {{ include "sch.names.appName" (list .) }}-{{ .sch.chart.components.engine.name }}
           image: "{{ .Values.docker_registry_prefix }}/{{ .Values.dvEngine.image.dockerImage }}:{{ .Values.image.tag }}"
@@ -48,21 +75,32 @@ spec:
           - mountPath: /mnt/PV/versioned/unified_console_data
             name: dv-data
             subPath: unified_console_data
-          - mountPath: /mnt/PV/unversioned
-            name: dv-caching-data
-            subPath: unversioned
+          - mountPath: /mnt/PV/unversioned/hadoop/bigsql
+            name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}-data
+            subPath: unversioned/hadoop/bigsql
+          - mountPath: /mnt/PV/versioned/ibm/bigsql
+            name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}-data
+            subPath: "{{ .Chart.AppVersion }}/ibm/bigsql"
           - mountPath: /var/log
             name: dv-data
             subPath: logfiles
           - mountPath: /tmp/container_resources
             name: dv-pod-info
             readOnly: false
+          - mountPath: /dev/shm
+            name: dshm
           - name: secret-volume
             readOnly: true
             mountPath: "/etc/secret-volume"
+          - name: zen-service-id-secret-volume
+            readOnly: true
+            mountPath: "/etc/zen-service-id-secret-volume"
           - name: wdp-service-id-secret-volume
             readOnly: true
             mountPath: "/etc/wdp-service-id-secret-volume"
+          - name: wdp-policy-service-secret-volume
+            readOnly: true
+            mountPath: "/etc/wdp-policy-service-secret-volume"
           - name: internal-nginx-svc-tls
             readOnly: true
             mountPath: "/etc/internal-nginx-svc-tls"
@@ -98,8 +136,8 @@ spec:
               - /opt/dv/current/liveness.sh
             initialDelaySeconds: 300
             periodSeconds: 120
-            failureThreshold: 10
-            timeoutSeconds: 10
+            failureThreshold: 15
+            timeoutSeconds: 35
           lifecycle:
             preStop:
               exec:
@@ -112,16 +150,18 @@ spec:
               value: "true"
             - name: IS_HELM_UPGRADE
               value: "{{ .Release.IsUpgrade }}"
+            - name: ZEN_SERVICE_INSTANCE_ID
+              value: "{{ .Values.zenServiceInstanceId | int64 }}"
 {{- include "dv.helpers.resources" (list . .Values.resources.dv) | indent 10 }}
 {{- include "sch.security.securityContext" (list . .sch.chart.security.serverContainerSecurityContext) | indent 10 }}
       terminationGracePeriodSeconds: 120
       volumes:
       - name: dv-data
         persistentVolumeClaim:
-            claimName: {{ if .Values.persistence.existingClaimName }}{{ .Values.persistence.existingClaimName }}{{- else }}{{ include "sch.names.appName" (list .) }}-pvc{{- end }}
-      - name: dv-caching-data
-        persistentVolumeClaim:
-            claimName: {{ if .Values.persistence.cachingpv.existingClaimName }}{{ .Values.persistence.cachingpv.existingClaimName }}{{- else }}{{ include "sch.names.appName" (list .) }}-caching-pvc{{- end }}
+            claimName: {{ include "sch.names.appName" (list .) }}-pvc
+      - name: dshm
+        emptyDir:
+          medium: Memory
       - name: dv-pod-info
         downwardAPI:
           items:
@@ -137,13 +177,32 @@ spec:
         secret:
           secretName: {{ include "sch.names.appName" (list .) }}-{{ .sch.chart.components.secret.name }}
           defaultMode: 288
+      - name: zen-service-id-secret-volume
+        secret:
+          secretName: zen-service-broker-secret
+          defaultMode: 288
       - name: wdp-service-id-secret-volume
         secret:
           secretName: wdp-service-id
           defaultMode: 288
+      - name: wdp-policy-service-secret-volume
+        secret:
+          secretName: secret-wdp-policy-service
+          defaultMode: 256
           optional: true
       - name: internal-nginx-svc-tls
         secret:
           secretName: internal-nginx-svc-tls
           defaultMode: 288
           optional: true
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      {{- if .Values.persistence.useDynamicProvisioning }}
+      storageClassName: {{ .Values.persistence.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.persistence.size | quote }}

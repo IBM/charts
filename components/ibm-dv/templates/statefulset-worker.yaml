@@ -1,19 +1,20 @@
 {{- include "sch.config.init" (list . "dv.sch.chart.config.values") -}}
 {{- $appName := .sch.chart.appName -}}
 {{- $compName := .sch.chart.components.worker.name -}}
-{{- $bigsqlComp := .sch.chart.components.bigsql.name -}}
+{{- $podName := .sch.chart.pods.worker.name -}}
 {{- $ServiceInstanceID := .Values.zenServiceInstanceId | int64 -}}
+{{- $ServiceInstanceUID := .Values.zenServiceInstanceUID | int64 -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
   labels:
-{{ include "sch.metadata.labels.standard" (list . $compName (dict $bigsqlComp $bigsqlComp "ServiceInstanceID" $ServiceInstanceID "app" $appName)) | indent 4 }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "type" "engine" "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 4 }}
 spec:
   podManagementPolicy: Parallel
   selector:
     matchLabels:
-{{ include "sch.metadata.labels.standard" (list . $compName (dict $bigsqlComp $bigsqlComp "ServiceInstanceID" $ServiceInstanceID "app" $appName)) | indent 6 }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "type" "engine" "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 6 }}
   serviceName: {{ include "sch.names.appName" (list .) }}
   replicas: {{ .Values.workerCount }}
   updateStrategy:
@@ -21,8 +22,12 @@ spec:
   template:
     metadata:
       labels:
-{{ include "sch.metadata.labels.standard" (list . $compName (dict $bigsqlComp $bigsqlComp "ServiceInstanceID" $ServiceInstanceID "app" $appName)) | indent 8 }}
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "type" "engine" "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/podSelector" $podName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 8 }}
       annotations:
+        hook.activate.cpd.ibm.com/command: "[]"
+        hook.deactivate.cpd.ibm.com/command: "[]"
+        hook.quiesce.cpd.ibm.com/command: "[]"
+        hook.unquiesce.cpd.ibm.com/command: "[]"
 {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering nil nil nil) | indent 8 }}
     spec:
 {{- include "sch.security.securityContext" (list . .sch.chart.security.workerPodSecurityContext) | indent 6 }}
@@ -39,10 +44,10 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
               matchExpressions:
-              - key: bigsql
+              - key: type
                 operator: In
                 values:
-                - bigsql
+                - engine
             topologyKey: kubernetes.io/hostname
 {{ else }}
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -50,12 +55,38 @@ spec:
             podAffinityTerm:
               labelSelector:
                 matchExpressions:
-                - key: bigsql
+                - key: type
                   operator: In
                   values:
-                  - bigsql
+                  - engine
               topologyKey: kubernetes.io/hostname
 {{ end }}
+      initContainers:
+        - name: {{ include "sch.names.appName" (list .) }}-{{ .sch.chart.components.worker.name }}-init
+          image: "{{ .Values.docker_registry_prefix }}/{{ .Values.dvInitVolume.image.dockerImage }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+          - /bin/sh
+          - -c
+          - --
+          - until [ -f /mnt/PV/versioned/marker_files/.restored.txt ]; do sleep 10; done;
+            if [ ! -d /mnt/PV/versioned/usr ]; then
+            python3 -u /restore-volumes-script.py --operation restore --type versioned --overwrite;
+            sudo mkdir -vp /mnt/PV/unversioned/hadoop/bigsql/bigsql;
+            sudo chown -R bigsql:1001 /mnt/PV/unversioned/hadoop/bigsql /mnt/PV/versioned/marker_files;
+            fi
+          volumeMounts:
+            - mountPath: /mnt/PV/versioned
+              name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}-data
+              subPath: "{{ .Chart.AppVersion }}"
+            - mountPath: /mnt/PV/unversioned
+              name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}-data
+              subPath: unversioned
+            - mountPath: /mnt/PV/versioned/marker_files
+              name: {{ include "sch.names.appName" (list .) }}-data
+              subPath: "{{ .Chart.AppVersion }}/marker_files"
+{{- include "dv.helpers.resources" (list . .Values.resources.dv) | indent 10 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.security.initVolumeContainerSecurityContext) | indent 10 }}
       containers:
         - name: {{ include "sch.names.appName" (list .) }}-{{ .sch.chart.components.worker.name }}
           image: "{{ .Values.docker_registry_prefix }}/{{ .Values.dvEngine.image.dockerImage }}:{{ .Values.image.tag }}"
@@ -74,11 +105,29 @@ spec:
                 - stop
           volumeMounts:
             - mountPath: /mnt/PV/versioned
-              name: dv-data
+              name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}-data
               subPath: "{{ .Chart.AppVersion }}"
             - mountPath: /mnt/PV/unversioned
-              name: dv-caching-data
+              name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}-data
               subPath: unversioned
+            - mountPath: /mnt/PV/versioned/marker_files
+              name: {{ include "sch.names.appName" (list .) }}-data
+              subPath: "{{ .Chart.AppVersion }}/marker_files"
+            - mountPath: /mnt/PV/versioned/ibm/home-bigsql/cfg/datavirtualization/fmp
+              name: {{ include "sch.names.appName" (list .) }}-data
+              subPath: "{{ .Chart.AppVersion }}/ibm/home-bigsql/cfg/datavirtualization/fmp"
+            - mountPath: /mnt/PV/versioned/etc
+              name: {{ include "sch.names.appName" (list .) }}-data
+              subPath: "{{ .Chart.AppVersion }}/etc"
+            - mountPath: /dev/shm
+              name: dshm
+            - name: secret-volume
+              readOnly: true
+              mountPath: "/etc/secret-volume"
+            - name: wdp-service-id-secret-volume
+              readOnly: true
+              mountPath: "/etc/wdp-service-id-secret-volume"
+              
           ports:
             {{- with .Values.service }}
             - containerPort: {{ .bigsqlDB2JDBC }}
@@ -102,13 +151,36 @@ spec:
               - readiness
             periodSeconds: 90
             timeoutSeconds: 30
+          env:
+            - name: ZEN_SERVICE_INSTANCE_ID
+              value: "{{ .Values.zenServiceInstanceId | int64 }}"
 {{- include "dv.helpers.resources" (list . .Values.resources.dv) | indent 10 }}
 {{- include "sch.security.securityContext" (list . .sch.chart.security.workerContainerSecurityContext) | indent 10 }}
       terminationGracePeriodSeconds: 60
       volumes:
-      - name: dv-data
+      - name: {{ include "sch.names.appName" (list .) }}-data
         persistentVolumeClaim:
-            claimName: {{ if .Values.persistence.existingClaimName }}{{ .Values.persistence.existingClaimName }}{{- else }}{{ include "sch.names.appName" (list .) }}-pvc{{- end }}
-      - name: dv-caching-data
-        persistentVolumeClaim:
-            claimName: {{ if .Values.persistence.cachingpv.existingClaimName }}{{ .Values.persistence.cachingpv.existingClaimName }}{{- else }}{{ include "sch.names.appName" (list .) }}-caching-pvc{{- end }}
+            claimName: {{ include "sch.names.appName" (list .) }}-pvc
+      - name: dshm
+        emptyDir:
+          medium: Memory
+      - name: secret-volume
+        secret:
+          secretName: {{ include "sch.names.appName" (list .) }}-{{ .sch.chart.components.secret.name }}
+          defaultMode: 288
+      - name: wdp-service-id-secret-volume
+        secret:
+          secretName: wdp-service-id
+          defaultMode: 288
+
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      {{- if .Values.persistence.useDynamicProvisioning }}
+      storageClassName: {{ .Values.persistence.workerpv.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.persistence.workerpv.size | quote }}
