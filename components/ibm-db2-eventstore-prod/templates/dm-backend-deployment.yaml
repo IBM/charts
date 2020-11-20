@@ -1,0 +1,125 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # Unique key of the Deployment instance
+  name: {{ .Values.servicename }}-dm-backend
+  labels:
+    app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    component: eventstore
+    {{- include "eventstore.podLabels" . | indent 4 }}
+
+spec:
+  # 1 Pods should exist at all times.
+  replicas: {{ .Values.dmBackend.replicas }}
+  # Keep record of 2 revisions for rollback
+  revisionHistoryLimit: 2
+  selector:
+     matchLabels:
+       app.kubernetes.io/name: {{ .Values.servicename }}-dm-backend
+  template:
+    metadata:
+      labels:
+        # Apply this label to pods and default
+        # the Deployment label selector to this value
+        app.kubernetes.io/name: {{ .Values.servicename }}-dm-backend
+        helm.sh/chart: "{{ .Chart.Name }}"
+        name: {{ template "eventstore.name" . }}
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        component: eventstore
+        enabled: "true"
+        {{- include "eventstore.podLabels" . | indent 8 }}
+      annotations:
+        {{- include "eventstore.annotations" . | indent 8 }}
+    spec:
+      affinity:
+        {{- include "eventstore.nodeAffinity" . | indent 6 }} 
+      {{- include "eventstore.tolerations" . | indent 6 }}
+      {{- include "eventstore.security" . | indent 6 }}
+      serviceAccountName: {{ default "default" .Values.serviceAccountName }}
+      {{- include "eventstore.podSecurityContext" . | indent 6 }}
+      containers:
+      - name: dm-backend
+        {{- if .Values.dmBackend.image.tag }}
+        image: {{ .Values.dmBackend.image.repository }}:{{ .Values.dmBackend.image.tag }}
+        {{- else }}
+        image: {{ .Values.dmBackend.image.repository }}:{{ .Values.image.universalTag }}
+        {{- end }} 
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- include "eventstore.securityContext" . | indent 8 }}
+        env:
+        {{- include "eventstore.environment-variables" . | indent 8 }}
+        - name: SERVICE_NAME	
+          value: "{{ .Values.servicename }}"
+        - name: DEVICES_JSON
+          valueFrom:
+             configMapKeyRef:
+                name: {{ .Values.servicename }}-console-devices
+                key: devices_json
+        - name: CLIENT_STOREPASS
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Values.servicename }}-ssl-keystore-password-secrets"
+              key: client_storepass
+        - name: SQLLIB_SHARED
+          value: "/system-storage/{{ .Values.servicename }}/{{ .Values.db2InstanceUser }}/sqllib_shared"
+        ports:
+        - containerPort: 3020
+          name: dm-backend-port
+        readinessProbe:
+          tcpSocket:
+            port: 3020
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: {{ .Values.dmBackend.readinessProbeTimeout }}
+        livenessProbe:
+          tcpSocket:
+            port: 3020
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: {{ .Values.dmBackend.livenessProbeTimeout }}
+        volumeMounts:
+        - name: bluspark-config-volume
+          mountPath: /k8s_mount/bluspark
+        {{- if ( not .Values.storage.storageLocation.dataStorage.enabled) }}
+        - mountPath: /system-storage
+          name: storage-underfs
+        - mountPath: /eventstorefs
+          name: storage-underfs
+        {{- else }}
+        {{- if (not .Values.objectStorage.useObjectStorage) }}
+        - mountPath: /eventstorefs
+          name: data-storage
+        {{- end }}
+        - mountPath: /system-storage
+          name: system-storage
+        {{- end }}
+      # Restart policy for all containers within the pod
+      # One of Always, OnFailure, Never. Default to Always.
+      restartPolicy: Always
+      volumes:
+      {{- if ( not .Values.storage.storageLocation.dataStorage.enabled) }}
+      - name: storage-underfs
+        persistentVolumeClaim:
+        {{- if .Values.pvcSettings.existingClaimName }}
+          claimName: {{ .Values.pvcSettings.existingClaimName }}
+        {{- else }}
+          claimName: {{ .Values.servicename }}-pvc
+        {{- end }}
+      {{- else }}
+      {{- if (not .Values.objectStorage.useObjectStorage) }}
+        {{- include "eventstore.container.storage.dataStorage" . | indent 6 }}
+      {{- end }}
+        {{- include "eventstore.container.storage.systemStorage" . | indent 6 }}
+      {{- end }}
+      - name: bluspark-config-volume
+        configMap:
+          name: "{{ .Values.servicename }}-config-files"
+          items:
+          - key: bluspark-dm-backend-conf
+            path: bluspark.dm-backend.conf

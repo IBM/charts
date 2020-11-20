@@ -1,0 +1,88 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "{{ .Values.servicename }}-sqllib-shared-job"
+  labels:
+    app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    {{- include "eventstore.podLabels" . | indent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sqllib-shared-job
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        name: "{{ .Values.servicename }}-sqllib-shared-job"
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        {{- include "eventstore.podLabels" . | indent 8 }}
+      annotations:
+         {{- include "eventstore.annotations" . | indent 8 }}
+    spec:
+      affinity:
+        {{- include "eventstore.nodeAffinity" . | indent 6 }}
+      {{- include "eventstore.tolerations" . | indent 6 }}
+      {{- include "eventstore.security" . | indent 6 }}
+      serviceAccountName: {{ default "default" .Values.serviceAccountName }}
+      {{- include "eventstore.podSecurityContext" . | indent 6 }}
+      containers:
+      - name: eventstore-init
+        {{- if .Values.eventstoreTools.image.tag }}
+        image: {{ .Values.eventstoreTools.image.repository }}:{{ .Values.eventstoreTools.image.tag }}
+        {{- else }}
+        image: {{ .Values.eventstoreTools.image.repository }}:{{ .Values.image.universalTag }}
+        {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ['/bin/sh']
+        {{- if or (not .Values.storage.storageLocation.dataStorage.enabled) (.Values.objectStorage.useObjectStorage) }}
+        args: ['-cx', '/home/db2inst1/base_entrypoint.sh /eventstore/tools/hooks/pre-install/setup-sqllib-shared.sh -p /system-storage/{{ .Values.servicename }}/db2inst1/ -s /eventstore/sqllib_shared.tar.gz']
+        {{- else }}
+        args: ['-cx', '/home/db2inst1/base_entrypoint.sh /eventstore/tools/hooks/pre-install/setup-sqllib-shared.sh -p /system-storage/{{ .Values.servicename }}/db2inst1/ -s /eventstore/sqllib_shared.tar.gz -d /data-storage/{{ .Values.servicename }}/db2inst1/']
+        {{- end }}
+        {{- include "eventstore.securityContext" . | indent 8 }}
+        env:
+        {{- include "eventstore.environment-variables" . | indent 8 }}
+        - name: SHARED_STORAGE_PATH
+          value: "/eventstorefs/{{ .Values.servicename }}"
+        volumeMounts:
+        - mountPath: /system-storage
+          name: storage-underfs
+        - mountPath: /eventstorefs
+          name: storage-underfs
+        {{- if and (.Values.storage.storageLocation.dataStorage.enabled) (not .Values.objectStorage.useObjectStorage) }}
+        - mountPath: /data-storage
+          name: data-storage
+        {{- end }}
+        - name: user-home-mount
+          mountPath: /user-home/_global_/eventstore
+          subPath: "_global_/eventstore"
+        - name: user-home-mount
+          mountPath: /user-home/_global_/dbdrivers
+          subPath: "_global_/dbdrivers"
+      restartPolicy: Never
+      volumes:
+      {{- if ( not .Values.storage.storageLocation.dataStorage.enabled) }}
+      - name: storage-underfs
+        persistentVolumeClaim:
+        {{- if .Values.pvcSettings.existingClaimName }}
+          claimName: {{ .Values.pvcSettings.existingClaimName }}
+        {{- else }}
+          claimName: {{ .Values.servicename }}-pvc
+        {{- end }}
+      {{- else }}
+      - name: storage-underfs
+        persistentVolumeClaim:
+          {{- if .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
+          claimName: {{ .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
+          {{- else }}
+          claimName: {{ .Values.servicename }}-system-pvc
+          {{- end }}
+      {{- if (not .Values.objectStorage.useObjectStorage) }}
+        {{- include "eventstore.container.storage.dataStorage" . | indent 6 }}
+      {{- end }}
+      {{- end }}
+      {{- include "eventstore.user-home-pvc" .  | indent 6 }}

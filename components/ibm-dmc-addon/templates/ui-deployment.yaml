@@ -1,0 +1,87 @@
+{{- $compName := "ui" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.ui.deployment.name }}
+  labels:
+    icpdata_addon: "true"
+    icpdata_addon_version: {{.Chart.AppVersion | quote }}
+{{- include "common.labels" (list . $compName) | indent 4 }}
+spec:
+{{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+{{- end }}
+  selector:
+    matchLabels:
+{{- include "common.matchLabels" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+        icpdata_addon: "true"
+        icpdata_addon_version: {{.Chart.AppVersion | quote }}
+{{- include "common.labels" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "common.annotations" . | indent 8 }}
+    spec:
+      {{- with .Values.image.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ default "default" .Values.global.serviceAccount }}
+      {{- include "common.podSecurityContext" . | nindent 6 }}
+      affinity:
+      {{- include "common.nodeAffinity" . | indent 8 }}
+      {{- include "common.podAffinity" . | indent 8 }}
+      {{- include "common.podAntiAffinity" . | indent 8 }}
+      tolerations:
+      {{- include "common.tolerations" . | indent 8 }}
+      containers:
+      - name: {{ $compName }}
+        securityContext:
+          {{- include "common.containerSecurityContext" . | nindent 12 }}
+        image: "{{- include "image.repoTag" (list . $compName) -}}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: POD_NAMESPACE
+          value: "{{ .Release.Namespace }}"
+        ports:
+          - name: https
+            containerPort: 8443
+            protocol: TCP
+          - name: http
+            containerPort: 8080
+            protocol: TCP
+        livenessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          successThreshold: 1
+          httpGet:
+            path: /add-ons/meta/add-ons.json
+            port: https
+            scheme: HTTPS
+          timeoutSeconds: 1
+        readinessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          httpGet:
+            path: /add-ons/meta/add-ons.json
+            port: https
+            scheme: HTTPS
+          timeoutSeconds: 1
+        resources:
+          {{- toYaml .Values.ui.resources | nindent 12 }}
+    {{- with .Values.nodeSelector }}
+    nodeSelector:
+      {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.affinity }}
+    affinity:
+      {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+    tolerations:
+      {{- toYaml . | nindent 8 }}
+    {{- end }}

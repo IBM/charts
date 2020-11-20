@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Values.servicename }}-db-connection-test"
+  labels:
+    app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  serviceAccountName: {{ default "default" .Values.serviceAccountName }}
+  {{- include "eventstore.podSecurityContext" . | indent 2 }}
+  affinity:
+    {{- include "eventstore.nodeAffinity" . | indent 2 }}
+  {{- include "eventstore.tolerations" . | indent 2 }}
+  {{- include "eventstore.security" . | indent 2 }}
+  containers:
+  - name: eventstore-tools
+    {{- if .Values.eventstoreTools.image.tag }}
+    image: {{ .Values.eventstoreTools.image.repository }}:{{ .Values.eventstoreTools.image.tag }}
+    {{- else }}
+    image: {{ .Values.eventstoreTools.image.repository }}:{{ .Values.image.universalTag }}
+    {{- end }}
+    imagePullPolicy: {{ .Values.image.pullPolicy }}
+    command: ['/bin/sh']
+    args: ["-cx", "/eventstore/tools/hooks/post-install/check_connection.sh --database-name {{ .Values.database.name }} --service-name {{ .Values.servicename }} --namespace {{ .Release.Namespace }}"]
+    {{- include "eventstore.securityContext" . | indent 4 }}
+    env:
+    - name: SERVICENAME
+      value: {{ .Values.servicename }}
+    - name: RELEASE_NAMESPACE
+      value: {{ .Release.Namespace }}
+    - name: MEMBER_COUNT
+      value: "{{ .Values.deployment.members }}"
+  restartPolicy: Never

@@ -1,0 +1,55 @@
+{{- if or ( eq .Values.global.nodeLabel.labelNodes true ) ( eq .Values.deployment.type "BVT" ) }}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "{{ .Values.servicename }}-label-job"
+  labels:
+    app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    {{- include "eventstore.podLabels" . | indent 4 }}
+  {{ if eq .Values.prerequisiteCheck "enabled" -}}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-delete-policy": "hook-succeeded,before-hook-creation"
+    "helm.sh/hook-weight": "1"
+  {{- end }}
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: eventstore-label-job
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        name: "{{ .Values.servicename }}-label-job"
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        {{- include "eventstore.podLabels" . | indent 8 }}
+      annotations:
+         {{- include "eventstore.annotations" . | indent 8 }}
+    spec:
+      affinity:
+        {{- include "eventstore.nodeAffinityNoLabels" . | indent 6 }}
+      {{- include "eventstore.security" . | indent 6 }}
+      serviceAccountName: {{ default "default" .Values.serviceAccountName }}
+      containers:
+      - name: eventstore-init
+        {{- if .Values.eventstoreTools.image.tag }}
+        image: {{ .Values.eventstoreTools.image.repository }}:{{ .Values.eventstoreTools.image.tag }}
+        {{- else }}
+        image: {{ .Values.eventstoreTools.image.repository }}:{{ .Values.image.universalTag }}
+        {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ['/bin/sh']
+        {{- if eq .Values.deployment.type "BVT" }}
+        args: ['-cx', '/eventstore/tools/hooks/pre-install/labelNodes.sh -t implicit -l icp4data=database-db2eventstore -n {{ .Values.deployment.members }} -q db2eventstore=true && /eventstore/tools/hooks/pre-install/labelNodes.sh -t implicit -l node-role.db2eventstore.ibm.com/control=true -n {{ .Values.deployment.controlNodes }} -q icp4data=database-db2eventstore']
+        {{- else}}
+        args: ['-cx', '/eventstore/tools/hooks/pre-install/labelNodes.sh -t explicit -l is_eventstore=true -n {{ .Values.deployment.members }} -s {{ .Values.address.eventstoreNodesString }} && /eventstore/tools/hooks/pre-install/labelNodes.sh -t implicit -l node-role.db2eventstore.ibm.com/control=true -n {{ .Values.deployment.controlNodes }} -q is_eventstore=true']
+        {{- end }}
+        {{- include "eventstore.securityContext" . | indent 8 }}
+        env:
+        {{- include "eventstore.environment-variables" . | indent 8 }}
+      restartPolicy: Never
+{{- end }}

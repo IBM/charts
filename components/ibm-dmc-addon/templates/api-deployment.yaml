@@ -1,0 +1,99 @@
+{{- $compName := "api" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.api.deployment.name }}
+  labels:
+{{- include "common.labels" (list . $compName) | indent 4 }}
+spec:
+{{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+{{- end }}
+  selector:
+    matchLabels:
+{{- include "common.matchLabels" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{- include "common.labels" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "common.annotations" . | indent 8 }}
+    spec:
+      {{- with .Values.api.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ default "default" .Values.global.serviceAccount }}
+      {{- include "common.podSecurityContext" . | nindent 6 }}
+      volumes:
+      - name: internal-tls
+        secret:
+          defaultMode: 420
+          secretName: internal-tls
+      - name: zen-service-broker-secret
+        secret:
+          defaultMode: 420
+          secretName: zen-service-broker-secret
+      affinity:
+      {{- include "common.nodeAffinity" . | indent 8 }}
+      {{- include "common.podAffinity" . | indent 8 }}
+      {{- include "common.podAntiAffinity" . | indent 8 }}
+      tolerations:
+      {{- include "common.tolerations" . | indent 8 }}
+      containers:
+      - name: {{ $compName }}
+        securityContext:
+{{- include "common.containerSecurityContext" . | nindent 10 }}
+        image: "{{- include "image.repoTag" (list . $compName) -}}"
+        imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+        env:
+        - name: POD_NAMESPACE
+          value: "{{ .Release.Namespace }}"
+        command:
+        - /dmcapi-server
+        - --host
+        - 0.0.0.0
+        - --port
+        - "5555"
+        - --tls-host
+        - 0.0.0.0
+        - --tls-port
+        - "4444"
+        - --tls-certificate
+        - "/etc/internal-tls/tls.crt"
+        - --tls-key
+        - "/etc/internal-tls/tls.key"
+        ports:
+        - name: https
+          containerPort: 4444
+          protocol: TCP
+        - name: http
+          containerPort: 5555
+          protocol: TCP
+        livenessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          successThreshold: 1
+          tcpSocket:
+            port: 5555
+          timeoutSeconds: 1
+        readinessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          tcpSocket:
+            port: 5555
+          timeoutSeconds: 1
+        volumeMounts:
+        - name: internal-tls
+          mountPath: /etc/internal-tls
+        - name: zen-service-broker-secret
+          mountPath: /etc/zen-service-broker-secret
+        resources:
+    {{- toYaml .Values.api.resources | nindent 10 }}
+    {{- with .Values.nodeSelector }}   
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}

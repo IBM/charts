@@ -1,0 +1,193 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # Unique key of the Deployment instance
+  name: {{ .Values.servicename }}-tools-worker
+  labels:
+    app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    component: eventstore
+    {{- include "eventstore.podLabels" . | indent 4 }}
+spec:
+  strategy:
+    type: Recreate
+  replicas: {{ .Values.deployment.members }}
+  # Keep record of 2 revisions for rollback
+  revisionHistoryLimit: 2
+  selector:
+      matchLabels:
+        app.kubernetes.io/name: {{ .Values.servicename }}-tools-worker
+  template:
+    metadata:
+      labels:
+        # Apply this label to pods and default
+        # the Deployment label selector to this value
+        app.kubernetes.io/name: {{ .Values.servicename }}-tools-worker
+        helm.sh/chart: "{{ .Chart.Name }}"
+        name: {{ template "eventstore.name" . }}
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        component: eventstore
+        enabled: "true"
+        {{- include "eventstore.podLabels" . | indent 8 }}
+      annotations:
+        {{- include "eventstore.annotations" . | indent 8 }}
+    spec:
+      affinity:
+        {{- include "eventstore.nodeAffinity" . | indent 6 }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: "app.kubernetes.io/name"
+                    operator: In
+                    values:
+                    - {{ .Values.servicename }}-tools-worker
+              topologyKey: "kubernetes.io/hostname"
+      {{- include "eventstore.tolerations" . | indent 6 }}
+      {{- include "eventstore.security" . | indent 6 }}
+      serviceAccountName: {{ default "default" .Values.serviceAccountName }}
+      {{- include "eventstore.podSecurityContext" . | indent 6 }}
+      initContainers:
+      {{- include "eventstore.wait-sqllib-shared" . | indent 6 }}
+      {{- include "eventstore.wait-db2nodes-cfg" . | indent 6 }}
+      {{- include "eventstore.wait-db2-registry" . | indent 6 }}
+      containers:
+      - name: bar
+        {{- if .Values.engine.image.tag }}
+        image: {{ .Values.engine.image.repository }}:{{ .Values.engine.image.tag }}
+        {{- else }}
+        image: {{ .Values.engine.image.repository }}:{{ .Values.image.universalTag }}
+        {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ['/bin/ksh']
+        args: ["-l","-c","/home/db2inst1/base_entrypoint.sh /eventstore/nova_tools-worker_entrypoint.sh"]
+        {{- include "eventstore.securityContextEngine" . | indent 8 }}
+        readinessProbe:
+           exec:
+             command:
+             - sudo
+             - cat
+             - /home/db2inst1/sqllib/db2nodes.cfg
+           initialDelaySeconds: 5
+           periodSeconds: 10
+           timeoutSeconds: {{ .Values.engine.readinessProbeTimeout }}
+        livenessProbe:
+           exec:
+             command:
+             - sudo
+             - cat
+             - /home/db2inst1/sqllib/db2nodes.cfg
+           initialDelaySeconds: 300
+           periodSeconds: 20
+           timeoutSeconds: {{ .Values.engine.livenessProbeTimeout }}
+        env:
+        {{- include "eventstore.environment-variables" . | indent 8 }}
+        # ME=${USER}
+        - name: ME
+          value: "root"
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+             secretKeyRef:
+                name: cos-{{ .Values.servicename }}
+                key: access-key
+                optional: true
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+             secretKeyRef:
+                name: cos-{{ .Values.servicename }}
+                key: secret-key
+                optional: true
+        - name: DB2INSTANCE
+          value: "{{ .Values.db2InstanceUser }}"
+        - name: SQLLIB_SHARED
+          value: "/system-storage/{{ .Values.servicename }}/{{ .Values.db2InstanceUser }}/sqllib_shared"
+        - name: STORAGE_CATALOG_UNDERFS
+          value: "/system-storage/{{ .Values.servicename }}/db2inst1"
+        - name: LOCAL_SSD_PATH
+          value: "/eventstore/db/ssd/{{ .Values.servicename }}"
+        - name: LOCAL_ZK_PATH
+          value: "/eventstore/db/zookeeper"
+        - name: STORAGE_DATA_UNDERFS
+          value: "/eventstorefs/data"
+        - name: DB2_CLIENT_PORT
+          value: "{{ tpl (.Values.engine.db2ClientPort | toString) . }}"
+        - name: DB2_COMMUNICATION_PORT
+          value: "{{ tpl (.Values.engine.db2CommunicationPort | toString) . }}"
+        - name: EXTERNAL_STORAGE
+          value: "/eventstore/db/external_db"
+        volumeMounts:
+        {{- if ( not .Values.storage.storageLocation.dataStorage.enabled) }}
+        - mountPath: /eventstorefs
+          name: storage-underfs
+        - mountPath: /system-storage
+          name: storage-underfs
+        {{- else }}
+        {{- if (not .Values.objectStorage.useObjectStorage) }}
+        - mountPath: /eventstorefs
+          name: data-storage
+        {{- end }}
+        - mountPath: /system-storage
+          name: system-storage
+        {{- end }}
+        - mountPath: /eventstore/ssl
+          name: eventstore-ssl-certificate
+        - mountPath: /eventstore/eventstore_external_conf
+          name: eventstore-config-volume
+        - mountPath: /eventstore/db/external_db
+          name: eventstore-external-db
+          mountPropagation: HostToContainer
+        - mountPath: /eventstore/db/ssd/{{ .Values.servicename }}
+          name: eventstore-local-db
+        - mountPath: /eventstore/db/zookeeper
+          name: zookeeper
+        {{- if .Values.objectStorage.useObjectStorage }}
+        - mountPath: /k8s_mount/cos-ssl-certificate-secrets/cos-ssl-cert
+          subPath: cos-ssl-cert
+          name: cos-ssl-certificate-secrets-volume
+        {{- end }}
+      # Restart policy for all containers within the pod
+      # One of Always, OnFailure, Never. Default to Always.
+      restartPolicy: Always
+      volumes:
+      {{- if ( not .Values.storage.storageLocation.dataStorage.enabled) }}
+      - name: storage-underfs
+        persistentVolumeClaim:
+        {{- if .Values.pvcSettings.existingClaimName }}
+          claimName: {{ .Values.pvcSettings.existingClaimName }}
+        {{- else }}
+          claimName: {{ .Values.servicename }}-pvc
+        {{- end }}
+      {{- else }}
+      {{- if (not .Values.objectStorage.useObjectStorage) }}
+        {{- include "eventstore.container.storage.dataStorage" . | indent 6 }}
+      {{- end }}
+        {{- include "eventstore.container.storage.systemStorage" . | indent 6 }}
+      {{- end }}
+      - name: eventstore-ssl-certificate
+        hostPath:
+          path: {{ .Values.disk.computePath }}/{{ .Values.servicename }}/engine/ssl 
+      - name: eventstore-external-db
+        hostPath:
+          path: {{ .Values.disk.storagePath }}/{{ .Values.servicename }}/engine/utils/external_db
+      - name: eventstore-local-db
+        hostPath:
+          path: {{ .Values.disk.computePath }}/{{ .Values.servicename }}/engine/local_db
+      - name: zookeeper
+        hostPath:
+          path: {{ tpl .Values.disk.zookeeperPath . }}/{{ .Values.servicename }}/zookeeper
+      - name: eventstore-config-volume
+        configMap:
+          name: "{{ .Values.servicename }}-config-files"
+          items:
+          - key: db2eventstore-reg-var
+            path: db2eventstore-reg-var.conf
+      {{- if .Values.objectStorage.useObjectStorage }}
+      - name: cos-ssl-certificate-secrets-volume
+        secret:
+          secretName: cos-{{ .Values.servicename }}
+      {{- end }}

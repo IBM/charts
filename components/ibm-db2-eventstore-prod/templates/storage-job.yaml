@@ -1,0 +1,88 @@
+{{- if eq .Values.storage.configure true }}
+{{- if .Values.storage.createPVS }}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "{{ .Values.servicename }}-storage-job"
+  labels:
+    app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    {{- include "eventstore.podLabels" . | indent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        name: "{{ .Values.servicename }}-storage-job"
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        {{- include "eventstore.podLabels" . | indent 8 }}
+      annotations:
+         {{- include "eventstore.annotations" . | indent 8 }}
+    spec:
+      affinity:
+        {{- include "eventstore.nodeAffinity" . | indent 6 }}
+      {{- include "eventstore.security" . | indent 6 }}
+      serviceAccountName: {{ default "default" .Values.serviceAccountName }}
+      containers:
+      - name: nova-storage 
+        {{- if .Values.storage.image.tag }}
+        image: {{ .Values.storage.image.repository }}:{{ .Values.storage.image.tag }}
+        {{- else }}
+        image: {{ .Values.storage.image.repository }}:{{ .Values.image.universalTag }}
+        {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- include "eventstore.securityContext" . | indent 8 }}
+        env:
+        {{- include "eventstore.environment-variables" . | indent 8 }}
+        {{- if eq .Values.storage.sshType "password" }}    
+        - name: SSH_PASS
+          valueFrom:
+            secretKeyRef:
+              name: ssh-pass-{{ .Release.Name }}
+              key: pass
+        {{- end }}
+        - name: RUNTIME_CONTEXT
+          value: {{ .Values.runtime }}
+        - name: TYPE
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Values.servicename }}-storage-config-files
+              key: type 
+        - name: SETUP_NFS 
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Values.servicename }}-storage-config-files
+              key: setupNFS 
+        - name: CREATE_PVS
+          valueFrom:
+            configMapKeyRef:
+               name: {{ .Values.servicename }}-storage-config-files
+               key: createPVS
+        volumeMounts:
+        - mountPath: /etc/configmap
+          name: storage-config-volume
+        {{- if eq .Values.storage.sshType "key" }}
+        - mountPath: /etc/secret-volume
+          name: secret-volume
+        {{- end }}
+      volumes:
+      - name: storage-config-volume
+        configMap:
+          name: {{ .Values.servicename }}-storage-config-files
+          items:
+          - key: storage-conf
+            path: storage.conf
+      {{- if eq .Values.storage.sshType "key" }}
+      - name: secret-volume
+        secret:
+          secretName: ssh-key-{{ .Release.Name }}
+      {{- end }}
+      restartPolicy: Never
+{{- end }}
+{{- end }}

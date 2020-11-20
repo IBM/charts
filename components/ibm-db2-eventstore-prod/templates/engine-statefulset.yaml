@@ -1,0 +1,264 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  # Unique key of the Deployment instance
+  name: {{ .Values.servicename }}-tenant-engine
+  labels:
+    app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    component: eventstore
+    {{- include "eventstore.podLabels" . | indent 4 }}
+spec:
+  # Pods should exist at all times.
+  replicas: {{ .Values.deployment.members }}
+  serviceName: {{ .Values.servicename }}-tenant-engine-internal-svc
+  podManagementPolicy: "Parallel"
+  # Keep record of 2 revisions for rollback
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.servicename }}-tenant-engine
+  template:
+    metadata:
+      labels:
+        # Apply this label to pods and default
+        # the Deployment label selector to this value
+        app.kubernetes.io/name: {{ .Values.servicename }}-tenant-engine
+        api-database-jdbc: "{{ .Values.servicename }}-tenant-engine-db2-external-svc"
+        api-database-scala: "{{ .Values.servicename }}-tenant-engine-es-external-svc"
+        api-progress: "{{ .Values.servicename }}engine"
+        helm.sh/chart: "{{ .Chart.Name }}"
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        component: eventstore
+        enabled: "true"
+        {{- include "eventstore.podLabels" . | indent 8 }}
+      annotations:
+        {{- include "eventstore.annotations" . | indent 8 }}
+    spec:
+      affinity:
+        {{- include "eventstore.nodeAffinity" . | indent 6 }}
+      {{- include "eventstore.tolerations" . | indent 6 }}
+      # Host networking requested for this pod. Use the host’s network namespace.
+      # If this option is set, the ports that will be used must be specified.
+      # Note that for server to server communication we still use the IP addresses
+      # of the internal network.
+      hostNetwork: {{ .Values.engine.hostNetwork }}
+      hostIPC: true
+      hostPID: false
+      serviceAccountName: {{ default "default" .Values.serviceAccountName }}
+      {{- include "eventstore.podSecurityContext" . | indent 6 }}
+      {{- if eq .Values.engine.hostNetwork true }}
+      # FIXME dnsPolicy: ClusterFirst is not working with hostNetwork - fixed in 1.6
+      # with ClusterFirstWithHostNet
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
+      initContainers:
+      {{- include "eventstore.set-kernelParams" . | indent 6 }}
+      {{- include "eventstore.wait-sqllib-shared" . | indent 6 }}
+      {{- include "eventstore.wait-db2nodes-cfg" . | indent 6 }}
+      {{- include "eventstore.wait-db2-registry" . | indent 6 }}
+      {{- include "eventstore.wait-zookeeper" . | indent 6 }}
+      {{- if eq .Values.dts.configure true }}
+      {{- include "eventstore.wait-dts" . | indent 6 }}
+      {{- end }}
+      {{- include "eventstore.wait-catalog" . | indent 6 }}
+      containers:
+      - name: engine
+        {{- if .Values.engine.image.tag }}
+        image: {{ .Values.engine.image.repository }}:{{ .Values.engine.image.tag }}
+        {{- else }}
+        image: {{ .Values.engine.image.repository }}:{{ .Values.image.universalTag }}
+        {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ['/home/db2inst1/base_entrypoint.sh']
+        args: ["/eventstore/nova_entrypoint.sh"]
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/eventstore/cleanup.sh"]
+        ports:
+          - containerPort: {{ tpl (.Values.engine.publicPort | toString) . }}
+            name: public-port
+          - containerPort: {{ tpl (.Values.engine.internalPort | toString) . }}
+            name: internal-port
+          - containerPort: {{ tpl (.Values.engine.replicationPort | toString) . }}
+            name: repl-port
+          - containerPort: {{ tpl (.Values.engine.loggerPort | toString) . }}
+            name: logger-port
+          - containerPort: {{ tpl (.Values.engine.db2ClientPort | toString) . }}
+            name: db2-ext-port
+            protocol: TCP
+          - containerPort: {{ tpl (.Values.engine.db2CommunicationPort | toString) . }}
+            name: db2-int-port
+            protocol: TCP
+          - containerPort: {{ tpl (.Values.engine.sshPort | toString) . }}
+            name: ssh-port
+            protocol: TCP
+        readinessProbe:
+          tcpSocket:
+            port: {{ tpl (.Values.engine.db2ClientPort | toString) . }}
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: {{ .Values.engine.readinessProbeTimeout }}
+        livenessProbe:
+          tcpSocket:
+            port: {{ tpl (.Values.engine.db2ClientPort | toString) . }}
+          initialDelaySeconds: 300
+          periodSeconds: 20
+          timeoutSeconds: {{ .Values.engine.livenessProbeTimeout }}
+        {{- include "eventstore.securityContextEngine" . | indent 8 }}
+        env:
+        {{- include "eventstore.environment-variables" . | indent 8 }}
+        # ME=${USER}
+        - name: ME
+          value: "root"
+        - name: SSH_PORT
+          value: "{{ tpl (.Values.engine.sshPort | toString) . }}"
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: cos-{{ .Values.servicename }}
+              key: access-key
+              optional: true
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cos-{{ .Values.servicename }}
+              key: secret-key
+              optional: true
+        - name: TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES
+          value: "{{ .Values.engine.tcmallocMaxTotalThreadCacheBytes }}"
+        - name: DB2INSTANCE
+          value: "{{ .Values.db2InstanceUser }}"
+        # EventStore allows user to define flexible number of engine replicas at install time. The defined replica count
+        # is recorded in this env var of the deployment definition to facilitate scale up/down.
+        - name: SQLLIB_SHARED
+          value: "/system-storage/{{ .Values.servicename }}/{{ .Values.db2InstanceUser }}/sqllib_shared"
+        - name: SHARED_STORAGE_PATH
+          value: "/eventstorefs/{{ .Values.servicename }}"
+        - name: LOCAL_SSD_PATH
+          value: "/eventstore/db/ssd/{{ .Values.servicename }}"
+        - name: LOCAL_LOG_PATH
+          value: "/eventstore/logs"
+        # BLUSPARK_PORT_EXTERNAL=${BLUSPARK_PORT_EXTERNAL}
+        - name: BLUSPARK_PORT_EXTERNAL
+          value: "{{ tpl (.Values.engine.publicPort | toString) . }}"
+        - name: BLUSPARK_PORT_INTERNAL
+          value: "{{ tpl (.Values.engine.internalPort | toString) . }}"
+        - name: DB2_CLIENT_PORT
+          value: "{{ tpl (.Values.engine.db2ClientPort | toString) . }}"
+        - name: DB2_COMMUNICATION_PORT
+          value: "{{ tpl (.Values.engine.db2CommunicationPort | toString) . }}"
+        # Unique identifier for the machine where the POD is running
+        - name: BLUSPARK_MACHINE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        # BLUSPARK_AREA_CONFIGURATION_FILE=${BLUSPARK_AREA_BLUSPARK_CONF_IN_CONTAINER}
+        - name: BLUSPARK_AREA_CONFIGURATION_FILE
+          value: /eventstore/external_conf/bluspark.conf
+        volumeMounts:
+        - mountPath: /eventstore/logs
+          name: eventstore-logs
+        - mountPath: /eventstore/db/shared
+          name: eventstore-shared-db
+        # Propagate user provided NFS that's mounted on host filesystem to container
+        - mountPath: /eventstore/db/external_db
+          name: eventstore-external-db
+          mountPropagation: HostToContainer
+        # use  label for shared between containers
+        - mountPath: /eventstore/db/ssd/{{ .Values.servicename }}
+          name: eventstore-local-db
+        - mountPath: /eventstore/external_conf
+          name: bluspark-config-volume
+        - mountPath: /eventstore/eventstore_external_conf
+          name: eventstore-config-volume
+        {{- if ( not .Values.storage.storageLocation.dataStorage.enabled) }}
+        - mountPath: /eventstorefs
+          name: storage-underfs
+        - mountPath: /system-storage
+          name: storage-underfs
+        {{- else }}
+        {{- if (not .Values.objectStorage.useObjectStorage) }}
+        - mountPath: /eventstorefs
+          name: data-storage
+        {{- end }}
+        - mountPath: /system-storage
+          name: system-storage
+        - mountPath: /eventstorefs/{{ .Values.servicename }}
+          subPath: {{ .Values.servicename }}
+          name: system-storage
+        {{- end }}
+        - mountPath: /etc/engine-secret-volume
+          name: engine-ssh-keys
+        {{- if .Values.objectStorage.useObjectStorage }}
+        - mountPath: /k8s_mount/cos-ssl-certificate-secrets/cos-ssl-cert
+          subPath: cos-ssl-cert
+          name: cos-ssl-certificate-secrets-volume
+        {{- end }}
+      # Restart policy for all containers within the pod
+      # One of Always, OnFailure, Never. Default to Always.
+      restartPolicy: Always
+      volumes:
+      - name: sys
+        hostPath:
+          path: /proc/sys
+      - name: proc
+        hostPath:
+          path: /proc
+      {{- if ( not .Values.storage.storageLocation.dataStorage.enabled) }}
+      - name: storage-underfs
+        persistentVolumeClaim:
+        {{- if .Values.pvcSettings.existingClaimName }}
+          claimName: {{ .Values.pvcSettings.existingClaimName }}
+        {{- else }}
+          claimName: {{ .Values.servicename }}-pvc
+        {{- end }}
+      {{- else }}
+      {{- if (not .Values.objectStorage.useObjectStorage) }}
+        {{- include "eventstore.container.storage.dataStorage" . | indent 6 }}
+      {{- end }}
+        {{- include "eventstore.container.storage.systemStorage" . | indent 6 }}
+      {{- end }}
+      - name: eventstore-logs
+        # HostPath represents a pre-existing file or directory on the host machine that is directly exposed to the container.
+        # This is generally used for system agents or other privileged things that are allowed to see the host machine.
+        # Most containers will NOT need this.
+        hostPath:
+          path: {{ .Values.disk.storagePath }}/{{ .Values.servicename }}/engine/shared_db/log
+      - name: eventstore-shared-db
+        hostPath:
+          path: {{ .Values.disk.storagePath }}/{{ .Values.servicename }}/engine/shared_db/db
+      - name: eventstore-external-db
+        hostPath:
+          path: {{ .Values.disk.computePath }}/{{ .Values.servicename }}/engine/utils/external_db
+      - name: eventstore-local-db
+        hostPath:
+          path: {{ .Values.disk.computePath }}/{{ .Values.servicename }}/engine/local_db
+      # Configmap volumes
+      - name: bluspark-config-volume
+        configMap:
+          name: "{{ .Values.servicename }}-config-files"
+          items:
+          - key: bluspark-conf
+            path: bluspark.conf
+      - name: eventstore-config-volume
+        configMap:
+          name: "{{ .Values.servicename }}-config-files"
+          items:
+          - key: db2eventstore-reg-var
+            path: db2eventstore-reg-var.conf
+      # Secret volumes
+      - name: engine-ssh-keys
+        secret:
+          secretName: {{ .Values.servicename }}-engine-secrets
+      {{- if .Values.objectStorage.useObjectStorage }}
+      - name: cos-ssl-certificate-secrets-volume
+        secret:
+          secretName: cos-{{ .Values.servicename }}
+      {{- end }}
