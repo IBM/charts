@@ -1,0 +1,61 @@
+{{- if .Values.global.databases }}
+{{- $compName := "zen-databases" -}}
+{{- $cloudpakInstanceId := .Values.global.cloudpakInstanceId -}}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: zen-databases
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.zenDatabases.replicas }}
+  selector:
+    matchLabels:
+      {{- include "zenhelper.labels" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+      annotations:
+        {{- include "0025.annotations" (list . $compName $cloudpakInstanceId) | indent 8 }}
+    spec:
+      securityContext:
+        runAsUser: 1000321000
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      terminationGracePeriodSeconds: 0
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+      containers:
+      - name: zen-databases-container
+        {{ if .Values.global.use_external_prefix }}
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenDatabases.image.repository }}:{{ .Values.global.image.tag }}"
+        {{ else }}
+        image: "{{ .Values.zenDatabases.image.repository }}:{{ .Values.zenDatabases.image.tag }}"
+        {{ end }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["/scripts/startup.sh"]
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: RELEASE_NAME
+          value: {{ .Release.Name }}
+        resources:
+{{ toYaml .Values.zenDatabases.resources | indent 12 }}
+        ports:
+        - containerPort: 3004
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /#/myDatabases
+            port: 3004
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /#/myDatabases
+            port: 3004
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 30
+{{ end }}

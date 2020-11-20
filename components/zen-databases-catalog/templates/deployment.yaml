@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "uniquename" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    icpdata_addon: "true"
+    icpdata_addon_version: "{{ .Values.global.version }}"
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "fullname" . }}
+      release: "{{ .Release.Name }}"
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        release: "{{ .Release.Name }}"
+        icpdata_addon: "true"
+        icpdata_addon_version: "{{ .Values.global.version }}"
+        {{ if (eq "db2aaservice" .Values.dbType) }}
+        icpdsupport/addOnId: "databases"
+        {{- else }}
+        icpdsupport/addOnId: "{{ .Values.dbType }}"
+        {{- end }}
+        icpdsupport/app: "database"
+      annotations:
+        {{- include "db2wh.annotations" .  | indent 8 }}
+    spec:
+      securityContext:
+        runAsUser: 1000321000
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      containers:
+      - name: "{{ .Chart.Name }}"
+        image: "{{ .Values.global.docker_registry_prefix  }}/{{ .Values.image.repository }}-{{ .Values.dbType }}:{{ .Values.image.tag }}-{{ template "platform" . }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: https
+          containerPort: 8443
+          protocol: TCP
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        resources:
+          limits:
+            cpu: 300m
+            memory: 512Mi
+          requests:
+            cpu: 30m
+            memory: 128Mi
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- include "nodeaffinity" . | indent 6 }}
+    {{- include "tolerations" . | indent 6 }}
+      restartPolicy: Always
