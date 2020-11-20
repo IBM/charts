@@ -1,0 +1,152 @@
+{{- if ( eq .Values.dts.configure true ) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # Unique key of the Deployment instance
+  name: {{ .Values.servicename }}-dts
+  labels:
+    app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    component: eventstore
+    {{- include "eventstore.podLabels" . | indent 4 }}
+
+spec:
+  strategy:
+    type: Recreate
+  # Pods should exist at all times.
+  replicas: 1
+  # Keep record of 2 revisions for rollback
+  revisionHistoryLimit: 2
+  selector:
+     matchLabels:
+       app.kubernetes.io/name: {{ .Values.servicename }}-dts
+  template:
+    metadata:
+      labels:
+        # Apply this label to pods and default
+        # the Deployment label selector to this value
+        app.kubernetes.io/name: {{ .Values.servicename }}-dts
+        api-progress: "{{ .Values.servicename }}dts"
+        helm.sh/chart: "{{ .Chart.Name }}"
+        name: {{ template "eventstore.name" . }}
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        component: eventstore
+        enabled: "true"
+        {{- include "eventstore.podLabels" . | indent 8 }}
+      annotations:
+        {{- include "eventstore.annotations" . | indent 8 }}
+    spec:
+      affinity:
+        {{- include "eventstore.nodeAffinity" . | indent 6 }}
+      {{- include "eventstore.tolerations" . | indent 6 }}
+      hostIPC: true
+      hostNetwork: false
+      hostPID: false
+      serviceAccountName: {{ default "default" .Values.serviceAccountName }}
+      {{- include "eventstore.podSecurityContext" . | indent 6 }}
+      # FIXME dnsPolicy: ClusterFirst is not working with hostNetwork - fixed in 1.6
+      # with ClusterFirstWithHostNet
+      dnsPolicy: ClusterFirstWithHostNet
+      initContainers:
+      {{- include "eventstore.wait-sqllib-shared" . | indent 6 }}
+      {{- include "eventstore.wait-db2nodes-cfg" . | indent 6 }}
+      {{- include "eventstore.wait-db2-registry" . | indent 6 }}
+      containers:
+      - name: engine
+        {{- if .Values.engine.image.tag }}
+        image: {{ .Values.engine.image.repository }}:{{ .Values.engine.image.tag }}
+        {{- else }}
+        image: {{ .Values.engine.image.repository }}:{{ .Values.image.universalTag }}
+        {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ['/home/db2inst1/base_entrypoint.sh']
+        args: ["/eventstore/dts_entrypoint.sh"]
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+          - containerPort: {{ .Values.dts.clientPort }}
+            name: client-port
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.dts.clientPort }}
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: {{ .Values.engine.readinessProbeTimeout }}
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.dts.clientPort }}
+          initialDelaySeconds: 300
+          periodSeconds: 20
+          timeoutSeconds: {{ .Values.engine.livenessProbeTimeout }}
+        {{- include "eventstore.securityContextEngine" . | indent 8 }}
+        env:
+        {{- include "eventstore.environment-variables" . | indent 8 }}
+        # ME=${USER}
+        - name: ME
+          value: "root"
+        - name: DB2INSTANCE
+          value: "{{ .Values.db2InstanceUser }}"
+        - name: SQLLIB_SHARED
+          value: "/system-storage/{{ .Values.servicename }}/{{ .Values.db2InstanceUser }}/sqllib_shared"
+        - name: LOCAL_LOG_PATH
+          value: "/eventstore/logs"
+        - name: DB2_CLIENT_PORT
+          value: "{{ tpl (.Values.engine.db2ClientPort | toString) . }}"
+        - name: DB2_COMMUNICATION_PORT
+          value: "{{ tpl (.Values.engine.db2CommunicationPort | toString) . }}"
+        # Unique identifier for the machine where the POD is running
+        - name: BLUSPARK_MACHINE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        # BLUSPARK_INSTANCE_NO: note all nodes will have the same number
+        # but they are not using this for node generation, only for naming the log files
+        - name: BLUSPARK_INSTANCE_NO
+          value: "0"
+        volumeMounts:
+        - mountPath: /eventstore/logs
+          name: eventstore-logs
+        - mountPath: /eventstore/host_machine_id
+          name: machine-id-file
+        {{- if ( not .Values.storage.storageLocation.dataStorage.enabled) }}
+        - mountPath: /system-storage
+          name: storage-underfs
+        {{- else }}
+        - mountPath: /system-storage
+          name: system-storage
+        {{- end }}
+      # Restart policy for all containers within the pod
+      # One of Always, OnFailure, Never. Default to Always.
+      restartPolicy: Always
+      volumes:
+      - name: sys
+        hostPath:
+          path: /proc/sys
+      - name: proc
+        hostPath:
+          path: /proc
+      {{- if ( not .Values.storage.storageLocation.dataStorage.enabled) }}
+      - name: storage-underfs
+        persistentVolumeClaim:
+        {{- if .Values.pvcSettings.existingClaimName }}
+          claimName: {{ .Values.pvcSettings.existingClaimName }}
+        {{- else }}
+          claimName: {{ .Values.servicename }}-pvc
+        {{- end }}
+      {{- else }}
+        {{- include "eventstore.container.storage.systemStorage" . | indent 6 }}
+      {{- end }}
+      - name: eventstore-logs
+        # HostPath represents a pre-existing file or directory on the host machine that is directly exposed to the container.
+        # This is generally used for system agents or other privileged things that are allowed to see the host machine.
+        # Most containers will NOT need this.
+        hostPath:
+          path: {{ .Values.disk.storagePath }}/{{ .Values.servicename }}/dts/shared_db/log
+      - name: machine-id-file
+        hostPath:
+          path: /etc/machine-id
+{{- end }}

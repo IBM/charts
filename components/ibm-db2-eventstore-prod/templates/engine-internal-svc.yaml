@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ .Values.servicename }}-tenant-engine-internal-svc"
+  labels:
+    app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    component: eventstore
+  {{ if ne .Values.runtime "ICP4Data" -}}
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+  {{- end }}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+  - port: {{ tpl (.Values.engine.db2CommunicationPort | toString) . }}
+    targetPort: {{ tpl (.Values.engine.db2CommunicationPort | toString) . }}
+    name: db2-communication
+  - port: {{ tpl (.Values.engine.internalPort | toString) . }}
+    targetPort: {{ tpl (.Values.engine.internalPort | toString) . }}
+    name: es-communication
+  selector:
+    app.kubernetes.io/name: {{ .Values.servicename }}-tenant-engine
+    component: eventstore
+    enabled: "true"

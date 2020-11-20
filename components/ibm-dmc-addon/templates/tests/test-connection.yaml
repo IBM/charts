@@ -1,0 +1,32 @@
+{{- $compName := "test" -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "common.fullname" . }}-test-connection"
+  labels:
+{{- include "common.labels" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+  {{- include "common.nodeAffinity" . | indent 4 }}
+  {{- include "common.podAffinity" . | indent 4 }}
+  {{- include "common.podAntiAffinity" . | indent 4 }}
+  tolerations:
+  {{- include "common.tolerations" . | indent 4 }}
+  {{- include "common.podSecurityContext" . | nindent 2 }}
+  containers:
+  - name: test
+    securityContext:
+      {{- include "common.containerSecurityContext" . | nindent 8 }}
+    image: "{{- include "image.repoTag" (list . "ui") -}}"
+    command: ['wget']
+    args: ['{{ .Values.ui.service.name }}:{{ .Values.ui.service.httpPort }}/add-ons/meta/add-ons.json']
+    resources:
+      requests:
+        memory: 100Mi
+        cpu: 100m
+      limits:
+        memory: 100Mi
+        cpu: 100m
+  restartPolicy: Never
