@@ -1,0 +1,109 @@
+{{- if ( eq .Values.development true ) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # Unique key of the Deployment instance
+  name: {{ .Values.servicename }}-tenant-svt
+  labels:
+    app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    {{- include "eventstore.podLabels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.svt.replicas }}
+  selector:
+     matchLabels:
+       app.kubernetes.io/name: {{ .Values.servicename }}-tenant-svt
+  template:
+    metadata:
+      name: {{ .Values.servicename }}-tenant-svt
+      labels:
+        app.kubernetes.io/name: {{ .Values.servicename }}-tenant-svt
+        helm.sh/chart: "{{ .Chart.Name }}"
+        name: {{ template "eventstore.name" . }}
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        enabled: "true"
+        {{- include "eventstore.podLabels" . | indent 8 }}
+      annotations:
+        {{- include "eventstore.annotations" . | indent 8 }}
+    spec:
+      affinity:
+        {{- include "eventstore.nodeAffinity" . | indent 6 }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: "app"
+                    operator: In
+                    values:
+                    - {{ .Values.servicename }}-tenant-svt
+              topologyKey: "kubernetes.io/hostname"
+      {{- include "eventstore.tolerations" . | indent 6 }}
+      {{- include "eventstore.security" . | indent 6 }}
+      serviceAccountName: {{ default "default" .Values.serviceAccountName }}
+      containers:
+      - name: svt
+        {{- if .Values.svt.image.tag }}
+        image: {{ .Values.svt.image.repository }}:{{ .Values.svt.image.tag }}
+        {{- else }}
+        image: {{ .Values.svt.image.repository }}:{{ .Values.image.universalTag }}
+        {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- include "eventstore.securityContext" . | indent 8 }}
+        command: ['/home/db2inst1/base_entrypoint.sh']
+        args: ["sudo -E /eventstore/init.sh"]
+        env:
+        {{- include "eventstore.environment-variables" . | indent 8 }}
+        - name: CLIENT_STOREPASS
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Values.servicename }}-ssl-keystore-password-secrets"
+              key: client_storepass
+        - name: SQLLIB_SHARED
+          value: /system-storage/{{ .Values.servicename }}/db2inst1/sqllib_shared
+        volumeMounts:
+        - name: svt-config-volume
+          mountPath: /k8s_mount/bluspark
+        - name: user-home-mount
+          mountPath: /user-home
+        {{- if ( not .Values.storage.storageLocation.dataStorage.enabled) }}
+        - name: storage-underfs
+          mountPath: /eventstorefs
+        - name: storage-underfs
+          mountPath: /system-storage
+        {{- else }}
+        {{- if (not .Values.objectStorage.useObjectStorage) }}
+        - mountPath: /eventstorefs
+          name: data-storage
+        {{- end }}
+        - mountPath: /system-storage
+          name: system-storage
+        {{- end }}
+      volumes:
+      {{- if ( not .Values.storage.storageLocation.dataStorage.enabled) }}
+      - name: storage-underfs
+        persistentVolumeClaim:
+        {{- if .Values.pvcSettings.existingClaimName }}
+          claimName: {{ .Values.pvcSettings.existingClaimName }}
+        {{- else }}
+          claimName: {{ .Values.servicename }}-pvc
+        {{- end }}
+      {{- else }}
+      {{- if (not .Values.objectStorage.useObjectStorage) }}
+        {{- include "eventstore.container.storage.dataStorage" . | indent 6 }}
+      {{- end }}
+        {{- include "eventstore.container.storage.systemStorage" . | indent 6 }}
+      {{- end }}
+      - name: svt-config-volume
+        configMap:
+          name: "{{ .Values.servicename }}-config-files"
+          items:
+          - key: svt-perf-conf
+            path: svt-perf.conf
+      {{- include "eventstore.user-home-pvc" .  | indent 6 }}
+      restartPolicy: Always
+{{- end }}
