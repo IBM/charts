@@ -1,0 +1,44 @@
+{{/*
+#+------------------------------------------------------------------------+
+#| Licensed Materials - Property of IBM
+#| IBM Cognos Products: Cognos Dashboard Embedded
+#| (C) Copyright IBM Corp. 2019
+#|
+#| US Government Users Restricted Rights - Use, duplication or disclosure
+#| restricted by GSA ADP Schedule Contract with IBM Corp.
+#+------------------------------------------------------------------------+
+*/}}
+{{- $redisUri := (printf "redis://%s:%g" "cognosdaasredis" .Values.image.redisInit.port) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "ibmCde.fullname" . }}-proxy-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ibmCde.release_labels" . | indent 4 }}
+data:
+  AIRGAP: {{ .Values.image.server.airgap | quote }}
+  CLOUD_PRIVATE: "true"
+  CDN_ROOT: /daas
+  DAAS_SERVER: "http://127.0.0.1:9080" #http://{{ printf "%s-%s" .Release.Name "daas-server" | trunc 63 | replace "-" "" }}:9080
+  LOGLEVEL: {{ .Values.logLevel | default "warn" | quote }}
+  NODE_ENV: local
+  PORT: "3000"
+  PROXY_API_KEY: "proxy" #${PROXY_API_KEY}
+  PROXY_USER: "proxy" #${PROXY_USER}
+  SERVICE_BROKER_DB_URL: ""
+  SESSION_COOKIE_NAME: "ba.proxy.dev"
+  SESSION_PREFIX: "sess:"
+  SESSION_SECRET: SESSION_SECRET
+  SESSION_TTL: "300"
+  SERVICE_BROKER_AUTH: "[{\"username\":\"cloud_private\",\"password\":\"cloud_private\"}]"
+  SHAREDDATA_PATH: "/shared-data"
+  VCAP_SERVICES: '{"compose-for-redis": [{"credentials": {"db_type": "redis","maps": [],"name": "","uri_cli": "","deployment_id": "","uri": {{ $redisUri | quote }},"misc": {"direct_readonly": [],"cli_readonly": [],"ssh_cli": []}},"syslog_drain_url": null,"volume_mounts": [],"label": "compose-for-redis","provider": null,"plan": "Standard","name": "ba-daas-dev-redis","tags": ["big_data","data_management","ibm_created"]}]}'
+  HTTPS_PORT: "3001"
+{{- if (not .Values.image.proxy.tlsSecret) }}
+  DAAS_TLS_CERT_PATH: "/etc/ssl/cde-sb-proxy.crt.pem"
+  DAAS_TLS_KEY_PATH: "/etc/ssl/cde-sb-proxy.pem"
+{{- end }}
+{{- if .Values.global.buildVersion }}
+  BUILD_VERSION: {{ .Values.global.buildVersion | quote }}
+{{- end }}
