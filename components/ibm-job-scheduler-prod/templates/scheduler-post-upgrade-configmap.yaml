@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scheduler-post-upgrade-configmap
+  annotations:
+    "helm.sh/hook": "pre-upgrade"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "99"
+    {{- if .Values.global.annotations }}
+{{ toYaml .Values.global.annotations | trim | indent 4 }}
+    {{- end }}
+  labels:
+    icpdsupport/addOnId: {{ .Values.global.addOnId | quote }}
+    icpdsupport/app: api
+    chart: {{ template "watson-studio.chart" $ }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    helm.sh/chart: {{ template "watson-studio.chart" $ }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  scheduler-post-upgrade.sh: |
+    #!/bin/bash
+    set -e
+
+    domain=${CUSTOM_DOMAIN:-internal-nginx-svc:12443}
+    while read -r SECRET
+    do
+      BTOK=$(kubectl -n $NAMESPACE get secret $SECRET -o jsonpath='{.data.DSX_TOKEN}')
+      DECODED_BTOK=$(echo $BTOK | base64 -d)
+      NEW_TOKEN=$(curl -k -H "Authorization: $DECODED_BTOK" -H "lifetime: 99999999" -X POST "https://$domain/api/v1/usermgmt/v1/usermgmt/getTimedToken" -d "lifetime=99999999" | jq -r '.accessToken')
+      if [ $NEW_TOKEN ]; then
+        ENCODED_NEW_TOKEN=$(echo -n "Bearer $NEW_TOKEN" | base64 -w 0)
+        kubectl -n $NAMESPACE patch secret $SECRET -p="{\"data\":{\"DSX_TOKEN\": \"$ENCODED_NEW_TOKEN\"}}"
+      fi
+    done < <(kubectl get secret -n $NAMESPACE | grep '\-sct' | grep 100033 | awk '{print $1}')
+
+    exit 0

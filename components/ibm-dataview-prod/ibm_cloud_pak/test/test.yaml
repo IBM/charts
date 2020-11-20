@@ -1,0 +1,59 @@
+{{- $compName := "ibm-dataview-prod-test" -}}
+kind: Pod
+apiVersion: v1
+metadata:
+  name: {{$compName}}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    app.kubernetes.io/name: "{{ .Chart.Name }}-{{$compName}}"
+    helm.sh/chart: {{ .Chart.Name }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  serviceAccount: {{ .Values.service.viewer.sa }}
+  serviceAccountName: {{ .Values.service.viewer.sa }}
+  affinity:
+    nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - {{ .Values.resources.architecture }}
+  restartPolicy: Never
+  containers:
+    - name: {{$compName}}-container
+      image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+      imagePullPolicy: IfNotPresent
+      resources:
+        limits:
+          cpu: "0.5"
+          memory: "512Mi"
+        requests:
+          cpu: "0.5"
+          memory: "512Mi"
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: false
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true             
+        runAsUser: 1000320999
+        capabilities:
+          drop:
+          - ALL
+      command: [sh, -c]
+      args:
+        - |
+          response=$(curl -k -s -o /dev/null -w "%{response_code}" curl -k -s -o /dev/null -w "%{response_code}" https://{{ .Chart.Name }}/dataview/version)
+          if [ $response -ne 200 ]; then
+            echo "HTTP response $response accessing the Dataview service"
+            exit 1
+          else
+            echo "Dataview service is up"
+          fi

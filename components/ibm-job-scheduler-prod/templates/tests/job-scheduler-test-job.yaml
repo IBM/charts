@@ -1,0 +1,63 @@
+{{- $imagesList := .Files.Get "imagesList.yaml" }}
+{{- $imagesListDetails := fromYaml $imagesList }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: job-scheduler-test
+  annotations:
+    "helm.sh/hook": test-success
+    hook.deactivate.cpd.ibm.com/command: "[]"
+    hook.activate.cpd.ibm.com/command: "[]"
+    cloudpakInstanceId: {{ .Values.global.cloudpakInstanceId | default "set_during_install" }} 
+    {{- if .Values.global.annotations }}
+{{ toYaml .Values.global.annotations | trim | indent 4 }}
+    {{- end }}
+  labels:
+    name: job-scheduler-test
+    helm.sh/chart: {{ template "watson-studio.chart" $ }}
+    app.kubernetes.io/name: {{ $.Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsUser: 1000320999
+  serviceAccountName: cpd-viewer-sa
+  terminationGracePeriodSeconds: 0
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - amd64
+  containers:
+  - name: jobs-ui-verify
+    image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ (index $imagesListDetails "job-trigger").image.repository }}:{{ .Values.global.imageTag }}",
+    imagePullPolicy: {{ (index $imagesListDetails "job-trigger").image.pullPolicy }}
+    command: [sh, -c]
+    args:
+    - |
+      response=$(curl -k -s -o /dev/null -w "%{response_code}" https://jobs-ui/internal/monitor)
+      if [ $response -ne 200 ]; then
+        echo "HTTP response $response accessing the jobs UI service"
+        exit 1
+      else
+        echo "Jobs UI service is up"
+      fi
+    securityContext:
+      privileged: false
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 1000320999
+      readOnlyRootFilesystem: false
+      capabilities:
+        drop:
+          - ALL
+    resources:
+{{ toYaml .Values.postDelete.resources | trim | indent 6 }}
+  restartPolicy: Never

@@ -1,0 +1,97 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Name }}-environments-uninstall-job"
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }} 
+    app.kubernetes.io/name: "ibm-wsl-environments-prod"
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }} 
+    app: "ibm-wsl-environments-prod"
+    release: "{{ .Release.Name }}"
+    chart: {{ .Chart.Name }}
+    heritage: tiller
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-delete-policy": hook-succeeded
+    "helm.sh/hook-weight": "2"
+    {{- include "environments.cloudpak_annotations" . }}
+spec:
+  completions: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }} 
+        app.kubernetes.io/name: "ibm-wsl-environments-uninstall"
+        helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }} 
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app: "ibm-wsl-environments-uninstall"
+        component: "{{ .Release.Name }}-environments-uninstall-job"
+        icpdsupport/app: "api"
+        icpdsupport/addOnId: "ws"
+      annotations:
+        {{- include "environments.cloudpak_annotations" . |indent 4 }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ include "global.arch" . }}
+      serviceAccountName: cpd-editor-sa
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsUser: 1000320999
+        runAsNonRoot: true      
+      containers:
+        - name: environments-uninstall-job-container
+          env:
+            - name: APP_ENV_DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: wdp-cloudant-url
+                  key: database-svc
+            - name: APP_ENV_DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: wdp-cloudant-creds
+                  key: username
+            - name: APP_ENV_DB_API_KEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: wdp-cloudant-creds
+                  key: password
+          image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.uninstallJob.image.repository }}:{{ .Values.uninstallJob.image.tag }}-{{ include "global.arch" . }}
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+          imagePullPolicy: Always
+          command: ["/bin/bash", "-c", "/home/node/scripts/initializeNotebooks.sh --uninstallEnvironments"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+          - mountPath: /cc-home
+            name: cc-home-mount
+      volumes:
+      - name: cc-home-mount
+        persistentVolumeClaim:
+          claimName: cc-home-pvc
+      restartPolicy: OnFailure

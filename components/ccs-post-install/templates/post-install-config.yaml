@@ -1,0 +1,107 @@
+{{- if eq .Values.global.deploymentTarget "icp4data" }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: ccs-post-install-config
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+data:
+  init.sh: |
+    set -e
+    LogMsg(){
+        logMsg="$1"
+        echo "["$(date +"%d-%B-%Y %R %Z")"]" ${logMsg}
+      }
+    LogError(){
+        LogMsg "ERROR: $@"
+      }
+    LogWarn(){
+        LogMsg "WARNING: $@"
+      }
+    LogInfo(){
+        LogMsg "INFO: $@"
+      }
+
+    userName={{ .Values.cpdDefaultAdminUser }};
+
+    LogInfo "Waiting for catalog-api pod to be ready"
+    kubectl wait --for=condition=ready --timeout=10m pod -l app=catalog-api
+
+    LogInfo "Getting access token"
+    accessToken=$(curl -ks -X GET https://zen-core-api-svc:4444/internal/v1/service_token?'username=$userName&uid=1000330999&expiration_time=120&permissions=administrator' -H "secret: $ZEN_SERVICE_BROKER_SECRET" -H "cache-control: no-cache" 2> /dev/null | python -c "import sys, json; dbInstJson=json.load(sys.stdin); print(dbInstJson['token'])")
+
+    if [ -z "$accessToken" ];
+    then
+        LogError "Access token creation failed"
+        exit 1
+    fi
+
+    #LogInfo "Making call to create global catalog"
+    globalCatalogJsonBody="{ \"name\": \"Platform assets catalog\", \"description\": \"The catalog where all platform users can share assets and connections.\", \"generator\": \"wkc post install\", \"uid\": \"ibm-global-catalog\", \"bss_account_id\": \"999\", \"bucket\": { \"bucket_type\": \"assetfiles\"}, \"is_governed\": false }"
+    globalCatalogResponseCode=$(curl -ks -w "%{http_code}" -o /dev/null -X POST -H 'Content-Type: application/json' -H "Accept: application/json" -H "Authorization: Bearer $accessToken" "https://internal-nginx-svc:12443/v2/catalogs?check_bucket_existence=false" -d "$globalCatalogJsonBody")
+
+    if [ "$globalCatalogResponseCode" != "409" ] && [ "$globalCatalogResponseCode" != "201" ];
+    then
+        LogError "Global catalog creation failed, response code is $globalCatalogResponseCode"
+        exit 1
+    else
+        LogInfo "Global catalog was created successfully or already exists"
+        x=1
+        while [ $x -le 5 ]
+        do
+          catalogId=$(curl -ks -X GET -H 'Content-Type: application/json' -H "Accept: application/json" -H "Authorization: Bearer $accessToken" "https://internal-nginx-svc:12443/v2/catalogs/ibm-global-catalog" | tr ',' '\n' | grep -w "guid"  | tr '"' ' ' | awk '{print $NF}')
+          if [ -z "$catalogId" ];
+          then
+            echo "Re-trying get catalog's id attempt $x..."
+            sleep 10
+            x=$(( $x + 1 ))
+          else
+            break;
+          fi
+        done
+        
+        if [ -z "$catalogId" ];
+        then
+          LogError "Failed to resolve catalog id."
+          exit 1;
+        fi
+    fi
+
+    LogInfo "Adding all users group to global catalog"
+    allUsersJsonBody=$(curl -ks -X GET -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Authorization: Bearer $accessToken" "https://internal-nginx-svc:12443/usermgmt/v1/usermgmt/users?user_roles=zen_administrator_role" | python -c "import sys, json; get_admin_users_response=json.load(sys.stdin); \
+    uid_list=[response_map['uid'] for response_map in get_admin_users_response]; \
+    member_list=[{'user_iam_id': uid, 'role': 'admin'} for uid in uid_list]; \
+    member_list.append({ 'access_group_id': '10000', 'role': 'viewer' }); \
+    print(json.dumps({'members': member_list}));");
+    
+    allUsersResponseCode=$(curl -ks -w "%{http_code}" -o /dev/null -X POST -H 'Content-Type: application/json' -H "Accept: application/json" -H "Authorization: Bearer $accessToken" "https://internal-nginx-svc:12443/v2/catalogs/$catalogId/members" -d "$allUsersJsonBody");
+
+    if [ "$allUsersResponseCode" != "201" ] && [ "$allUsersResponseCode" != "200" ];
+    then
+        LogError "Failed to add all users group to global catalog, response code is $allUsersResponseCode"
+        exit 1
+    fi
+
+    LogInfo "Waiting for asset-files-api pod to be ready"
+    kubectl wait --for=condition=ready --timeout=10m pod -l app=asset-files-api
+
+    LogInfo "Making call to create root folder for global catalog"
+    rootFolderResponseCode=$(curl -ks -o /dev/null -w "%{http_code}" -X PUT -H 'Content-Type: application/json' -H "Accept: application/json" -H "Authorization: Basic $WDP_SERVICE_ID" "https://internal-nginx-svc:12443/v2/asset_files?catalog_id=$catalogId")
+
+    if [ "$rootFolderResponseCode" != "409" ] && [ "$rootFolderResponseCode" != "201" ];
+    then
+        LogError "Creating root folder for global catalog creation failed, response code is $rootFolderResponseCode"
+        exit 1
+    else
+        LogInfo "Root folder for global catalog was created sucessfully or already exists"
+    fi
+
+
+{{- end }}

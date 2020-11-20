@@ -1,0 +1,83 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Name }}-init-job"
+  labels:
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }} 
+    app.kubernetes.io/name: "ibm-ws-rstudio-init"
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }} 
+    app: "ibm-ws-rstudio"
+    release: "{{ .Release.Name }}"
+    chart: {{ .Chart.Name }}
+    heritage: tiller
+    icpdsupport/app: "ui"
+    icpdsupport/addOnId: "rstudio"
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": "hook-succeeded,before-hook-creation"
+    "helm.sh/hook-weight": "2"
+    {{- include "runtime_addon_rstudio.cloudpak_annotations" . }}
+spec:
+  completions: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }} 
+        app.kubernetes.io/name: "ibm-ws-rstudio-init"
+        helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_" }} 
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app: "ibm-ws-rstudio-init"
+        component: "{{ .Release.Name }}-rstudio-init-job"
+        icpdsupport/app: "ui"
+        icpdsupport/addOnId: "rstudio"
+      annotations:
+        {{- include "runtime_addon_rstudio.cloudpak_annotations" . |indent 4 }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.global.architecture }}
+      serviceAccountName: cpd-editor-sa
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsUser: {{ .Values.initJob.runAsUser }}
+        runAsNonRoot: true      
+      containers:
+        - name: rstudio-init-job-container
+          image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.initJob.image.name }}:{{ .Values.initJob.image.tag }}
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+          imagePullPolicy: Always
+          command: ["/bin/bash", "-c", "/scripts/initializeRStudio.sh --createWSLGlobalAssetTypes"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+          - mountPath: /cc-home
+            name: cc-home-mount
+      volumes:
+      - name: cc-home-mount
+        persistentVolumeClaim:
+          claimName: cc-home-pvc
+      restartPolicy: OnFailure
