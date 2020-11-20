@@ -1,0 +1,80 @@
+{{- include "sch.config.init" (list . "dv.sch.chart.config.values") -}}
+{{- $appName := .sch.chart.appName -}}
+{{- $compName := .sch.chart.components.addInstanceOwner.name -}}
+{{- $ServiceInstanceID := .Values.zenServiceInstanceId | int64 -}}
+{{- $ServiceInstanceUID := .Values.zenServiceInstanceUID | int64 -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.appName" (list .) }}-{{ $compName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "ServiceInstanceID" $ServiceInstanceID "app" $appName "icpdsupport/addOnId" $appName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" $ServiceInstanceID "icpdsupport/createdBy" $ServiceInstanceUID)) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering nil nil nil) | indent 8 }}
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.security.commonUtilsJobPodSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      restartPolicy: Never
+      containers:
+      - name: {{ $compName }}
+        image: "{{ .Values.docker_registry_prefix }}/{{ .Values.dvEngine.image.dockerImage }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: ZEN_SERVICE_INSTANCE_ID
+          value: "{{ .Values.zenServiceInstanceId | int64 }}"
+        volumeMounts:
+        - mountPath: /mnt/PV/versioned/uc_dsserver_shared
+          name: dv-data
+          subPath: uc_dsserver_shared
+        - name: secret-volume
+          readOnly: true
+          mountPath: "/etc/secret-volume"
+        - name: zen-service-id-secret-volume
+          readOnly: true
+          mountPath: "/etc/zen-service-id-secret-volume"
+        command:
+        - /bin/bash
+        - -c
+        - |
+          echo "[INFO] Waiting for dv-engine-0 to become Ready..."
+          until [ -f /mnt/PV/versioned/uc_dsserver_shared/config/.dataserver_initialized ]; do
+            echo -n "."
+            sleep 10
+          done
+
+          # any failure from here on means the user wasn't added so it should be fatal
+          set -e
+
+          # Retrieve the instance owner's username
+          instance_details=$(curl -s -k -H "secret: $(cat /etc/zen-service-id-secret-volume/token)" -H "Content-Type: application/json" zen-core-api-svc:3333/v3/service_instances/${ZEN_SERVICE_INSTANCE_ID})
+          echo "[INFO] Retrieved instance details for Service Instance ID ${ZEN_SERVICE_INSTANCE_ID}: ${instance_details}"
+
+          # Use Python to pull the owner_username out of the JSON response
+          owner_username=$(echo ${instance_details} | python -c "import sys, json; print(json.load(sys.stdin)['service_instance']['owner_username'])")
+
+          cat <<EOF | jsqsh --echo --non-interactive --jdbc-url=jdbc:db2://dv-internal:32051/bigsql --user=bluadmin --password="$(cat /etc/secret-volume/password)" -i -
+          GRANT ROLE DV_ADMIN TO USER ${owner_username};
+          EOF
+
+          echo "[INFO] Successfully added instance owner ${owner_username} to instance ${ZEN_SERVICE_INSTANCE_ID}"
+
+{{ include "dv.helpers.resources" (list . .Values.resources.commonUtilsJob) | indent 8 }}
+{{ include "sch.security.securityContext" (list . .sch.chart.security.commonUtilsJobContainerSecurityContext) | indent 8 }}
+      volumes:
+      - name: dv-data
+        persistentVolumeClaim:
+            claimName: {{ include "sch.names.appName" (list .) }}-pvc
+      - name: secret-volume
+        secret:
+          secretName: {{ include "sch.names.appName" (list .) }}-{{ .sch.chart.components.secret.name }}
+          defaultMode: 288
+      - name: zen-service-id-secret-volume
+        secret:
+          secretName: zen-service-broker-secret
+          defaultMode: 288

@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: 
+  annotations: 
+    alpha.image.policy.openshift.io/resolve-names: "*"
+    image.openshift.io/triggers: "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"os-indexer-queue-ibm:latest\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"os-indexer-queue-ibm\\\")].image\"}]"
+  labels: 
+    app: os-indexer-queue-ibm
+    app.kubernetes.io/component: os-indexer-queue-ibm
+    app.kubernetes.io/instance: {{.Release.Name}}
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: java
+    app.kubernetes.io/part-of: os-core-ibm-app
+    app.openshift.io/runtime: java
+    app.openshift.io/runtime-version: "8"
+  name: os-indexer-queue-ibm
+spec: 
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector: 
+    matchLabels: 
+      app: os-indexer-queue-ibm
+  strategy: 
+    rollingUpdate: 
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template: 
+    metadata: 
+      annotations: 
+        cloudpakId: 22c3734b7f2e46299738f97c24bad56f
+        productVersion: 1.0.0
+        productID: 22c3734b7f2e46299738f97c24bad56f
+        sidecar.istio.io/inject: 'true'
+        icpdsupport/addOnId: osdu
+        cloudpakName: IBM Open Energy Data Universe for IBM Cloud Pak for Data
+        cloudpakVersion: 3.5.0
+        productChargedContainers: All
+        productName: IBM Open Energy Data Universe for IBM Cloud Pak for Data
+        sidecar.istio.io/rewriteAppHTTPProbers: 'true'
+        productMetric: VIRTUAL_PROCESSOR_CORE
+      labels: 
+        app: os-indexer-queue-ibm
+        deploymentconfig: os-indexer-queue-ibm
+        icpdsupport/addOnId: osdu
+        icpdsupport/assemblyName: osdu
+        icpdsupport/app: osdu
+    spec: 
+      containers: 
+        - 
+          env: 
+            - 
+              name: JAVA_APP_JAR
+              value: /deployments/*-spring-boot.jar
+          envFrom: 
+            - 
+              configMapRef: 
+                name: props-core
+            - secretRef:
+                name: props-secret
+          image: "os-indexer-queue-ibm:vR2.5"
+          imagePullPolicy: Always
+          name: os-indexer-queue-ibm
+          ports: 
+            - 
+              containerPort: 8080
+              protocol: TCP
+            - 
+              containerPort: 8443
+              protocol: TCP
+            - 
+              containerPort: 8778
+              protocol: TCP
+          resources: 
+            limits: 
+              cpu: 1
+              memory: 1Gi
+            requests: 
+              cpu: 200m
+              memory: 500Mi
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 40
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 60
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        capabilities:
+          drop:
+            - KILL
+            - MKNOD
+            - SETGID
+            - SETUID
+      terminationGracePeriodSeconds: 30
+
