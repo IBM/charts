@@ -1,0 +1,91 @@
+# Default values for chart.
+# This is a YAML-formatted file.
+
+global:
+  pullPolicy: IfNotPresent
+  ibmProduct: ws
+  deploymentTarget: icp4data
+  annotations:
+    cloudpakName: IBM Cloud Pak for Data
+    cloudpakId: eb9998dcc5d24e3eb5b6fb488f750fe2
+    cloudpakVersion: "3.0.0"
+    productMetric: VIRTUAL_PROCESSOR_CORE
+    productChargedContainers: All
+    productID: ICP4D-Watson-Machine-Learning-3-0-0
+    productName: IBM Watson Machine Learning for IBM Cloud Pak for Data
+    productVersion: "3.0.0"
+  serviceAccount: cpd-viewer-sa
+  runAsUser: "1000320999"
+  imageTag: v3.0.0
+  sessionKey: wml_icp4d.sid
+# List of microservices that need to be deployed
+microservicelist:
+  - wml-main
+
+nginx: true
+
+# host information
+host: internal-nginx-svc
+hostPort: 12443
+
+# common microservice details
+microservice:
+  name: false # Required: Has to be replaced by command line argument --set
+  rootPath: /monitor # Required: Needs to be passed from helm command, default set to /monitor
+  port: 8443
+  scheme: HTTPS
+  # namespace: dap-core # override based on region of deployment, put in envars if needed
+  
+  # service information for microservice
+  service:
+    type: ClusterIP
+    port: 443
+    enabled: true
+
+  # deployment information for microservice
+  deployment:
+    enabled: true
+    envVariableFile: "envvar.yaml"
+    replicaCount: 1 # We can make this parameter customizable. Min 3 replicas to map one to each MZR zone
+    minReadySeconds: 5 # Each pod needs to be available for min 5 seconds to be considered Ready, prevents bad version to be rolled out
+    progressDeadline: 480 # Each deployment has at most 8 minutes to be considered ready or it will fall back, same timeout as helm
+    limits:
+      cpu: "500m"
+      memory: "4Gi"
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    probes:
+      readinessProbe:
+        initialDelaySeconds: 100 # Seconds before making the first readinessProbe check after container restarted
+        timeoutSeconds: 5 # Seconds after the probe timesout
+        failureThreshold: 3 # How many failures
+        successThreshold: 1
+      livenessProbe:
+        successThreshold: 1
+        periodSeconds: 30 # How often to try the probe 
+        failureThreshold: 5
+        timeoutSeconds: 5
+        initialDelaySeconds: 180
+    env: icp4d
+    strategy:
+      type: RollingUpdate
+      maxSurge: 100% # Refers to the percentage of pod instances that we allow to exist above the desired replicaCount, needed for deployments
+      maxUnavailable: 40% # Refers to the percentage of pod instances that can be unavailable at any given point in time relative to replicaCount
+
+# eventually this chart will install ingress
+ingress:
+  enabled: false 
+  host: None
+  tls:
+    enabled: false
+    secret: dataplatform-tls
+
+# Default information for a microservice
+namespace: 
+  enabled: false
+  name: dap-core
+
+propertyPrefix: icp4d_prod_
+buildVersion: "3.0.0"
+

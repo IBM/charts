@@ -1,0 +1,60 @@
+{{- $compName := "post-delete-hadoop-addon-hook" -}}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: post-delete-hadoop-addon-hook
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+    app.kubernetes.io/name: post-delete-hadoop-addon-hook
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  annotations:
+    "helm.sh/hook": "post-delete"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-weight": "0"
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+        app.kubernetes.io/name: post-delete-hadoop-addon-hook
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsUser: 1000320999
+      serviceAccountName: cpd-editor-sa
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+      containers:
+      - name: post-delete-hadoop-addon-hook-container
+        image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.utilsApi.image.repository }}:{{ .Values.utilsApi.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["sh", "-c", "cd /utils-api/scripts/dsxhi_ha && sh uninstall_hadoop_addon.sh"]
+        resources:
+{{ toYaml .Values.utilsApi.resources | indent 10 }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000320999
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /cc-home
+          name: cc-home-mount
+      volumes:
+      - name: cc-home-mount
+        persistentVolumeClaim:
+          claimName: "cc-home-pvc"
+      restartPolicy: OnFailure

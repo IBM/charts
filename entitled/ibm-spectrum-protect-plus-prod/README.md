@@ -6,45 +6,25 @@
 
 IBM Spectrum Protect Plus is a data protection and availability solution for virtual environments and database applications that can be rapidly deployed to protect your environment.
 
-Kubernetes Backup Support is a feature of IBM Spectrum Protect Plus that extends data protection to containers in Kubernetes clusters. Kubernetes Backup Support protects persistent volumes that are attached to containers in Kubernetes clusters. Snapshot backups of the persistent volumes are created and copied to IBM Spectrum Protect Plus vSnap servers.
+Container Backup Support is a feature of IBM Spectrum Protect Plus that extends data protection to containers in a Kubernetes or Red Hat OpenShift environment. Container Backup Support protects persistent volumes, namespace-scoped resources, and cluster-scoped resources that are associated with containers in Kubernetes or OpenShift clusters.  Snapshot backups of the persistent volumes are created and copied to IBM Spectrum Protect Plus vSnap servers.
 
-[Product Documentation](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.6/spp/welcome.html)
+[Product Documentation](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.7/spp/welcome.html)
 
 ## Chart Details
 
-This chart deploys the Kubernetes Backup Support component of IBM Spectrum Protect Plus that supports data protection in the Kubernetes environment.
+This chart deploys the Container Backup Support component of IBM Spectrum Protect Plus that supports data protection in the Kubernetes or OpenShift environment.
 
 ## Prerequisites
 
-* Cluster prerequisites:
-  * Kubernetes 1.16.0 or later, with beta APIs enabled.
-  * Helm versions >= 2.16.0 < 3.0.0
-  * Ceph Container Storage Interface (CSI) driver 1.2 or 2.0 with Rados Block Device (RBD) storage.
-  * You must be running a Kubernetes cluster with CSI support.
-  * Persistent storage must be provided by the CSI driver, which must support CSI snapshot capabilities.
-  * A storage class must be defined for the persistent volumes that are being protected.
-  * The Kubernetes command-line tool kubectl must be accessible on the installation host and in the local path.
-  * CSI snapshot support must be enabled on the kubectl command line.
-  * The target image registry must be accessible from the Kubernetes cluster. The target image registry can be a local image registry or an external image registry. For an external image registry, you can configure the image pull secret to secure your environment.
-  * To create new cluster-wide resources, you must be logged in to the target cluster as a user with cluster-admin privileges.
-  * Ensure that Kubernetes Backup Support secrets that include user IDs, passwords, and keys are encrypted at rest in the etcd distributed key-value store. For more information, see [Encrypting Secret Data at Rest](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/).
-  * Kubernetes Backup Support protects only persistent storage that was allocated by a storage plug-in that supports the CSI interface.
-  * Only formatted volumes are supported. Raw block volumes are not supported.
-  * For Kubernetes 1.16 only: The VolumeSnapshotDataSource feature gate must be enabled. For instructions, see [Enabling the VolumeSnapshotDataSource feature](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.6/spp/r_spp_cbs_prereqs.html#r_spp_cbs_prereqs__enable_volsnapdatasource).
-  * Optional: To help optimize product performance and scalability, ensure that Kubernetes Metrics Server v0.3.5 or later is installed and running. For instructions, see [Verifying whether the Metrics Server is running](https://www.ibm.com/support/knowledgecenterSSNQFQ_10.1.6/spp/r_spp_cbs_prereqs.html#r_spp_cbs_prereqs__install_metrics_server).
-
-* IBM Spectrum Protect prerequisites:
-  * External, non-container components such as IBM Spectrum Protect Plus and the IBM Spectrum Protect Plus vSnap server must be provisioned and configured by the IBM Spectrum Protect Plus administrator. For instructions, see [Installing IBM Spectrum Protect Plus](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.6/spp/c_spp_installation.html).
-  * An IBM Spectrum Protect Plus instance must be deployed and licensed as a VMware virtual appliance. Network connectivity must exist to and from the target cluster. 
-  * An IBM Spectrum Protect Plus vSnap instance must be deployed as a VMware virtual appliance. The vSnap instance must be configured as an external vSnap server for storing backups. For instructions, see [Installing vSnap servers](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.6/spp/c_vsnap_installation.html).
-
-For the most current requirements and prerequisites, see https://www.ibm.com/support/pages/node/2489223.
+To view the requirements and prerequisites, see [Container backup and restore requirements](https://www.ibm.com/support/pages/node/6325259).
 
 ## Resources Required
 
-- The following system resources are based on the default install parameters.
+* The following system resources are based on the default install parameters.
 
-By default, when you use this helm chart you start with the following number of Containers and required resources:  
+By default, when you use this helm chart you start with the following number of containers and required resources:
+
+* For Kubernetes:
 
   |Component                       | Replica | Request CPU  | Limit CPU    | Request Memory | Limit Memory
   |------------------------------  | --------| -------------| -------------| -------------  | -------------
@@ -57,351 +37,474 @@ By default, when you use this helm chart you start with the following number of 
   |baas-transaction-manager        | 3       | 200m         | 1            | 100Mi          | 500Mi
   |baas-transaction-manager-worker | 3       | 200m         | 2            | 250Mi          | 500Mi
   |baas-transaction-manager-redis  | 3       | 50m          | 200m         | 50Mi           | 250Mi
+  |baas-strimzi-cluster-operatior  | 1       | 200m         | 1            | 384Mi          | 384Mi
+  |baas-zookeeper                  | 3       | 300m         | 2            | 400Mi          | 1Gi
 
-   - The CPU resource is measured in Kubernetes _cpu_ units. See Kubernetes documentation for details.
-   - Ensure that you have sufficient resources available on your worker nodes to support the deployment.
+* For OpenShift
+
+  |Component                       | Replica | Request CPU  | Limit CPU    | Request Memory | Limit Memory
+  |------------------------------  | --------| -------------| -------------| -------------  | -------------
+  |baas-spp-agent                  | 1       | 2            | 3            | 800Mi          | 1000Mi
+  |baas-datamover                  | 1       | 100m         | 500m         | 500Mi          | 1000Mi
+  |baas-kafka                      | 1       | 500m         | 2            | 600Mi          | 2Gi
+  |baas-scheduler                  | 1       | 100m         | 750m         | 150Mi          | 500Mi
+  |baas-controller                 | 1       | 250m         | 1            | 50Mi           | 250Mi
+  |baas-transaction-manager        | 3       | 200m         | 1            | 100Mi          | 500Mi
+  |baas-transaction-manager-worker | 3       | 200m         | 2            | 250Mi          | 500Mi
+  |baas-transaction-manager-redis  | 3       | 50m          | 200m         | 50Mi           | 250Mi
+  |baas-zookeeper                  | 3       | 300m         | 2            | 400Mi          | 1Gi
+  |baas-entity-operator            | 1       | 300m         | 2            | 400Mi          | 1Gi
+
+* The CPU resource is measured in Kubernetes _cpu_ units. See Kubernetes documentation for details.
+* Ensure that you have sufficient resources available on your worker nodes to support the deployment.
 
 ## Installing the Chart
 
-You can install Kubernetes Backup Support by using one of the following methods:
+You can install Container Backup Support by using one of the following methods:
 
-* By downloading and installing the Helm package from IBM Helm Chart Repository and IBM Entitled Registry. 
+* By downloading and installing the product package in an airgap environment
 
-   The Helm package is smaller in size and therefore takes less time to download. Internet access is required to pull containers at deployment time. For instructions, see "Preparing for installation using package from IBM Helm Chart Repository and IBM Entitled Registry".
+   The installation package from IBM Passport Advantage® Online is a larger but self-contained package. Internet access is not required at deployment time.
+   For instructions, see [Installing Container Backup Support in an airgap environment](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.7/spp/t_spp_cbs_install_proc.html).
 
-* By downloading and installing the product package from IBM Passport Advantage. 
+* By fetching and installing the product package from IBM Helm Charts Repository and IBM Entitled Registry
 
-   The package from IBM Passport Advantage is a larger but self-contained package. Internet access is not required at deployment time. For instructions on downloading and installing the package from IBM Passport Advantage, see [Installing and deploying Kubernetes Backup Support images in the Kubernetes environment](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.6/spp/t_spp_cbs_install_proc.html).
+  The Helm package is smaller in size and therefore takes less time to download. Internet access is required to pull containers at deployment time.
+  For instructions, see [Installing Container Backup Support from IBM Helm Charts Repository and IBM Entitled Registry](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.7/spp/t_cbs_inst_helmrepo.html).
 
-### Preparing for installation using package from IBM Helm Chart Repository and IBM Entitled Registry
+### Setting up the installation variables
 
-Before you begin, ensure that your cluster can connect to the internet to pull images from the registry during the installation.
+A script is used as part of the installation process for Container Backup Support. Set up the environment and installation variables that are used by the installation script. The variables are saved to the `baas-options.sh` and `baas-values.yaml` files.
 
-The Helm chart for Kubernetes Backup Support is available in the IBM Helm Chart Repository. The Helm package contains links to the IBM Entitled Registry. 
+#### `baas-options.sh` file
 
-When the Helm chart is installed using the baas-install.sh script, links to the entitled registry are constructed based on the values in the baas_config.cfg configuration file. When Kubernetes starts to provision the pods for Kubernetes Backup Support, the containers specified in the links will be pulled from the entitled registry.
+Contains the variables that are used to configure the prerequisites for Container Backup Support. Use this file to replace the sample `baas-options.sh` file that is provided in the installation package.
 
-#### Step 1. Obtain a key to the IBM Entitled Registry
+```bash
+export DOCKER_REGISTRY_ADDRESS='your_docker_registry'
+export DOCKER_REGISTRY_USERNAME='your_docker_username'
+export DOCKER_REGISTRY_PASSWORD='your_docker_password'
+export DOCKER_REGISTRY_NAMESPACE='your_docker_registry_namespace'
+export SPP_ADMIN_USERNAME='your_protectplus_admin_username'
+export SPP_ADMIN_PASSWORD='your_protectplus_admin_password'
+export DATAMOVER_USERNAME='make_up_a_datamover_username'
+export DATAMOVER_PASSWORD='make_up_a_datamover_password'
+export PVC_NAMESPACES_TO_PROTECT='ns1 ns2'
+export MINIO_USERNAME='make_up_a_minio_username'
+export MINIO_PASSWORD='make_up_a_minio_password'
+export BAAS_VERSION='10.1.7'
+```
 
-Before you can pull docker images from the IBM Entitled Registry, you must obtain a key from the IBM Container Library.
+#### `baas-values.yaml` file
 
-To obtain an entitlement key:
+Contains the values that are used to install or upgrade Container Backup Support. Use this file to replace the sample `baas-values.yaml` file that is provided in the installation package.
 
-1. Log in to the [IBM Container Library](https://myibm.ibm.com/products-services/containerlibrary). Specify your IBMid and password when prompted.
-2. In the Access your container software page, click **Copy key** to copy your entitlement key.
-3. Save the key to a secure location. You will use the key in "Step 4. Create an image pull secret that contains the entitlement key". For example, save the following information to a file:
+```yaml
+license: false | true
+isOCP: false | true
+clusterName: specify_a_cluster_name
+networkPolicy:
+  clusterAPIServerips:
+    - kubernetes_host_ip1
+    - kubernetes_host_ip2
+    - kubernetes_host_ip3
+  clusterAPIServerport: your_protectplus_server_port
+  clusterCIDR: x.x.x.x/yy
+SPPips: your_protectplus_server_ip
+SPPport: your_protectplus_server_port
+productLoglevel: INFO | WARNING | ERROR | DEBUG
+imageRegistry: your_docker_registry
+imageRegistryNamespace: your_docker_registry_namespace
+minioStorageClass: name_of_storageclass_to_use_with_minio
+veleroNamespace: ""
+```
 
-   ```text
-   dockerRegistryKey: <your_entitlement_key>
+For detailed information, see [Setting up the installation variables](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.7/spp/c_spp_cbs_prereq_set_vars.html).
+
+### Installing Container Backup Support in an airgap environment
+
+1. Download the SPP_V10.1.7_for_Containers.tar.gz package from the IBM Passport Advantage Online to your home folder (~).
+
+    [For information about downloading files](https://www.ibm.com/support/pages/node/6330495)
+
+2. Extract the installation package and the .tgz file that contains the Helm 3 chart by issuing the following commands:
+
+   ```bash
+   tar -xvf SPP_V10.1.7_for_Containers.tar.gz
+   cd installer
+   tar -xvf ibm-spectrum-protect-plus-prod-1.1.0.tgz
    ```
 
-#### Step 2. Obtain the package from IBM Helm Chart Repository and IBM Entitled Registry
+   Restriction: Ensure that you do not add any large files to the installer/ibm-spectrum-protect-plus-prod directory. The size of the contents in this directory, including files and subdirectories, must not exceed the limit set by Helm (3145728 bytes).
 
-To review the product README and related files in the IBM Helm Chart Repository, navigate to https://github.com/IBM/charts/tree/master/entitled/ibm-spectrum-protect-plus-prod.
+3. Copy the `baas-options.sh` and `baas-values.yaml` files that you created to the Helm chart
+installation directory:
 
-To download the Helm package file named **ibm-spectrum-protect-plus-prod-1.0.0.tgz**, navigate to https://github.com/IBM/charts/tree/master/repo/entitled.
+    ```bash
+    cd ibm-spectrum-protect-plus-prod/ibm_cloud_pak/pak_extensions/install
+    cp ~/install_vars_dir/baas-options.sh .
+    cp ~/install_vars_dir/baas-values.yaml .
+    chmod +x *.sh
+    ```
 
-During deployment, the container images will be pulled from the IBM Entitled Registry.
+    where install_vars_dir is the directory where you saved your custom `baas-options.sh` and baasvalues. yaml files.
 
-After the download is completed, expand the .tgz file and cd to the ibm_cloud_pak/pak_extensions/install directory. 
+4. Issue the following command to deploy Container Backup Support:
 
-The **baas_install.sh** script in the **install** directory is used for installing Kubernetes Backup Support.
+    ```text
+    ./baas-install-ppa.sh
+    ```
 
-#### Step 3. Review the baas_config.cfg configuration file for use with IBM Entitled Registry
+    For detailed information, see [Installing Container Backup Support in an airgap environment](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.7/spp/t_spp_cbs_install_proc.html).
 
-Review the baas_config.cfg configuration file, which is used to configure the baas_install.sh installation script to run the product installation from the IBM Entitled Registry.
+### Installing Container Backup Support from IBM Helm Charts Repository and IBM Entitled Registry
 
-Complete the following steps:
+1. Complete this one-time preparation to add the IBM Helm Charts repository to the local repository list.
+Issue the following commands:
 
-1. cd to the **install** directory.
-2. Review the ./baas_config.cfg file.
-3. If necessary, edit and modify the value in the PRODUCT_IMAGE_REGISTRY_SECRET_NAME parameter. By default, it is set to "baas-registry-secret".
-   
-   The PRODUCT_IMAGE_REGISTRY_SECRET_NAME parameter in the baas_config.cfg configuration file specifies the name of the image pull secret to use. Be sure to use the same value as the secret name when you create the secret in "Step 4. Create an image pull secret that contains the entitlement key".
- 
+    ```text
+    helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm
+    helm3 repo list
+    helm3 repo update
+    helm3 search repo spectrum
+    ```
 
-#### Step 4. Create an image pull secret that contains the entitlement key
+2. Fetch the Container Backup Support Helm package from the IBM Helm Charts Repository:
 
-The image pull secret is used to provide the credentials that are needed by Kubernetes to pull docker images from the IBM Entitled Registry.
+    ```text
+    mkdir installer
+    cd installer
+    helm3 fetch ibm-helm/ibm-spectrum-protect-plus-prod --version "1.1.0"
+    ```
 
-Use the value provided for PRODUCT_IMAGE_REGISTRY_SECRET_NAME as the name of your secret. The image pull secret must be in every namespace of the PVCs that will be protected by Kubernetes Backup Support.
+3. Extract the Helm package:
+
+    ```text
+    tar -xvf ibm-spectrum-protect-plus-prod-1.1.0.tgz
+    helm3 fetch ibm-helm/ibm-spectrum-protect-plus-prod --version "1.1.0"
+    ```
+
+    Restriction: Ensure that you do not add any large files to the installer/ibm-spectrum-protect-plus-prod directory. The size of the contents in this directory, including files and subdirectories, must not exceed the limit set by Helm (3145728 bytes).
+
+4. Copy the `baas-options.sh` and `baas-values.yaml` files that you created to the Helm chart
+installation directory:
+
+    ```text
+    cd ibm-spectrum-protect-plus-prod/ibm_cloud_pak/pak_extensions/install
+    cp ~/install_vars_dir/baas-options.sh
+    cp ~/install_vars_dir/baas-values.yaml
+    chmod +x *.sh
+    ```
+
+    where install_vars_dir is the directory where you saved your custom `baas-options.sh` and baasvalues.yaml files.
+
+5. Issue the following command to deploy Container Backup Support:
+
+    ```bash
+    ./baas-install-entitled-registry.sh
+    ```
+
+    For detailed information, see [Installing Container Backup Support from IBM Helm Charts Repository and IBM Entitled Registry](https://www.ibm.com/support/knowledgecenter/en/SSNQFQ_10.1.7/spp/t_cbs_inst_helmrepo.html).
+
+## Uninstalling the Chart
+
+You can uninstall Container Backup Support completely so that all components, including all configurations and backups, are removed from the Kubernetes or OpenShift environment.
 
 Before you begin:
 
-* Ensure that you obtained a key to the IBM Entitled Registry as described in "Step 1. Obtain a key to the entitled staging registry".
-* Ensure that the product namespace "baas" exists by issuing the following command:
-  ```text
-  kubectl get namespace baas
-  ```
-  If the "baas" namespace does not exist, issue the following command to create it:
-  ```text
-  kubectl create namespace baas
-  ```
-
-To create an image pull secret for the IBM Entitled Registry:
-
-1. Issue the following command to create an image pull secret called "baas-registry-secret" for namespace "baas", using the entitlement key that you obtained:
-
-   ```text
-   kubectl create secret docker-registry "baas-registry-secret" --namespace "baas" --docker-server="cp.icr.io/cp/sppc" --docker-username="cp" --docker-password="<your_entitlement_key>" --docker-email=yourname@your.company.com
-   ```
-
-2. Determine the namespaces of any PVCs that you want to protect by issuing the following command:
-
-   ```text
-   kubectl get pvc --all-namespaces
-   ```
-
-3. For each PVC that you want to protect, copy the secret to that PVC's namespace by issuing the following command. For example, to copy the secret that you created for the **baas** namespace to **namespace1**:
-   ```text
-   kubectl get secret "baas-registry-secret" --namespace="baas" --export -o yaml | kubectl apply --namespace="namespace1" -f -
-   ```
-
-### Installing the product
-
-To install Kubernetes Backup Support using the ibm-spectrum-protect-plus-prod chart:
-
-1. Log in to the target cluster as a user with cluster-admin privileges.
-2. cd to the install directory.
-3. Obtain the CIDR method for the cluster by issuing the following command:
-   ```text
-   kubectl cluster-info dump | grep -m 1 cluster-cidr
-   ```
-   The CIDR is provided in the output in the following format:
-   ```text
-   --cluster-cidr=xxx.yyy.0.0/zz
-   ```  
-4. Obtain the IP address and server port for the cluster API server by issuing the following command:
-   ```text
-   kubectl config view|awk '/cluster\:/,/server\:/' | grep server\: | awk '{print $2}'
-   ```
-   The result is a URL that is composed of an IP address and port number, as shown in the following example:
-   ```text
-   https://192.0.2.0:6443
-   ```
-   where 192.0.2.0 is the cluster API server IP address and 6443 is the port address.
-
-
-5. Edit the **baas_config.cfg** configuration file and modify the configuration parameters by providing the appropriate values for your environment. Enclose the values in quotation marks, as shown in the following example:
-
-   ```text
-   BAAS_ADMIN="sppadmin"
-   ```
-
-   The following table contains the parameters that you must modify:
-   
-   <table>
-    Table 1. Specifications for the baas_config.cfg configuration file
-    <tr>
-        <th>Parameter</th>
-        <th>Description</th>
-        <th>Default Value</th>
-    </tr>
-    <tr>
-        <td>BAAS_ADMIN</td>
-        <td>The user ID of the IBM Spectrum Protect Plus administrator.</td>
-        <td>isppadmin</td>
-    </tr>
-    <tr>
-        <td>BAAS_PASSWORD</td>
-        <td>
-            The IBM Spectrum Protect Plus password. For increased security, specify an empty string "". You are
-            prompted for the password when you run the deployment script. If you must specify a password in the
-            configuration file for automated test deployments, ensure that the file is stored in a secure
-            location.
-        </td>
-        <td>None</td>
-    </tr>
-    <tr>
-        <td>CLUSTER_NAME</td>
-        <td>
-            The unique cluster name that is used to register the application host to the IBM Spectrum Protect
-            Plus server.
-        </td>
-        <td>None</td>
-    </tr>
-    <tr>
-        <td>CLUSTER_CIDR</td>
-        <td>The CIDR for the cluster. Enter the CDIR that was obtained in Step 3 of the "Installing the product" section.</td>
-        <td>192.168.0.0/16</td>
-    </tr>
-    <tr>
-        <td>CLUSTER_API_SERVER_IP_ADDRESS</td>
-        <td>The IP address for the cluster API server. Enter the IP address that was obtained in Step 4 of the "Installing the product" section.</td>
-        <td>x.x.x.x</td>
-    </tr>
-    <tr>
-        <td>CLUSTER_API_SERVER_PORT</td>
-        <td>The port address for the cluster API server. Enter the port address that was obtained in Step 4 of the "Installing the product" section.
-        <td>6443</td>
-    </tr>
-    <tr>
-        <td>LICENSE</td>
-        <td>
-            The product license for Kubernetes Backup Support. The
-            English license file is located in the LICENSES/LICENSE-en directory that
-            is included in the installation package. Versions of the license in other languages are available at https://www-03.ibm.com/software/sla/sladb.nsf/searchlis/?searchview&searchorder=4&searchmax=0&query=(5737-F11).
-            <p>Review the license information, and specify ACCEPTED to accept the license during installation
-                without being prompted.</p>
-            <p>If you do not change the default value, you are prompted to accept the license during installation.
-                Otherwise, the installation fails.</p>
-        </td>
-        <td>NOTACCEPTED</td>
-    </tr>
-    <tr>
-        <td>SPP_AGENT_SERVICE_NODEPORT</td>
-        <td>
-            The SSH port for the connection from IBM Spectrum Protect Plus from to the Kubernetes Backup Support
-            agent container service.
-            <p>If you do not specify a value for this port, a random port within the NodePort range is assigned by
-                the NodePort service in Kubernetes. The default range is 30000 - 32767.</p>
-            <p>If you specify a value for this port, use a port number within the NodePort range that is set up by
-                the Kubernetes administrator.
-                Ensure that the port is not already in use by the cluster. If the port is already in use, the
-                installation process fails with an
-                error that shows which NodePorts are already in use.</p>
-        </td>
-        <td>None</td>
-    </tr>
-    <tr>
-        <td>SPP_IP_ADDRESSES</td>
-        <td>The IBM Spectrum Protect Plus server IP address.</td>
-        <td>x.x.x.x</td>
-    </tr>
-    <tr>
-        <td>PRODUCT_IMAGE_REGISTRY_SECRET_NAME</td>
-        <td>
-            The name of the Kubernetes image-pull secret that contains the credentials for the registry.
-            The secret must be in the namespace that is specified by the PRODUCT_IMAGE_REGISTRY_NAMESPACE
-            parameter.
-            <p>For the data mover container to run, the image-pull secret must be in
-            every namespace of each persistent volume claim (PVC) to be backed up and restored.
-            </p>
-        </td>
-        <td>baas-registry-secret</td>
-    </tr>
-    <tr>
-        <td>PRODUCT_LOGLEVEL</td>
-        <td>
-            The trace levels for troubleshooting issues with the Kubernetes Backup Support transaction manager,
-            controller, and
-            scheduler components. The following trace levels are available: INFO, WARNING, DEBUG, or ERROR.
-        </td>
-        <td>INFO</td>
-    </tr>
-   </table>
-
-   The following parameters and values are reserved for Kubernetes Backup Support and for pulling images from the IBM Entitled Registry. Keep them as is.
-
-   * PRODUCT_NAMESPACE="baas"
-   * PRODUCT_TARGET_PLATFORM="K8S"
-   * PRODUCT_IMAGE_REGISTRY="cp.icr.io"
-   * PRODUCT_IMAGE_REGISTRY_NAMESPACE="cp/sppc"
-
-   The SPP_PORT value specifies the port for the Kubernetes Backup Support user interface. Do not change the default value of 443.
-   Kubernetes Backup Support is available only in English in IBM Spectrum Protect Plus Version 10.1.6. For this reason, do not change the PRODUCT_LOCALIZATION="en_US" setting.
-
-   The most commonly used parameters are specified in baas_config.cfg. There are other parameters, such as liveness and readiness probes, in the values.yaml file.  If you need to adjust one of these values, you can update the values.yaml file and run the baas_install.sh with the upgrade (-u) option.
-
-6. Start the installation and deployment by issuing the following command:
-   ```text
-   ./baas_install.sh -i
-   ```
-   When prompted, enter yes to continue.
-
-   This command deploys the ibm-spectrum-protect-plus-prod chart using the configuration that you specified in the **baas_config.cfg** file.
-
-   Depending on your environment, it might take several minutes to load and deploy the package.
-
-7. To verify that the Kubernetes Backup Support components are properly installed, issue the following command:
-   ```text
-   ./baas_install.sh -s
-   ```
-   If the installation fails, the missing components are listed in the MISSING section of the output.
-   
-   When all pods are running, the deployment is completed.
-
-   For detailed installation instructions, see [Installing and deploying Kubernetes Backup Support images](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.6/spp/t_spp_cbs_install_proc.html).
-
-   If you want to update the existing configuration, modify the parameters in the baas_config.cfg file as required for your environment, and issue the following command:
-   ```text
-   ./baas_install.sh -u
-   ```
-
-### Uninstalling the Chart
-
-You can uninstall Kubernetes Backup Support completely so that all components, including all configurations and backups, are removed from the Kubernetes environment.
-
-Before you begin:
-
-* Stop all scheduled backups. For instructions, see [Modifying parameters in a YAML file](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.6/spp/t_spp_cbs_bup_scheduling.html#t_spp_cbs_bup_scheduling__mod_YAML).
+* Stop all scheduled backups. For instructions, see [Modifying parameters in a YAML file](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.7/spp/t_spp_cbs_bup_scheduling.html#t_spp_cbs_bup_scheduling__mod_YAML).
 * Wait for all running backup and restore jobs to finish.
 
 To completely uninstall Kubernetes Backup Support from the cluster that you are logged in to, complete the following steps on the command line:
 
-1. Destroy all snapshot and copy backups with a destroy request. For instructions, see Deleting container backups.
+1. Destroy all snapshot and copy backups with a destroy request. For instructions, see [Deleting container backups](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.7/spp/t_spp_cbs_deleting_bups.html).
+
 2. Delete any persistent volume claims (PVCs) that were used for copy backups.
-    Tip You can look for the names of the PVCs that were backed up.
-3. Delete the baas custom resource definition (CRD) by issuing the following command:
-   ```text
-   kubectl delete crd baasreqs.baas.io
-   ```
-   This command also deletes all BaasReq request objects.
-    
-4. Uninstall Kubernetes Backup Support by issuing the following command from the installer directory:
-   ```text
-   ./baas_install.sh -d
-   ```    
-   When prompted, enter yes to continue.
+Tip: To determine which PVCs were used for copy backups, look for the names of the PVCs that were backed up.
 
-   This command removes all data mover pods, deployments, and network policies. The Kubernetes secret for Kubernetes Backup Support is also removed.
+3. Uninstall Container Backup Support by issuing the following commands:
 
-5. Optional: To verify the progress of the uninstallation, enter the following command:
-   ```text
-   kubectl get pod -n baas
-   ```
-   or
-   ```text
-   watch kubectl get pod -n baas
-   ```
-6. Unregister the Kubernetes cluster by using the IBM Spectrum Protect Plus user interface:
-    1. In the navigation pane, click Manage Protection > Containers > Kubernetes.
-    2. In the Kubernetes page, click Manager clusters.
+    ```bash
+    cd ~/installer/ibm-spectrum-protect-plus-prod/ibm_cloud_pak/pak_extensions/install
+    ./baas-uninstall.sh
+    ```
+
+4. Optional: To verify the progress of the uninstallation, enter the following command:
+
+    ```bash
+    kubectl get pods -n baas
+    ```
+
+5. Optional: For OpenShift: If the amq-streams-cluster-operator pod is still running after the uninstallation is completed, you must manually uninstall it. To uninstall the amq-streams-cluster-operator pod, you must delete all ClusterServiceVersion (CSV) objects in the installation namespace. For example, issue the following command:
+
+    ```bash
+    oc delete csv --namespace baas --all
+    ```
+
+6. Unregister the Kubernetes or OpenShift cluster by using the IBM Spectrum Protect Plus user interface:
+
+    1. In the navigation pane, take one of the following actions:
+      *For Kubernetes: Click Manage Protection > Containers > Kubernetes.
+      *For OpenShift: Click Manage Protection > Containers > OpenShift.
+    2. Click Manage clusters.
     3. In the list of host addresses, click the deletion icon next the cluster that you want to unregister.
-    4. In the Confirm window, enter the displayed confirmation code and click Unregister.
-    
-    The cluster host is removed from the IBM Spectrum Protect Plus user interface.
-    
-7. Remove the account identity that is used to register the Kubernetes cluster:
+    4. In the Confirm window, enter the displayed confirmation code, and click Unregister.
+
+7. Remove the account identity that is used to register the Kubernetes or OpenShift cluster:
+
     1. In the navigation pane, click Accounts > Identity.
     2. Click the deletion icon that is associated with the cluster.
     3. Click Yes to delete the identity.
-    
-8. If you are running Kubernetes 1.16, disable the VolumeSnapshotDataSource feature if you no longer require it.
-9. Delete the service level agreement (SLA) policies and any other customizations by deleting the baas namespace. Issue the following command:
-   ```text
-   kubectl delete namespace baas
-   ```    
-10. Remove the manually created image-pull secret for the IBM Entitled Registry with the **kubectl delete secret** command in all the namespaces that the secret existed in.
-11. Optional: Review the installation and configuration information and revert any prerequisite steps.
 
+8. Optional: Review the installation and configuration information and revert any prerequisite steps.
 
-## Configuration
+## Configuration parameters for Container Backup Support
 
-The configuration table in Step 5 of the "Installing the product" section lists the configurable parameters of the ibm-spectrum-protect-plus-prod chart and their default values. You can configure the parameters in the baas_config.cfg configuration file. 
+The configuration parameters of the Container Backup Support Helm chart are provided.
 
+The values for the parameters are specified in the following files:
+
+### `baas-options.sh`
+
+Contains the variables that are used to configure the prerequisites for Container Backup Support. Use this file to replace the sample
+`baas-options.sh` file that is provided in the installation package.
+
+### `baas-values.yaml`
+
+Contains the values that are used to install or upgrade Container Backup Support. Use this file to replace the sample
+`baas-values.yaml` file that is provided in the installation package.
+
+For more information, see Setting up the installation variables.
+
+The following table contains the descriptions for the environment variables in the `baas-options.sh` file. You must enclose the values with single quotation marks ('').
+
+#### Table 1. Installation variables in the `baas-options.sh` file
+
+<table>
+<div>
+
+<thead>
+  <tr>
+    <th Environment variable</th>
+    <th Description</th>
+  </tr>
+</thead>
+
+<tbody>
+<tr>
+  <td>DOCKER_REGISTRY_ADDRESS</td>
+  <td>The address of the Docker registry where the container images are loaded.<p>To pull images
+  from the IBM® Entitled Registry, you must specify <span>cp.icr.io/cp</span><p>The value for DOCKER_REGISTRY_ADDRESS must match the value
+  for the <span>imageRegistry</span> parameter in the <span>baas-values.yaml</span>file.</p></td>
+</tr>
+
+<tr>
+  <td>DOCKER_REGISTRY_USERNAME</td>
+  <td>The user account for the Docker registry where the container images are loaded.<p>To pull images from the IBM Entitled Registry, you must specify '<span>cp</span>'.</p></td>
+</tr>
+
+<tr>
+  <td>DOCKER_REGISTRY_PASSWORD</td>
+  <td>The user password for the Docker registry where the container images are loaded.<p>To pull images from the IBM Entitled Registry, specify the entitlement key that you obtained from the <a href="https://myibm.ibm.com/products-services/containerlibrary" rel="noopener" target="_blank" title="(Opens in a new tab or window)">IBM Container software library</a>.</p>
+  <p>You can optionally specify an environment variable for the password. For example: ${DOCKERUSER_PW} or ${IBMCLOUD_API_KEY}</p></td>
+</tr>
+
+<tr>
+  <td>DOCKER_REGISTRY_NAMESPACE</td>
+  <td>The namespace of the Docker registry where the container images are loaded.<p>To pull images from the IBM Entitled Registry, you must specify '<span>sppc</span>'.</p>
+  <p>The value for DOCKER_REGISTRY_NAMESPACE must match the value for the <span>imageRegistryNamespace</span> parameter in the <span>baas-values.yaml</span> file.</p></td>
+</tr>
+
+<tr>
+  <td>SPP_ADMIN_USERNAME</td>
+  <td>The user ID of the <span>IBM Spectrum® Protect Plus</span> administrator.</td>
+</tr>
+
+<tr>
+  <td>SPP_ADMIN_PASSWORD</td>
+  <td>The <span>IBM Spectrum Protect Plus</span> password.<p>You can optionally specify an environment variable for the password. For example:
+  ${PROTECTPLUS_ADMIN_PW}</p></td>
+</tr>
+
+<tr>
+  <td>DATAMOVER_USERNAME</td>
+  <td>The user ID to create for use with the data mover.</td>
+</tr>
+
+<tr>
+  <td>DATAMOVER_PASSWORD</td>
+  <td>The user password to create for use with the data mover.</td>
+</tr>
+
+<tr>
+  <td>PVC_NAMESPACES_TO_PROTECT</td>
+  <td>The list of namespaces that contain the persistent volume claims (PVCs) that you want to
+  protect. Use this variable when you plan to pull images from an external Docker registry or
+  repository. Separate the namespaces with intervening spaces. For example: 'namespace1 namespace2'<p>
+  To obtain the values for PVC_NAMESPACES_TO_PROTECT, determine the PVCs that you want to protect by
+  issuing the following command:</p>
+  <code>kubectl get pvc --all-namespaces</code><p>Identify the PVCs that you
+  want to protect and specify the unique set of namespaces that are associated with the PVCs.</p>
+  <p>During the installation process, an image pull secret for the remote registry is created
+  automatically and copied to the namespaces that are associated with the PVCs.</p></td>
+</tr>
+
+<tr>
+  <td>MINIO_USERNAME</td>
+  <td>The username of the MinIO user. MinIO object storage is used to store backups of cluster and namespace resources.</td>
+</tr>
+
+<tr>
+  <td>MINIO_PASSWORD</td>
+  <td>The password for the MinIO user.</td>
+</tr>
+
+</tbody>
+</table>
+</div>
+
+<br /><p>The following table contains the descriptions and default values for the configuration parameters
+in the <span>baas-values.yaml</span> file:</p><br />
+
+<div>
+
+<table>
+
+Table 2. Configuration parameters in the <span>baas-values.yaml</span> file.
+
+<thead>
+  <tr>
+    <th>Parameter</th>
+    <th>Description</th>
+    <th>Default value</th>
+  </tr>
+</thead>
+
+<tbody>
+
+<tr>
+  <td><span>license</span></td>
+  <td>The product license for <span>Container Backup Support</span>. The English license file is located in the <span>LICENSES/LICENSE-en</span> directory, which is
+  included in the installation package. Versions of the license in other languages are available at <a href="http://www-03.ibm.com/software/sla/sladb.nsf/searchlis/?searchview&amp;searchorder=4&amp;searchmax=0&amp;query=(Spectrum+Protect+Plus)" rel="noopener" target="_blank" title="(Opens in a new tab or window)">License Information documents</a>.<p>Review the license information, and specify <span>true</span> to accept the license during installation without being prompted.</p></td>
+  <td>false</td>
+</tr>
+
+<tr>
+  <td><span>isOCP</span></td>
+  <td>Sets the type of cluster that you are installing <span>Container Backup Support</span> on. Set <span>IS_OCP</span> to
+  <span>true</span> for an OpenShift® cluster and <span>false</span> for a Kubernetes cluster.</td>
+  <td>false</td>
+</tr>
+
+<tr>
+  <td><span>clusterName</span></td>
+  <td>The unique cluster name that is used to register the application host to the <span>IBM Spectrum Protect Plus</span> server.</td>
+  <td>None</td>
+</tr>
+
+<tr>
+  <td><span>clusterAPIServerips</span></td>
+  <td >The IP address for the cluster API server. To obtain the cluster API server address, issue the following command:
+  <pre><code>kubectl get endpoints -n default -o yaml kubernetes</code></pre>
+  <div>Use all of the provided addresses listed under the <span>addresses</span> field in the output, or add or remove IP
+  addresses as needed. Specify multiple addresses as follows:<pre><code>networkPolicy:
+  clusterAPIServerips:
+    - <var>x.x.x.x</var>
+    - <var>y.y.y.y</var>
+    - <var>z.z.z.z</var></code></pre></div></td>
+  <td><var>x.x.x.x</var></td>
+</tr>
+
+<tr>
+  <td><span>clusterAPIServerport</span></td>
+  <td>The port address for the cluster API server.</td>
+  <td>6443</td>
+</tr>
+
+<tr>
+  <td><span>clusterCIDR</span></td>
+  <td>The Classless Inter-Domain Routing (CIDR) value for the cluster. To obtain the CIDR, issue
+  the following command:<div>For Kubernetes:
+  <pre><code>kubectl cluster-info dump | grep -m 1 cluster-cidr</code></pre></div>
+  Note: If the command does not return the CIDR value, change the<span>grep</span>
+  expression to look for the combination of "cluster" and "CIDR" and run the command again.
+  <div>For OpenShift:
+  <pre><code>oc get network -o yaml | grep -A1 clusterNetwork:</code></pre></div>
+  <p>Use the displayed IP
+  address as the cluster CIDR address.</p></td>
+  <td><code>192.168.0.0/16</code></td>
+</tr>
+
+<tr>
+  <td><span>SPPips</span></td>
+  <td>The <span>IBM Spectrum Protect Plus</span> server IP address.</td>
+  <td><var>x.x.x.x</var></td>
+</tr>
+
+<tr>
+  <td><span>SPPport</span></td>
+  <td>The <span>IBM Spectrum Protect Plus</span> server port.</td>
+  <td>443</td>
+</tr>
+
+<tr>
+  <td><span>productLoglevel</span></td>
+  <td>The trace levels for troubleshooting issues with the <span>Container Backup Support</span> transaction manager, controller, and
+  scheduler components. The following trace levels are available: INFO, WARNING, DEBUG, and ERROR.</td>
+  <td><code>INFO</code></td>
+</tr>
+
+<tr>
+  <td><span>imageRegistry</span></td>
+  <td>The address of the Docker registry where the container images are loaded.
+  <p>To pull images from the IBM Entitled Registry, you must specify <span>cp.stg.icr.io/cp</span>.</p>
+  <p>The value for the <span>imageRegistry</span> parameter must match the value for the
+  DOCKER_REGISTRY_ADDRESS variable in the <span>baas-options.sh</span> file.</p></td>
+  <td><var>&lt;docker-repo-hostname&gt;</var>:5000</td>
+</tr>
+
+<tr>
+  <td><span>imageRegistryNamespace</span></td>
+  <td>The namespace of the Docker registry where the container images are loaded.<p>To pull images from the IBM Entitled Registry,
+  you must specify <span>sppc</span>.</p><p>The value for the <span>imageRegistryNamespace</span>
+  parameter must match the value for the DOCKER_REGISTRY_NAMESPACE variable in the <span>baas-options.sh</span> file.</p></td>
+  <td><cod>baas</code></td>
+</tr>
+
+<tr>
+  <td><span>minioStorageClass</span></td>
+  <td>The name of the storage class to use for the MinIO server. The MinIO server is used to store
+  the backups of cluster and namespace resources.<p>If you do not specify a value for this parameter,
+  the default storage class of your cluster is used. Ensure that a default storage class is
+  defined.</p></td>
+  <td>None</td>
+</tr>
+
+<tr>
+  <td><span>veleroNamespace</span></td>
+  <td>Specify the namespace of the Velero installation that is dedicated to <span>IBM Spectrum Protect Plus</span>
+  <span>Container Backup Support</span>, for example,
+  <code>spp-velero</code>.<p>If you do not specify a value for this parameter, Velero integration is disabled and you can use <span>Container Backup Support</span> to
+  protect only persistent volume claims (PVCs).</p></td>
+  <td>None</td>
+</tr>
+
+</tbody>
+</table>
+</div>
 
 ## Limitations
 
 * You cannot deploy the product more than once
-* A rollback to a previous version of Kubernetes Backup Support is not supported. In other words, you cannot use Kubernetes Backup Support V10.1.5 to restore data that was backed up by Kubernetes Backup Support V10.1.6.
-* Additional limitations and known problems are available at https://www.ibm.com/support/pages/node/6209657. 
+* A rollback to a previous version of the product is not supported. In other words, you cannot use Kubernetes Backup Support V10.1.5 to restore data that was backed up by Container Backup Support V10.1.7.
+
+For more information, see [Additional limitations and known problems](https://www.ibm.com/support/pages/node/567387)
 
 ## Documentation
 
-For more information about Kubernetes Backup Support, see the following resources in IBM Knowledge Center:
+For more information about Container Backup Support, see the following resources in IBM Knowledge Center:
 
-* [Protecting containers](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.6/spp/c_spp_protecting_containers.html)
-* [Kubernetes Backup Support requirements](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.6/spp/r_spp_system_reqs_cbs.html)
-* [Installing Kubernetes Backup Support](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.6/spp/c_spp_cbs_installation.html)
-* [Protecting containers by using the command line](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.6/spp/c_spp_cbs_using_cmdline.html)
+* [Protecting containers](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.7/spp/c_spp_protecting_containers.html)
+* [Container Backup Support requirements](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.7/spp/r_spp_system_reqs_cbs.html)
+* [Installing Container Backup Support](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.7/spp/c_spp_cbs_installation.html)
+* [Protecting containers by using the command line](https://www.ibm.com/support/knowledgecenter/SSNQFQ_10.1.7/spp/c_spp_cbs_using_cmdline.html)
