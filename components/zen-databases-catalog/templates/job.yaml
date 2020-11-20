@@ -1,0 +1,53 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "{{ template "uniquename" . }}-uploadjob"
+  labels:
+    app: "{{ template "fullname" . }}"
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        {{ if (eq "db2aaservice" .Values.dbType) }}
+        icpdsupport/addOnId: "databases"
+        {{- else }}
+        icpdsupport/addOnId: "{{ .Values.dbType }}"
+        {{- end }}
+        icpdsupport/app: "database"
+      annotations:
+        {{- include "db2wh.annotations" .  | indent 8 }}
+    spec:
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "tolerations" . | indent 6 }}
+      securityContext:
+        runAsUser: 1000321000
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      containers:
+      - name: "{{ .Chart.Name }}-upload-chart"
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.image.repository }}-{{ .Values.dbType }}:{{ .Values.image.tag }}-{{ template "platform" . }}"
+        imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+        command: ['/bin/sh']
+        args: ['-cx', '/upload.sh --image-registry {{ .Values.global.docker_registry_prefix }} --dbtype {{ .Values.dbType }}']
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 50m
+            memory: 128Mi
+      volumes:
+        - name: user-home-mount
+          persistentVolumeClaim:
+            claimName: "user-home-pvc"
+      restartPolicy: Never
