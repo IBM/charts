@@ -19,22 +19,41 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 Create annotation
 */}}
 {{- define "mongo.annotations" }}
-productName: "IBM Data management Platform for MongoDB Enterprise Advanced 2.0 Cloud Pak"
-{{- if ( eq .Values.runtime "ICP4Data" ) }}
-productID: "ICP4D-addon-5737-H42"
-{{- else }}
-productID: "5737-H42"
-{{- end }}
-productVersion: "1.0.2"
-productMetric: VIRTUAL_PROCESSOR_CORE
-productChargedContainers: All
-cloudpakName: IBM Cloud Pak for Data
-cloudpakId: eb9998dcc5d24e3eb5b6fb488f750fe2
-cloudpakVersion: 3.0.1
+productVersion: "2.0.2"
+cloudpakName: "IBM Data Management Platform for MongoDB Enterprise Advanced for IBM Cloud Pak for Data"
+cloudpakId: "628fa31a63e849e391eb9e5184be8fa5"
+cloudpakInstanceId: "{{ .Values.zenCloudPakInstanceId }}"
+productCloudpakRatio: "1:1"
+productID: "628fa31a63e849e391eb9e5184be8fa5"
+productName: "IBM Data Management Platform for MongoDB Enterprise Advanced"
+productMetric: "VIRTUAL_SERVER"
+productChargedContainers: "All"
+cloudpakVersion: "3.0.1"
 {{- end }}
 
-{{- define "mongo.hostaccess" }}
+{{- define "mongo.Podsecurity" }}
 hostNetwork: false
 hostPID: false
 hostIPC: false
+securityContext:
+  runAsNonRoot: true
 {{- end }}
+
+{{- define "mongo.Containersecurity" }}
+securityContext:
+  privileged: false
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  capabilities:
+    drop:
+    - ALL
+{{- end }}
+
+
+{{- define "metadata_info" }}
+app.kubernetes.io/name: {{ include "fullname" . }}
+helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+release: {{ .Release.Name }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}
+

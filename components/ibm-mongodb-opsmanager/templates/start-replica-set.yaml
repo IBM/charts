@@ -3,10 +3,7 @@ apiVersion: batch/v1
 metadata:
   name: "{{ .Values.servicename }}-start-replicajob"
   labels:
-    app: {{ template "fullname" . }}
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"
+    {{- include "metadata_info" . | indent 4 }}
   {{ if eq .Values.allowHooks "enabled" -}}
   annotations:
     "helm.sh/hook": post-install
@@ -17,18 +14,17 @@ spec:
   template:
     metadata:
       labels:
-        app: {{ template "fullname" . }}
-        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-        release: "{{ .Release.Name }}"
-        heritage: "{{ .Release.Service }}"
+        {{- include "metadata_info" . | indent 8 }}
         icpdsupport/app: database
+        icpdsupport/addOnId: "{{ .Values.dbType }}"
+        icpdsupport/createdBy: "{{ .Values.zenServiceInstanceUID | int64 }}"
         icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
       annotations:
         {{- include "mongo.annotations" .  | indent 8 }}
     spec:
       {{- include "nodeaffinity" . | indent 6 }}
       {{- include "tolerations" . | indent 6 }}
-      {{- include "mongo.hostaccess" .  | indent 6 }}
+      {{- include "mongo.Podsecurity" .  | indent 6 }}
       serviceAccount: {{ .Values.global.serviceAccount }}
       containers:
       - name: mongodb-startreplicaset
@@ -37,9 +33,16 @@ spec:
         command: ['/bin/sh']
         ##Adding a check for storage location to handle upgrade scenarios
         {{- if .Values.storage.storageLocation.dataStorage.enabled }}
-        args: ['-cx', '/var/mongodb_setup/replica-set/manage-replica-set.sh --start --replica-name {{ .Values.servicename }}-replica-set --member {{ .Values.deployment.members }} --version {{ .Values.deployment.version }} --persistent {{ .Values.persistence.enabled }} --cpu {{ .Values.limit.cpu }} --memory {{ .Values.limit.memory }} --storage {{ .Values.storage.storageLocation.dataStorage.pvc.claim.size }} --namespace {{ .Release.Namespace }} --service-name {{ .Values.servicename }} --storage-class {{ .Values.storage.storageLocation.dataStorage.pvc.claim.storageClassName }} --dedicated {{ .Values.dedicated }} --cluster-name {{ .Values.deployment.clusterName }} --instanceID {{ .Values.zenServiceInstanceId | int64 }}']
+        args: ['-cx', '/var/mongodb_setup/replica-set/manage-replica-set.sh --start --replica-name {{ .Values.servicename }}-replica-set --member {{ .Values.deployment.members }} --version {{ .Values.deployment.version }} --persistent {{ .Values.persistence.enabled }} --cpu {{ .Values.limit.cpu }} --memory {{ .Values.limit.memory }} --storage {{ .Values.storage.storageLocation.dataStorage.pvc.claim.size }} --namespace {{ .Release.Namespace }} --service-name {{ .Values.servicename }} --storage-class {{ .Values.storage.storageLocation.dataStorage.pvc.claim.storageClassName }} --dedicated {{ .Values.dedicated }} --cluster-name {{ .Values.deployment.clusterName }} --instanceID {{ .Values.zenServiceInstanceId | int64 }} --managed-by {{ .Release.Service }} --instance {{ .Release.Name }} --chart {{ .Chart.Name }}-{{ .Chart.Version }} --name {{ template "fullname" . }} --dbType {{ .Values.dbType }} --createdBy {{ .Values.zenServiceInstanceUID | int64 }} --cloudpakInstanceId {{ .Values.zenCloudPakInstanceId }}']
         {{- else }}
-        args: ['-cx', '/var/mongodb_setup/replica-set/manage-replica-set.sh --start --replica-name {{ .Values.servicename }}-replica-set --member {{ .Values.deployment.members }} --version {{ .Values.deployment.version }} --persistent {{ .Values.persistence.enabled }} --cpu {{ .Values.limit.cpu }} --memory {{ .Values.limit.memory }} --storage {{ .Values.pvcSettings.size }} --namespace {{ .Release.Namespace }} --service-name {{ .Values.servicename }} --storage-class {{ .Values.pvcSettings.storageClassName }} --dedicated {{ .Values.dedicated }} --cluster-name {{ .Values.deployment.clusterName }} --instanceID {{ .Values.zenServiceInstanceId | int64 }}']
+        args: ['-cx', '/var/mongodb_setup/replica-set/manage-replica-set.sh --start --replica-name {{ .Values.servicename }}-replica-set --member {{ .Values.deployment.members }} --version {{ .Values.deployment.version }} --persistent {{ .Values.persistence.enabled }} --cpu {{ .Values.limit.cpu }} --memory {{ .Values.limit.memory }} --storage {{ .Values.pvcSettings.size }} --namespace {{ .Release.Namespace }} --service-name {{ .Values.servicename }} --storage-class {{ .Values.pvcSettings.storageClassName }} --dedicated {{ .Values.dedicated }} --cluster-name {{ .Values.deployment.clusterName }} --instanceID {{ .Values.zenServiceInstanceId | int64 }} --managed-by {{ .Release.Service }} --instance {{ .Release.Name }} --chart {{ .Chart.Name }}-{{ .Chart.Version }} --name {{ template "fullname" . }} --dbType {{ .Values.dbType }} --createdBy {{ .Values.zenServiceInstanceUID | int64 }} --cloudpakInstanceId {{ .Values.zenCloudPakInstanceId }}']
         {{- end }}
-        {{- include "mongodbSecurityContext" . | indent 8 }}      
+        {{- include "mongo.Containersecurity" . | indent 8 }}
+        resources:
+          requests:
+            cpu: '0.10'
+            memory: '128M'
+          limits:
+            cpu: '0.5'
+            memory: '256M'
       restartPolicy: Never

@@ -3,27 +3,23 @@ apiVersion: batch/v1
 metadata:
   name: "{{ .Values.servicename }}-load-crdjob"
   labels:
-    app: {{ template "fullname" . }}
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"
+    {{- include "metadata_info" . | indent 4 }}
 spec:
   backoffLimit: 1
   template:
     metadata:
       labels:
-        app: {{ template "fullname" . }}
-        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-        release: "{{ .Release.Name }}"
-        heritage: "{{ .Release.Service }}"
+        {{- include "metadata_info" . | indent 8 }}
         icpdsupport/app: config
         icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
+        icpdsupport/addOnId: "{{ .Values.dbType }}"
+        icpdsupport/createdBy: "{{ .Values.zenServiceInstanceUID | int64 }}"
       annotations:
         {{- include "mongo.annotations" .  | indent 8 }}
     spec:
       {{- include "nodeaffinity" . | indent 6 }}
       {{- include "tolerations" . | indent 6 }}
-      {{- include "mongo.hostaccess" .  | indent 6 }}
+      {{- include "mongo.Podsecurity" .  | indent 6 }}
       serviceAccount: {{ .Values.global.serviceAccount }}
       containers:
       - name: mongodb-startreplicaset
@@ -38,7 +34,18 @@ spec:
         --iomimage {{.Values.initOpsManager.image.repository}} --iomtag {{.Values.initOpsManager.image.tag}}
         --appdbimage {{.Values.appdb.image.repository}} --appdbtag {{.Values.appdb.image.tag}}
         --iappdbimage {{.Values.initAppdb.image.repository}} --iappdbtag {{.Values.initAppdb.image.tag}}
-        --instanceID {{ .Values.zenServiceInstanceId | int64 }}'
+        --instanceID {{ .Values.zenServiceInstanceId | int64 }}
+        --dbType {{ .Values.dbType }}
+        --createdBy {{ .Values.zenServiceInstanceUID | int64 }}
+        --cloudpakInstanceId {{ .Values.zenCloudPakInstanceId }}
+        --managed-by {{ .Release.Service }} --chart {{ .Chart.Name }}-{{ .Chart.Version }}'
         ]
-        {{- include "mongodbSecurityContext" . | indent 8 }}
+        {{- include "mongo.Containersecurity" . | indent 8 }}
+        resources:
+          requests:
+            cpu: '0.10'
+            memory: '128M'
+          limits:
+            cpu: '0.5'
+            memory: '256M'
       restartPolicy: Never
