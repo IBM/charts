@@ -3,10 +3,7 @@ kind: Deployment
 metadata:
   name: "{{ .Values.servicename }}-api-management"
   labels:
-    app: {{ template "fullname" . }}
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"
+    {{- include "metadata_info" . | indent 4 }}
     component: mongodb
 spec:
   selector:
@@ -18,26 +15,31 @@ spec:
     metadata:
       name: mongodb-api-management
       labels:
-        app: {{ template "fullname" . }}
+        {{- include "metadata_info" . | indent 8 }}
         api-database-status: "{{ .Values.servicename }}-mongodb-api"
-        api-database-jdbc: "{{ .Values.servicename }}-driver"
-        chart: "{{ .Chart.Name }}"
-        release: "{{ .Release.Name }}"
-        heritage: "{{ .Release.Service }}"
         component: mongodb
         icpdsupport/app: config
+        icpdsupport/addOnId: "{{ .Values.dbType }}"
+        icpdsupport/createdBy: "{{ .Values.zenServiceInstanceUID | int64 }}"
         icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
       annotations:
         {{- include "mongo.annotations" .  | indent 8 }}
     spec:
       {{- include "nodeaffinity" . | indent 6 }}
       {{- include "tolerations" . | indent 6 }}
-      {{- include "mongo.hostaccess" .  | indent 6 }}
+      {{- include "mongo.Podsecurity" .  | indent 6 }}
       serviceAccount: {{ .Values.global.serviceAccount }}
       containers:
       - name: mongo-status
         image: {{ .Values.apiManagement.image.repository }}:{{ .Values.apiManagement.image.tag }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        resources:
+          requests:
+            cpu: '0.10'
+            memory: '128M'
+          limits:
+            cpu: '0.5'
+            memory: '256M'
         livenessProbe:
           exec:
             command: ["/bin/bash", "-c", "ls /var/mongodb_setup"]
@@ -48,7 +50,7 @@ spec:
             command: ["/bin/bash", "-c", "ls /var/mongodb_setup"]
           initialDelaySeconds: 5
           periodSeconds: 5
-        {{- include "mongodbSecurityContext" . | indent 8 }}
+        {{- include "mongo.Containersecurity" . | indent 8 }}
         env:
         - name: NAMESPACE
           value: {{ .Release.Namespace }}
