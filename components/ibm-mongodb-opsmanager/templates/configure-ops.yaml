@@ -3,10 +3,7 @@ apiVersion: batch/v1
 metadata:
   name: "{{ .Values.servicename }}-configure-job"
   labels:
-    app: {{ template "fullname" . }}
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"
+    {{- include "metadata_info" . | indent 4 }}
   {{ if eq .Values.allowHooks "enabled" -}}
   annotations:
     "helm.sh/hook": post-install
@@ -18,18 +15,17 @@ spec:
   template:
     metadata:
       labels:
-        app: {{ template "fullname" . }}
-        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-        release: "{{ .Release.Name }}"
-        heritage: "{{ .Release.Service }}"
+        {{- include "metadata_info" . | indent 8 }}
         icpdsupport/app: config
+        icpdsupport/addOnId: "{{ .Values.dbType }}"
+        icpdsupport/createdBy: "{{ .Values.zenServiceInstanceUID | int64 }}"
         icpdsupport/serviceInstanceId: "{{ .Values.zenServiceInstanceId | int64 }}"
       annotations:
         {{- include "mongo.annotations" .  | indent 8 }}
     spec:
       {{- include "nodeaffinity" . | indent 6 }}
       {{- include "tolerations" . | indent 6 }}
-      {{- include "mongo.hostaccess" .  | indent 6 }}
+      {{- include "mongo.Podsecurity" .  | indent 6 }}
       serviceAccount: {{ .Values.global.serviceAccount }}
       containers:
       - name: mongodb-addfirstuser
@@ -37,6 +33,15 @@ spec:
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         command: ['/bin/sh']
         args: ['-cx', '/var/mongodb_setup/configure-ops/configure.sh --emailaddress {{ .Values.emailaddress }} --projectname {{ .Values.projectname }} --namespace {{ .Release.Namespace }} --service-name {{ .Values.servicename }}
-        --storage {{ .Values.pvcSettings.size }} --storage-class {{ .Values.storage.storageLocation.metaStorage.pvc.claim.storageClassName }} --version {{ .Values.opsmanagerConfigs.image.tag }} --dedicated {{ .Values.dedicated }} --instanceID {{ .Values.zenServiceInstanceId | int64 }}']
-        {{- include "mongodbSecurityContext" . | indent 8 }}      
+        --storage {{ .Values.pvcSettings.size }} --storage-class {{ .Values.storage.storageLocation.metaStorage.pvc.claim.storageClassName }} --version {{ .Values.opsManager.image.tag }} --dedicated {{ .Values.dedicated }} --instanceID {{ .Values.zenServiceInstanceId | int64 }}
+        --managed-by {{ .Release.Service }} --instance {{ .Release.Name }} --chart {{ .Chart.Name }}-{{ .Chart.Version }} --name {{ template "fullname" . }}
+        --dbType {{ .Values.dbType }} --createdBy {{ .Values.zenServiceInstanceUID | int64 }} --cloudpakInstanceId {{ .Values.zenCloudPakInstanceId }}']
+        {{- include "mongo.Containersecurity" . | indent 8 }}      
+        resources:
+          requests:
+            cpu: '0.10'
+            memory: '128M'
+          limits:
+            cpu: '0.5'
+            memory: '256M'
       restartPolicy: Never
