@@ -1,9 +1,9 @@
 ## What's new...
-DataPower 2018.4.1.13
+DataPower 2018.4.1.14
 Refreshing existing charts for firmware upgrade
 
 ## Fixes
-Close connection on healthcheck requests
+None
 
 ## Prerequisites
 None
@@ -17,6 +17,7 @@ See README.md
 
 | Chart   |   Date  | Kubernetes Required |    Image(s) Supported    | Breaking Changes | Details |
 | ------- | ------------ | -------- | ------------------------------------ | ---- | -------------------------------------------------------------- |
+| 3.1.3   | Nov 17, 2020 | >=1.13.0 | ibmcom/datapower:2018.4.1.14.327897  | None | 2018.4.1.14 refresh |
 | 3.1.2   | Aug 24, 2020 | >=1.13.0 | ibmcom/datapower:2018.4.1.13.324822  | None | 2018.4.1.13 refresh |
 | 3.1.1   | Jun 26, 2020 | >=1.13.0 | ibmcom/datapower:2018.4.1.12.323006  | None | 2018.4.1.12 refresh |
 | 3.1.0   | May 11, 2020 | >=1.13.0 | ibmcom/datapower:2018.4.1.11.320653  | None | 2018.4.1.11, http health check, configmaps |
