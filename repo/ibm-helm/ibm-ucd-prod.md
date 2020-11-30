@@ -359,7 +359,7 @@ Edit the file myvalues.yaml to specify the parameter values to use when installi
 To install the chart into namespace 'ucdtest' with the release name `my-ucd-release` and use the values from myvalues.yaml:
 
 ```bash
-$ helm install --namespace ucdtest --name my-ucd-release --values myvalues.yaml ibm-helm/ibm-ucd-prod
+$ helm install my-ucd-release ibm-helm/ibm-ucd-prod --namespace ucdtest --values myvalues.yaml
 ```
 
 > **Tip**: List all releases using `helm list`.
@@ -396,7 +396,7 @@ The Helm chart has the following values that can be overriden using the --set pa
 | version |  | The product version to install |  |
 | image | pullPolicy | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to Always |
 |       | secret |  An image pull secret used to authenticate with the image registry | Empty (default) if no authentication is required to access the image registry. |
-| service | type | Specify type of service | Valid options are NodePort and LoadBalancer (for clusters that support LoadBalancer). Default is ClusterIP |
+| service | type | Specify type of service | Valid options are ClusterIP, NodePort and LoadBalancer (for clusters that support LoadBalancer). Default is ClusterIP |
 | database | type | The type of database UCD will connect to | Valid values are db2, mysql, mariadb, oracle, and sqlserver |
 |          | name | The name of the database to use |  |
 |          | hostname | The hostname/IP of the database server | |
