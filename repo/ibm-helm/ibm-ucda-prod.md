@@ -272,7 +272,7 @@ Edit the file myvalues.yaml to specify the parameter values to use when installi
 To install the chart into namespace 'ucdtest' with the release name `my-ucda-release` and use the values from myvalues.yaml:
 
 ```bash
-$ helm install --namespace ucdtest --name my-ucda-release --values myvalues.yaml ibm-helm/ibm-ucda-prod
+$ helm install my-ucda-release ibm-helm/ibm-ucda-prod --namespace ucdtest --values myvalues.yaml
 ```
 
 > **Tip**: List all releases using `helm list`.
