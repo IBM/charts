@@ -4,6 +4,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: "{{.Release.Name}}-upload-models-{{ .Release.Revision }}"
+  namespace: {{ .Release.Namespace }}
   labels:
 {{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
 spec:
@@ -12,6 +13,9 @@ spec:
       name: "{{.Release.Name}}"
       labels:
 {{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        productMetric: "{{ .Values.global.stt.productMetric }}"
     spec:
       hostNetwork: false
       hostPID: false
@@ -20,6 +24,9 @@ spec:
         runAsNonRoot: true
         {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
         runAsUser: 999
+        {{- if semverCompare ">=1.14" .Capabilities.KubeVersion.GitVersion }}
+        runAsGroup: 10000
+        {{- end }}
         {{- end }}
       restartPolicy: Never
       initContainers:
@@ -46,7 +53,7 @@ spec:
                 if [ $? == 0 ]; then break; fi;
                 sleep 5;
               done;
-              sleep 10;
+              sleep 30;
       containers:
       {{- $global := . -}}
       {{- $values := .Values -}}
@@ -101,6 +108,14 @@ spec:
           value: "/model"
         - name: speech_models_multipart_upload
           value: "{{ $multipartUploadThreads }}"
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - if [ $(ps | grep python | wc -l) -ge 1 ]; then exit 0; else echo Python not running; exit 1; fi
+          initialDelaySeconds: 120
+          periodSeconds: 30
         volumeMounts:
         - mountPath: /etc/chuck/minio
           name: minio-account
@@ -110,6 +125,6 @@ spec:
       volumes:
         - name: minio-account
           secret:
-            secretName: {{ .Values.global.datastores.minio.secretName }}
+            secretName: {{ .Values.global.datastores.minio.authSecretName }}
       affinity:
 {{- include "ibm-watson-speech-prod.affinity" . | indent 8 }}

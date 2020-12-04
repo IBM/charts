@@ -43,6 +43,12 @@ class ValidateAudioResourceRequirement:
         'marginalMem': 0.1 * 2 ** 30,  # 100MB
         'marginalCpu': 10  # 0.1CPU
     }
+
+class RnntResourceRequirement:
+        resourceRequirement = {
+            'marginalMem': 0.06 * 2 ** 30,  # 60MB
+            'marginalCpu': 15  # 0.15CPU
+        }
 {{- end -}}
 
 {{- define "chuck.chuckSessionPoolsPy" -}}

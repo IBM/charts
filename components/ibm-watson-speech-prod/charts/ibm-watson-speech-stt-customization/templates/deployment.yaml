@@ -5,6 +5,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  namespace: {{ .Release.Namespace }}
   labels:
 {{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
     appName: stt-customization
@@ -23,8 +24,10 @@ spec:
     metadata:
       annotations:
 {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        productMetric: "{{ .Values.global.stt.productMetric }}"
       labels:
 {{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+{{ include "speech-services.meteringLabels" . | indent 8 }}
         appName: stt-customization
         wdc.ibm.com/network-access: public-egress
     spec:
@@ -36,6 +39,9 @@ spec:
         runAsNonRoot: true
         {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
         runAsUser: 1001
+        {{- if semverCompare ">=1.14" .Capabilities.KubeVersion.GitVersion }}
+        runAsGroup: 10000
+        {{- end }}
         {{- end }}
       initContainers:
         - name: wait4db
@@ -47,17 +53,17 @@ spec:
             valueFrom:
               secretKeyRef:
                 name: "{{ .Values.global.datastores.postgressql.auth.authSecretName }}"
-                key: pg_su_password
+                key: PG_PASSWORD
           - name: PGCONNECT_TIMEOUT
             value: "3"
           command: ['sh', '-c']
           args:
            #- until pg_isready -h {{ .Release.Name }}-ibm-postgresql-proxy-svc.{{- .Release.Namespace }} -p 5432 -d postgres;
-            - until psql -h {{ .Release.Name }}-ibm-postgresql-proxy-svc.{{- .Release.Namespace }} -p 5432 -d postgres -U stolon;
+            - until psql -h {{ .Release.Name }}-ibm-postgresql-proxy-service.{{- .Release.Namespace }} -p 5432 -d postgres -U enterprisedb;
               do echo waiting for database;
               sleep 2;
               done;
-              psql -h {{ .Release.Name }}-ibm-postgresql-proxy-svc.{{- .Release.Namespace }} -d postgres -U stolon -f /tmp/stt-customization.sql;
+              psql -h {{ .Release.Name }}-ibm-postgresql-proxy-service.{{- .Release.Namespace }} -d postgres -U enterprisedb -f /tmp/stt-customization.sql;
           volumeMounts:
           - name: sql-volume
             mountPath: /tmp/
@@ -110,7 +116,7 @@ spec:
             valueFrom:
               secretKeyRef:
                 name: {{ .Values.global.datastores.postgressql.auth.authSecretName }}
-                key: pg_su_password
+                key: PG_PASSWORD
           ports:
           - containerPort: 9080
           - containerPort: 9443

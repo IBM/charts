@@ -1,0 +1,46 @@
+{{- include "sch.config.init" (list . "sch.chart.stt.config.values") -}}
+{{- $comp := "edb-postgres" -}}
+apiVersion: edbpostgres.com/v1alpha1
+kind: EDBPostgres
+metadata:
+  name: "{{ .Release.Name }}-ibm-postgresql"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $comp) | indent 4 }}
+spec:
+  affinity:
+    - key: beta.kubernetes.io/arch
+      operator: In
+      values:
+        - amd64
+  clusterSize: {{ .Values.global.datastores.postgressql.numReplicas | default 3 }}
+  databaseMemoryLimit: {{ .Values.global.datastores.postgressql.databaseMemoryLimit | quote }}
+  databaseMemoryRequest: {{ .Values.global.datastores.postgressql.databaseMemoryRequest | quote }}
+  databaseCPULimit: {{ .Values.global.datastores.postgressql.databaseCPULimit | quote }}
+  databaseCPU: {{ .Values.global.datastores.postgressql.databaseCPU | quote }}
+  databaseStorageRequest: {{ .Values.global.datastores.postgressql.databaseStorageRequest | quote }}
+  databaseStorageClass: "{{.Values.global.datastores.postgressql.databaseStorageClass}}"
+  databaseArchiveStorageClass: "{{.Values.global.datastores.postgressql.databaseArchiveStorageClass}}"
+  databaseWalStorageClass: "{{.Values.global.datastores.postgressql.databaseWalStorageClass}}"
+  databasePort: {{ .Values.global.datastores.postgressql.databasePort | default 5432 }}
+  containerImagePullPolicy: Always
+  serviceAccount: {{ .Values.global.datastores.postgressql.serviceAccount | quote }}
+  highAvailability:
+    enable: {{ .Values.global.datastores.postgressql.highAvailabilityEnabled }}
+    image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.global.datastores.postgressql.images.stolon.name }}:{{ .Values.global.datastores.postgressql.images.stolon.tag }}"
+    podDebug: "false"
+    tls:
+      tlsEnabled: {{ .Values.global.datastores.postgressql.tlsEnabled  | default true }}
+      certificateSecretName: {{ tpl .Values.global.datastores.postgressql.tlsSecretName . | quote }}
+  image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.global.datastores.postgressql.images.postgres.name }}:{{ .Values.global.datastores.postgressql.images.postgres.tag }}"
+  secretName: {{ .Values.global.datastores.postgressql.authSecretName | quote }}
+  postgresType: "PG"
+  postgresVersion: 12
+  customLabels:
+    environment: development
+    developer: edb
+{{ include "sch.metadata.labels.standard" (list . $comp) | indent 4 }}
+  customAnnotations:
+    maker: edb
+    operator_vendor: edb
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 4 }}
+    productMetric: VIRTUAL_PROCESSOR_CORE

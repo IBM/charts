@@ -72,3 +72,8 @@ affinity settings. Default values are in _sch-chart-config.tpl
 {{- include "sch.affinity.nodeAffinity" (list . ) }}
   {{- end }}
 {{- end -}}
+
+{{- define "speech-services.meteringLabels" -}}
+icpdsupport/addOnId: "{{ ( .Values.global.addonId ) }}"
+icpdsupport/serviceInstanceId: "{{ ( .Values.global.zenServiceInstanceId | int64 ) }}"
+{{- end -}}
