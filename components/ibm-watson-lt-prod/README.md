@@ -166,7 +166,7 @@ metadata:
   annotations:
     kubernetes.io/description: "This policy is the most restrictive,
       requiring pods to run with a non-root UID, and preventing pods from accessing the host."
-    cloudpak.ibm.com/version: "1.1.2"
+    cloudpak.ibm.com/version: "1.2"
   name: ibm-lt-prod-scc
 allowHostDirVolumePlugin: false
 allowHostIPC: false
@@ -485,7 +485,7 @@ Run the following commands to do pre-installation set up of the cluster:
 - `{modules}` Select one or more module and they should be comma separated. 
   - `watson-language-pak-1,watson-language-pak-2,watson-language-pak-3`
 - `{namespace}` is the namespace IBM Cloud Pak for Data was installed into, normally `zen`.
-- `{assembly_version}` is the release version; currently it is 1.1.2
+- `{assembly_version}` is the release version; currently it is 1.2
 - `{storage_class}` is the StorageClass name specified in the StorageClass definition.
 
 ### Installing the Assembly on an air-gap cluster
@@ -508,7 +508,7 @@ The same version/build of `cpd-linux` is required throughout the process
   ```
   - `{modules}` Select one or more module and they should be comma separated. 
     - `watson-language-pak-1,watson-language-pak-2,watson-language-pak-3`
-  - `{assembly_version}` is the release version; currently it is 1.1.2
+  - `{assembly_version}` is the release version; currently it is 1.2
 
 1. Push the `lt-workspace` folder to a location with access to the OpenShift cluster to be installed and the same version of the `cpd-linux` tool used in the preloadImages step above
 
@@ -543,7 +543,7 @@ The same version/build of `cpd-linux` is required throughout the process
   ./cpd-linux preloadImages --action push --load-from ./lt-workspace --assembly watson-language-translator --optional-modules {modules} --version ${assembly_version} --transfer-image-to $(oc registry info)/zen --target-registry-username kubeadmin --target-registry-password $(oc whoami -t) --insecure-skip-tls-verify
   ```
  
-  - `{assembly_version}` is the release version; currently it is 1.1.2
+  - `{assembly_version}` is the release version; currently it is 1.2
    
 1. Run the following command
    
@@ -575,7 +575,7 @@ The same version/build of `cpd-linux` is required throughout the process
    - `{docker-registry}` is the address of the internal OpenShift docker registry. Normally 
       - docker-registry.default.svc:5000 for 3.x 
       - image-registry.openshift-image-registry.svc:5000 for 4.x
-   - `{assembly_version}` is the release version; currently it is 1.1.2
+   - `{assembly_version}` is the release version; currently it is 1.2
    - `{storage_class}` is the StorageClass name specified in the StorageClass definition.
 
 ## Verifying the chart
