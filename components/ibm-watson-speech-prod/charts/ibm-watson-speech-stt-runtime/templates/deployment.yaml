@@ -4,6 +4,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  namespace: {{ .Release.Namespace }}
   labels:
 {{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
 spec:
@@ -18,12 +19,16 @@ spec:
   selector:
     matchLabels:
 {{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+{{ include "speech-services.meteringLabels" . | indent 6 }}
   template:
     metadata:
       labels:
 {{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+{{ include "speech-services.meteringLabels" . | indent 8 }}
+
       annotations:
 {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        productMetric: "{{ .Values.global.stt.productMetric }}"
     spec:
       hostNetwork: false
       hostPID: false
@@ -32,6 +37,9 @@ spec:
         runAsNonRoot: true
         {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
         runAsUser: 1000
+        {{- if semverCompare ">=1.14" .Capabilities.KubeVersion.GitVersion }}
+        runAsGroup: 10000
+        {{- end }}
         {{- end }}
       terminationGracePeriodSeconds: 1800
       initContainers:
@@ -122,6 +130,9 @@ spec:
         - mountPath: /opt/ibm/chuck.x86_64/var/resourceRequirements.py
           name: chuck-env
           subPath: resourceRequirements.py
+        - mountPath: /opt/ibm/chuck.x86_64/var/catalog.json
+          name: chuck-catalog
+          subPath: catalog.json
 
       - name: haproxy
         imagePullPolicy: {{ .Values.imagePullPolicy }}
@@ -171,6 +182,9 @@ spec:
         - name: chuck-env
           configMap:
             name: {{ include "sch.names.fullCompName" (list . $compName) }}
+        - name: chuck-catalog
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . $compName) }}
         - name: minio-account
           secret:
-            secretName: {{ .Values.global.datastores.minio.secretName }}
+            secretName: {{ .Values.global.datastores.minio.authSecretName }}
