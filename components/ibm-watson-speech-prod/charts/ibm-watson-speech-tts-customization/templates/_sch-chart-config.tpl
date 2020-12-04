@@ -18,8 +18,15 @@ sch:
       tts_customization:
         name: "tts-customization"
     metering:
-      productName: "{{ .Values.global.tts.productName }}"
-      productID: "ICP4D-addon-{{ .Values.global.tts.productId }}"
-      productVersion: "{{ .Values.global.tts.productVersion }}"
+      cloudpakName: {{ .Values.global.cloudpakName }}
+      cloudpakId: {{ .Values.global.cloudpakId }}
+
+      productName: {{ .Values.global.tts.productName }}
+      productID: {{ .Values.global.tts.productId }}
+      productVersion: {{ .Values.global.tts.productVersion }}
+      productMetric: {{ .Values.global.tts.productMetric }}
+      productCloudpakRatio: {{ .Values.global.productCloudpakRatio }}
+      productChargedContainers: {{ .Values.global.productChargedContainers }}
+
     labelType: prefixed
 {{- end -}}

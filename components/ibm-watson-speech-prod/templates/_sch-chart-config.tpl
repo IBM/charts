@@ -18,14 +18,15 @@ sch:
       stt:
         name: "stt"
     metering:
+      cloudpakName: {{ .Values.global.cloudpakName }}
+      cloudpakId: {{ .Values.global.cloudpakId }}
+
       productName: {{ .Values.global.stt.productName }}
       productID: {{ .Values.global.stt.productId }}
       productVersion: {{ .Values.global.stt.productVersion }}
-      productMetric: VIRTUAL_PROCESSOR_CORE
-
-      cloudpakName: IBM Cloud Pak for Data
-      cloudpakId: eb9998dcc5d24e3eb5b6fb488f750fe2
-      cloudpakVersion: 3.0.0
+      productMetric: {{ .Values.global.stt.productMetric }}
+      productCloudpakRatio: {{ .Values.global.productCloudpakRatio }}
+      productChargedContainers: {{ .Values.global.productChargedContainers }}
 
       licenseType: "International Program License Agreement (IPLA)"
       uniqueKey: "00000"
@@ -45,12 +46,20 @@ sch:
         runAsNonRoot: true
 {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
         runAsUser: {{ .Values.runAsUser }}
+#only apply runAsGroup label if Kubernetes version is >=1.14
+{{- if semverCompare ">=1.14" .Capabilities.KubeVersion.GitVersion }}
+        runAsGroup: 10000
+{{- end }}
 {{- end }}
     securityContextContainer:
       securityContext:
         runAsNonRoot: true
 {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
         runAsUser: {{ .Values.runAsUser }}
+#only apply runAsGroup label if Kubernetes version is >=1.14
+{{- if semverCompare ">=1.14" .Capabilities.KubeVersion.GitVersion }}
+        runAsGroup: 10000
+{{- end }}
 {{- end }}
         privileged: false
         readOnlyRootFilesystem: true
@@ -68,14 +77,16 @@ sch:
       tts:
         name: "tts"
     metering:
+      cloudpakName: IBM Watson API Kit for IBM Cloud Pak for Data
+      cloudpakId: df0b9c8451114e2d86d27ecb96afb37a
+      cloudpakInstanceId: {{ .Values.global.cloudpakInstanceId }}
+
       productName: {{ .Values.global.tts.productName }}
       productID: {{ .Values.global.tts.productId }}
       productVersion: {{ .Values.global.tts.productVersion }}
-      productMetric: VIRTUAL_PROCESSOR_CORE
-
-      cloudpakName: IBM Cloud Pak for Data
-      cloudpakId: eb9998dcc5d24e3eb5b6fb488f750fe2
-      cloudpakVersion: 3.0.0
+      productMetric: {{ .Values.global.tts.productMetric }}
+      productCloudpakRatio: "1:1"
+      productChargedContainers: "All"
 
       licenseType: "International Program License Agreement (IPLA)"
       uniqueKey: "00000"
@@ -95,12 +106,19 @@ sch:
         runAsNonRoot: true
 {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
         runAsUser: {{ .Values.runAsUser }}
+{{- if semverCompare ">=1.14" .Capabilities.KubeVersion.GitVersion }}
+        runAsGroup: 10000
+{{- end }}
 {{- end }}
     securityContextContainer:
       securityContext:
         runAsNonRoot: true
 {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
         runAsUser: {{ .Values.runAsUser }}
+#only apply runAsGroup label if Kubernetes version is >=1.14
+{{- if semverCompare ">=1.14" .Capabilities.KubeVersion.GitVersion }}
+        runAsGroup: 10000
+{{- end }}
 {{- end }}
         privileged: false
         readOnlyRootFilesystem: true
