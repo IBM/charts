@@ -10,6 +10,31 @@
 {{- end -}}
 {{- end -}}
 {{- end -}}
+{{- define "ibm-languages" -}}
+{{- $values := .Values -}}
+{{- range $langCode, $languageConfig := $values.languages }}
+{{- $asSource := false -}}
+{{- $asTarget := false -}}
+{{- range $modelID, $modelConfig := $values.translationModels }}
+{{- if and (eq ($modelConfig.image.name | split "-" )._1 ($langCode | replace "-" "" | lower) ) $modelConfig.enabled }}{{ $asSource = true }}{{ end }}
+{{- if and (eq ($modelConfig.image.name | split "-" )._2 ($langCode | replace "-" "" | lower) ) $modelConfig.enabled }}{{ $asTarget = true }}{{ end }}
+{{- end }}
+{{- if or $asSource $asTarget $values.lid.enabled }}
+{
+  "custom_language_code": {{ $languageConfig.short | quote }},
+  "language_code": {{ if $languageConfig.iso6393Code }}{{ $languageConfig.iso6393Code | quote }}{{ else }}null{{ end }},
+  "country_code": {{ if $languageConfig.countryCode }}{{ $languageConfig.countryCode | quote }}{{ else }}null{{ end }},
+  "language_name": {{ $languageConfig.name | quote }},
+  "native_language_name": {{ $languageConfig.nativeLanguageName | quote }},
+  "words_separated": {{ $languageConfig.wordsSeparated }},
+  "direction": {{ $languageConfig.direction | quote }},
+  "supported_as_source": {{ $asSource }},
+  "supported_as_target": {{ $asTarget }},
+  "identifiable": {{ if (not $values.lid.enabled) }}false{{ else }}{{ $languageConfig.identifiable }}{{ end }}
+},
+{{- end -}}
+{{- end -}}
+{{- end -}}
 {{- $compName := "model-config" -}}
 {{- if (.Values.api.enabled) -}}
 apiVersion: v1
@@ -24,6 +49,12 @@ data:
     {
       "ibm-models" : [
       {{- include "ibm-models" . | trimSuffix " " | trimSuffix "," | indent 8  }}
+      ]
+    }
+  language-config.json: |-
+    {
+      "languages" : [
+      {{- include "ibm-languages" . | trimSuffix " " | trimSuffix "," | indent 8  }}
       ]
     }
 {{- end -}}

@@ -1,0 +1,126 @@
+{{- include "sch.config.init" (list . "ibm-watson-lt.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.minio.name -}}
+{{- $compName2 :=  .sch.chart.components.minio.authSecret -}}
+{{- $compName3 :=  .sch.chart.components.minio.sseMasterKeySecret -}}
+apiVersion: helm.operator-sdk/v1alpha1
+kind: IbmMinio
+metadata:
+  name: {{ include "sch.names.fullCompName" (list $ $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  affinity: 
+{{ include "ibm-watson-lt.affinity" $ | trim | indent 8 }}
+  buckets: []
+  {{ $clusterDomain := .Values.global.clusterDomain -}}
+  clusterDomain: {{ ( $clusterDomain | replace "svc." "" ) }}
+  configPath: /workdir/home/.minio/
+  configPathmc: /workdir/home/.mc/
+  creds:
+    image:
+      image: {{ .Values.s3.creds.image.name }}:{{ .Values.s3.creds.image.tag }}
+      pullPolicy: {{ .Values.global.image.pullPolicy | quote }}
+  defaultBucket:
+    enabled: {{ .Values.s3.defaultBucket.enabled }}
+    name: {{ .Values.s3.defaultBucket.name }}
+    policy: {{ .Values.s3.defaultBucket.policy }}
+    purge: {{ .Values.s3.defaultBucket.purge }}
+  enableCp4dMeteringLabels: true
+  environment:
+    minioBrowser: "on"
+  existingSecret: {{ if .Values.s3.existingSecret }}{{ .Values.s3.existingSecret | quote }}{{ else }}{{ include "sch.names.fullCompName" (list $ $compName2) | quote }}{{ end }}
+  global:
+    dockerRegistryPrefix: {{ .Values.global.dockerRegistryPrefix }}
+    image:
+      pullPolicy: {{ .Values.global.image.pullPolicy }}
+      pullSecret: {{ .Values.global.image.pullSecret }}
+    license: {{ .Values.global.license }}
+    metering:
+      addOnName: ""
+      cloudpakId: eb9998dcc5d24e3eb5b6fb488f750fe2
+      cloudpakName: IBM Cloud Pak for Data
+      cloudpakVersion: 3.0.0
+      productChargedContainers: All
+      productID: ibm_minio_1_0_0_Apache_2___55555
+      productMetric: VIRTUAL_PROCESSOR_CORE
+      productName: ibm-minio
+      productVersion: 1.0.0
+    sch:
+      enabled: true
+    storageClassName: {{ .Values.global.storageClassName | quote }}
+    zenServiceInstanceId: {{ .Values.global.zenServiceInstanceId | quote }}
+  keep: false
+  livenessProbe:
+    failureThreshold: 3
+    initialDelaySeconds: 20
+    periodSeconds: 30
+    successThreshold: 1
+    timeoutSeconds: 1
+  minio:
+    image:
+      image: {{ .Values.s3.minio.image.name }}:{{ .Values.s3.minio.image.tag }}
+      pullPolicy: {{ .Values.global.image.pullPolicy | quote }}
+  minioClient:
+    image:
+      image: {{ .Values.s3.minioClient.image.name }}:{{ .Values.s3.minioClient.image.tag }}
+      pullPolicy: {{ .Values.global.image.pullPolicy | quote }}
+  mountPath: /workdir/data
+  networkPolicy:
+    allowExternal: true
+    enabled: false
+  nodeSelector: {}
+  persistence:
+    accessMode: {{ .Values.s3.persistence.accessMode }}
+    enabled: {{ .Values.s3.persistence.enabled }}
+    selector:
+      label: ""
+      value: ""
+    size: {{ .Values.s3.persistence.size }}
+    subPath: ""
+    useDynamicProvisioning: {{ .Values.s3.persistence.dynamicProvisioning }}
+  podAnnotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+  podDisruptionBudget:
+    create: true
+    maxUnavailable: 1
+    minAvailable: ""
+  postBucketCreationHookWeight: "0"
+  priorityClassName: ""
+  rbac:
+    create: {{ .Values.s3.rbac.create }}
+  readinessProbe:
+    failureThreshold: 3
+    initialDelaySeconds: 15
+    periodSeconds: 15
+    successThreshold: 1
+    timeoutSeconds: 1
+  replicas: {{ .Values.s3.replicas }}
+  replicasForDev: {{ .Values.s3.replicas }}
+  replicasForProd: {{ .Values.s3.replicas }}
+  resources:
+    limits:
+      cpu: {{ .Values.s3.resources.limits.cpu }}
+      memory: {{ .Values.s3.resources.limits.memory }}
+    requests:
+      cpu: {{ .Values.s3.resources.requests.cpu }}
+      memory: {{ .Values.s3.resources.requests.memory }}
+  securityContext:
+    creds:
+      runAsUser: 523
+    minio:
+      runAsUser: 999
+  service:
+    port: {{ .Values.s3.service.port }}
+  serviceAccount:
+    create: {{ .Values.s3.serviceAccount.create }}
+    name: {{ .Values.s3.serviceAccount.name | quote }}
+  sse:
+    enabled: {{ .Values.s3.sse.enabled }}
+    masterKeyName: {{ .Values.s3.sse.masterKeyName }}
+    masterKeySecret: {{ if .Values.s3.sse.masterKeySecret }}{{ .Values.s3.sse.masterKeySecret | quote }}{{ else }}{{ include "sch.names.fullCompName" (list $ $compName3) | quote }}{{ end }}
+  tls:
+    certSecret: {{ include "ibm-watson-lt.tlsSecretName" . | quote}}
+    enabled: {{ .Values.s3.tls.enabled }}
+  tolerations: []
+  updateStrategy: RollingUpdate
+

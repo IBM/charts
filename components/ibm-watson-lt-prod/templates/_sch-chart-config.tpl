@@ -22,14 +22,25 @@ sch:
         name: "segmenter"
       docTrans:
         name: "documents"
+      postgres:
+        name: "postgres"
+        authSecret: "postgres-auth-secret"
+        proxyService: "postgres-proxy-service"
+      minio:
+        name: "minio"
+        authSecret: "minio-auth-secret"
+        headless: "minio-ibm-minio-headless-svc"
+        service: "minio-ibm-minio-svc"
+        sseMasterKeySecret: "minio-sse-masterKeySecret"
     metering:
       productName: {{ .Values.product.name }}
       productVersion: {{ .Values.product.version }}
       productID: {{ .Values.product.id }}
       productMetric: VIRTUAL_PROCESSOR_CORE
       productChargedContainers: All
-      cloudpakName: IBM Cloud Pak for Data
-      cloudpakId: eb9998dcc5d24e3eb5b6fb488f750fe2
+      productCloudpakRatio: "1:1"
+      cloudpakName: "IBM Watson API Kit for IBM Cloud Pak for Data"
+      cloudpakId: {{ .Values.product.id }}
       cloudpakVersion: 3.0.0
     mnlpPodSecurityContext:
       hostNetwork: false
@@ -37,9 +48,14 @@ sch:
       hostIPC: false
       securityContext:
         runAsNonRoot: true
+
 {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
         fsGroup: 10000
         runAsUser: 10000
+#only apply runAsGroup label if Kubernetes version is >=1.14
+{{- if semverCompare ">=1.14" .Capabilities.KubeVersion.GitVersion }}
+        runAsGroup: 10000
+{{- end }}
 {{- end }}
 
     dropAllContainerSecurityContext:

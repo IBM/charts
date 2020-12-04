@@ -1,17 +1,17 @@
 ################## GLOBALLY SHARED CONFIG #########################################################
 global:
+
   appName: "ibm-watson-lt"
   clusterDomain: svc.cluster.local
   # global.dockerRegistryPrefix specifies the Docker repository for the image, this will be pre-appended to the image.repository name.
-  dockerRegistryPrefix: "cp.icr.io/cp/watson-lt"
-  zenControlPlaneNamespace: ""
-  # zenServiceInstanceDisplayName: ""
+  dockerRegistryPrefix: "cp.stg.icr.io/cp/watson-lt"
+  zenControlPlaneNamespace: "zen"
 
   # storage class name for pvc
   storageClassName: ""
-  
+
   affinity: {}
-  
+
   license: true
   # Prevent duplicated templates by excluding sub-chart's sch charts
   sch:
@@ -21,7 +21,6 @@ global:
     pullPolicy: "IfNotPresent"
 
   serviceAccount:
-    create: true
     name: "" #use default template
   rbac:
     create: true
@@ -29,7 +28,7 @@ global:
   tests:
     image:
       name: "lt-restapi"
-      tag: "master-5817fb80-291"
+      tag: "master-c6d4a64a-357"
     resources:
       memoryLimitMB: 500
       cpuLimitMillis: 3000
@@ -41,14 +40,14 @@ global:
 ################## Common Settings ################################################################
 
 product:
-  name: "IBM Watson Language Translator for IBM CloudPak for Data"
-  id: "ICP4D-addon-fc3d2312499a4bdba33692d3f60ffb32-language-translator"
-  version: "1.1.2"
+  name: "IBM Watson Language Translator"
+  id: "df0b9c8451114e2d86d27ecb96afb37a"
+  version: "1.2"
 
 creds:
   image:
     name: "opencontent-icp-cert-gen-1"
-    tag: "1.1.4"
+    tag: "1.1.8"
   tls:
     create: true
     nameTpl: '{{ printf "%s-%s-%s" .Release.Name .Chart.Name "tls" }}'
@@ -61,7 +60,7 @@ api:
 
   image:
     name: "lt-restapi"
-    tag: "master-5817fb80-291"
+    tag: "master-c6d4a64a-357"
   resources:
     cpuRequestMillis: 200
     cpuLimitMillis: 1000
@@ -84,7 +83,7 @@ documents:
   replicas: 1
   image:
     name: "document-translation"
-    tag: "master-334d5d89-295"
+    tag: "master-5c6dbb91-344"
 
   resources:
     cpuRequestMillis: 200
@@ -106,7 +105,7 @@ lid:
   replicas: 1
   image:
     name: "serve-runtime"
-    tag: "wdc-20200220-c6610053-20-master-fa87fe03-159"
+    tag: "wdc-20200220-68601747-48-master-8b1efcb5-194"
   resources:
     cpuRequestMillis: 250
     cpuLimitMillis: 750
@@ -119,7 +118,7 @@ lid:
 
   model:
     name: "language-id"
-    tag: "1.1.2"
+    tag: "1.2"
     id: ibm-lid
 
 ################## SEGMENTER CONFIG ##############################################################
@@ -128,7 +127,7 @@ segmenter:
   enabled: true
   image:
     name: "serve-runtime"
-    tag: "wdc-20200220-c6610053-20-master-fa87fe03-159"
+    tag: "wdc-20200220-68601747-48-master-8b1efcb5-194"
   resources:
     cpuRequestMillis: 250
     cpuLimitMillis: 750
@@ -141,7 +140,7 @@ segmenter:
 
   model:
     name: "sentence-segmenter"
-    tag: "1.1.2"
+    tag: "1.2"
     id: ibm-segmenter
 
 ################## TRANSLATION CONFIG ##############################################################
@@ -150,7 +149,7 @@ translation:
   replicas: 1
   image:
     name: "serve-runtime"
-    tag: "wdc-20200220-c6610053-20-master-fa87fe03-159"
+    tag: "wdc-20200220-68601747-48-master-8b1efcb5-194"
   resources:
     cpuRequestMillis: 1000
     cpuLimitMillis: 5000
@@ -162,19 +161,25 @@ translation:
 
 ### Databases ###################################################################
 s3:
-  enabled: true
+  service:
+    port: 9000
   serviceAccount:
     create: false
-    name: '{{ include "ibm-watson-lt.serviceAccountName" . }}'
+    name: 'ibm-minio-operator'
   rbac:
     create: false
   tls:
     enabled: true
+  existingSecret: ""
   defaultBucket:
     enabled: true     # create a bucket automatically, at installation
     name: documents   # bucket name, cannot be templated right now
     policy: none      # defines bucket policy (permissions, one of "none", "download", "upload", "public") for anonymous access ("none" does *not* mean to disable auth)
     purge: false      # do not delete bucket if bucket (name) already exists
+  sse:
+    enabled: true
+    masterKeyName: sseMasterKey
+    masterKeySecret: ""
 
   resources:
     requests:
@@ -187,6 +192,8 @@ s3:
   persistence:
     enabled: false
     size: 10Gi
+    dynamicProvisioning: true
+    accessMode: ReadWriteOnce
 
   # If changing replicas:
   # - need to change to an even number
@@ -196,59 +203,57 @@ s3:
   minio:
     image:
       name: "opencontent-minio"
-      tag: "1.1.3"
+      tag: "1.1.5"
   minioClient:
     image:
       name: "opencontent-minio-client"
-      tag: "1.0.3"
+      tag: "1.0.5"
   creds:
     image:
       name: "opencontent-icp-cert-gen-1"
-      tag: "1.1.4"
-  affinity: {}
-  affinityMinio: {}
+      tag: "1.1.8"
 
 postgres:
-  postgres:
-    image:
-      name: "opencontent-postgres-stolon"
-      tag: "2.0.1"
   enabled: true
-  serviceAccount:
-    create: false
-    name: '{{ include "ibm-watson-lt.serviceAccountName" . }}'
-  rbac:
-    create: false
-  persistence:
-    enabled: false
-    useDynamicProvisioning: true
-    size: 10Gi
   keeper:
-    resources:
-      limits:
-        cpu: 500m
-        memory: 256Mi
-      requests:
-        cpu: 200m
-        memory: 256Mi
-    affinity: {}    
-  sentinel:
-    affinity: {}
-  proxy:
-    affinity: {}
-    
+    image:
+      name: "edb-stolon"
+      tag: "v1-ubi8-amd64"
+  proxy: 
+    image: 
+      name: "edb-postgresql-12"
+      tag: "ubi8-amd64"
+  port: 5432
+  enableTLS: true
+  authSecretName: ""
+  serviceAccountName: 'edb-operator'
+  persistence:
+    size: "50Gi"
+  resources: 
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits: 
+      cpu: 500m
+      memory: 256Mi
+  clusterSize: 3
+
 gateway:
   enabled: true
   affinity: {}
-  
+
+  metering:
+    productID: "df0b9c8451114e2d86d27ecb96afb37a"
+    productName: "IBM Watson Language Translator" 
+
   addonService:
     zenNamespace: 'zen'
     image:
       repository: watson-gateway
-      tag: 3.4.1
+      tag: 3.7.5
   addon:
     displayName: "Watson Language Translator"
-    version: "1.1.2"
+    version: "1.2"
     shortDescription: "IBM Watson™ Language Translator allows you to translate text programmatically from one language into another language."
     longDescription: >-
       Expand to new markets by instantly translating your documents,
@@ -267,7 +272,7 @@ gateway:
     tls:
       image:
         repository: opencontent-common-utils
-        tag: 1.1.7
+        tag: 1.1.10
 
   backendService:
     name: ""
@@ -294,276 +299,276 @@ translationModels:
   ar-en:
     enabled: false
     image:
-      name: lt_ar-ar_en-us_general
-      tag: 1.1.2
+      name: lt-arar-enus-general
+      tag: 1.2
   de-en:
     enabled: false
     image:
-      name: lt_de-de_en-us_general
-      tag: 1.1.2
+      name: lt-dede-enus-general
+      tag: 1.2
   en-ar:
     enabled: false
     image:
-      name: lt_en-us_ar-ar_general
-      tag: 1.1.2
+      name: lt-enus-arar-general
+      tag: 1.2
   en-de:
     enabled: false
     image:
-      name: lt_en-us_de-de_general
-      tag: 1.1.2
+      name: lt-enus-dede-general
+      tag: 1.2
   en-es:
     enabled: false
     image:
-      name: lt_en-us_es-es_general
-      tag: 1.1.2
+      name: lt-enus-eses-general
+      tag: 1.2
   en-fr:
     enabled: false
     image:
-      name: lt_en-us_fr-fr_general
-      tag: 1.1.2
+      name: lt-enus-frfr-general
+      tag: 1.2
   en-he:
     enabled: false
     image:
-      name: lt_en-us_he-il_general
-      tag: 1.1.2
+      name: lt-enus-heil-general
+      tag: 1.2
   en-it:
     enabled: false
     image:
-      name: lt_en-us_it-it_general
-      tag: 1.1.2
+      name: lt-enus-itit-general
+      tag: 1.2
   en-pt:
     enabled: false
     image:
-      name: lt_en-us_pt-br_general
-      tag: 1.1.2
+      name: lt-enus-ptbr-general
+      tag: 1.2
   en-ru:
     enabled: false
     image:
-      name: lt_en-us_ru-ru_general
-      tag: 1.1.2
+      name: lt-enus-ruru-general
+      tag: 1.2
   en-tr:
     enabled: false
     image:
-      name: lt_en-us_tr-tr_general
-      tag: 1.1.2
+      name: lt-enus-trtr-general
+      tag: 1.2
   en-zh:
     enabled: false
     image:
-      name: lt_en-us_zh-cn_general
-      tag: 1.1.2
+      name: lt-enus-zhcn-general
+      tag: 1.2
   en-zh-TW:
     enabled: false
     image:
-      name: lt_en-us_zh-tw_general
-      tag: 1.1.2
+      name: lt-enus-zhtw-general
+      tag: 1.2
   es-en:
     enabled: false
     image:
-      name: lt_es-es_en-us_general
-      tag: 1.1.2
+      name: lt-eses-enus-general
+      tag: 1.2
   fr-en:
     enabled: false
     image:
-      name: lt_fr-fr_en-us_general
-      tag: 1.1.2
+      name: lt-frfr-enus-general
+      tag: 1.2
   he-en:
     enabled: false
     image:
-      name: lt_he-il_en-us_general
-      tag: 1.1.2
+      name: lt-heil-enus-general
+      tag: 1.2
   it-en:
     enabled: false
     image:
-      name: lt_it-it_en-us_general
-      tag: 1.1.2
+      name: lt-itit-enus-general
+      tag: 1.2
   pt-en:
     enabled: false
     image:
-      name: lt_pt-br_en-us_general
-      tag: 1.1.2
+      name: lt-ptbr-enus-general
+      tag: 1.2
   ru-en:
     enabled: false
     image:
-      name: lt_ru-ru_en-us_general
-      tag: 1.1.2
+      name: lt-ruru-enus-general
+      tag: 1.2
   tr-en:
     enabled: false
     image:
-      name: lt_tr-tr_en-us_general
-      tag: 1.1.2
+      name: lt-trtr-enus-general
+      tag: 1.2
   zh-en:
     enabled: false
     image:
-      name: lt_zh-cn_en-us_general
-      tag: 1.1.2
+      name: lt-zhcn-enus-general
+      tag: 1.2
   zh-TW-en:
     enabled: false
     image:
-      name: lt_zh-tw_en-us_general
-      tag: 1.1.2
+      name: lt-zhtw-enus-general
+      tag: 1.2
 ###################################################################################################
 ########################################## LANGUAGE PAK 2 #########################################
 ###################################################################################################
   en-bn:
     enabled: false
     image:
-      name: lt_en-us_bn-bd_general
-      tag: 1.1.2
+      name: lt-enus-bnbd-general
+      tag: 1.2
   en-gu:
     enabled: false
     image:
-      name: lt_en-us_gu-in_general
-      tag: 1.1.2
+      name: lt-enus-guin-general
+      tag: 1.2
   en-hi:
     enabled: false
     image:
-      name: lt_en-us_hi-in_general
-      tag: 1.1.2
+      name: lt-enus-hiin-general
+      tag: 1.2
   en-id:
     enabled: false
     image:
-      name: lt_en-us_id-id_general
-      tag: 1.1.2
+      name: lt-enus-idid-general
+      tag: 1.2
   en-ja:
     enabled: false
     image:
-      name: lt_en-us_ja-jp_general
-      tag: 1.1.2
+      name: lt-enus-jajp-general
+      tag: 1.2
   en-ko:
     enabled: false
     image:
-      name: lt_en-us_ko-kr_general
-      tag: 1.1.2
+      name: lt-enus-kokr-general
+      tag: 1.2
   en-ml:
     enabled: false
     image:
-      name: lt_en-us_ml-in_general
-      tag: 1.1.2
+      name: lt-enus-mlin-general
+      tag: 1.2
   en-ms:
     enabled: false
     image:
-      name: lt_en-us_ms-my_general
-      tag: 1.1.2
+      name: lt-enus-msmy-general
+      tag: 1.2
   en-mt:
     enabled: false
     image:
-      name: lt_en-us_mt-mt_general
-      tag: 1.1.2
+      name: lt-enus-mtmt-general
+      tag: 1.2
   en-ne:
     enabled: false
     image:
-      name: lt_en-us_ne-np_general
-      tag: 1.1.2
+      name: lt-enus-nenp-general
+      tag: 1.2
   en-si:
     enabled: false
     image:
-      name: lt_en-us_si-lk_general
-      tag: 1.1.2
+      name: lt-enus-silk-general
+      tag: 1.2
   en-ta:
     enabled: false
     image:
-      name: lt_en-us_ta-in_general
-      tag: 1.1.2
+      name: lt-enus-tain-general
+      tag: 1.2
   en-te:
     enabled: false
     image:
-      name: lt_en-us_te-in_general
-      tag: 1.1.2
+      name: lt-enus-tein-general
+      tag: 1.2
   en-th:
     enabled: false
     image:
-      name: lt_en-us_th-th_general
-      tag: 1.1.2
+      name: lt-enus-thth-general
+      tag: 1.2
   en-ur:
     enabled: false
     image:
-      name: lt_en-us_ur-pk_general
-      tag: 1.1.2
+      name: lt-enus-urpk-general
+      tag: 1.2
   en-vi:
     enabled: false
     image:
-      name: lt_en-us_vi-vn_general
-      tag: 1.1.2
+      name: lt-enus-vivn-general
+      tag: 1.2
   bn-en:
     enabled: false
     image:
-      name: lt_bn-bd_en-us_general
-      tag: 1.1.2
+      name: lt-bnbd-enus-general
+      tag: 1.2
   gu-en:
     enabled: false
     image:
-      name: lt_gu-in_en-us_general
-      tag: 1.1.2
+      name: lt-guin-enus-general
+      tag: 1.2
   hi-en:
     enabled: false
     image:
-      name: lt_hi-in_en-us_general
-      tag: 1.1.2
+      name: lt-hiin-enus-general
+      tag: 1.2
   id-en:
     enabled: false
     image:
-      name: lt_id-id_en-us_general
-      tag: 1.1.2
+      name: lt-idid-enus-general
+      tag: 1.2
   ja-en:
     enabled: false
     image:
-      name: lt_ja-jp_en-us_general
-      tag: 1.1.2
+      name: lt-jajp-enus-general
+      tag: 1.2
   ko-en:
     enabled: false
     image:
-      name: lt_ko-kr_en-us_general
-      tag: 1.1.2
+      name: lt-kokr-enus-general
+      tag: 1.2
   ml-en:
     enabled: false
     image:
-      name: lt_ml-in_en-us_general
-      tag: 1.1.2
+      name: lt-mlin-enus-general
+      tag: 1.2
   ms-en:
     enabled: false
     image:
-      name: lt_ms-my_en-us_general
-      tag: 1.1.2
+      name: lt-msmy-enus-general
+      tag: 1.2
   mt-en:
     enabled: false
     image:
-      name: lt_mt-mt_en-us_general
-      tag: 1.1.2
+      name: lt-mtmt-enus-general
+      tag: 1.2
   ne-en:
     enabled: false
     image:
-      name: lt_ne-np_en-us_general
-      tag: 1.1.2
+      name: lt-nenp-enus-general
+      tag: 1.2
   si-en:
     enabled: false
     image:
-      name: lt_si-lk_en-us_general
-      tag: 1.1.2
+      name: lt-silk-enus-general
+      tag: 1.2
   ta-en:
     enabled: false
     image:
-      name: lt_ta-in_en-us_general
-      tag: 1.1.2
+      name: lt-tain-enus-general
+      tag: 1.2
   te-en:
     enabled: false
     image:
-      name: lt_te-in_en-us_general
-      tag: 1.1.2
+      name: lt-tein-enus-general
+      tag: 1.2
   th-en:
     enabled: false
     image:
-      name: lt_th-th_en-us_general
-      tag: 1.1.2
+      name: lt-thth-enus-general
+      tag: 1.2
   ur-en:
     enabled: false
     image:
-      name: lt_ur-pk_en-us_general
-      tag: 1.1.2
+      name: lt-urpk-enus-general
+      tag: 1.2
   vi-en:
     enabled: false
     image:
-      name: lt_vi-vn_en-us_general
-      tag: 1.1.2
+      name: lt-vivn-enus-general
+      tag: 1.2
 
 ###################################################################################################
 ########################################## LANGUAGE PAK 3 #########################################
@@ -571,220 +576,1015 @@ translationModels:
   bg-en:
     enabled: false
     image:
-      name: lt_bg-bg_en-us_general
-      tag: 1.1.2
+      name: lt-bgbg-enus-general
+      tag: 1.2
+  bs-en:
+    enabled: false
+    image:
+      name: lt-bsba-enus-general
+      tag: 1.2
   ca-es:
     enabled: false
     image:
-      name: lt_ca-es_es-es_general
-      tag: 1.1.2
+      name: lt-caes-eses-general
+      tag: 1.2
+  cnr-en:
+    enabled: false
+    image:
+      name: lt-cnrme-enus-general
+      tag: 1.2
   cs-en:
     enabled: false
     image:
-      name: lt_cs-cz_en-us_general
-      tag: 1.1.2
+      name: lt-cscz-enus-general
+      tag: 1.2
+  cy-en:
+    enabled: false
+    image:
+      name: lt-cygb-enus-general
+      tag: 1.2
   da-en:
     enabled: false
     image:
-      name: lt_da-dk_en-us_general
-      tag: 1.1.2
+      name: lt-dadk-enus-general
+      tag: 1.2
   de-fr:
     enabled: false
     image:
-      name: lt_de-de_fr-fr_general
-      tag: 1.1.2
+      name: lt-dede-frfr-general
+      tag: 1.2
   de-it:
     enabled: false
     image:
-      name: lt_de-de_it-it_general
-      tag: 1.1.2
+      name: lt-dede-itit-general
+      tag: 1.2
   el-en:
     enabled: false
     image:
-      name: lt_el-gr_en-us_general
-      tag: 1.1.2
+      name: lt-elgr-enus-general
+      tag: 1.2
   en-bg:
     enabled: false
     image:
-      name: lt_en-us_bg-bg_general
-      tag: 1.1.2
+      name: lt-enus-bgbg-general
+      tag: 1.2
+  en-bs:
+    enabled: false
+    image:
+      name: lt-enus-bsba-general
+      tag: 1.2
+  en-cnr:
+    enabled: false
+    image:
+      name: lt-enus-cnrme-general
+      tag: 1.2
   en-cs:
     enabled: false
     image:
-      name: lt_en-us_cs-cz_general
-      tag: 1.1.2
+      name: lt-enus-cscz-general
+      tag: 1.2
+  en-cy:
+    enabled: false
+    image:
+      name: lt-enus-cygb-general
+      tag: 1.2
   en-da:
     enabled: false
     image:
-      name: lt_en-us_da-dk_general
-      tag: 1.1.2
+      name: lt-enus-dadk-general
+      tag: 1.2
   en-el:
     enabled: false
     image:
-      name: lt_en-us_el-gr_general
-      tag: 1.1.2
+      name: lt-enus-elgr-general
+      tag: 1.2
   en-et:
     enabled: false
     image:
-      name: lt_en-us_et-ee_general
-      tag: 1.1.2
+      name: lt-enus-etee-general
+      tag: 1.2
   en-fi:
     enabled: false
     image:
-      name: lt_en-us_fi-fi_general
-      tag: 1.1.2
+      name: lt-enus-fifi-general
+      tag: 1.2
+  en-fr-CA:
+    enabled: false
+    image:
+      name: lt-enus-frca-general
+      tag: 1.2
   en-ga:
     enabled: false
     image:
-      name: lt_en-us_ga-ie_general
-      tag: 1.1.2
+      name: lt-enus-gaie-general
+      tag: 1.2
   en-hr:
     enabled: false
     image:
-      name: lt_en-us_hr-hr_general
-      tag: 1.1.2
+      name: lt-enus-hrhr-general
+      tag: 1.2
   en-hu:
     enabled: false
     image:
-      name: lt_en-us_hu-hu_general
-      tag: 1.1.2
+      name: lt-enus-huhu-general
+      tag: 1.2
   en-lt:
     enabled: false
     image:
-      name: lt_en-us_lt-lt_general
-      tag: 1.1.2
+      name: lt-enus-ltlt-general
+      tag: 1.2
   en-lv:
     enabled: false
     image:
-      name: lt_en-us_lv-lv_general
-      tag: 1.1.2
+      name: lt-enus-lvlv-general
+      tag: 1.2
   en-nb:
     enabled: false
     image:
-      name: lt_en-us_nb-no_general
-      tag: 1.1.2
+      name: lt-enus-nbno-general
+      tag: 1.2
   en-nl:
     enabled: false
     image:
-      name: lt_en-us_nl-nl_general
-      tag: 1.1.2
+      name: lt-enus-nlnl-general
+      tag: 1.2
   en-pl:
     enabled: false
     image:
-      name: lt_en-us_pl-pl_general
-      tag: 1.1.2
+      name: lt-enus-plpl-general
+      tag: 1.2
   en-ro:
     enabled: false
     image:
-      name: lt_en-us_ro-ro_general
-      tag: 1.1.2
+      name: lt-enus-roro-general
+      tag: 1.2
   en-sk:
     enabled: false
     image:
-      name: lt_en-us_sk-sk_general
-      tag: 1.1.2
+      name: lt-enus-sksk-general
+      tag: 1.2
   en-sl:
     enabled: false
     image:
-      name: lt_en-us_sl-si_general
-      tag: 1.1.2
+      name: lt-enus-slsi-general
+      tag: 1.2
+  en-sr:
+    enabled: false
+    image:
+      name: lt-enus-srrs-general
+      tag: 1.2
   en-sv:
     enabled: false
     image:
-      name: lt_en-us_sv-se_general
-      tag: 1.1.2
+      name: lt-enus-svse-general
+      tag: 1.2
+  en-uk:
+    enabled: false
+    image:
+      name: lt-enus-ukua-general
+      tag: 1.2
   es-ca:
     enabled: false
     image:
-      name: lt_es-es_ca-es_general
-      tag: 1.1.2
+      name: lt-eses-caes-general
+      tag: 1.2
+  es-eu:
+    enabled: false
+    image:
+      name: lt-eses-eues-general
+      tag: 1.2
   es-fr:
     enabled: false
     image:
-      name: lt_es-es_fr-fr_general
-      tag: 1.1.2
+      name: lt-eses-frfr-general
+      tag: 1.2
   et-en:
     enabled: false
     image:
-      name: lt_et-ee_en-us_general
-      tag: 1.1.2
+      name: lt-etee-enus-general
+      tag: 1.2
+  eu-es:
+    enabled: false
+    image:
+      name: lt-eues-eses-general
+      tag: 1.2
   fi-en:
     enabled: false
     image:
-      name: lt_fi-fi_en-us_general
-      tag: 1.1.2
+      name: lt-fifi-enus-general
+      tag: 1.2
   fr-de:
     enabled: false
     image:
-      name: lt_fr-fr_de-de_general
-      tag: 1.1.2
+      name: lt-frfr-dede-general
+      tag: 1.2
+  fr-CA-en:
+    enabled: false
+    image:
+      name: lt-frca-enus-general
+      tag: 1.2
   fr-es:
     enabled: false
     image:
-      name: lt_fr-fr_es-es_general
-      tag: 1.1.2
+      name: lt-frfr-eses-general
+      tag: 1.2
   ga-en:
     enabled: false
     image:
-      name: lt_ga-ie_en-us_general
-      tag: 1.1.2
+      name: lt-gaie-enus-general
+      tag: 1.2
   hr-en:
     enabled: false
     image:
-      name: lt_hr-hr_en-us_general
-      tag: 1.1.2
+      name: lt-hrhr-enus-general
+      tag: 1.2
   hu-en:
     enabled: false
     image:
-      name: lt_hu-hu_en-us_general
-      tag: 1.1.2
+      name: lt-huhu-enus-general
+      tag: 1.2
   it-de:
     enabled: false
     image:
-      name: lt_it-it_de-de_general
-      tag: 1.1.2
+      name: lt-itit-dede-general
+      tag: 1.2
   lt-en:
     enabled: false
     image:
-      name: lt_lt-lt_en-us_general
-      tag: 1.1.2
+      name: lt-ltlt-enus-general
+      tag: 1.2
   lv-en:
     enabled: false
     image:
-      name: lt_lv-lv_en-us_general
-      tag: 1.1.2
+      name: lt-lvlv-enus-general
+      tag: 1.2
   nb-en:
     enabled: false
     image:
-      name: lt_nb-no_en-us_general
-      tag: 1.1.2
+      name: lt-nbno-enus-general
+      tag: 1.2
   nl-en:
     enabled: false
     image:
-      name: lt_nl-nl_en-us_general
-      tag: 1.1.2
+      name: lt-nlnl-enus-general
+      tag: 1.2
   pl-en:
     enabled: false
     image:
-      name: lt_pl-pl_en-us_general
-      tag: 1.1.2
+      name: lt-plpl-enus-general
+      tag: 1.2
   ro-en:
     enabled: false
     image:
-      name: lt_ro-ro_en-us_general
-      tag: 1.1.2
+      name: lt-roro-enus-general
+      tag: 1.2
   sk-en:
     enabled: false
     image:
-      name: lt_sk-sk_en-us_general
-      tag: 1.1.2
+      name: lt-sksk-enus-general
+      tag: 1.2
   sl-en:
     enabled: false
     image:
-      name: lt_sl-si_en-us_general
-      tag: 1.1.2
+      name: lt-slsi-enus-general
+      tag: 1.2
+  sr-en:
+    enabled: false
+    image:
+      name: lt-srrs-enus-general
+      tag: 1.2
   sv-en:
     enabled: false
     image:
-      name: lt_sv-se_en-us_general
-      tag: 1.1.2
+      name: lt-svse-enus-general
+      tag: 1.2
+  uk-en:
+    enabled: false
+    image:
+      name: lt-ukua-enus-general
+      tag: 1.2
+     
+###################################################################################################
+################################### LANGUAGE CONFIGURATION ###############################
+###################################################################################################
+languages:
+  af-za:
+    name: Afrikaans
+    short: af
+    iso6393Code: afr
+    countryCode: ZA
+    nativeLanguageName: "Afrikaans"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  ar-ar:
+    name: Arabic
+    short: ar
+    iso6393Code: ara
+    countryCode: AR
+    nativeLanguageName: "العربية"
+    wordsSeparated: true
+    direction: right_to_left
+    identifiable: true
+  az-az:
+    name: Azerbaijani
+    short: az
+    iso6393Code: aze
+    countryCode: AZ
+    nativeLanguageName: "آذربایجان دیلی"
+    wordsSeparated: true
+    direction: right_to_left
+    identifiable: true
+  ba-ru:
+    name: Bashkir
+    short: ba
+    iso6393Code: bak
+    countryCode: RU
+    nativeLanguageName: "башҡорт Теле"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  be-by:
+    name: Belarusian
+    short: be
+    iso6393Code: bel
+    countryCode: BY
+    nativeLanguageName: "Беларуская мова"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  bg-bg:
+    name: Bulgarian
+    short: bg
+    iso6393Code: bul
+    countryCode: BG
+    nativeLanguageName: "български език"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  bn-bd:
+    name: Bengali
+    short: bn
+    iso6393Code: ben
+    countryCode: BD
+    nativeLanguageName: "বাংলা"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  bs-ba:
+    name: Bosnian
+    short: bs
+    iso6393Code: bos
+    countryCode: BA
+    nativeLanguageName: "Bosanski"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: false
+  ca-es:
+    name: Catalan
+    short: ca
+    iso6393Code: cat
+    countryCode: ES
+    nativeLanguageName: "Català"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  cnr-me:
+    name: Montenegrin
+    short: cnr
+    iso6393Code: cnr
+    countryCode: ME
+    nativeLanguageName: "Crnogorski"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: false
+  cs-cz:
+    name: Czech
+    short: cs
+    iso6393Code: ces
+    countryCode: CZ
+    nativeLanguageName: "Český Jazyk"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  cv-ru:
+    name: Chuvash
+    short: cv
+    iso6393Code: chv
+    countryCode: RU
+    nativeLanguageName: "Чӑвашла"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  cy-gb:
+    name: Welsh
+    short: cy
+    iso6393Code: cym
+    countryCode: GB
+    nativeLanguageName: "Cymraeg"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  da-dk:
+    name: Danish
+    short: da
+    iso6393Code: dan
+    countryCode: DK
+    nativeLanguageName: "Dansk"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  de-de:
+    name: German
+    short: de
+    iso6393Code: deu
+    countryCode: DE
+    nativeLanguageName: "Deutsch"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  el-gr:
+    name: Greek
+    short: el
+    iso6393Code: ell
+    countryCode: GR
+    nativeLanguageName: "Νέα Ελληνικά"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  en-us:
+    name: English
+    short: en
+    iso6393Code: eng
+    countryCode: US
+    nativeLanguageName: "English"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  eo-eo:
+    name: Esperanto
+    short: eo
+    iso6393Code: epo
+    countryCode: EO
+    nativeLanguageName: "Esperanto"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  es-es:
+    name: Spanish
+    short: es
+    iso6393Code: spa
+    countryCode: ES
+    nativeLanguageName: "Español"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  et-ee:
+    name: Estonian
+    short: et
+    iso6393Code: est
+    countryCode: EE
+    nativeLanguageName: "Eesti Keel"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  eu-es:
+    name: Basque
+    short: eu
+    iso6393Code: eus
+    countryCode: ES
+    nativeLanguageName: "Euskara"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  fa-ir:
+    name: Persian
+    short: fa
+    iso6393Code: fas
+    countryCode: IR
+    nativeLanguageName: "فارسی"
+    wordsSeparated: true
+    direction: right_to_left
+    identifiable: true
+  fi-fi:
+    name: Finnish
+    short: fi
+    iso6393Code: fin
+    countryCode: FI
+    nativeLanguageName: "Suomen Kieli"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  fr-fr:
+    name: French
+    short: fr
+    iso6393Code: fra
+    countryCode: FR
+    nativeLanguageName: "Français"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  fr-CA:
+    name: French (Canada)
+    short: fr-CA
+    iso6393Code: null
+    countryCode: CA
+    nativeLanguageName: "Français Québécois"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: false
+  ga-ie:
+    name: Irish
+    short: ga
+    iso6393Code: gle
+    countryCode: IE
+    nativeLanguageName: "Gaeilge"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  gu-in:
+    name: Gujarati
+    short: gu
+    iso6393Code: guj
+    countryCode: IN
+    nativeLanguageName: "ગુજરાતી"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  he-il:
+    name: Hebrew
+    short: he
+    iso6393Code: heb
+    countryCode: IL
+    nativeLanguageName: "עברית"
+    wordsSeparated: true
+    direction: right_to_left
+    identifiable: true
+  hi-in:
+    name: Hindi
+    short: hi
+    iso6393Code: hin
+    countryCode: IN
+    nativeLanguageName: "हिन्दी"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  hr-hr:
+    name: Croatian
+    short: hr
+    iso6393Code: hrv
+    countryCode: HR
+    nativeLanguageName: "Hrvatski"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  ht-ht:
+    name: Haitian
+    short: ht
+    iso6393Code: hat
+    countryCode: HT
+    nativeLanguageName: "Kreyòl Ayisyen"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  hu-hu:
+    name: Hungarian
+    short: hu
+    iso6393Code: hun
+    countryCode: HU
+    nativeLanguageName: "Magyar Nyelv"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  hy-am:
+    name: Armenian
+    short: hy
+    iso6393Code: hye
+    countryCode: AM
+    nativeLanguageName: "հայերեն"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  id-id:
+    name: Indonesian
+    short: id
+    iso6393Code: ind
+    countryCode: ID
+    nativeLanguageName: "Bahasa Indonesia"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: false
+  is-is:
+    name: Icelandic
+    short: is
+    iso6393Code: isl
+    countryCode: IS
+    nativeLanguageName: "Íslenska"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  it-it:
+    name: Italian
+    short: it
+    iso6393Code: ita
+    countryCode: IT
+    nativeLanguageName: "Italiano"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  ja-jp:
+    name: Japanese
+    short: ja
+    iso6393Code: jpn
+    countryCode: JP
+    nativeLanguageName: "日本語"
+    wordsSeparated: false
+    direction: left_to_right
+    identifiable: true
+  ka-ge:
+    name: Georgian
+    short: ka
+    iso6393Code: kat
+    countryCode: GE
+    nativeLanguageName: "ქართული"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  kk-kz:
+    name: Kazakh
+    short: kk
+    iso6393Code: kaz
+    countryCode: KZ
+    nativeLanguageName: "қазақ тілі"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  km-kh:
+    name: Central Khmer
+    short: km
+    iso6393Code: khm
+    countryCode: KH
+    nativeLanguageName: "ភាសាខ្មែរ"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  ko-kr:
+    name: Korean
+    short: ko
+    iso6393Code: kor
+    countryCode: KR
+    nativeLanguageName: "한국어"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  ku-ku:
+    name: Kurdish
+    short: ku
+    iso6393Code: kur
+    countryCode: ku
+    nativeLanguageName: "کوردی"
+    wordsSeparated: true
+    direction: right_to_left
+    identifiable: true
+  ky-kg:
+    name: Kirghiz
+    short: ky
+    iso6393Code: kir
+    countryCode: KG
+    nativeLanguageName: "кыргызча"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  lo-la:
+    name: Lao
+    short: lo
+    iso6393Code: lao
+    countryCode: LA
+    nativeLanguageName: "ພາສາລາວ"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  lt-lt:
+    name: Lithuanian
+    short: lt
+    iso6393Code: lit
+    countryCode: LT
+    nativeLanguageName: "Lietuvių Kalba"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  lv-lv:
+    name: Latvian
+    short: lv
+    iso6393Code: lav
+    countryCode: LV
+    nativeLanguageName: "Latviešu Valoda"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  ml-in:
+    name: Malayalam
+    short: ml
+    iso6393Code: mal
+    countryCode: IN
+    nativeLanguageName: "മലയാളം"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  mn-mn:
+    name: Mongolian
+    short: mn
+    iso6393Code: mon
+    countryCode: MN
+    nativeLanguageName: "Монгол Хэл"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  mr-in:
+    name: Marathi
+    short: mr
+    iso6393Code: mar
+    countryCode: IN
+    nativeLanguageName: "मराठी"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  ms-my:
+    name: Malay
+    short: ms
+    iso6393Code: msa
+    countryCode: MY
+    nativeLanguageName: "Bahasa Melayu"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  mt-mt:
+    name: Maltese
+    short: mt
+    iso6393Code: mlt
+    countryCode: MT
+    nativeLanguageName: "Malti"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  my-mm:
+    name: Burmese
+    short: my
+    iso6393Code: mya
+    countryCode: MM
+    nativeLanguageName: "မြန်မာစာ"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  nb-no:
+    name: Norwegian Bokmal
+    short: nb
+    iso6393Code: nob
+    countryCode: "NO"
+    nativeLanguageName: "Bokmål"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  ne-np:
+    name: Nepali
+    short: ne
+    iso6393Code: nep
+    countryCode: NP
+    nativeLanguageName: "नेपाली भाषा"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  nl-nl:
+    name: Dutch
+    short: nl
+    iso6393Code: nld
+    countryCode: NL
+    nativeLanguageName: "Nederlands"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  nn-no:
+    name: Norwegian Nynorsk
+    short: nn
+    iso6393Code: nno
+    countryCode: "NO"
+    nativeLanguageName: "Nynorsk"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  pa-in:
+    name: Punjabi
+    short: pa
+    iso6393Code: pan
+    countryCode: IN
+    nativeLanguageName: "ਪੰਜਾਬੀ"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  pa-pk:
+    name: Punjabi (Shahmukhi script, Pakistan)
+    short: pa-PK
+    iso6393Code: pan
+    countryCode: PK
+    nativeLanguageName: "پنجابی"
+    wordsSeparated: true
+    direction: right_to_left
+    identifiable: true
+  pl-pl:
+    name: Polish
+    short: pl
+    iso6393Code: pol
+    countryCode: PL
+    nativeLanguageName: "Język polski"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  ps-ps:
+    name: Pushto
+    short: ps
+    iso6393Code: pus
+    countryCode: PS
+    nativeLanguageName: "پښتو"
+    wordsSeparated: true
+    direction: right_to_left
+    identifiable: true
+  pt-br:
+    name: Portuguese
+    short: pt
+    iso6393Code: por
+    countryCode: BR
+    nativeLanguageName: "Português"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  ro-ro:
+    name: Romanian
+    short: ro
+    iso6393Code: ron
+    countryCode: RO
+    nativeLanguageName: "Limba Română"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  ru-ru:
+    name: Russian
+    short: ru
+    iso6393Code: rus
+    countryCode: RU
+    nativeLanguageName: "Русский язык"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  si-lk:
+    name: Sinhala
+    short: si
+    iso6393Code: sin
+    countryCode: LK
+    nativeLanguageName: "සිංහල"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  sk-sk:
+    name: Slovakian
+    short: sk
+    iso6393Code: slk
+    countryCode: SK
+    nativeLanguageName: "Slovenčina"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  sl-si:
+    name: Slovenian
+    short: sl
+    iso6393Code: slv
+    countryCode: SI
+    nativeLanguageName: "Slovenščina"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  so-so:
+    name: Somali
+    short: so
+    iso6393Code: som
+    countryCode: SO
+    nativeLanguageName: "اللغة الصومالية"
+    wordsSeparated: true
+    direction: right_to_left
+    identifiable: true
+  sq-al:
+    name: Albanian
+    short: sq
+    iso6393Code: sqi
+    countryCode: AL
+    nativeLanguageName: "Shqip"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  sr-rs:
+    name: Serbian
+    short: sr
+    iso6393Code: srp
+    countryCode: RS
+    nativeLanguageName: "Српски"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  sv-se:
+    name: Swedish
+    short: sv
+    iso6393Code: swe
+    countryCode: SE
+    nativeLanguageName: "Svenska"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  ta-in:
+    name: Tamil
+    short: ta
+    iso6393Code: tam
+    countryCode: IN
+    nativeLanguageName: "தமிழ்"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  te-in:
+    name: Telugu
+    short: te
+    iso6393Code: tel
+    countryCode: IN
+    nativeLanguageName: "తెలుగు"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  th-th:
+    name: Thai
+    short: th
+    iso6393Code: tha
+    countryCode: TH
+    nativeLanguageName: "ภาษาไทย"
+    wordsSeparated: false
+    direction: left_to_right
+    identifiable: true
+  tl-ph:
+    name: Tagalog
+    short: tl
+    iso6393Code: tgl
+    countryCode: PH
+    nativeLanguageName: "ᜏᜒᜃᜅ᜔ ᜆᜄᜎᜓᜄ᜔"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  tr-tr:
+    name: Turkish
+    short: tr
+    iso6393Code: tur
+    countryCode: TR
+    nativeLanguageName: "Türkçe"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  uk-ua:
+    name: Ukrainian
+    short: uk
+    iso6393Code: ukr
+    countryCode: UA
+    nativeLanguageName: "Українська мова"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  ur-pk:
+    name: Urdu
+    short: ur
+    iso6393Code: urd
+    countryCode: PK
+    nativeLanguageName: "اُردُو"
+    wordsSeparated: true
+    direction: right_to_left
+    identifiable: true
+  vi-vn:
+    name: Vietnamese
+    short: vi
+    iso6393Code: vie
+    countryCode: VN
+    nativeLanguageName: "Tiếng Việt"
+    wordsSeparated: true
+    direction: left_to_right
+    identifiable: true
+  zh-cn:
+    name: Simplified Chinese
+    short: zh
+    iso6393Code: zho
+    countryCode: CN
+    nativeLanguageName: "中文"
+    wordsSeparated: false
+    direction: left_to_right
+    identifiable: true
+  zh-TW:
+    name: Traditional Chinese
+    short: zh-TW
+    iso6393Code: zht
+    countryCode: TW
+    nativeLanguageName: "古文"
+    wordsSeparated: false
+    direction: left_to_right
+    identifiable: true

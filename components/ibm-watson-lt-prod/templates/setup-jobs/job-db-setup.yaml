@@ -33,7 +33,7 @@ spec:
       - name: psql
         {{ include "sch.security.securityContext" (list . .sch.chart.dropAllContainerSecurityContext) | indent 8 }}
         {{ include "ibm-watson-lt.pullPolicyTemplate" . }}
-        image: {{ include "ibm-watson-lt.repo" . }}{{ .Values.postgres.postgres.image.name }}:{{ .Values.postgres.postgres.image.tag }}
+        image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.postgres.proxy.image.name }}:{{ .Values.postgres.proxy.image.tag }}
         command:
           - "/bin/bash"
           - "-c"
@@ -41,7 +41,7 @@ spec:
             {{/* wait until PG ready */}}
             echo "Waiting until postgres is running"
             while true ; do
-              pg_isready -h $PGHOST -d postgres -U $PGUSER && break || sleep 30
+              $PGBIN/pg_isready -h $PGHOST -d postgres -U $PGUSER && break || sleep 30
             done
             echo "Done. Postgres is running now. Let go to create/update the DB schema for store microservice."
             cat <<EOF | psql -h $PGHOST -d postgres -U $PGUSER -f -
@@ -213,8 +213,10 @@ spec:
                 TC_SOURCE_SENTENCE      varchar(1024) NOT NULL,
                 TC_TARGET_SENTENCE      varchar(1024) NOT NULL,
                 M_MODEL_ID          varchar(64) NOT NULL,
-              TC_LAST_USED        timestamp NOT NULL DEFAULT now(),
+                TC_LAST_USED        timestamp NOT NULL DEFAULT now(),
                 TC_OPT_OUT_FLAG           boolean DEFAULT FALSE,
+                TC_WORD_COUNT            integer DEFAULT 0,
+                TC_SOURCE            	 varchar(64) DEFAULT 'ENGINE',
                 PRIMARY KEY         (M_MODEL_ID, TC_SOURCE_SENTENCE)
             );
 
@@ -222,12 +224,38 @@ spec:
             -- opt out is set to false if at least on lookup was without opt-out set (logical AND between current and new flag)
             -- in other words, opt-out == true only if all lookups have the opt-out flag set
 
-            CREATE OR REPLACE FUNCTION tc_lru_lookup_with_optout(IN model_id text, IN source_sentence text, IN opt_out boolean, OUT translation text) AS \$\$
+            CREATE OR REPLACE FUNCTION tc_lru_lookup(IN model_id text, IN source_sentence text, IN opt_out boolean, OUT translation text, OUT word_count integer) AS \$\$
             BEGIN
-              SELECT TC_TARGET_SENTENCE INTO translation FROM translation_cache WHERE M_MODEL_ID = model_id AND TC_SOURCE_SENTENCE = source_sentence;
+              SELECT TC_TARGET_SENTENCE, TC_WORD_COUNT INTO translation, word_count FROM translation_cache WHERE M_MODEL_ID = model_id AND TC_SOURCE_SENTENCE = source_sentence;
               IF FOUND THEN
                 UPDATE translation_cache SET TC_LAST_USED = now(), TC_OPT_OUT_FLAG = TC_OPT_OUT_FLAG AND opt_out WHERE M_MODEL_ID = model_id AND TC_SOURCE_SENTENCE = source_sentence;
               END IF;
+            END;
+            \$\$ LANGUAGE PLPGSQL;
+
+            CREATE OR REPLACE FUNCTION tc_lru_update(IN model_id text, IN source_sentence text, IN target_sentence text, IN opt_out boolean, IN word_count INTEGER) RETURNS VOID AS \$\$
+            DECLARE
+              source varchar(64);
+            BEGIN
+              -- get cache source (ENGINE or HUMAN) if any
+              SELECT TC_SOURCE INTO source FROM translation_cache WHERE M_MODEL_ID = model_id AND TC_SOURCE_SENTENCE = source_sentence;
+  
+              -- cache hit, then update
+              IF FOUND THEN
+                -- update cache entry
+                IF source = 'ENGINE' THEN
+                   UPDATE translation_cache SET TC_TARGET_SENTENCE = target_sentence, TC_LAST_USED = now(), TC_OPT_OUT_FLAG = TC_OPT_OUT_FLAG AND opt_out, TC_WORD_COUNT = word_count WHERE M_MODEL_ID = model_id AND TC_SOURCE_SENTENCE = source_sentence;
+
+                -- update cache timestamp
+                ELSE
+                   UPDATE translation_cache SET TC_LAST_USED = now() WHERE M_MODEL_ID = model_id AND TC_SOURCE_SENTENCE = source_sentence;
+                END IF;
+
+              -- cache miss, then insert
+              ELSE
+                INSERT INTO translation_cache (TC_SOURCE_SENTENCE, TC_TARGET_SENTENCE, M_MODEL_ID, TC_LAST_USED, TC_OPT_OUT_FLAG, TC_WORD_COUNT)
+                VALUES (source_sentence, target_sentence, model_id, now(), opt_out, word_count);
+              END IF;   	
             END;
             \$\$ LANGUAGE PLPGSQL;
 

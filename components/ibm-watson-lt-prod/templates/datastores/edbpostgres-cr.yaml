@@ -1,0 +1,42 @@
+{{- include "sch.config.init" (list . "ibm-watson-lt.sch.chart.config.values") -}}
+{{- $compName1 :=  .sch.chart.components.postgres.name -}}
+{{- $compName2 :=  .sch.chart.components.postgres.authSecret -}}
+apiVersion: edbpostgres.com/v1alpha1
+kind: EDBPostgres
+metadata:
+  name: {{ include "sch.names.fullCompName" (list $ $compName1) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName1) | indent 4 }}
+spec:
+  clusterSize: {{ .Values.postgres.clusterSize }}
+  databaseMemoryLimit: {{ .Values.postgres.resources.limits.memory | quote }}
+  databaseMemoryRequest: {{ .Values.postgres.resources.requests.memory | quote }}
+  databaseCPULimit: {{ .Values.postgres.resources.limits.cpu | quote }}
+  databaseCPU: {{ .Values.postgres.resources.requests.cpu | quote }}
+  databaseStorageRequest: {{ .Values.postgres.persistence.size | quote }}
+  databaseStorageClass: {{ .Values.global.storageClassName | quote }}
+  databaseArchiveStorageClass: {{ .Values.global.storageClassName | quote }}
+  databaseWalStorageClass: {{ .Values.global.storageClassName | quote }}
+  databasePort: {{ .Values.postgres.port }}
+  containerImagePullPolicy: Always
+  serviceAccount: {{ .Values.postgres.serviceAccountName | quote }} 
+  highAvailability:
+    # fixed since non ha mode not supported and test failed
+    enable: true
+    image: "{{ .Values.global.dockerRegistryPrefix }}/{{.Values.postgres.keeper.image.name }}:{{.Values.postgres.keeper.image.tag }}"
+    podDebug: "false"
+    tls:
+      tlsEnabled: {{ .Values.postgres.enableTLS }}
+      certificateSecretName: {{ include "ibm-watson-lt.tlsSecretName" . | quote}}
+  image: "{{ .Values.global.dockerRegistryPrefix }}/{{.Values.postgres.proxy.image.name }}:{{.Values.postgres.proxy.image.tag }}"
+  secretName: {{ if .Values.postgres.authSecretName }}{{.Values.postgres.authSecretName | quote }}{{ else }}{{ include "sch.names.fullCompName" (list $ $compName2) | quote }}{{ end }}
+  postgresType: "PG"
+  postgresVersion: 12
+  customLabels:
+    environment: development
+    developer: edb
+{{ include "sch.metadata.labels.standard" (list . $compName1) | indent 4 }}
+  customAnnotations:
+    maker: edb
+    operator_vendor: edb
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 4 }}
