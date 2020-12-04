@@ -1,0 +1,128 @@
+{{- include "sch.config.init" (list . "sch.chart.stt.config.values") -}}
+{{- $comp := "ibm-minio" -}}
+apiVersion: helm.operator-sdk/v1alpha1
+kind: IbmMinio
+metadata:
+  name: '{{ .Release.Name }}'
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $comp) | indent 4 }}
+
+spec:
+  # Default values copied from <project_dir>/helm-charts/ibm-minio/values.yaml
+
+  affinity: {}
+  affinityMinio: {}
+  buckets: []
+  clusterDomain: {{ .Values.global.clusterDomain | quote }}
+  configPath: /workdir/home/.minio/
+  configPathmc: /workdir/home/.mc/
+  creds:
+    image:
+      name: {{ .Values.global.datastores.minio.images.certgen.name | quote }}
+      pullPolicy: '{{ tpl ( .Values.global.image.pullPolicy | toString ) .  }}'
+      tag: {{ .Values.global.datastores.minio.images.certgen.tag }}
+  defaultBucket:
+    enabled: true
+    name: bucket
+    policy: none
+    purge: false
+  enableCp4dMeteringLabels: false
+  environment:
+    minioBrowser: "on"
+  existingSecret: "{{ .Values.global.datastores.minio.authSecretName }}"
+  global:
+    deploymentType: "{{ .Values.global.datastores.minio.deploymentType }}"
+    dockerRegistryPrefix: "{{ .Values.global.dockerRegistryPrefix }}"
+    image:
+      pullPolicy: IfNotPresent
+      pullSecret: "{{ .Values.global.image.pullSecret }}"
+    license: true
+    metering:
+      addOnName: ""
+      cloudpakId: eb9998dcc5d24e3eb5b6fb488f750fe2
+      cloudpakName: IBM Cloud Pak for Data
+      cloudpakVersion: 3.0.0
+      productChargedContainers: All
+      productID: ibm_minio_1_0_0_Apache_2___55555
+      productMetric: VIRTUAL_PROCESSOR_CORE
+      productName: ibm-minio
+      productVersion: 1.0.0
+    sch:
+      enabled: true
+    storageClassName: {{ .Values.global.datastores.minio.storageClassName | quote }}
+    zenServiceInstanceId: {{ .Values.global.zenServiceInstanceId }}
+  keep: false
+  livenessProbe:
+    failureThreshold: 3
+    initialDelaySeconds: 20
+    periodSeconds: 30
+    successThreshold: 1
+    timeoutSeconds: 1
+  minio:
+    image:
+      name: {{ .Values.global.datastores.minio.images.minio.name | quote }}
+      pullPolicy: '{{ tpl ( .Values.global.image.pullPolicy | toString ) .  }}'
+      tag: {{ .Values.global.datastores.minio.images.minio.tag }}
+  minioClient:
+    image:
+      name: {{ .Values.global.datastores.minio.images.minioClient.name | quote }}
+      pullPolicy: '{{ tpl ( .Values.global.image.pullPolicy | toString ) .  }}'
+      tag: {{ .Values.global.datastores.minio.images.minioClient.tag }}
+  mountPath: /workdir/data
+  networkPolicy:
+    allowExternal: true
+    enabled: false
+  nodeSelector: {}
+  persistence:
+    accessMode: ReadWriteOnce
+    enabled: {{ .Values.global.datastores.minio.persistence.enabled }}
+    selector:
+      label: ""
+      value: ""
+    size: {{ .Values.global.datastores.minio.persistence.size }}
+    subPath: ""
+    useDynamicProvisioning: true
+  podAnnotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 4 }}
+  podDisruptionBudget:
+    create: true
+    maxUnavailable: 1
+    minAvailable: ""
+  postBucketCreationHookWeight: "0"
+  priorityClassName: ""
+  rbac:
+    create: true
+  readinessProbe:
+    failureThreshold: 3
+    initialDelaySeconds: 15
+    periodSeconds: 15
+    successThreshold: 1
+    timeoutSeconds: 1
+  replicas: {{ .Values.global.datastores.minio.replicas }}
+  replicasForDev: {{ .Values.global.datastores.minio.replicasForDev }}
+  replicasForProd: {{ .Values.global.datastores.minio.replicasForProd }}
+  resources:
+    limits:
+      memory: {{ .Values.global.datastores.minio.memoryLimit | quote }}
+    requests:
+      cpu: {{ .Values.global.datastores.minio.cpuRequest | quote }}
+      memory: {{ .Values.global.datastores.minio.memoryRequest | quote }}
+  securityContext:
+    creds:
+      runAsUser: 523
+    minio:
+      runAsUser: 999
+  service:
+    port: {{ .Values.global.datastores.minio.servicePort }}
+  serviceAccount:
+    create: false
+    name: {{ .Values.global.datastores.minio.serviceAccountName | quote }}
+  sse:
+    enabled: false
+    masterKeyName: sseMasterKey
+    masterKeySecret: ""
+  tls:
+    certSecret: {{ tpl .Values.global.datastores.minio.tlsSecretName . | quote }}
+    enabled: {{ .Values.global.datastores.minio.tlsEnabled }}
+  tolerations: []
+  updateStrategy: RollingUpdate
