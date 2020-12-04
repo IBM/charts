@@ -8,7 +8,7 @@
     {{ include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) }}
   {{- end -}}
 {{- end -}}
-  
+
 {{- /* ################################### IMAGES ################################### */ -}}
 
 {{- define "ibm-watson-lt.repo" -}}
@@ -50,13 +50,13 @@ imagePullPolicy: {{ .Values.global.image.pullPolicy }}
 {{- /* ################################### TRANSLATION MODELS ################################### */ -}}
 {{- define "ibm-watson-lt.sourceLang" -}}
 {{- $id := . -}}
-{{ if eq $id "zh-TW-en" }}zh-TW{{ else }}{{ (split "-" $id )._0 }}{{ end }}
+{{ if or (eq $id "zh-TW-en") (eq $id "fr-CA-en") }}{{ ( $id | replace "-en" "" ) }}{{ else }}{{ (split "-" $id )._0 }}{{ end }}
 {{- end -}}
 
 {{- define "ibm-watson-lt.targetLang" -}}
 {{- $id := . -}}
-{{- if eq $id "en-zh-TW" -}}zh-TW{{- else -}}
-{{- if eq $id "zh-TW-en" -}}en{{ else }}{{ (split "-" $id )._1 }}{{ end }}{{- end -}}
+{{- if or (eq $id "en-zh-TW") (eq $id "en-fr-CA") -}}{{ ( $id | replace "en-" "") }}{{- else -}}
+{{- if or (eq $id "fr-CA-en") (eq $id "zh-TW-en") -}}en{{ else }}{{ (split "-" $id )._1 }}{{ end }}{{- end -}}
 {{- end -}}
 
 {{- define "ibm-watson-lt.modelInsert" -}}
@@ -67,7 +67,7 @@ SET search_path TO {{ .Values.api.dbConfig.schemaname }};
 {{ range $modelID, $modelConfig := .Values.translationModels }}
 {{- $source := (include "ibm-watson-lt.sourceLang" $modelID) -}}
 {{- $target := (include "ibm-watson-lt.targetLang" $modelID) -}}
-{{- $domain := (split "_" $modelConfig.image.name )._3 -}}
+{{- $domain := (split "-" $modelConfig.image.name )._3 -}}
 {{- $mid := (printf "%s-%s" $source $target) -}}
 {{ if $modelConfig.enabled }}
 INSERT INTO MODEL(M_MODEL_ID, M_MQ_NAME, M_NAME, M_TYPE, M_SOURCE_LANGUAGE, M_TARGET_LANGUAGE, M_IS_CUSTOMIZABLE, M_IS_DEFAULT, M_DOMAIN, M_DESCRIPTION, M_STATUS)
@@ -79,19 +79,23 @@ DELETE FROM model WHERE m_model_id = {{ $mid | squote }};
 {{- end -}}
 
 {{- /* ################################### DB SETUP ################################### */ -}}
-
 {{- define "ibm-watson-lt.pgenv_common" -}}
+{{- $compName1 :=  .sch.chart.components.postgres.proxyService -}}
+{{- $compName2 :=  .sch.chart.components.postgres.authSecret -}}
 - name: PGHOST
-  value: {{ .Release.Name }}-ibm-postgresql-proxy-svc
+  value: {{ include "sch.names.fullCompName" (list $ $compName1) | quote }}
 - name: PGUSER
-  value: {{ .Values.postgres.auth.pgSuperuserName }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ if .Values.postgres.authSecretName }}{{.Values.postgres.authSecretName | quote }}{{ else }}{{ include "sch.names.fullCompName" (list $ $compName2) | quote }}{{ end }}
+      key: "PG_USER"
 - name: PGPASSWORD
   valueFrom:
     secretKeyRef:
-      name: {{ default (printf "%s-ibm-postgresql-auth-secret" .Release.Name ) .Values.postgres.auth.authSecretName }}
-      key: "pg_su_password"
+      name: {{ if .Values.postgres.authSecretName }}{{.Values.postgres.authSecretName | quote }}{{ else }}{{ include "sch.names.fullCompName" (list $ $compName2) | quote }}{{ end }}
+      key: "PG_PASSWORD"
 - name: PGPORT
-  value: {{ .Values.postgres.ports.externalPort | quote }}
+  value: {{ .Values.postgres.port | quote }}
 - name: PGSSLMODE
   value: require
 - name: PGSSLROOTCERT
@@ -110,9 +114,9 @@ DELETE FROM model WHERE m_model_id = {{ $mid | squote }};
 {{- define "ibm-watson-lt.pg_cert_volume" -}}
 - name: postgres-cert
   secret:
-    secretName: {{ default (printf "%s-ibm-postgresql-tls-secret" .Release.Name ) .Values.postgres.tls.tlsSecretName }}
+    secretName: {{ include "ibm-watson-lt.tlsSecretName" . | quote }}
     items:
-    - key: tls.crt
+    - key: ca.crt
       path: server.crt.pem
 {{- end -}}
 {{- define "ibm-watson-lt.pg_cert_mount" -}}
@@ -136,15 +140,17 @@ template is provided in .Values.global.tls.nameTpl.
 {{- /* ################################### S3 - MINIO ################################### */ -}}
 
 {{- define "ibm-watson-lt.s3AccessSecretNameTemplate" -}}
-{{- default (printf "%s-ibm-minio-auth" .Release.Name) .Values.s3.existingSecret -}}
+{{- $compName :=  .sch.chart.components.minio.authSecret -}}
+{{- if .Values.s3.existingSecret }}{{.Values.s3.existingSecret | quote }}{{ else }}{{ include "sch.names.fullCompName" (list $ $compName) | quote }}{{ end -}}
 {{- end -}}
 
 {{- define "ibm-watson-lt.s3TlsSecretNameTemplate" -}}
-{{- default (printf "%s-ibm-minio-tls" .Release.Name) .Values.s3.tls.certSecret -}}
+{{- include "ibm-watson-lt.tlsSecretName" . | quote -}}
 {{- end -}}
 
 {{- define "ibm-watson-lt.s3EndpointTemplate" -}}
-{{- printf "%s-ibm-minio-svc.%s.%s" .Release.Name .Release.Namespace .Values.global.clusterDomain -}}
+{{- $compName :=  .sch.chart.components.minio.service -}}
+{{- include "sch.names.fullCompName" (list $ $compName) }}.{{ .Release.Namespace }}.{{ .Values.global.clusterDomain -}}
 {{- end -}}
 
 {{- /* ################################### MISC ################################### */ -}}
@@ -160,6 +166,11 @@ The buffer will have a minimal size of 10 requests, otherwise will have 5 times 
 {{- /* ROOT LOG LEVEL VALIDATION
 Log level validation.
 */ -}}
+
+{{- define "ibm-watson-lt.meteringLabels" -}}
+icpdsupport/serviceInstanceId: {{ .Values.global.zenServiceInstanceId | quote }}
+{{- end -}}
+
 
 {{- /*
 {{- define "ibm-watson-lt.rootLogLevel" -}}
