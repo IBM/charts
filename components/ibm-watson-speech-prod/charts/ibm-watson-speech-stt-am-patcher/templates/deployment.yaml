@@ -4,6 +4,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  namespace: {{ .Release.Namespace }}
   labels:
 {{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
 spec:
@@ -20,8 +21,10 @@ spec:
     metadata:
       labels:
 {{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+{{ include "speech-services.meteringLabels" . | indent 8 }}
       annotations:
 {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        productMetric: "{{ .Values.global.stt.productMetric }}"
         enabledModelsChecksum: {{ include "chuck.getEnabledModels" (list .Values.global.sttModels true) | sha256sum | quote }}
     spec:
       hostNetwork: false
@@ -31,6 +34,9 @@ spec:
         runAsNonRoot: true
         {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
         runAsUser: 1000
+        {{- if semverCompare ">=1.14" .Capabilities.KubeVersion.GitVersion }}
+        runAsGroup: 10000
+        {{- end }}
         {{- end }}
       terminationGracePeriodSeconds: 1800
       initContainers:
@@ -173,4 +179,4 @@ spec:
             name: {{ include "sch.names.fullCompName" (list . $compName) }}
         - name: minio-account
           secret:
-            secretName: {{ .Values.global.datastores.minio.secretName }}
+            secretName: {{ .Values.global.datastores.minio.authSecretName }}

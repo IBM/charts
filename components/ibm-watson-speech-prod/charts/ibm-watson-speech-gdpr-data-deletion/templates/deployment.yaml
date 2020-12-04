@@ -5,6 +5,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  namespace: {{ .Release.Namespace }}
   labels:
 {{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
     appName: gdpr-data-deletion
@@ -22,8 +23,10 @@ spec:
     metadata:
       annotations:
 {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        productMetric: "{{ .Values.global.stt.productMetric }}"
       labels:
 {{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+{{ include "speech-services.meteringLabels" .  | indent 8 }}
         appName: gdpr-data-deletion
     spec:
       hostNetwork: false
@@ -33,6 +36,9 @@ spec:
         runAsNonRoot: true
         {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
         runAsUser: 1001
+        {{- if semverCompare ">=1.14" .Capabilities.KubeVersion.GitVersion }}
+        runAsGroup: 10000
+        {{- end }}
         {{- end }}
       terminationGracePeriodSeconds: 300
       containers:

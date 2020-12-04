@@ -6,41 +6,158 @@ tags:
   ttsRuntime: true
 
 global:
+  clusterDomain: "cluster.local"
   dockerRegistryPrefix: "cp.icr.io/cp/watson-speech"
   image:
     pullSecret: "docker-pull-{{ .Release.Namespace }}-cp-icr-io-spch-registry-registry"
     pullPolicy: "IfNotPresent"
+
+  cloudpakName: "IBM Watson API Kit for IBM Cloud Pak for Data"
+  cloudpakId: "df0b9c8451114e2d86d27ecb96afb37a"
+  productCloudpakRatio: "1:1"
+  productChargedContainers: "All"
+  stt:
+    productName: "IBM Watson Speech to Text"
+    productVersion: "1.2"
+    productId: "df0b9c8451114e2d86d27ecb96afb37a"
+    productMetric: "VIRTUAL_PROCESSOR_CORE"
+  tts:
+    productName: "IBM Watson Text to Speech"
+    productVersion: "1.2"
+    productId: "df0b9c8451114e2d86d27ecb96afb37a"
+    productMetric: "VIRTUAL_PROCESSOR_CORE"
+
+  zenControlPlaneNamespace: "zen"
+  zenServiceInstanceId: "1"
+  addonId: "speech-services"
+
   runtimeSSLCertificate: ""
   sch:
     enabled: true
-  stt:
-    productName: "IBM Watson Speech To Text"
-    productVersion: "1.1"
-    productId: "344c12fda5fd4b94918c3ab349ebc5c8-speech-to-text"
-  tts:
-    productName: "IBM Watson Text To Speech"
-    productVersion: "1.1"
-    productId: "5ed60094aaaf41809bedf65c9b38cdcc-text-to-speech"
+
   ssl:
     image:
       repository: opencontent-common-utils
-      tag: 1.1.5
+      tag: 1.1.11
 
   datastores:
+    compose:
+      postgres:
+        defaultDatabase: postgres
+        schemaName: public
+        minIdleConnections: 0
+        maxIdleConnections: 10
+        maxTotalConnections: 20
+        maxWaitMilliseconds: 30
+
+
     minio:
+      persistence:
+        enabled: true
+        size: 10Gi
+
       enabled: true
       endpoint: ""
-      secretName: minio
+      tlsEnabled: true
+      serviceAccountName: "{{ .Release.Name }}-speech-runtime-privileged"
+
+      #Images
+      images:
+        certgen:
+          name: opencontent-icp-cert-gen-1
+          tag: 1.1.9
+        minio:
+          name: "opencontent-minio"
+          tag: 1.1.5
+        minioClient:
+          name: "opencontent-minio-client"
+          tag: 1.0.5
+
+      #Sizing
+      deploymentType: Production #Options: Development or Production
+      replicasForDev: 4
+      replicasForProd: 4
+      memoryLimit: 2048Mi
+      cpuRequest: 250m
+      memoryRequest: 256Mi
+
+      #Storage
+      storageClassName: "portworx-sc"
+      servicePort: 9000
+
+      #Secrets
+      authSecretName: minio
+      tlsSecretName: "{{ .Release.Name }}-ibm-datastore-tls"
       baseModelsBucket: speech-service-base-models
+
+    rabbitMQ:
+      tlsEnabled: true
+      replicas: 3
+      nodePort: 5671
+      managerPort: 15671
+
+      #Images
+      images:
+        config:
+          name: opencontent-rabbitmq-config-copy
+          tag: 1.1.5
+        rabbitmq:
+          name: opencontent-rabbitmq-3
+          tag: 1.1.8
+
+      #Sizing
+      cpuRequest: 200m
+      cpuLimit: 200m
+      memoryRequest: 256Mi
+      memoryLimit: 256Mi
+
+      #Storage
+      storageClassName: "portworx-sc"
+      pvEnabled: true
+      pvSize: 5Gi
+      useDynamicProvisioning: true
+
+      #Secrets
+      tlsSecretName: "{{ .Release.Name }}-ibm-datastore-tls"
+      authSecretName: "{{ .Release.Name }}-ibm-rabbitmq-auth-secret"
+
     postgressql:
-      auth:
-        authSecretName: "user-provided-postgressql"
+      tlsEnabled: true
+      highAvailabilityEnabled: true
+      serviceAccount: "edb-operator"
+
+      #Images
+      images:
+        stolon:
+          name: "edb-stolon"
+          tag: "v1-ubi8-amd64"
+        postgres:
+          name: "edb-postgresql-12"
+          tag: "ubi8-amd64"
+
+      #Sizing configuration
+      numReplicas: 3
+      databaseMemoryLimit: 5Gi
+      databaseMemoryRequest: 1Gi
+      databaseCPULimit: 1000m
+      databaseCPU: 50m
+      databaseStorageRequest: 5Gi
+
+      #Storage configuration
+      databaseStorageClass: "portworx-sc"
+      databaseArchiveStorageClass: "portworx-sc"
+      databaseWalStorageClass: "portworx-sc"
+      databasePort: 5432
+
+      #Secrets
+      authSecretName: "user-provided-postgressql"
+      tlsSecretName: "{{ .Release.Name }}-ibm-datastore-tls"
+
   images:
     utils:
       image: speech-utils-rhubi8
-      tag: master-34
+      tag: master-37
 
-  dbgGenericModelsImageName: null
   ttsVoiceMarginalCPU: 400
   cloudPakPort: 31843
 
@@ -50,17 +167,25 @@ global:
     genericModels:
       enabled: true
     enUsBroadbandModel:
-      enabled: true
+      enabled: false
       catalogName: en-US_BroadbandModel
       size: 2100
     enUsNarrowbandModel:
-      enabled: true
+      enabled: false
       catalogName: en-US_NarrowbandModel
       size: 2100
     enUsShortFormNarrowbandModel:
-      enabled: true
+      enabled: false
       catalogName: en-US_ShortForm_NarrowbandModel
       size: 2100
+    enAuBroadbandModel:
+      enabled: false
+      catalogName: en-AU_BroadbandModel
+      size: 600
+    enAuNarrowbandModel:
+      enabled: false
+      catalogName: en-AU_NarrowbandModel
+      size: 600
     jaJpBroadbandModel:
       enabled: false
       catalogName: ja-JP_BroadbandModel
@@ -85,6 +210,14 @@ global:
       enabled: false
       catalogName: es-ES_NarrowbandModel
       size: 3300
+    frCaBroadbandModel:
+      enabled: false
+      catalogName: fr-CA_BroadbandModel
+      size: 600
+    frCaNarrowbandModel:
+      enabled: false
+      catalogName: fr-CA_NarrowbandModel
+      size: 600
     frFrBroadbandModel:
       enabled: false
       catalogName: fr-FR_BroadbandModel
@@ -147,6 +280,16 @@ global:
       catalogName: nl-NL_NarrowbandModel
       size: 1200
 
+    #Next gen models
+    esEsNarrowBandModelNextGen:
+      enabled: false
+      catalogName: es-ES_NarrowbandModel_nextgen
+      size: 100
+    itItNarrowBandModelNextGen:
+      enabled: false
+      catalogName: it-IT_NarrowbandModel_nextgen
+      size: 100
+
   modelAliases:
     esEsBroadbandModel:
       - es-AR_BroadbandModel
@@ -166,7 +309,7 @@ global:
       enabled: true
     # TTS LPC NET Voices
     enUSMichaelV3Voice:
-      enabled: true
+      enabled: false
       catalogName: en-US_MichaelV3Voice      # true
       size: 260
     deDEBirgitV3Voice:
@@ -182,11 +325,11 @@ global:
       catalogName: en-GB_KateV3Voice
       size: 30
     enUSAllisonV3Voice:
-      enabled: true
+      enabled: false
       catalogName: en-US_AllisonV3Voice      # true
       size: 260
     enUSLisaV3Voice:
-      enabled: true
+      enabled: false
       catalogName: en-US_LisaV3Voice         # true
       size: 270
     esLASofiaV3Voice:
@@ -217,6 +360,10 @@ global:
       enabled: false
       catalogName: it-IT_FrancescaV3Voice
       size: 30
+    frFRNicolasV3Voice:
+      enabled: false
+      catalogName: fr-FR_NicolasV3Voice
+      size: 30
     jaJPEmiV3Voice:
       enabled: false
       catalogName: ja-JP_EmiV3Voice
@@ -241,35 +388,43 @@ global:
       enabled: false
       catalogName: en-US_OliviaV3Voice
       size: 30
+    enGBCharlotteV3Voice:
+      enabled: false
+      catalogName: en-GB_CharlotteV3Voice
+      size: 30
+    enGBJamesV3Voice:
+      enabled: false
+      catalogName: en-GB_JamesV3Voice
+      size: 30
 
 
 # Node/pod affinity for all pods. If specified overrides the default affinity to run on any amd64 node.
 affinity: {}
 
-external:
-  minio:
-    global:
-      storageClassName: portworx-sc
-    minio:
-      image:
-        name: "opencontent-minio"
-        tag: "1.1.3"
-    minioClient:
-      image:
-        name: "opencontent-minio-client"
-        tag: "1.0.3"
-    serviceAccount:
-      pullSecret: "artifactory-registry"
-    existingSecret: minio
-    persistence:
-      size: 100Gi
-      enabled: true
-      #useDynamicProvisioning: true
-      #storageClass: local-storage-local
-      #storageClass: portworx-sc
-      storageClass: rook-ceph-cephfs-internal
-    mode: distributed
-    replicas: 4
+# external:
+#   minio:
+#     global:
+#       storageClassName: portworx-sc
+#     minio:
+#       image:
+#         name: "opencontent-minio"
+#         tag: "1.1.3"
+#     minioClient:
+#       image:
+#         name: "opencontent-minio-client"
+#         tag: "1.0.3"
+#     serviceAccount:
+#       pullSecret: "artifactory-registry"
+#     existingSecret: minio
+#     persistence:
+#       size: 100Gi
+#       enabled: true
+#       #useDynamicProvisioning: true
+#       #storageClass: local-storage-local
+#       #storageClass: portworx-sc
+#       storageClass: rook-ceph-cephfs-internal
+#     mode: distributed
+#     replicas: 4
 
 sttRuntime:
   anonymizeLogs: false
@@ -307,47 +462,46 @@ ttsRuntime:
         requestsCpu: 4
 
 # all of this stuff needs to go to secrets repo/vault eventually
-datastores:
-  compose:
-    postgres:
-      defaultDatabase: postgres
-      schemaName: public
-      minIdleConnections: 0
-      maxIdleConnections: 10
-      maxTotalConnections: 20
-      maxWaitMilliseconds: 30
+# datastores:
+#   compose:
+#     postgres:
+#       defaultDatabase: postgres
+#       schemaName: public
+#       minIdleConnections: 0
+#       maxIdleConnections: 10
+#       maxTotalConnections: 20
+#       maxWaitMilliseconds: 30
 
-postgressql:
-  global:
-    storageClassName: "portworx-sc"
-  auth:
-    authSecretName: "user-provided-postgressql"
-  persistence:
-    enabled: true
-    #useDynamicProvisioning: true
-    #storageClassName: local-storage-local
-    #storageClassName: portworx-sc
-    storageClassName: rook-ceph-cephfs-internal
+# postgressql:
+#   global:
+#     storageClassName: "portworx-sc"
+#   auth:
+#     authSecretName: ""
+#   persistence:
+#     enabled: true
+#     #useDynamicProvisioning: true
+#     #storageClassName: local-storage-local
+#     #storageClassName: portworx-sc
+#     storageClassName: rook-ceph-cephfs-internal
 
-rabbitmqHA:
-  global:
-    storageClassName: "portworx-sc"
-  replicas: 3
-  persistentVolume:
-    enabled: true
-    #useDynamicProvisioning: true
-    #storageClassName: "local-storage-local"
-    #storageClassName: portworx-sc
-    storageClassName: rook-ceph-cephfs-internal
+# rabbitmqHA:
+#   global:
+#     storageClassName: "portworx-sc"
+#   replicas: 3
+#   persistentVolume:
+#     enabled: true
+#     #useDynamicProvisioning: true
+#     #storageClassName: "local-storage-local"
+#     #storageClassName: portworx-sc
+#     storageClassName: rook-ceph-cephfs-internal
 
 addonSTT:
   schConfigName: 'sch.chart.stt.config.values'
   addonService:
     image:
-      tag: 3.6.3
-    zenNamespace: 'zen'
+      tag: 3.7.6
   addon:
-    version: 1.1.4
+    version: 1.2
     displayName: "Watson Speech to Text"
     shortDescription: "Convert audio and voice into written text."
     longDescription: "The Watson Speech to Text add-on provides an application programming interface (API) that enables you to add speech transcription services to your applications. The add-on uses information about language structure and audio signals to create transcriptions.<br><br>The add-on also:<br><br><ul><li>Identifies acoustically similar alternative words</li><li>Provides transcription confidence levels</li><li>Includes the audio timestamp for each word in the transcription</li><li>Enables you to redact PCI data for additional security</li></ul>"
@@ -364,7 +518,7 @@ addonSTT:
     tls:
       image:
         repository: opencontent-common-utils
-        tag: 1.1.5
+        tag: 1.1.11
 
   backendService:
     name: ''
@@ -424,10 +578,9 @@ addonTTS:
   schConfigName: 'sch.chart.tts.config.values'
   addonService:
     image:
-      tag: 3.6.3
-    zenNamespace: 'zen'
+      tag: 3.7.6
   addon:
-    version: 1.1.4
+    version: 1.2
     displayName: "Watson Text to Speech"
     shortDescription: "Convert written text into natural-sounding speech."
     longDescription: "The Watson Text to Speech add-on provides an application programming interface (API) that converts written text to natural- sounding speech in a variety of languages and voices.<br><br>For example, you can use the add-on to:<br><br><ul><li>Improve customer experience and engagement by interacting with users in multiple languages and tones</li><li>Increase content accessibility for users with different abilities</li><li>Provide audio options to avoid distracted driving</li><li>Automate customer service interactions to increase efficiency</li></ul>"
@@ -444,7 +597,7 @@ addonTTS:
     tls:
       image:
         repository: opencontent-common-utils
-        tag: 1.1.5
+        tag: 1.1.11
 
 
   backendService:

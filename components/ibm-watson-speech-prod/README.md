@@ -1,4 +1,4 @@
-# IBM Watson™ Speech Services 1.1.4
+# IBM Watson™ Speech Services 1.2
 
 ## Introduction
 
@@ -395,7 +395,7 @@ The same version/build of `cpd-linux` is required throughout the process.
    ./cpd-linux preloadImages --repo speech-repo.yaml --assembly watson-speech --version ${assembly-version} --action download --download-path ./{speech-workspace}
    ```
 
-   - `{assembly-version}` is the release version; currently it is 1.1.4.
+   - `{assembly-version}` is the release version; currently it is 1.2
    - `{speech-workspace}` is the directory where the images are to be downloaded.
 
 1. Push the `{speech-workspace}` folder to a location with access to the OpenShift cluster to be installed and the same version of the `cpd-linux` tool used in the preloadImages step above.
@@ -413,7 +413,7 @@ The same version/build of `cpd-linux` is required throughout the process.
    ```
 
    - `{speech-workspace}` is the directory where the images are to be downloaded.
-   - `{assembly-version}` is the release version; currently it is 1.1.4.
+   - `{assembly-version}` is the release version; currently it is 1.2
    - `{namespace-name}` is the namespace into which IBM Cloud Pak for Data was installed, normally `zen`.
 
 1. Run the following command.
@@ -434,7 +434,7 @@ The same version/build of `cpd-linux` is required throughout the process.
    - `{docker-registry}` is the address of the internal OpenShift docker registry, normally:
       - `docker-registry.default.svc:5000` for OpenShift 3.X
       - `image-registry.openshift-image-registry.svc:5000` for OpenShift 4.X
-   - `{assembly_version}` is the release version; currently it is 1.1.4.
+   - `{assembly_version}` is the release version; currently it is 1.2.
 
 ## Verifying the chart
 
