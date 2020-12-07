@@ -1,0 +1,74 @@
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "insights.sch.chart.config.values") }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "sequencer.fullname" . }}-cleanup
+  labels:
+    {{ include "common.caseLabels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": "post-delete"
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      name: {{ template "sequencer.fullname" . }}-cleanup
+      annotations: {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8}}
+      labels:
+        {{ include "common.caseLabels" . | nindent 8 }}
+        resourceName: "{{ template "sequencer.fullname" . }}-cleanup"
+    spec:
+      {{- include "common.podRootSecurityContextParams" . | nindent 6 }}
+      serviceAccountName: {{ template "sequencer.serviceaccountname" . }}
+      affinity:
+        {{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      containers:
+      - name: cleanup
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ else }}{{ .Values.image.repository }}{{ end }}/{{ .Values.image.name }}:{{.Values.image.tag  }}
+        securityContext: {{ include "common.podContainerSecurityContextParams" . | nindent 10 }}
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+{{- range $entry := .Values.sequence }}
+          echo "=>>>Deleting {{ $.Release.Name }}-{{ $entry.name }}..." && kubectl delete configmap {{ $.Release.Name }}-{{ $entry.name }} || true
+{{- end }}
+          echo "=>>>Deleting {{ template "sequencer.fullname" . }}-insights..." && kubectl delete route {{ template "sequencer.fullname" . }}-insights || true
+          echo "=>>>Deleting {{ template "sequencer.fullname" . }}-apigateway-api..." && kubectl delete route {{ template "sequencer.fullname" . }}-apigateway-api || true
+          echo "=>>>Deleting {{ template "sequencer.fullname" . }}-apigateway-docs..." && kubectl delete route {{ template "sequencer.fullname" . }}-apigateway-docs || true
+          echo "=>>>Deleting {{ template "sequencer.fullname" . }}-ssh-service..." && kubectl delete route {{ template "sequencer.fullname" . }}-ssh-service || true
+          echo "=>>>Deleting kafka-keystores..." && kubectl delete secret kafka-keystores || true
+          echo "=>>>Deleting insights-eventstreams..." && kubectl delete secret insights-eventstreams || true
+          echo "=>>>Deleting insights-db2-rootca..." && kubectl delete secret insights-db2-rootca || true
+          echo "=>>>Deleting {{ $.Release.Name }}-setup-kafka-ready..." && kubectl delete cm {{ $.Release.Name }}-setup-kafka-ready || true
+          echo "=>>>Deleting {{ $.Release.Name }}-setup-apigateway-route-dev..." && kubectl delete cm {{ $.Release.Name }}-setup-apigateway-route-dev || true
+          echo "=>>>Deleting {{ $.Release.Name }}-setup-apigateway-route..." && kubectl delete cm {{ $.Release.Name }}-setup-apigateway-route || true
+          echo "=>>>Deleting {{ $.Release.Name }}-setup-insights-route..." && kubectl delete cm {{ $.Release.Name }}-setup-insights-route || true
+          echo "=>>>Deleting {{ $.Release.Name }}-ssh-service-port..." && kubectl delete cm {{ $.Release.Name }}-ssh-service-port || true
+          echo "=>>>Deleting {{ $.Release.Name }}-setup-mongodb-ready..." && kubectl delete cm {{ $.Release.Name }}-setup-mongodb-ready || true
+          echo "=>>>Deleting {{ $.Release.Name }}-setup-db2-ready..." && kubectl delete cm {{ $.Release.Name }}-setup-db2-ready || true
+          echo "=>>>Deleting {{ $.Release.Name }}-setup-tenant-postdeploy-ready..." && kubectl delete cm {{ $.Release.Name }}-setup-tenant-postdeploy-ready || true
+          echo "=>>>Deleting {{ $.Release.Name }}-connector-issuer..." && kubectl delete Issuer {{ $.Release.Name }}-connector-issuer || true
+          echo "=>>>Deleting {{ $.Release.Name }}-connector-issuer-ca..." && kubectl delete secret {{ $.Release.Name }}-connector-issuer-ca || true
+          echo "=>>>Deleting {{ $.Release.Name }}-connector-csr..." && kubectl delete Certificate {{ $.Release.Name }}-connector-csr || true
+        resources:
+          limits:
+            cpu: 100m
+            memory: 500Mi
+          requests:
+            cpu: 6m
+            memory: 6Mi
+      restartPolicy: Never

@@ -1,0 +1,205 @@
+{{- if .Values.global.insights.licenseAccept }}
+{{- $root := . }}
+{{- $fullName :=  include "tenant-fetcher.fullname" . }}
+{{- $labels := include "tenant-fetcher.labels" . -}}
+{{- include "sch.config.init" (list . "insights.sch.chart.config.values") }}
+{{- range $k, $v1 := .Values.cronjob }}
+---
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{  $fullName }}-{{ $v1.name }}
+  labels:
+{{ $labels | indent 4 }}
+    appName: {{ $fullName }}-{{ $v1.name }}
+spec: 
+  schedule: {{ $v1.schedule | quote}}
+  startingDeadlineSeconds: 200
+  concurrencyPolicy: Replace
+  suspend: true
+  jobTemplate:
+    metadata:
+      name: {{  $fullName }}-{{ $v1.name }}
+      labels:
+{{ $labels | indent 8 }}
+    spec: 
+      template:
+        metadata:
+          name: {{  $fullName }}-{{ $v1.name }}
+          annotations: {{- include "sch.metadata.annotations.metering" (list . $.sch.chart.metering "" "" nil) | indent 12}}
+          labels:
+{{ $labels | indent 12 }}
+            appName: {{ $fullName }}-{{ $v1.name }}
+        spec:
+          {{- toYaml $root.Values.podRootSecurityContextParams | nindent 10 }}
+          serviceAccount: {{ $.Values.global.serviceAccount }} 
+          securityContext:
+{{ include "tenant-fetcher.fsGroupGid" (list $root ) | indent 12 }}
+          affinity:
+            {{- include "sch.affinity.nodeAffinity" (list $root) | indent 12 }}
+          containers:
+          - name: {{  $fullName }}-{{ $v1.name }}
+            resources:
+              {{- toYaml $root.Values.resources | nindent 14 }}
+            {{ include "tenant-fetcher.insightsImagePath" $root }}
+            securityContext:
+              {{- toYaml $root.Values.podContainerSecurityContextParams | nindent 14 }}
+            envFrom:
+            - configMapRef:
+                name: {{  $fullName }}-env
+            - configMapRef:
+                name: {{ $fullName }}-svc-env
+            {{/* INJECT_ENVFROM_ */}}
+            - configMapRef:
+                name: '{{ $.Release.Name }}-setup-kafka-ready'
+            
+            env:
+            {{- range $k, $v := $v1.envVars }}
+            - name: {{ $k | quote }}
+              value: {{ $v | quote }}
+            {{- end }}
+            {{/* INJECT_ENV_ */}}
+            - name: KAFKA_SASL_ENABLED
+              value: 'false'
+            
+            - name: KAFKA_TLS_ENABLED
+              value: 'false'
+            
+            - name: KAFKA_CA_CERT_PEM_PATH
+              value: /etc/gies/es-cert-gi.pem
+            
+            - name: KAFKA_CA_CERT_JKS_PATH
+              value: /etc/gies/es-cert-gi.jks
+            
+            - name: KAFKA_BROKERS
+              valueFrom:
+                configMapKeyRef:
+                  key: _KAFKA_BROKERS
+                  name: '{{ $.Release.Name }}-insights-shared-cm'
+            
+            - name: _KAFKA_CA_CERT_JKS_PASSWORD
+              valueFrom:
+                configMapKeyRef:
+                  key: _KAFKA_CA_CERT_JKS_PASSWORD
+                  name: '{{ $.Release.Name }}-insights-shared-cm'
+            
+            {{- range $k, $v := $root.Values.insights_secrets }}
+            - name: {{ $k | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $v.secretGrouping | quote }}
+                  key: {{ $v.secretGroupingKey | quote }}
+            {{- end }}
+            volumeMounts:
+            {{- if hasKey $root.Values "volumesMount"}}
+            {{- range $k := $root.Values.volumesMount}}
+            - name: {{ $k.name }}
+              mountPath: {{ $k.mountPath }}
+              {{- if hasKey $k "subPath"}}
+              subPath: {{ $k.subPath }}
+              {{- end }}
+            {{- end }}
+            {{- end }}
+            {{- if hasKey $root.Values "volumes_filesForMount"}}
+            {{- range $k, $v := $root.Values.volumes_filesForMount}}
+            - name: {{ $k }}
+              mountPath: {{ $v.mountPath }}
+              subPath: {{ $v.subPath }}
+            {{- end }}
+            {{- end }}
+            {{- if hasKey $root.Values "volumes_rootCAForMount"}}
+            {{- range $k, $v := $root.Values.volumes_rootCAForMount }}
+            - name: {{ $k }}-gen
+              mountPath: {{ $v.mountPathPrefix }}/{{ $k }}.crt
+              subPath: ca.crt
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            {{- if hasKey $root.Values "volumes_certsForMount"}}
+            {{- range $k, $v := $root.Values.volumes_certsForMount}}
+            - name: {{ $k }}-ca-gen
+              mountPath: {{ $v.mountPathPrefix }}/app.crt
+              subPath: tls.crt
+              readOnly: true
+            - name: {{ $k }}-ca-gen
+              mountPath: {{ $v.mountPathPrefix }}/app.key
+              subPath: tls.key
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            {{- if hasKey $root.Values "volumes_sshForMount"}}  
+            {{- range $k, $v := $root.Values.volumes_sshForMount}}
+            - name: {{ $k }}-ssh-gen
+              mountPath: {{ $v.mountPathPrefix }}/{{ $v.name }}.pub
+              subPath: {{ $v.name }}.pub
+              readOnly: true
+            - name: {{ $k }}-ssh-gen
+              mountPath: {{ $v.mountPathPrefix }}/{{ $v.name }}
+              subPath: {{ $v.name }}
+              readOnly: true
+            {{- end }}
+            {{- end }}
+          volumes:
+          {{- if hasKey $root.Values "volumes"}}
+          {{- range $k := $root.Values.volumes }}
+          - name:  {{ $k.name }}
+            {{- if eq $k.type "persistentVolumeClaim"}}
+            persistentVolumeClaim:
+              claimName: {{ include "tenant-fetcher.tplValue" ( dict "value" $k.sourceName "context" $) }}
+            {{- else if eq $k.type "configMap" }}
+            configMap:
+              name: {{ include "tenant-fetcher.tplValue" ( dict "value" $k.sourceName "context" $) }}
+              items:
+              {{- range $kitems := $k.items }}
+              - key: $kitems.path
+                path: $kitems.path
+              {{- end}}
+            {{- else if eq $k.type "secret" }}
+            secret:
+              secretName: {{ include "tenant-fetcher.tplValue" ( dict "value" $k.sourceName "context" $) }}
+              items:
+              {{- range $kitems := $k.items }}
+              - key: $kitems.path
+                path: $kitems.path
+              {{- end}}
+            {{- end}}
+          {{- end }}
+          {{- end }}
+          {{- if hasKey $root.Values "volumes_filesForMount"}}
+          {{- range $k, $v := $root.Values.volumes_filesForMount}}
+          - name: {{ $k }}
+            configMap:
+              name: {{ $fullName }}-filemount-{{ $k }}
+              items:
+              - key: {{ $v.subPath }}
+                path: {{ $v.subPath }}
+          {{- end }}
+          {{- end }}
+          {{- if hasKey $root.Values "volumes_rootCAForMount"}}
+          {{- range $k, $v := $root.Values.volumes_rootCAForMount}}
+          - name: {{ $k }}-gen
+            secret:
+              secretName: {{ $k }}-gen
+          {{- end }}
+          {{- end }}
+          {{- if hasKey $root.Values "volumes_certsForMount"}}
+          {{- range $k, $v := $root.Values.volumes_certsForMount}}
+          - name: {{ $k }}-ca-gen
+            secret:
+              secretName: {{ $k }}-ca-gen
+          {{- end }}
+          {{- end }}
+          {{- if hasKey $root.Values "volumes_sshForMount"}}
+          {{- range $k, $v := $root.Values.volumes_sshForMount}}
+          - name: {{ $k }}-ssh-gen
+            secret:
+              secretName: {{ $k }}-ssh-gen
+          {{- end }}
+          {{- end }}
+          {{- if $root.Values.global.image.insightsPullSecret }}
+          imagePullSecrets:
+            - name: {{ $root.Values.global.image.insightsPullSecret }}
+          {{- end}}
+          restartPolicy: Never
+{{- end }}
+{{- end }}
