@@ -1,0 +1,321 @@
+{{- if or (.Values.hadr.enabled) (regexMatch "^s?mpp?" .Values.subType) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "fullname" . }}-etcd
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    component: "etcd"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+    icpdsupport/app: {{ template "fullname" . }}
+spec:
+  ports:
+  - port: 2380
+    name: etcd-server
+  - port: 2379
+    name: etcd-client
+    protocol: TCP
+  clusterIP: None
+  selector:
+    app: {{ template "fullname" . }}
+    component: "etcd"
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ template "fullname" . }}-etcd
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    component: "etcd"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+    icpdsupport/app: {{ template "fullname" . }} 
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "fullname" . }}
+      release: {{ .Release.Name }}
+      heritage: {{ .Release.Service }}
+      component: "etcd"
+  serviceName: {{ template "fullname" . }}-etcd
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}"
+        component: "etcd"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+        icpdsupport/app: {{ template "fullname" . }}
+      annotations:
+        {{- include "db2wh.annotations" . | indent 8 }}
+    spec:
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "podAffinityDedicated" . | indent 8 }}
+      {{- include "podAntiAffinityEtcd" . | indent 8 }}
+      {{- include "tolerations" . | indent 6 }}
+      {{- include "nonroot.securityContext" . | indent 6}}
+      serviceAccount: {{ default "default" .Values.global.serviceAccount }}
+      terminationGracePeriodSeconds: 0
+      volumes:
+      {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+      - name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+        {{- if eq .Values.storage.storageLocation.metaStorage.volumeType "hostPath" }}
+        hostPath:
+          path: {{ .Values.storage.storageLocation.metaStorage.hostPath.path }}
+          type: {{ .Values.storage.storageLocation.metaStorage.hostPath.type }}
+        {{- else }}
+        persistentVolumeClaim:
+          {{- if .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
+          claimName: {{ .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-meta-storage
+          {{- end }}
+        {{- end }}
+      {{- else }}
+      - name: {{ template "fullname" . }}-db2u-sqllib-shared
+        persistentVolumeClaim:
+          {{- if .Values.storage.existingClaimName }}
+          claimName: {{ .Values.storage.existingClaimName }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+      {{- end }}
+      initContainers:
+      - name: init-etcd-dir
+        {{- if .Values.images.tools.image.tag }}
+        image: "{{ .Values.global.image.repository }}/{{ .Values.images.tools.image.image }}:{{ .Values.images.tools.image.tag }}{{ template "platform" . }}"
+        {{- else }}
+        image: "{{ .Values.global.image.repository }}/{{ .Values.images.tools.image.image }}:{{ .Values.images.universalTag }}{{ template "platform" . }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "nonroot.containers.securityContext" . | indent 8 }}
+        {{- if (eq "x86_64" .Values.arch) }}
+        {{- include "jobs.resources" . | indent 8 }}
+        {{- else }}
+        {{- include "jobs.resources.ppc64le.low" . | indent 8 }}
+        {{- end }}
+        command:
+          - "/bin/sh"
+          - "-ec"
+          - |
+            set -x
+            /tools/post-install/db2u_ready.sh \
+                --replicas {{ .Values.images.db2u.replicas }} \
+                --template {{ template "fullname" . }} \
+                --namespace {{ .Release.Namespace }} \
+                --dbType {{ .Values.global.dbType }}
+            DETERMINATION_FILE=/persistence/nodeslist
+            CAT_NODE=$(head -1 $DETERMINATION_FILE)
+            kubectl exec -it -n {{ .Release.Namespace }} ${CAT_NODE?} -- bash -c \
+                "sudo mkdir -p /mnt/blumeta0/etcd \
+                && sudo chmod -c -R 777 /mnt/blumeta0/etcd"
+            exit $?
+        volumeMounts:
+        - mountPath: /persistence
+          {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+      containers:
+      - name: {{ template "fullname" . }}-etcd
+        image: '{{ .Values.global.image.repository }}/{{ .Values.images.etcd.image.image }}:{{ .Values.images.etcd.image.tag }}{{ template "platform" . }}'
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "nonroot.containers.etcd.securityContext" . | indent 8 }}
+        livenessProbe:
+          tcpSocket:
+            port: 2379
+          timeoutSeconds: 10
+          initialDelaySeconds: 20
+          periodSeconds: 30
+          successThreshold: 1
+          failureThreshold: 5
+        ports:
+        - containerPort: 2380
+          name: peer
+        - containerPort: 2379
+          name: client
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        env:
+        - name: INITIAL_CLUSTER_SIZE
+          value: "3"
+        - name: SET_NAME
+          value: {{ template "fullname" . }}-etcd
+        volumeMounts:
+        - mountPath: /persistence
+          {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+        lifecycle:
+          preStop:
+            exec:
+              command:
+                - "/bin/sh"
+                - "-ec"
+                - |
+                  EPS=""
+                  for i in $(seq 0 $((${INITIAL_CLUSTER_SIZE} - 1))); do
+                      EPS="${EPS}${EPS:+,}http://${SET_NAME}-${i}.${SET_NAME}:2379"
+                  done
+                  HOSTNAME=$(hostname)
+                  member_hash() {
+                      etcdctl member list | grep http://${HOSTNAME}.${SET_NAME}:2380 | cut -d':' -f1 | cut -d'[' -f1
+                  }
+                  SET_ID=${HOSTNAME##*[^0-9]}
+                  if [ "${SET_ID}" -ge ${INITIAL_CLUSTER_SIZE} ]; then
+                      echo "Removing ${HOSTNAME} from etcd cluster"
+                      ETCDCTL_ENDPOINT=${EPS} etcdctl member remove $(member_hash)
+                      if [ $? -eq 0 ]; then
+                          # Remove everything otherwise the cluster will no longer scale-up
+                          rm -rf /var/run/etcd/*
+                      fi
+                  fi
+        command:
+          - "/bin/sh"
+          - "-ec"
+          - |
+            set -x
+            HOSTNAME=$(hostname)
+            if [ ! -d "/persistence/etcd/${HOSTNAME}" ]; then
+                mkdir -p /persistence/etcd/${HOSTNAME}
+            fi
+            ln -sf /persistence/etcd/${HOSTNAME} /var/run/etcd
+            # store member id into PVC for later member replacement
+            collect_member() {
+                while ! etcdctl member list &>/dev/null; do sleep 1; done
+                etcdctl member list | grep http://${HOSTNAME}.${SET_NAME}:2380 | cut -d':' -f1 | cut -d'[' -f1 > /var/run/etcd/member_id
+                exit 0
+            }
+            eps() {
+                EPS=""
+                for i in $(seq 0 $((${INITIAL_CLUSTER_SIZE} - 1))); do
+                    EPS="${EPS}${EPS:+,}http://${SET_NAME}-${i}.${SET_NAME}:2379"
+                done
+                echo ${EPS}
+            }
+            member_hash() {
+                etcdctl member list | grep http://${HOSTNAME}.${SET_NAME}:2380 | cut -d':' -f1 | cut -d'[' -f1
+            }
+            # re-joining after failure?
+            if [ -e /var/run/etcd/default.etcd ]; then
+                echo "Re-joining etcd member"
+                if [ ! -f /var/run/etcd/member_id ]; then
+                    # prestop cleanup
+                    EPS=""
+                    for i in $(seq 0 $((${INITIAL_CLUSTER_SIZE} - 1))); do
+                        EPS="${EPS}${EPS:+,}http://${SET_NAME}-${i}.${SET_NAME}:2379"
+                    done
+                    HOSTNAME=$(hostname)
+                    member_hash() {
+                        etcdctl member list | grep http://${HOSTNAME}.${SET_NAME}:2380 | cut -d':' -f1 | cut -d'[' -f1
+                    }
+
+                    #Add in member
+                    export ETCDCTL_ENDPOINT=$(eps)
+                    # member already added?
+                    MEMBER_HASH=$(member_hash)
+                    if [ -n "${MEMBER_HASH}" ]; then
+                        # the member hash exists but for some reason etcd failed
+                        # as the datadir has not be created, we can remove the member
+                        # and retrieve new hash
+                        etcdctl member remove ${MEMBER_HASH}
+                        if [ $? -eq 0 ]; then
+                          # Remove everything otherwise the cluster will no longer scale-up
+                          rm -rf /var/run/etcd/*
+                        fi
+                    fi
+                    echo "Adding new member"
+                    etcdctl member add ${HOSTNAME} http://${HOSTNAME}.${SET_NAME}:2380 | grep "^ETCD_" > /var/run/etcd/new_member_envs
+                    if [ $? -ne 0 ]; then
+                        echo "Exiting"
+                        rm -f /var/run/etcd/new_member_envs
+                        exit 1
+                    fi
+                    cat /var/run/etcd/new_member_envs
+                    source /var/run/etcd/new_member_envs
+                    collect_member &
+                    exec etcd --name ${HOSTNAME} \
+                        --listen-peer-urls http://0.0.0.0:2380 \
+                        --listen-client-urls http://0.0.0.0:2379 \
+                        --advertise-client-urls http://${HOSTNAME}.${SET_NAME}:2379 \
+                        --data-dir /var/run/etcd/default.etcd \
+                        --initial-advertise-peer-urls http://${HOSTNAME}.${SET_NAME}:2380 \
+                        --initial-cluster ${ETCD_INITIAL_CLUSTER} \
+                        --initial-cluster-state ${ETCD_INITIAL_CLUSTER_STATE}
+                else
+                #same logic as before for when using a pvc.. rejoin member
+                member_id=$(cat /var/run/etcd/member_id)
+                # re-join member
+                ETCDCTL_ENDPOINT=$(eps) etcdctl member update ${member_id} http://${HOSTNAME}.${SET_NAME}:2380 | true
+                exec etcd --name ${HOSTNAME} \
+                    --listen-peer-urls http://0.0.0.0:2380 \
+                    --listen-client-urls http://0.0.0.0:2379\
+                    --advertise-client-urls http://${HOSTNAME}.${SET_NAME}:2379 \
+                    --data-dir /var/run/etcd/default.etcd
+                fi
+            fi
+            # etcd-SET_ID
+            SET_ID=${HOSTNAME##*[^0-9]}
+            # adding a new member to existing cluster (assuming all initial pods are available)
+            if [ "${SET_ID}" -ge ${INITIAL_CLUSTER_SIZE} ]; then
+                export ETCDCTL_ENDPOINT=$(eps)
+                # member already added?
+                MEMBER_HASH=$(member_hash)
+                if [ -n "${MEMBER_HASH}" ]; then
+                    # the member hash exists but for some reason etcd failed
+                    # as the datadir has not be created, we can remove the member
+                    # and retrieve new hash
+                    etcdctl member remove ${MEMBER_HASH}
+                fi
+                echo "Adding new member"
+                etcdctl member add ${HOSTNAME} http://${HOSTNAME}.${SET_NAME}:2380 | grep "^ETCD_" > /var/run/etcd/new_member_envs
+                if [ $? -ne 0 ]; then
+                    echo "Exiting"
+                    rm -f /var/run/etcd/new_member_envs
+                    exit 1
+                fi
+                cat /var/run/etcd/new_member_envs
+                source /var/run/etcd/new_member_envs
+                collect_member &
+                exec etcd --name ${HOSTNAME} \
+                    --listen-peer-urls http://0.0.0.0:2380 \
+                    --listen-client-urls http://0.0.0.0:2379 \
+                    --advertise-client-urls http://${HOSTNAME}.${SET_NAME}:2379 \
+                    --data-dir /var/run/etcd/default.etcd \
+                    --initial-advertise-peer-urls http://${HOSTNAME}.${SET_NAME}:2380 \
+                    --initial-cluster ${ETCD_INITIAL_CLUSTER} \
+                    --initial-cluster-state ${ETCD_INITIAL_CLUSTER_STATE}
+            fi
+            PEERS=""
+            for i in $(seq 0 $((${INITIAL_CLUSTER_SIZE} - 1))); do
+                PEERS="${PEERS}${PEERS:+,}${SET_NAME}-${i}=http://${SET_NAME}-${i}.${SET_NAME}:2380"
+            done
+            collect_member &
+            # join member
+            exec etcd --name ${HOSTNAME} \
+                --initial-advertise-peer-urls http://${HOSTNAME}.${SET_NAME}:2380 \
+                --listen-peer-urls http://0.0.0.0:2380 \
+                --listen-client-urls http://0.0.0.0:2379 \
+                --advertise-client-urls http://${HOSTNAME}.${SET_NAME}:2379 \
+                --initial-cluster-token etcd-cluster-1 \
+                --initial-cluster ${PEERS} \
+                --initial-cluster-state new \
+                --data-dir /var/run/etcd/default.etcd
+{{- end }}

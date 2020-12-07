@@ -1,0 +1,35 @@
+{{ if .Values.storage.storageLocation.tieredStorage.enabled -}}
+  {{- range $tier := .Values.storage.storageLocation.tieredStorage.tiers -}}
+    {{ $tierSettings := (index $.Values.storage.storageLocation.tieredStorage $tier) }}
+    {{ if not $tierSettings.enablePodLevelClaim }}
+    {{- if and (eq $tierSettings.volumeType "pvc") (not $tierSettings.pvc.existingClaim.name) }}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ template "fullname" $ }}-db2u-tiered-{{ $tier }}-storage
+  labels:
+    app: {{ template "fullname" $ }}
+    chart: "{{ $.Chart.Name }}-{{ $.Chart.Version }}"
+    release: "{{ $.Release.Name }}"
+    heritage: "{{ $.Release.Service }}"
+spec:
+      {{- if $tierSettings.pvc.claim.useDynamicProvisioning }}
+  storageClassName: {{ default nil $tierSettings.pvc.claim.storageClassName | quote }}
+      {{- else }}
+  storageClassName: {{ $tierSettings.pvc.claim.storageClassName | quote }}
+      {{- end }}
+  accessModes:
+    - "ReadWriteMany"
+  resources:
+    requests:
+      storage: {{ $tierSettings.pvc.claim.size | quote }}
+      {{- if and (not (empty $tierSettings.pvc.claim.volumeLabel)) (not (empty $tierSettings.pvc.claim.volumeLabelValue)) }}
+  selector:
+    matchLabels:
+        {{ $tierSettings.pvc.claim.volumeLabel }}: {{ $tierSettings.pvc.claim.volumeLabelValue }}
+      {{- end }}
+    {{- end }}
+    {{- end }}
+---
+  {{- end }}
+{{- end }}

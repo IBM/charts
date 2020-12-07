@@ -1,0 +1,84 @@
+{{ if .Values.dtw.enabled }}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "{{ template "fullname" . }}-db2u-dtw-prep-job"
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  template:
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "tolerations" . | indent 6 }}
+      {{- include "nonroot.securityContext" . | indent 6 }}
+      initContainers:
+      - name: wait-restore-morph-job
+        image: "{{ .Values.global.image.repository }}/{{ .Values.images.dtw.image.image }}:{{ .Values.images.dtw.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "nonroot.containers.securityContext" . | indent 8 }}
+        {{- include "jobs.resources" . | indent 8 }}
+        command:
+          - "/bin/sh"
+          - "-ecx"
+          - |
+            success=0
+            until [[ $status -eq 1 ]]; do
+                status=$(kubectl get job -n {{ .Release.Namespace }} {{ template "fullname" . }}-db2u-restore-morph-job -o jsonpath='{.status.succeeded}')
+            done
+      containers:
+      - name: prep-db
+        image: "{{ .Values.global.image.repository }}/{{ .Values.images.dtw.image.image }}:{{ .Values.images.dtw.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "nonroot.containers.securityContext" . | indent 8 }}
+        {{- include "jobs.resources.2X" . | indent 8 }}
+        command:
+          - "/bin/sh"
+          - "-ecx"
+          - |
+            DETERMINATION_FILE=/mnt/blumeta0/nodeslist
+            CAT_NODE=$(head -1 $DETERMINATION_FILE)
+            cp -rf /DTW /mnt/blumeta0/
+            mkdir -p /mnt/blumeta0/flats/
+            chown -R 500:1000 /mnt/blumeta0/flats/
+            chown -R 500:1000 /mnt/blumeta0/DTW
+            kubectl exec -it -n {{ .Release.Namespace }} ${CAT_NODE?} -- bash -c "su - db2inst1 -c \"cd /mnt/blumeta0/DTW; perl dtw.pl\""
+        volumeMounts:
+        - mountPath: /mnt/blumeta0
+          {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+      restartPolicy: Never
+      serviceAccount: {{ default "default" .Values.global.serviceAccount }}
+      volumes:
+      {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+      - name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+        {{- if eq .Values.storage.storageLocation.metaStorage.volumeType "hostPath" }}
+        hostPath:
+          path: {{ .Values.storage.storageLocation.metaStorage.hostPath.path }}
+          type: {{ .Values.storage.storageLocation.metaStorage.hostPath.type }}
+        {{- else }}
+        persistentVolumeClaim:
+          {{- if .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
+          claimName: {{ .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-meta-storage
+          {{- end }}
+        {{- end }}
+      {{- else }}
+      - name: {{ template "fullname" . }}-db2u-sqllib-shared
+        persistentVolumeClaim:
+          {{- if .Values.storage.existingClaimName }}
+          claimName: {{ .Values.storage.existingClaimName }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+      {{- end }}
+{{ end }}

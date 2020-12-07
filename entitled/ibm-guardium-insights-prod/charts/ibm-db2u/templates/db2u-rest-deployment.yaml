@@ -1,0 +1,118 @@
+{{- if .Values.rest.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ template "fullname" . }}-db2u-rest-internal"
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    component: "{{ .Values.global.dbType }}"
+    type: "rest"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  ports:
+  - port: 50050
+    name: rest
+    targetPort: 50050
+    protocol: TCP
+  clusterIP: None
+  selector:
+    app: {{ template "fullname" . }}
+    component: "{{ .Values.global.dbType }}"
+    type: "rest"
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-db2u-rest
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: "{{ .Values.global.dbType }}"
+    icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+    icpdsupport/app: {{ template "fullname" . }}
+spec:
+  replicas: {{ .Values.images.rest.replicas }}
+  selector:
+    matchLabels:
+      type: rest
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: "{{ .Values.global.dbType }}"
+        api-database-status: "{{ .Values.servicename }}{{ .Values.global.dbType }}-api"
+        type: rest
+        icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+        icpdsupport/app: {{ template "fullname" . }}
+      annotations:
+        {{- include "db2wh.annotations" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "podAffinityDedicated" . | indent 8 }}
+      {{- include "tolerations" . | indent 6 }}
+      {{- include "nonroot.securityContext" . | indent 6 }}
+      serviceAccount: {{ default "default" .Values.global.serviceAccount }}
+      containers:
+      - name: {{ template "fullname" . }}-db2u-rest
+        image: '{{ .Values.global.image.repository }}/{{ .Values.images.rest.image.image }}:{{ .Values.images.rest.image.tag }}{{ template "platform" . }}'
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "nonroot.containers.rest.securityContext" . | indent 8 }}
+        readinessProbe:
+          timeoutSeconds: 3
+          initialDelaySeconds: 10
+          httpGet:
+            path: "/v1/version"
+            port: 50050
+            scheme: HTTPS
+          periodSeconds: 30
+          successThreshold: 1
+          failureThreshold: 5
+        livenessProbe:
+          tcpSocket:
+            port: 50050
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          successThreshold: 1
+          failureThreshold: 5
+        ports:
+        - containerPort: 50050
+          name: rest
+        {{- if (eq "x86_64" .Values.arch) }}
+        {{- include "jobs.resources" . | indent 8 }}
+        {{- else }}
+        {{- include "jobs.resources.ppc64le.low" . | indent 8 }}
+        {{- end }}
+        env:
+        - name: DB2_SVC_NAME
+          value: {{ template "fullname" . }}-db2u-internal
+        volumeMounts:
+        - mountPath: /mnt/blumeta0
+          {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+      volumes:
+      {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+        {{- include "db2u.container.storage.metaStorage" . | indent 6 }}
+      {{- else }}
+      - name: {{ template "fullname" . }}-db2u-sqllib-shared
+        persistentVolumeClaim:
+          {{- if .Values.storage.existingClaimName }}
+          claimName: {{ .Values.storage.existingClaimName }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+      {{- end }}
+{{- end }}

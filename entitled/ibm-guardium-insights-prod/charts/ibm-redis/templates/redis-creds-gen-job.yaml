@@ -1,0 +1,81 @@
+{{- if include "ibmRedis.licenseValidate" .  | required "License must be accepted by setting license key to true" }}
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "ibmRedis.sch.chart.config.values") -}}
+{{ if .Release.IsInstall }}
+{{- if (not .Values.auth.authSecretName)}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.credsGen) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsGen) | indent 4 }}
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.credsGen) | quote }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsGen) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsPodSecurityContext) | indent 8 }}
+      affinity:
+        {{- if .Values.affinity }}
+{{ .Values.affinity | toYaml | indent 8 }}
+        {{- else }}
+          {{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+        {{- end }}
+      serviceAccountName: {{ include "ibmRedis.serviceAccountName" . | quote }}
+{{- if ne .Values.global.image.pullSecret "" }}
+      imagePullSecrets:
+      - name:  {{ .Values.global.image.pullSecret }}
+{{- end }}
+      containers:
+      - name: creds-gen
+        image: "{{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.creds.image.name }}:{{ .Values.creds.image.tag }}"
+        imagePullPolicy: {{.Values.creds.image.pullPolicy}}
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 10m
+          limits:
+            memory: 128Mi
+            cpu: 50m
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsContainerSecurityContext) | indent 10 }}
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          cat <<EOF | kubectl apply -n {{ .Release.Namespace }} -f -
+{{- if (not .Values.auth.authSecretName) }}
+          ---
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.authsecret) | quote }}
+            labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 14 }}
+          data:
+            password: $(openssl rand -base64 10 | tr -d '\n' | base64 | tr -d '\n')
+{{- end }}
+          EOF
+      restartPolicy: Never
+{{- end }}
+{{ end }}
+{{ end }}

@@ -1,0 +1,108 @@
+affinity: {}
+fullnameOverride: ''
+global:
+  image:
+    imagePullSecret: ''
+    repository: ''
+  serviceAccount: insights-sa
+healthCheckPort: '37755'
+healthCheckTimeout: 30
+image:
+  image: reports-runner
+  pullPolicy: Always
+  repository: image-registry.openshift-image-registry.svc:5000
+  tag: 2020-11-29-13.05.21-5e87245
+  use_repository_namespace: true
+insights_env:
+  DB2_DATABASE_NAME: BLUDB
+  DB2_DATABASE_SECURITY: ''
+  DB2_PORT: '50000'
+  DB2_SSL_SERVER_CERT_PATH: ''
+  KAFKA_CA_CERT_JKS_PATH: ''
+  KAFKA_PRODUCER_TOPIC: notifications
+  KAFKA_SASL_MECHANISM: PLAIN
+  REPORTS_RUNNER_KAFKA_BLOCK_MS_CONFIG: '600000'
+  REPORTS_RUNNER_KAFKA_DELIVERY_TIMEOUT_MS: '600000'
+  REPORTS_RUNNER_KAFKA_RECONNECT_BACKOFF_MAX_MS_CONFIG: '10000'
+  REPORTS_RUNNER_KAFKA_RECONNECT_BACKOFF_MS_CONFIG: '100'
+  REPORTS_RUNNER_KAFKA_RETRY_BACKOFF_MS_CONFIG: '100'
+insights_secrets:
+  DB2_DATABASE_UID:
+    secretGrouping: insights-db2
+    secretGroupingKey: _DB2_DATABASE_UID
+  KAFKA_SASL_PASSWORD:
+    secretGrouping: insights-kafka
+    secretGroupingKey: _KAFKA_SASL_PASSWORD
+  KAFKA_SASL_USER:
+    secretGrouping: insights-kafka
+    secretGroupingKey: _KAFKA_SASL_USER
+  TICKETING_KEYSTORE_PASSWORD:
+    secretGrouping: ibm-ticketing-keystore
+    secretGroupingKey: _TICKETING_KEYSTORE_PASSWORD
+livenessProbe:
+  initialDelaySeconds: 60
+  periodSeconds: 60
+nameOverride: ''
+nodeSelector: {}
+podContainerSecurityContextParams:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  privileged: false
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1001
+podRootSecurityContextParams:
+  hostIPC: false
+  hostNetwork: false
+  hostPID: false
+readinessProbe:
+  initialDelaySeconds: 60
+  periodSeconds: 60
+readinessTimeout: 30
+replicaCount: 3
+resources:
+  limits:
+    cpu: 100m
+    memory: 500Mi
+  requests:
+    cpu: 6m
+    memory: 6Mi
+servicePorts_ClusterIP:
+- enabled: 'true'
+  name: default
+  port: '37755'
+  targetPort: '37755'
+  type: ClusterIP
+tolerations: []
+volumes:
+- items: []
+  name: insights-db2-rootca-0
+  sourceName: insights-db2-rootca
+  type: secret
+- name: db2-scratch-mount
+  sourceName: '{{ $.Release.Name }}-ibm-db2u-db2u-meta-storage'
+  type: persistentVolumeClaim
+volumesMount:
+- mountPath: /etc/pki/tls/certs/insights-db2-rootca.crt
+  name: insights-db2-rootca-0
+  readOnly: 'false'
+  subPath: tls.key
+- mountPath: /service/insights-exports
+  name: db2-scratch-mount
+  readOnly: 'false'
+  subPath: scratch/insights-exports
+volumes_certsForMount:
+  audit:
+    mountPathPrefix: /service/certs/audit
+  configuration:
+    mountPathPrefix: /service/certs/configuration
+  reports:
+    mountPathPrefix: /service/certs/reports
+  reports-runner:
+    mountPathPrefix: /service/certs/reportsrunner
+volumes_filesForMount: {}
+volumes_rootCAForMount:
+  insights-rootca:
+    mountPathPrefix: /etc/pki/tls/certs/

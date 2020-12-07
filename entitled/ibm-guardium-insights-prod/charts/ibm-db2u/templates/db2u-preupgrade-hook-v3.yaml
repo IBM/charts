@@ -1,0 +1,55 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "{{ template "fullname" . }}-db2u-preupgrade-hook-v3"
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+    icpdsupport/app: {{ template "fullname" . }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded
+    {{- include "db2wh.annotations" . | indent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+        icpdsupport/app: {{ template "fullname" . }}
+        resourceName: "{{ template "fullname" . }}-db2u-preupgrade-hook-v3"
+      annotations:
+        {{- include "db2wh.annotations" .  | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "tolerations" . | indent 6 }}
+      {{- include "nonroot.securityContext" . | indent 6 }}
+      containers:
+      - name: stop-slapd
+        {{- if .Values.images.tools.image.tag }}
+        image: "{{ .Values.global.image.repository }}/{{ .Values.images.tools.image.image }}:{{ .Values.images.tools.image.tag }}{{ template "platform" . }}"
+        {{- else }}
+        image: "{{ .Values.global.image.repository }}/{{ .Values.images.tools.image.image }}:{{ .Values.images.universalTag }}{{ template "platform" . }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "nonroot.containers.securityContext" . | indent 8 }}
+        {{- include "jobs.resources" . | indent 8 }}
+        command:
+          - "/bin/sh"
+          - "-ecx"
+          - |
+            ldap_pods=$(kubectl get -n {{ .Release.Namespace }} po -l component=ldap,release={{ .Release.Name }} -o jsonpath='{.items[*].metadata.name}')
+            for pod in ${ldap_pods}; do
+                  kubectl exec -it -n {{ .Release.Namespace }} ${pod} -- bash -c "which supervisorctl && supervisorctl stop slapd || exit 0"
+            done
+      restartPolicy: Never
+      serviceAccount: {{ default "default" .Values.global.serviceAccount }}

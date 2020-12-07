@@ -1,0 +1,54 @@
+{{- if .Values.global.insights.licenseAccept }}
+{{- include "sch.config.init" (list . "insights.sch.chart.config.values") }}
+---
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{ template "sequencer.fullname" . }}-reports-cleanup
+  labels:
+    {{ include "common.caseLabels" . | nindent 4 }}
+spec:
+  schedule: "23 1 * * *"
+  startingDeadlineSeconds: 200
+  concurrencyPolicy: Replace
+  suspend: true
+  jobTemplate:
+    metadata:
+      name: {{ template "sequencer.fullname" . }}-reports-cleanup
+      labels:
+        {{ include "common.caseLabels" . | nindent 8 }}
+    spec: 
+      template:
+        metadata:
+          name: {{ template "sequencer.fullname" . }}-reports-cleanup
+          annotations: {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 12}}
+          labels: {{ include "common.caseLabels" . | nindent 12 }}
+            resourceName: "{{ template "sequencer.fullname" . }}-reports-cleanup"
+        spec: {{ include "common.podRootSecurityContextParams" . | nindent 10 }}
+          serviceAccountName: {{ template "sequencer.serviceaccountname" . }}
+          affinity:
+            {{- include "sch.affinity.nodeAffinity" (list .) | indent 12 }}
+          containers:
+          - name: reports-cleanup
+            image: {{ if $.Values.global.image.repository }}{{ trimSuffix "/" $.Values.global.image.repository }}{{ else }}{{ $.Values.image.repository }}{{ end }}/{{ $.Values.image.name }}:{{$.Values.image.tag  }}
+            imagePullPolicy: Always
+            securityContext: {{ include "common.podContainerSecurityContextParams" . | nindent 14 }}
+            command:
+            - "/bin/bash"
+            - -c
+            - |
+              REPORTS_POD=`kubectl get pods | grep {{ .Release.Name }}-reports | head -n 1 | awk '{print $1}'`
+              kubectl exec $REPORTS_POD -- /bin/bash -c "/service/reports_csv_cleanup.sh"
+            resources:
+              limits:
+                cpu: 100m
+                memory: 500Mi
+              requests:
+                cpu: 6m
+                memory: 6Mi
+          imagePullSecrets:
+          {{- if $.Values.global.image.insightsPullSecret }}
+            - name: {{ $.Values.global.image.insightsPullSecret }}
+          {{- end}}
+          restartPolicy: Never
+{{- end }}

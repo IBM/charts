@@ -1,0 +1,134 @@
+{{ if .Values.dtw.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-db2u-client-workload
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: "{{ .Values.global.dbType }}"
+spec:
+  replicas: {{ .Values.images.dtw.replicas }}
+  selector:
+    matchLabels:
+      type: client-workload
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: "{{ .Values.global.dbType }}"
+        type: client-workload
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "podAffinityDedicated" . | indent 8 }}
+      {{- include "tolerations" . | indent 6 }}
+      {{- include "root.securityContext" . | indent 6 }}
+      serviceAccount: {{ default "default" .Values.global.serviceAccount }}
+      initContainers:
+      - name: wait-dtw-prep-job
+        image: "'{{ .Values.global.image.repository }}/{{ .Values.images.dtw.image.image }}:{{ .Values.images.dtw.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "root.containers.securityContext" . | indent 8 }}
+        {{- include "jobs.resources" . | indent 8 }}
+        command:
+          - "/bin/sh"
+          - "-ecx"
+          - |
+            success=0
+            until [[ $status -eq 1 ]]; do
+                status=$(kubectl get job -n {{ .Release.Namespace }} {{ template "fullname" . }}-db2u-dtw-prep-job -o jsonpath='{.status.succeeded}')
+            done
+      containers:
+      - name: {{ template "fullname" . }}-db2u-client-workload
+        image: "'{{ .Values.global.image.repository }}/{{ .Values.images.dtw.image.image }}:{{ .Values.images.dtw.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        # REVISE
+        {{- include "root.containers.client.securityContext" . | indent 8 }}
+        command:
+          - "/bin/bash"
+          - "-cx"
+          - |
+            /db2u/db2u_client_entrypoint.sh --exit
+            node=$(su - db2inst1 -c "db2 list node directory" | grep 'Node name' | awk '{print $4}')
+            su - db2inst1 -c "db2 uncatalog db BLUDB"
+            su - db2inst1 -c "db2 catalog db DTW at node $node"
+            touch /db2u/.db2u_client_workload_initialized
+            sleep infinity
+#        TODO: Re-think if applying resource constraints is necessary for dev?
+#        resources:
+#          requests:
+#            cpu: "1"
+#            memory: "50Mi"
+#          limits:
+#            cpu: "2"
+#            memory: "100Mi"
+        env:
+        - name: SERVICE_NAME
+          value: {{ template "fullname" . }}
+        - name: DB2U_SERVICE_NAME
+          value: {{ template "fullname" . }}-db2u
+        - name: REMOTE_DB
+          value: "{{ template "fullname" . }}-db2u-engn-svc:50000"
+        volumeMounts:
+        - mountPath: /mnt/blumeta0
+          {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+        - mountPath: /mnt/clientdir
+          {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+        - mountPath: "/secrets/db2instancepwd"
+          name: db2instance-secret
+          readOnly: true
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - ls -1 /db2u/.db2u_client_workload_initialized &> /dev/null
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          failureThreshold: 30
+        {{- include "db2u.containers.securityContext" . | indent 6 }}
+      volumes:
+      {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+      - name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+        {{- if eq .Values.storage.storageLocation.metaStorage.volumeType "hostPath" }}
+        hostPath:
+          path: {{ .Values.storage.storageLocation.metaStorage.hostPath.path }}
+          type: {{ .Values.storage.storageLocation.metaStorage.hostPath.type }}
+        {{- else }}
+        persistentVolumeClaim:
+          {{- if .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
+          claimName: {{ .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-meta-storage
+          {{- end }}
+        {{- end }}
+      {{- else }}
+      - name: {{ template "fullname" . }}-db2u-sqllib-shared
+        persistentVolumeClaim:
+          {{- if .Values.storage.existingClaimName }}
+          claimName: {{ .Values.storage.existingClaimName }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+      {{- end }}
+      - name: db2instance-secret
+        secret:
+          secretName: {{ template "fullname" . }}-db2u-instance
+          defaultMode: 256
+{{ end }}

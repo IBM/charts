@@ -1,0 +1,112 @@
+{{/*
+# **************************************************************
+#
+# IBM Confidential
+#
+# OCO Source Materials
+#
+# 5737-L66
+#
+# (C) Copyright IBM Corp. 2019, 2020
+#
+# The source code for this program is not published or otherwise
+# divested of its trade secrets, irrespective of what has been
+# deposited with the U.S. Copyright Office.
+#
+# **************************************************************
+*/}}
+{{- $helmHeritage := .Release.Service -}}
+{{- $helmRelease := .Release.Name -}}
+{{- $helmApp := include "sequencer.name" . }}
+{{- $helmChart := include "sequencer.chart" . }}
+{{- include "sch.config.init" (list . "insights.sch.chart.config.values") }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "sequencer.fullname" . }}-kafka-ready
+  labels:
+    {{ include "common.caseLabels" . | nindent 4 }}
+  annotations:
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300000
+  template:
+    metadata:
+      name: {{ template "sequencer.fullname" . }}-kafka-ready-container
+      labels:
+        {{ include "common.caseLabels" . | nindent 8 }}
+        resourceName: "{{ template "sequencer.fullname" . }}-kafka-ready-container"
+    spec:
+      {{- include "common.podRootSecurityContextParams" . | nindent 6 }}
+      serviceAccountName: {{ template "sequencer.serviceaccountname" . }}
+      imagePullSecrets:
+      {{- if .Values.global.image.imagePullSecret }}
+        - name: {{ .Values.global.image.imagePullSecret }}
+      {{- end }}
+      affinity:
+        {{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      containers:
+      - name: {{ .Release.Name }}-setup-kafka-ready
+        image: {{ if $.Values.global.image.repository }}{{ trimSuffix "/" $.Values.global.image.repository }}{{ else }}{{ $.Values.image.repository }}{{ end }}/{{ $.Values.image.name }}:{{$.Values.image.tag  }}
+        imagePullPolicy: Always
+        securityContext:
+          {{- include "common.podContainerSecurityContextParams" . | nindent 10 }}
+        env:
+        {{- include "common.envCaseLabels" . | nindent 8 }}
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          {{- $topicinfo := dict "names" (list) "partitions" (list) "replicationfactors" (list) -}}
+          {{- range $topic, $value := $.Values.kafka.sequence }}
+          {{- $no_op := print $topic | append $topicinfo.names | set $topicinfo "names" -}}
+          {{- $no_op := print $value.partitions | append $topicinfo.partitions | set $topicinfo "partitions" -}}
+          {{- $no_op := print $value.replicationfactor | append $topicinfo.replicationfactors | set $topicinfo "replicationfactors" -}}
+          {{- end}}
+
+          export KAFKA_CREATE_TOPIC_NAME=({{- join " " $topicinfo.names }})
+          export KAFKA_TOPIC_PARTITION=({{- join " " $topicinfo.partitions }})
+          export KAFKA_TOPIC_REPLICATION_FACTOR=({{- join " " $topicinfo.replicationfactors }})
+
+          Z='kubectl exec {{ $.Release.Name }}-kafka-0 -- /bin/bash -c "timeout 10 kafka-topics.sh --list --zookeeper bitnami-zookeeper"';
+          for i in {0..10}; do
+          eval $Z
+          X=$?;
+          while [ "X$X" != "X0" ]
+          do sleep 10;
+          eval $Z
+          X=$?;
+          done;
+          sleep 10;
+          done
+
+          for i in ${!KAFKA_CREATE_TOPIC_NAME[@]}; do
+          FOUND=0
+          while [ $FOUND -eq 0 ]; do
+          echo trying ${KAFKA_CREATE_TOPIC_NAME[$i]}
+          kubectl exec {{ $.Release.Name }}-kafka-0 -- /bin/bash -c "kafka-topics.sh --create --zookeeper bitnami-zookeeper --topic ${KAFKA_CREATE_TOPIC_NAME[$i]} --partitions ${KAFKA_TOPIC_PARTITION[$i]} --replication-factor  ${KAFKA_TOPIC_REPLICATION_FACTOR[$i]} --if-not-exists &"
+          FOUND=`kubectl exec -ti {{ $.Release.Name }}-kafka-0  -- /bin/bash -c "timeout 10 kafka-topics.sh --list --zookeeper bitnami-zookeeper" | grep "\<${KAFKA_CREATE_TOPIC_NAME[$i]}\>" | wc -l`
+          done
+          done
+
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: {{ $.Release.Name }}-setup-kafka-ready
+            labels:
+              app: {{ $helmApp }}
+              chart: {{ $helmChart }}
+              heritage: {{ $helmHeritage }}
+              release: {{ $helmRelease }}
+          data:
+            not_used: "ConfigMap"
+          EOF
+        resources:
+          limits:
+            cpu: 100m
+            memory: 500Mi
+          requests:
+            cpu: 6m
+            memory: 6Mi
+      restartPolicy: Never

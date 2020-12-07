@@ -1,0 +1,53 @@
+{{- if .Values.global.insights.licenseAccept }}
+{{- include "sch.config.init" (list . "insights.sch.chart.config.values") }}
+---
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{ template "sequencer.fullname" . }}-datamart-cleanup
+  labels:
+    {{ include "common.caseLabels" . | nindent 4 }}
+spec:
+  schedule: "50 * * * *"
+  startingDeadlineSeconds: 200
+  concurrencyPolicy: Replace
+  suspend: true
+  jobTemplate:
+    metadata:
+      name: {{ template "sequencer.fullname" . }}-datamart-cleanup
+      labels:
+        {{ include "common.caseLabels" . | nindent 8 }}
+    spec: 
+      template:
+        metadata:
+          name: {{ template "sequencer.fullname" . }}-datamart-cleanup
+          annotations: {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 12}}
+          labels: {{ include "common.caseLabels" . | nindent 12 }}
+            resourceName: "{{ template "sequencer.fullname" . }}-datamart-cleanup"
+        spec: {{ include "common.podRootSecurityContextParams" . | nindent 10 }}
+          serviceAccountName: {{ template "sequencer.serviceaccountname" . }}
+          affinity:
+            {{- include "sch.affinity.nodeAffinity" (list .) | indent 12 }}
+          containers:
+          - name: datamart
+            image: {{ if $.Values.global.image.repository }}{{ trimSuffix "/" $.Values.global.image.repository }}{{ else }}{{ $.Values.image.repository }}{{ end }}/{{ $.Values.image.name }}:{{$.Values.image.tag  }}
+            imagePullPolicy: Always
+            securityContext: {{ include "common.podContainerSecurityContextParams" . | nindent 14 }}
+            command:
+            - "/bin/bash"
+            - -c
+            - |
+              kubectl exec {{ $.Release.Name }}-ibm-db2u-db2u-0 -- /bin/bash -c "find /mnt/blumeta0/scratch/insights-datamart/ -regex '.*GROUP_MEMBERS.*' -exec rm -f {} \;"
+            resources:
+              limits:
+                cpu: 100m
+                memory: 500Mi
+              requests:
+                cpu: 6m
+                memory: 6Mi
+          {{- if $.Values.global.image.insightsPullSecret }}
+          imagePullSecrets:
+            - name: {{ $.Values.global.image.insightsPullSecret }}
+          {{- end}}
+          restartPolicy: Never
+{{- end }}
