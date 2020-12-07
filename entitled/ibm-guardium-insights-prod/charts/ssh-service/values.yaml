@@ -1,0 +1,83 @@
+affinity: {}
+fullnameOverride: ''
+global:
+  image:
+    imagePullSecret: ''
+    repository: ''
+  serviceAccount: insights-sa
+healthCheckPort: '22222'
+healthCheckTimeout: 30
+image:
+  image: ssh-service
+  pullPolicy: Always
+  repository: image-registry.openshift-image-registry.svc:5000
+  tag: 2020-11-25-16.27.17-7133ce4
+  use_repository_namespace: true
+insights_env:
+  KAFKA_CONSUMER_TOPIC: ingest_datamart
+  KAFKA_PRODUCER_TOPIC_SSH_SERVICE: ingest_datamart
+  KAFKA_SASL_MECHANISM: PLAIN
+insights_secrets:
+  KAFKA_SASL_PASSWORD:
+    secretGrouping: insights-kafka
+    secretGroupingKey: _KAFKA_SASL_PASSWORD
+  KAFKA_SASL_USER:
+    secretGrouping: insights-kafka
+    secretGroupingKey: _KAFKA_SASL_USER
+livenessProbe:
+  initialDelaySeconds: 60
+  periodSeconds: 60
+nameOverride: ''
+nodeSelector: {}
+podContainerSecurityContextParams:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  privileged: false
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1001
+podRootSecurityContextParams:
+  hostIPC: false
+  hostNetwork: false
+  hostPID: false
+readinessProbe:
+  initialDelaySeconds: 60
+  periodSeconds: 60
+readinessTimeout: 30
+replicaCount: 1
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 4m
+    memory: 1Mi
+servicePorts_LoadBalancer:
+- enabled: 'true'
+  name: default
+  port: '22222'
+  targetPort: '22222'
+  type: LoadBalancer
+tolerations: []
+volumes:
+- name: db2-scratch-mount
+  sourceName: '{{ $.Release.Name }}-ibm-db2u-db2u-meta-storage'
+  type: persistentVolumeClaim
+volumesMount:
+- mountPath: /service/datamart
+  name: db2-scratch-mount
+  readOnly: 'false'
+  subPath: scratch/insights-datamart
+volumes_certsForMount:
+  ssh-service:
+    mountPathPrefix: /service/certs/sshservice
+volumes_filesForMount: {}
+volumes_rootCAForMount:
+  insights-rootca:
+    mountPathPrefix: /etc/pki/tls/certs/
+volumes_sshForMount:
+  ssh-service:
+    mountPathPrefix: /service/.ssh
+    name: guardium_to_insights_scp

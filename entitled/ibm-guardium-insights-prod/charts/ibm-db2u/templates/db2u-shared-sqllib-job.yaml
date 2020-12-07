@@ -1,0 +1,77 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "{{ template "fullname" . }}-db2u-sqllib-shared-job"
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+    icpdsupport/app: {{ template "fullname" . }}
+  annotations:
+    {{- include "db2wh.annotations" . | indent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+        icpdsupport/app: {{ template "fullname" . }}
+        resourceName: "{{ template "fullname" . }}-db2u-sqllib-shared-job"
+      annotations:
+        {{- include "db2wh.annotations" .  | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "tolerations" . | indent 6 }}
+      {{- include "nonroot.securityContext" . | indent 6 }}
+      containers:
+      - name: {{ template "fullname" . }}-db2-init
+        {{- if .Values.images.tools.image.tag }}
+        image: "{{ .Values.global.image.repository }}/{{ .Values.images.instdb.image.image }}:{{ .Values.images.instdb.image.tag }}{{ template "platform" . }}"
+        {{- else }}
+        image: "{{ .Values.global.image.repository }}/{{ .Values.images.instdb.image.image }}:{{ .Values.images.universalTag }}{{ template "platform" . }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "sqllib.containers.securityContext" . | indent 8 }}
+        command: ['/bin/sh']
+        args: ['-cx', '/Db2wh_preinit/instdb_entrypoint.sh']
+        {{- include "jobs.resources.2X" . | indent 8 }}
+        env:
+        - name: SERVICENAME
+          value: "{{ .Values.servicename }}"
+        volumeMounts:
+        - mountPath: /mnt/blumeta0
+          {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+        - mountPath: /mnt/blumeta0/configmap/db2u
+          name: {{ template "fullname" . }}-db2u-config-volume
+      restartPolicy: Never
+      serviceAccount: {{ default "default" .Values.global.serviceAccount }}
+      volumes:
+      {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+        {{- include "db2u.container.storage.metaStorage" . | indent 6 }}
+      {{- else }}
+      - name: {{ template "fullname" . }}-db2u-sqllib-shared
+        persistentVolumeClaim:
+          {{- if .Values.storage.existingClaimName }}
+          claimName: {{ .Values.storage.existingClaimName }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+      {{- end }}
+      - name: {{ template "fullname" . }}-db2u-config-volume
+        configMap:
+          name: {{ template "fullname" . }}-db2u-config
+          items:
+          - key: db2u-var
+            path: db2u-var
