@@ -1,0 +1,76 @@
+{{/*
+# **************************************************************
+#
+# IBM Confidential
+#
+# OCO Source Materials
+#
+# 5737-L66
+#
+# (C) Copyright IBM Corp. 2019, 2020
+#
+# The source code for this program is not published or otherwise
+# divested of its trade secrets, irrespective of what has been
+# deposited with the U.S. Copyright Office.
+#
+# **************************************************************
+*/}}
+{{- $helmHeritage := .Release.Service -}}
+{{- $helmRelease := .Release.Name -}}
+{{- $helmApp := include "sequencer.name" . }}
+{{- $helmChart := include "sequencer.chart" . }}
+{{- include "sch.config.init" (list . "insights.sch.chart.config.values") }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "sequencer.fullname" . }}-mongodb-ready
+  labels:
+    {{ include "common.caseLabels" . | nindent 4 }}
+  annotations:
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300000
+  template:
+    metadata:
+      name: {{ template "sequencer.fullname" . }}-mongodb-ready-container
+      labels:
+        {{ include "common.caseLabels" . | nindent 8 }}
+        resourceName: "{{ template "sequencer.fullname" . }}-mongodb-ready-container"
+    spec:
+      {{- include "common.podRootSecurityContextParams" . | nindent 6 }}
+      serviceAccountName: {{ template "sequencer.serviceaccountname" . }}
+      imagePullSecrets: 
+      {{- if .Values.global.image.imagePullSecret }}
+        - name: {{ .Values.global.image.imagePullSecret }}
+      {{- end }}
+      affinity:
+        {{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      containers:
+      - name: {{ .Release.Name }}-setup-mongodb-ready
+        image: {{ if $.Values.global.image.repository }}{{ trimSuffix "/" $.Values.global.image.repository }}{{ else }}{{ $.Values.image.repository }}{{ end }}/{{ $.Values.image.name }}:{{$.Values.image.tag  }}
+        imagePullPolicy: Always
+        securityContext: 
+          {{- include "common.podContainerSecurityContextParams" . | nindent 10 }}
+        env:
+        {{- include "common.envCaseLabels" . | nindent 8 }}
+        - name: MONGODB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+                name: insights-mongodb
+                key: mongodb-root-password
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          echo "Starting mongodb-ready setup script..."
+          ./home/scripts/sequencer/setup-mongodb-ready.sh test
+          ./home/scripts/sequencer/setup-mongodb-ready.sh run
+          echo "Completed mongodb-ready setup script."
+        resources:
+          limits:
+            cpu: 100m
+            memory: 500Mi
+          requests:
+            cpu: 6m
+            memory: 6Mi
+      restartPolicy: Never 
