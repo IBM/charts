@@ -1,0 +1,82 @@
+{{/*
+# **************************************************************
+#
+# IBM Confidential
+#
+# OCO Source Materials
+#
+# 5737-L66
+#
+# (C) Copyright IBM Corp. 2020
+#
+# The source code for this program is not published or otherwise
+# divested of its trade secrets, irrespective of what has been
+# deposited with the U.S. Copyright Office.
+#
+# **************************************************************
+*/}}
+{{- $helmHeritage := .Release.Service -}}
+{{- $helmRelease := .Release.Name -}}
+{{- $helmApp := include "sequencer.name" . }}
+{{- $helmChart := include "sequencer.chart" . }}
+{{- include "sch.config.init" (list . "insights.sch.chart.config.values") }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "sequencer.fullname" . }}-db2u-lic-setup
+  labels:
+    {{ include "common.caseLabels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "3"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300000
+  template:
+    metadata:
+      name: {{ template "sequencer.fullname" . }}-db2u-lic-setup
+      annotations: {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8}}
+      labels:
+        {{ include "common.caseLabels" . | nindent 8 }}
+        resourceName: "{{ template "sequencer.fullname" . }}-db2u-lic-setup"
+    spec:
+      {{- include "common.podRootSecurityContextParams" . | nindent 6 }}
+      serviceAccountName: {{ template "sequencer.serviceaccountname" . }}
+      affinity:
+        {{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      imagePullSecrets: 
+      {{- if .Values.global.image.imagePullSecret }}
+        - name: {{ .Values.global.image.imagePullSecret }}
+      {{- end }}
+      restartPolicy: Never
+      containers:
+      - name: db2u-lic-setup
+        image: {{ if $.Values.global.image.repository }}{{ trimSuffix "/" $.Values.global.image.repository }}{{ else }}{{ $.Values.image.repository }}{{ end }}/{{ $.Values.image.name }}:{{$.Values.image.tag  }}
+        securityContext: 
+          {{- include "common.podContainerSecurityContextParams" . | nindent 10 }}
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          kubectl delete configmap {{ $.Release.Name }}-ibm-db2u-db2u-lic || true
+          cmdata=$(cat $HOME/scripts/db2/activationkey.yaml)
+          cat << EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: {{ $.Release.Name }}-ibm-db2u-db2u-lic
+            labels:
+              app: {{ template "sequencer.name" . }}
+              chart: {{ template "sequencer.chart" . }}
+              heritage: {{ .Release.Service }}
+              release: {{ .Release.Name }}
+          $cmdata
+          EOF
+        resources:
+          limits:
+            cpu: 100m
+            memory: 500Mi
+          requests:
+            cpu: 6m
+            memory: 6Mi

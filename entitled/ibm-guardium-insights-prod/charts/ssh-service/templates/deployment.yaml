@@ -1,0 +1,219 @@
+{{- if .Values.global.insights.licenseAccept }}
+{{- $root := . }}
+{{- $fullName := include "ssh-service.fullname" . }}
+{{- include "sch.config.init" (list . "insights.sch.chart.config.values") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ssh-service.fullname" . }}
+  labels:
+{{ include "ssh-service.labels" . | indent 4 }}
+spec:
+  progressDeadlineSeconds: 1800
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "ssh-service.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+{{ include "ssh-service.labels" . | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8}}
+    spec: 
+      {{- toYaml .Values.podRootSecurityContextParams | nindent 6 }}
+      serviceAccount: {{ .Values.global.serviceAccount }}
+      securityContext:
+{{ include "ssh-service.fsGroupGid" (list $root ) | indent 8 }}
+      {{- if $root.Values.global.image.insightsPullSecret }}
+      imagePullSecrets:
+        - name: {{ $root.Values.global.image.insightsPullSecret }}
+      {{- end}}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{ include "ssh-service.insightsImagePath" $root }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.podContainerSecurityContextParams | nindent 12 }}
+          envFrom:
+          - configMapRef:
+              name: {{ include "ssh-service.fullname" . }}-env
+          - configMapRef:
+              name: {{ include "ssh-service.fullname" . }}-svc-env
+          {{/* INJECT_ENVFROM_ */}}
+          - configMapRef:
+              name: '{{ $.Release.Name }}-setup-kafka-ready'
+          
+          - configMapRef:
+              name: '{{ $.Release.Name }}-setup-db2-ready'
+          
+          env:
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+          {{- range $k, $v := .Values.insights_secrets }}
+            - name: {{ $k | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $v.secretGrouping | quote }}
+                  key: {{ $v.secretGroupingKey | quote }}
+          {{- end }}
+            {{/* INJECT_ENV_ */}}
+            - name: KAFKA_SASL_ENABLED
+              value: 'false'
+            
+            - name: KAFKA_TLS_ENABLED
+              value: 'false'
+            
+            - name: KAFKA_CA_CERT_PEM_PATH
+              value: /etc/gies/es-cert-gi.pem
+            
+            - name: KAFKA_CA_CERT_JKS_PATH
+              value: /etc/gies/es-cert-gi.jks
+            
+            - name: KAFKA_BROKERS
+              valueFrom:
+                configMapKeyRef:
+                  key: _KAFKA_BROKERS
+                  name: '{{ $.Release.Name }}-insights-shared-cm'
+            
+            - name: _KAFKA_CA_CERT_JKS_PASSWORD
+              valueFrom:
+                configMapKeyRef:
+                  key: _KAFKA_CA_CERT_JKS_PASSWORD
+                  name: '{{ $.Release.Name }}-insights-shared-cm'
+            
+          volumeMounts:
+          {{- range $k := .Values.volumesMount}}
+          - name: {{ $k.name }}
+            mountPath: {{ $k.mountPath }}
+            {{- if hasKey $k "subPath"}}
+            subPath: {{ $k.subPath }}
+            {{- end }}
+          {{- end }}
+          {{- range $k, $v := .Values.volumes_filesForMount}}
+          - name: {{ $k }}
+            mountPath: {{ $v.mountPath }}
+            subPath: {{ $v.subPath }}
+          {{- end }}
+          {{- range $k, $v := .Values.volumes_rootCAForMount}}
+          - name: {{ $k }}-gen
+            mountPath: {{ $v.mountPathPrefix }}/{{ $k }}.crt
+            subPath: ca.crt
+            readOnly: true
+          {{- end }}
+          {{- range $k, $v := .Values.volumes_certsForMount}}
+          - name: {{ $k }}-ca-gen
+            mountPath: {{ $v.mountPathPrefix }}/app.crt
+            subPath: tls.crt
+            readOnly: true
+          - name: {{ $k }}-ca-gen
+            mountPath: {{ $v.mountPathPrefix }}/app.key
+            subPath: tls.key
+            readOnly: true
+          {{- end }}
+          {{- range $k, $v := .Values.volumes_sshForMount}}
+          - name: {{ $k }}-ssh-gen
+            mountPath: {{ $v.mountPathPrefix }}/{{ $v.name }}.pub
+            subPath: {{ $v.name }}.pub
+            readOnly: true
+          - name: {{ $k }}-ssh-gen
+            mountPath: {{ $v.mountPathPrefix }}/{{ $v.name }}
+            subPath: {{ $v.name }}
+            readOnly: true
+          {{- end }}
+          {{- if .Values.healthCheckPort}}
+          ports:
+            {{- range $k, $v := .Values.servicePorts}}
+            - containerPort: {{ $v.targetPort }}
+              protocol: TCP
+              name: {{ $v.name }}
+            {{- end }}
+          {{- end}}
+          livenessProbe:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - echo hi
+          #   timeoutSeconds: {{ .Values.healthCheckTimeout }}
+          #   tcpSocket:
+          #     port: grpc
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          readinessProbe:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - echo hello
+          #   initialDelaySeconds: {{ .Values.readinessTimeout }}
+          #   timeoutSeconds: {{ .Values.healthCheckTimeout }}
+          #   tcpSocket:
+          #     port: grpc
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      initContainers:
+        {{/* INJECT_INITCONTAINERS_ */}}
+      volumes:
+      {{- range $k := .Values.volumes }}
+      - name:  {{ $k.name }}
+        {{- if eq $k.type "persistentVolumeClaim"}}
+        persistentVolumeClaim:
+          claimName: {{ include "ssh-service.tplValue" ( dict "value" $k.sourceName "context" $) }}
+        {{- else if eq $k.type "configMap" }}
+        configMap:
+          name: {{ include "ssh-service.tplValue" ( dict "value" $k.sourceName "context" $) }}
+          items:
+          {{- range $kitems := $k.items }}
+          - key: $kitems.path
+            path: $kitems.path
+          {{- end}}
+        {{- else if eq $k.type "secret" }}
+        secret:
+          secretName: {{ include "ssh-service.tplValue" ( dict "value" $k.sourceName "context" $) }}
+          items:
+          {{- range $kitems := $k.items }}
+          - key: $kitems.path
+            path: $kitems.path
+          {{- end}}
+        {{- end}}
+      {{- end }}
+      {{- range $k, $v := .Values.volumes_filesForMount}}
+      - name: {{ $k }}
+        configMap:
+          name: {{ $fullName }}-filemount-{{ $k }}
+          items:
+          - key: {{ $v.subPath }}
+            path: {{ $v.subPath }}
+      {{- end }}
+      {{- range $k, $v := .Values.volumes_rootCAForMount}}
+      - name: {{ $k }}-gen
+        secret:
+          secretName: {{ $k }}-gen
+      {{- end }}
+      {{- range $k, $v := .Values.volumes_certsForMount}}
+      - name: {{ $k }}-ca-gen
+        secret:
+          secretName: {{ $k }}-ca-gen
+      {{- end }}
+      {{- range $k, $v := .Values.volumes_sshForMount}}
+      - name: {{ $k }}-ssh-gen
+        secret:
+          secretName: {{ $k }}-ssh-gen
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      affinity:
+        {{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+{{- end }}
