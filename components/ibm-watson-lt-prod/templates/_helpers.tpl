@@ -168,7 +168,7 @@ Log level validation.
 */ -}}
 
 {{- define "ibm-watson-lt.meteringLabels" -}}
-icpdsupport/serviceInstanceId: {{ .Values.global.zenServiceInstanceId | quote }}
+icpdsupport/serviceInstanceId: {{ .Values.global.zenServiceInstanceId | int64 | quote }}
 {{- end -}}
 
 
