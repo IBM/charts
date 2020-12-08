@@ -15,6 +15,18 @@ sch:
   chart:
     appName: "speech-to-text"
     components:
+      rabbitmq:
+        name: "rabbitmq"
+        headless: "rabbitmq-ibm-rabbitmq-headless-svc"
+        service: "rabbitmq-ibm-rabbitmq-svc"
+      postgres:
+        name: "postgres"
+        proxyService: "postgres-proxy-service"
+      minio:
+        name: "minio"
+        headless: "minio-ibm-minio-headless-svc"
+        service: "minio-ibm-minio-svc"
+        sseMasterKeySecret: "minio-sse-masterKeySecret"
       stt:
         name: "stt"
     metering:

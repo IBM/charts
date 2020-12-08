@@ -1,7 +1,7 @@
 {{- define "ibm-watson-speech-prod.object-storage-endpoint" -}}
 {{- $global := . -}}
 {{- if $global.Values.global.datastores.minio.enabled -}}
-https:// {{- $global.Release.Name -}} -ibm-minio-svc. {{- $global.Release.Namespace -}} :9000
+https:// {{- $global.Release.Name -}} -speech-to-text-minio-ibm-minio-svc. {{- $global.Release.Namespace -}} :9000
 {{- else -}}
 {{ $global.Values.global.datastores.minio.endpoint }}
 {{- end -}}
