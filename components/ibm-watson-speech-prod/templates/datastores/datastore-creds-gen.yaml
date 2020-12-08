@@ -61,16 +61,26 @@ spec:
           keyUsage = nonRepudiation, digitalSignature, keyEncipherment
           subjectAltName = @alt_names
           [alt_names]
-          DNS.1 = {{ .Release.Name }}-ibm-minio
-          DNS.2 = *.{{ .Release.Name }}-ibm-minio-headless-svc.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }}
-          DNS.3 = {{ .Release.Name }}-ibm-minio-svc.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }}
-          DNS.4 = localhost
-          DNS.5 = 127.0.0.1
-          DNS.6 = {{ .Release.Name }}-ibm-postgresql-proxy-service.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }}
-          DNS.7 = {{ .Release.Name }}-ibm-postgresql.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }}
+          DNS.1 = mnlp
+          DNS.2 = localhost
+          DNS.3 = 127.0.0.1
+          DNS.4 = {{ include "sch.names.fullName" (list .) }}
+          {{ $compName1 :=  .sch.chart.components.postgres.proxyService -}}
+          {{ $compName2 :=  .sch.chart.components.postgres.name -}}
+          DNS.5 = {{ include "sch.names.fullCompName" (list $ $compName1) }}.{{.Values.global.zenControlPlaneNamespace}}.{{.Values.global.clusterDomain }}
+          DNS.6 = {{ include "sch.names.fullCompName" (list $ $compName2) }}.{{.Values.global.zenControlPlaneNamespace}}.{{.Values.global.clusterDomain }}
+          {{ $compName3 :=  .sch.chart.components.minio.headless -}}
+          {{ $compName4 :=  .sch.chart.components.minio.service -}}
+          DNS.7 = *.{{ include "sch.names.fullCompName" (list $ $compName3) }}.{{ .Release.Namespace }}.{{ .Values.global.clusterDomain }}
+          DNS.8 = {{ include "sch.names.fullCompName" (list $ $compName4) }}.{{ .Release.Namespace }}.{{ .Values.global.clusterDomain }}
+          {{ $compName5 :=  .sch.chart.components.rabbitmq.headless -}}
+          {{ $compName6 :=  .sch.chart.components.rabbitmq.service -}}
+          DNS.9 = *.{{ include "sch.names.fullCompName" (list $ $compName5) }}.{{ .Release.Namespace }}.{{ .Values.global.clusterDomain }}
+          DNS.10 = {{ include "sch.names.fullCompName" (list $ $compName6) }}.{{ .Release.Namespace }}.{{ .Values.global.clusterDomain }}
+
           EOL
           openssl genrsa -out minio.key 2048
-          openssl req -new -key minio.key -out minio.csr -subj "/CN={{ .Release.Name }}-ibm-minio" -config openssl.cnf
+          openssl req -new -key minio.key -out minio.csr -subj "/CN={{ .Release.Name }}-minio-ibm-minio" -config openssl.cnf
           openssl x509 -req -in minio.csr \
             -CA ca.crt -CAkey ca.key -CAcreateserial \
             -out minio.crt -days 3650 -extensions v3_req -extfile openssl.cnf
