@@ -31,7 +31,7 @@
     #valid operators: In, NotIn, Exists, DoesNotExist, Gt, Lt
       nodeSelectorTerms:
       - matchExpressions:
-        - key: beta.kubernetes.io/arch
+        - key: kubernetes.io/arch
           operator: In
           values:
         {{- range $key, $val := .Values.arch }}
@@ -47,7 +47,7 @@
     - weight: {{ $val | trunc 1 | int }}
       preference:
         matchExpressions:
-        - key: beta.kubernetes.io/arch
+        - key: kubernetes.io/arch
           operator: In
           values:
           - {{ $key }}

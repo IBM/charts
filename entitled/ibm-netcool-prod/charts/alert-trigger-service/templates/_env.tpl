@@ -44,8 +44,12 @@
   value: "200"
 - name: BATCHING_TIME_SECS
   value: "1"
+- name: TEMPORAL_PATTERN_MATCH_COUNT
+  value: "3"
 - name: EVENTS_TOPIC
   value: {{ .Values.topics.events.name | quote }}
+- name: EVENTS_TOPIC_ENABLED
+  value: {{ .Values.topics.events.enabled | quote }}
 - name: EA_EVENTS_TOPIC
   value: {{ .Values.topics.eaevents.name | quote }}
 - name: ACTIONS_TOPIC

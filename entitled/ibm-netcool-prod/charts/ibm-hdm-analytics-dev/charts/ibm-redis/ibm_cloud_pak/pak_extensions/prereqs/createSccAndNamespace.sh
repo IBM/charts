@@ -48,9 +48,9 @@ do
    esac
 done
 
-cp ibm-restricted-scc.yaml ibm-restricted-scc.yaml.bak
+cp restricted-scc.yaml irestricted-scc.yaml.bak
 cp namespace.yaml namespace.yaml.bak
-sed -i -e "s/%NAMESPACE%/${NAMESPACE}/g" ibm-restricted-scc.yaml
+sed -i -e "s/%NAMESPACE%/${NAMESPACE}/g" restricted-scc.yaml
 sed -i -e "s/%NAMESPACE%/${NAMESPACE}/g" namespace.yaml
 
 if [ `kubectl get namespace | grep $NAMESPACE | wc -l` -gt 0 ]; then
@@ -61,7 +61,7 @@ else
 fi
 
 echo "Creating Security Context Constraints"
-oc apply -f ibm-restricted-scc.yaml
+oc apply -f restricted-scc.yaml
 
-mv ibm-restricted-scc.yaml.bak ibm-restricted-scc.yaml
+mv restricted-scc.yaml.bak restricted-scc.yaml
 mv namespace.yaml.bak namespace.yaml
