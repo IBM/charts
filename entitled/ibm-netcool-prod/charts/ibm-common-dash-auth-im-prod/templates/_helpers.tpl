@@ -16,7 +16,7 @@ Helpers for calculating cluster.fqdns / URLs
   {{- $ingressDomain := include "common-dash-auth-im-repo.cluster.fqdn" $root -}}
 
   {{- if $ingressGlobal.prefixWithReleaseName -}}
-    {{- printf "%s.%s.%s" $prefix $root.Release.Name $ingressDomain | trimPrefix "." -}}
+    {{- printf "%s%s%s.%s" $prefix $root.Values.global.urlDelimiter $root.Release.Name $ingressDomain | trimPrefix "." -}}
   {{- else -}}
     {{- printf "%s.%s" $prefix $ingressDomain | trimPrefix "." -}}
   {{- end -}}

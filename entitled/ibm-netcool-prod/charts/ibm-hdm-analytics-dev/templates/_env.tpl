@@ -775,7 +775,7 @@
 {{- if .Values.aggregationnormalizerservice.evtMgmtEndpoint.targetUrl }}
   value: {{ .Values.aggregationnormalizerservice.evtMgmtEndpoint.targetUrl | quote }}
 {{- else }}
-  value: "{{ .Release.Name }}-ea-noi-layer-eanoiactionservice:5600/api/actions/v1/actions"
+  value: "http://{{ .Release.Name }}-ea-noi-layer-eanoiactionservice:5600/api/actions/v1/actions"
 {{- end }}
 - name: EVT_MGMT_ENDPOINT_USERNAME
 {{- if eq .Values.global.hybrid.disabled true }}

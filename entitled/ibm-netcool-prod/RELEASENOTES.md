@@ -43,6 +43,6 @@ Full documentation on deploying the ibm-netcool-prod chart can be found in the [
 ----
 ### Build details
 
-- Build Number: master-242
-- Git Commit: 29a7b63
+- Build Number: master-300
+- Git Commit: 474dff4
 

@@ -33,10 +33,10 @@ alert-trigger:
     resources:
       limits:
         memory: 3000Mi
-        cpu: 500m
+        cpu: 1200m
       requests:
         memory: 2000Mi
-        cpu: 200m
+        cpu: 700m
 {{- end -}}
 
 {{- define "alert-trigger-service.comp.size.data" -}}

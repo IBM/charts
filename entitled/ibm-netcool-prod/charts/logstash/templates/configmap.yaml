@@ -84,11 +84,14 @@ data:
                 remove_tag => [ "relevant" ]
             }
         }
+        date {
+            match => [ "[resource][createdTime]", "UNIX_MS", "ISO8601" ]
+        }
     }
     output {
         elasticsearch {
             hosts => ["${ELASTICSEARCH_API}"]
-            index => "logstash-incidents"
+            index => "logstash-incidents-%{+YYYY.MM.dd}"
             workers => 1
             document_id => "%{uuid}"
             action => "update"
@@ -228,11 +231,14 @@ data:
             source => "[event][objectServer]"
             target => "[event][objectServer]"
         }
+        date {
+            match => [ "[event][objectServer][FirstOccurrence]", "ISO8601" ]
+        }
     }
     output {
         elasticsearch {
             hosts => ["${ELASTICSEARCH_API}"]
-            index => "logstash-noi-events"
+            index => "logstash-noi-events-%{+YYYY.MM.dd}"
             workers => 1
             document_id => "%{[event][objectServer][InstanceUuid]}"
             action => "update"
@@ -262,6 +268,9 @@ data:
         } else if ![event][lastOccurrence] {
             drop { }
         } else {
+            date {
+                match => [ "[event][lastOccurrence]", "ISO8601" ]
+            }
             mutate { 
                 add_field => { 
                     "id" => "%{[event][instanceUuid]}"
@@ -283,7 +292,7 @@ data:
                 }
             }
             mutate { 
-                remove_field => ["type", "@version", "@timestamp", "event"]  
+                remove_field => ["type", "@version", "event"]  
             }
         }
     }
@@ -292,7 +301,7 @@ data:
         # add event occurrence
         elasticsearch {
             hosts => ["${ELASTICSEARCH_API}"]
-            index => "logstash-event-reduction"
+            index => "logstash-event-reduction-%{+YYYY.MM.dd}"
             workers => 1
             document_id => "Occ-%{[id]}-%{[occurrence]}"
             action => "update"
@@ -303,7 +312,7 @@ data:
             # add ungrouped event
             elasticsearch {
                 hosts => ["${ELASTICSEARCH_API}"]
-                index => "logstash-event-reduction"
+                index => "logstash-event-reduction-%{+YYYY.MM.dd}"
                 workers => 1
                 document_id => "Ung-%{[id]}"
                 action => "update"
@@ -323,7 +332,7 @@ data:
             # add event group
             elasticsearch {
                 hosts => ["${ELASTICSEARCH_API}"]
-                index => "logstash-event-reduction"
+                index => "logstash-event-reduction-groups"
                 workers => 1
                 document_id => "Grp-%{[group]}"
                 action => "update"
@@ -343,7 +352,7 @@ data:
             # remove ungrouped event (if present)
             elasticsearch {
                 hosts => ["${ELASTICSEARCH_API}"]
-                index => "logstash-event-reduction"
+                index => "logstash-event-reduction-%{+YYYY.MM.dd}"
                 workers => 1
                 document_id => "Ung-%{[id]}"
                 action => "delete"
@@ -369,11 +378,14 @@ data:
         if [subscription] != "cfd95b7e-3bc7-4006-a4a8-a73a79c71255" {
             drop { }
         }
+        date {
+            match => [ "statisticsTimestamp", "ISO8601" ]
+        }
     }
     output {
         elasticsearch {
             hosts => ["${ELASTICSEARCH_API}"]
-            index => "logstash-rba-statistics"
+            index => "logstash-rba-statistics-%{+YYYY.MM.dd}"
             workers => 1
             document_id => "%{[statisticsTimestamp]}"
             action => "create"
@@ -396,11 +408,17 @@ data:
         if [subscription] != "cfd95b7e-3bc7-4006-a4a8-a73a79c71255" {
             drop { }
         }
+        date {
+            match => [ "createdAt", "ISO8601" ]
+        }
+        mutate {
+            remove_field => [ "context" ]
+        }
     }
     output {
         elasticsearch {
             hosts => ["${ELASTICSEARCH_API}"]
-            index => "logstash-rba-execution-records"
+            index => "logstash-rba-execution-records-%{+YYYY.MM.dd}"
             workers => 1
             document_id => "%{[id]}"
             action => "update"

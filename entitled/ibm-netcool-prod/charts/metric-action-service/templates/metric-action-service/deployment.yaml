@@ -1,0 +1,90 @@
+{{- include "sch.config.init" (list . "metric-action-service.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.metricactionservice.name -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $serviceName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+{{- if  eq .Values.global.environmentSize  "size0" }}
+  replicas: 0
+{{- else if eq .Values.global.environmentSize "size1" }}
+  replicas: 0
+{{- else }}
+  replicas: 0
+{{- end }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering "" "" nil) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+    spec:
+      {{- if .Values.global.image.secret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      volumes:
+      - name: kafka-streams-tmp
+        emptyDir:
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      initContainers:
+      - name: waitforkafka
+        image: {{ include "metric-action-service.image.url" (list . .Values.image) | quote }}
+        command: ["sh", "-c", "i=1; until getent hosts ${KAFKA_HOST}; do echo waiting for kafka $i; i=$((i+1)); sleep 2; done;"]
+        resources:
+{{ include "metric-action-service.comp.size.data" (list . "metricactionservice" "resources") | indent 10 }}        
+{{ include "metric-action-service.psp.securityContext" . | indent 8}}
+{{ include "metric-action-service.metricactionservice.environment" . | indent 8 }}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - name: {{ $serviceName }}
+        image: {{ include "metric-action-service.image.url" (list . .Values.image) | quote }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        volumeMounts:
+        - name: kafka-streams-tmp
+          mountPath: /tmp/kafka-streams
+        ports:
+        - containerPort: 8080
+          name: unsecure-port
+          protocol: TCP
+        livenessProbe:
+         exec:
+          command:
+          - "sh"
+          - "-c"
+          - >-
+             echo "Executing command for liveness props..." && 
+             ls /opt/app/lib/noi-metric-action-service*
+         initialDelaySeconds: 1
+         failureThreshold: 1
+         timeoutSeconds: 30
+         periodSeconds: 50
+        readinessProbe:
+         exec:
+          command:
+          - "sh"
+          - "-c"
+          - >-
+             echo "Execuecting command for readness props..." &&
+             ls /opt/app/lib/noi-metric-action-service*
+         initialDelaySeconds: 1
+         periodSeconds: 2
+        resources:
+{{ include "metric-action-service.comp.size.data" (list . "metricactionservice" "resources") | indent 10 }}
+{{ include "metric-action-service.metricactionservice.environment" . | indent 8 }}
+{{ include "metric-action-service.psp.securityContext" . | indent 8}}

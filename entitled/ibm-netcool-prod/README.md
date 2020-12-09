@@ -36,11 +36,11 @@ The operator also deploys one of the following components required to enable Ope
 - openLDAP proxy - to connect to an existing LDAP server outside of the deployment.
 
 For more information on how these applications work together to provide Netcool Operations Insight functionality, see
-[Netcool Operations Insight documentation: Deployment modes](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.2/com.ibm.netcool_ops.doc/soc/integration/concept/soc_int_deploymentmodes.html).
+[Netcool Operations Insight documentation: Deployment modes](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.3/com.ibm.netcool_ops.doc/soc/operations/task/ops_operations.html).
 
-For more information on event management, see [Configuring integrations](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.2/com.ibm.netcool_ops.doc/soc/config/task/cfg_configuring-integrations.html)
+For more information on event management, see [Configuring integrations](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.3/com.ibm.netcool_ops.doc/soc/operations/task/ops_resolving-alerts.html)
 
-For more information on topology management, see [Working with topology](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.2/com.ibm.netcool_ops.doc/asm/doc/Using/c_asm_using.html)
+For more information on topology management, see [Working with topology](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.3/com.ibm.netcool_ops.doc/asm/doc/Using/c_asm_using.html)
 
 ## Prerequisites
 
@@ -52,26 +52,21 @@ For more information on topology management, see [Working with topology](https:/
 
 The following prerequisites are required for a successful installation.
 
-- A Red Hat OpenShift Kubernetes cluster v4.4 or later. For more information on the cluster, see [OpenShift Container Platform 4.4 Documentation](https://docs.openshift.com/container-platform/4.4/welcome/index.html)
-- OpenShift CLI (oc), see [Getting started with the CLI](https://docs.openshift.com/container-platform/4.4/cli_reference/openshift_cli/getting-started-cli.html).
+- A Red Hat OpenShift Kubernetes cluster v4.5 or later. For more information on the cluster, see [OpenShift Container Platform 4.5 Documentation](https://docs.openshift.com/container-platform/4.5/welcome/index.html)
+- OpenShift CLI (oc), see [Getting started with the CLI](https://docs.openshift.com/container-platform/4.5/cli_reference/openshift_cli/getting-started-cli.html).
 - PersistentVolume support on the cluster.
-- Create ClusterRole and ClusterRoleBinding for topology management observers. For more information, see [Preparing your cluster](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.2/com.ibm.netcool_ops.doc/soc/integration/task/soc_int_preparing-rhocp-cluster.html)
 
-
-For more information on prerequisites, see  [Netcool Operations Insight Documentation: Preparing for installation](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.2/com.ibm.netcool_ops.doc/soc/integration/task/soc_int_preparing-rhocp-installation.html).
+For more information on prerequisites, see  [Netcool Operations Insight Documentation: Preparing for installation](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.3/com.ibm.netcool_ops.doc/soc/integration/task/soc_int_preparing-rhocp-installation.html).
 
 ### Store passwords in secrets.
   Following our security requirements, we do not install with default passwords. There are two options for password generation.
  - The install will generate random passwords and store these passwords in secrets, which you can extract after the install.  
- - You can create the passwords in secrets prior to install, where you choose the password [following these guidelines](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.2/com.ibm.netcool_ops.doc/soc/integration/task/int-creating_passwords_and_secrets-rhocp.html).
+ - You can create the passwords in secrets prior to install, where you choose the password [following these guidelines](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.3/com.ibm.netcool_ops.doc/soc/integration/task/int-creating_passwords_and_secrets-rhocp.html).
 
 ### Red Hat OpenShift Security Context Constraints Requirements
 
-The operator requires a Security Context Constraints (SCC) to be bound to the target service account prior to installation. All pods will use this SCC. An SCC constrains the actions a pod can perform. Actions such as Host IPC access. Host IPC access is required by our Db2 pod.  
-
-Choose either  
-  - Predefined Security Context Constraints `privileged`
-  - Custom SCC - If you wish to create a custom SCC, see [Preparing your cluster](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.2/com.ibm.netcool_ops.doc/soc/integration/task/soc_int_preparing-rhocp-cluster.html)
+The operator requires a Security Context Constraints (SCC) to be bound to the target service account prior to installation. All pods will use this SCC. An SCC constrains the actions a pod can perform. Actions such as Host IPC access. Host IPC access is required by our Db2 pod.  The SCC will be created
+automatically but can be created manually if cluster permissions require it. See [Preparing your cluster](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.3/com.ibm.netcool_ops.doc/soc/integration/task/soc_int_preparing-rhocp-cluster.html) for more information.
 
 ## Ingress Controller Configuration
 
@@ -89,39 +84,29 @@ kubectl patch namespace default --type=json -p '[{"op":"add","path":"/metadata/l
 
 ## Resources Required
 
-- For information about sizing, see [Hardware sizing for a full deployment on Red Hat OpenShift](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.2/com.ibm.netcool_ops.doc/soc/integration/reference/soc_sizing_full.html)
+- For information about sizing, see [Hardware sizing for a full deployment on Red Hat OpenShift](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.3/com.ibm.netcool_ops.doc/soc/integration/reference/soc_sizing_full.html)
 
-- For information about supported storage, see [Storage](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.2/com.ibm.netcool_ops.doc/soc/integration/concept/soc_int_storage_rhocp.html)
+- For information about supported storage, see [Storage](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.3/com.ibm.netcool_ops.doc/soc/integration/concept/soc_int_storage_rhocp.html)
 
 # Installing
+
 ## Prerequisites
 
-
-- Create a custom namespace to deploy into:
-```
-kubectl create namespace <namespace>
-```
-Where `<namespace>` is the name of the custom namespace that you want to create.
-
-
-- Create ServiceAccount and add user permissions:
-```
-oc create serviceaccount noi-service-account -n <namespace>
-oc adm policy add-scc-to-user privileged system:serviceaccount:<namespace>:noi-service-account
-kubectl patch serviceaccount default -p '{"imagePullSecrets": [{"name": "noi-registry-secret"}]}'
-```
-Where `<namespace>` is the namespace for the project that you are deploying to.
+- A PodDisruptionBudget will be automatically enabled for applicable components of the chart.
+- For more information on prerequisites, see [Preparing your cluster](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.3/com.ibm.netcool_ops.doc/soc/integration/task/soc_int_preparing-rhocp-cluster.html)
 
 ## Installing the operator with the Operator Lifecycle Management console
 
+For more information on installing, see [Installing Netcool Operations Insight](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.3/com.ibm.netcool_ops.doc/soc/integration/task/soc_int_preparing-rhocp-cluster.html)
+
 ### Create a Catalog source
-  - Within the OpenShift Console (4.4 or higher), select the menu navigation Administration -> Cluster Settings
+  - Within the OpenShift Console (4.5 or higher), select the menu navigation Administration -> Cluster Settings
   - Under the Global Settings tab, select OperatorHub configuration resource
   - Under the Sources tab, click the Create Catalog Source button
   - Provide a catalog source name and the image URL: docker.io/ibmcom
   - If a specific version is required, change the latest tag to the version. Select the Create button.
   - The catalog source appears, after a few minutes refresh the screen to see the number of operators count become 1.
-  
+
 ### Create Operator
   - Select the menu navigation OperatorHub and search for the NOI operator. Select the operator card, then the Install button.
   - Select a custom namespace to install the operator. Do not use namespaces that are kubernetes or openshift owned like kube-system or default. If you don't already have a project, create a project under the navigation menu Home -> Projects.
@@ -136,7 +121,7 @@ Where `<namespace>` is the namespace for the project that you are deploying to.
 
 ### Remove NOI deployments
 
-  **Warning** Removing a NOI deployment is a destructive action that can result in loss of persisted data.  Consult the documentation and ensure you have backed up persisted data prior to deleting a deployment.  For more information on backup and restore see [Backup and restore](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.2/com.ibm.netcool_ops.doc/soc/integration/task/backup_restore_hybrid.html)
+  **Warning** Removing a NOI deployment is a destructive action that can result in loss of persisted data.  Consult the documentation and ensure you have backed up persisted data prior to deleting a deployment.  For more information on backup and restore see [Backup and restore](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.3/com.ibm.netcool_ops.doc/soc/integration/task/backup_restore_hybrid.html)
 
   - Select the menu navigation Operators -> Installed Operators then select Netcool Operations Insight
   - Select All Instances tab and review and delete each deployment using the vertical ellipsis menu and Delete NOI menu item
@@ -144,11 +129,11 @@ Where `<namespace>` is the namespace for the project that you are deploying to.
 ### Uninstall NOI operator
 
   - Select the menu navigation Operators -> Installed Operators then select Netcool Operations Insight
-  - Select the Netcool Operations Insight operator vertical ellipsis menu -> Uninstall Operator 
+  - Select the Netcool Operations Insight operator vertical ellipsis menu -> Uninstall Operator
 
-### Remove the NOI operator catalog 
+### Remove the NOI operator catalog
 
-  - Within the OpenShift Console (4.4 or higher), select the menu navigation Administration -> Cluster Settings
+  - Within the OpenShift Console (4.5 or higher), select the menu navigation Administration -> Cluster Settings
   - Under the Global Settings tab, select OperatorHub configuration resource
   - Under the Sources tab, select the vertical ellipsis menu for the ibm-noi-catalog -> Delete CatalogSource
 
@@ -171,27 +156,29 @@ Search for the Custom Resource Definitions (CRD) created by the Netcool Operatio
 oc get crd | egrep "noi|cem|asm"
 oc delete crd <crd-name>
 ```
-For more information, see [Preparing your cluster](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.2/com.ibm.netcool_ops.doc/soc/integration/task/int_uninstalling-noi-on-rhocp.html)
-  
+For more information, see [Preparing your cluster](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.3/com.ibm.netcool_ops.doc/soc/integration/task/int_uninstalling-noi-on-rhocp.html)
+
 ## Operator Properties
 
-For more information on the properties used to configure a Netcool Operations Insight deployment, see [Operator properties](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.2/com.ibm.netcool_ops.doc/soc/integration/reference/int_installing-opsmg-rhocp-params.html)
+For more information on the properties used to configure a Netcool Operations Insight deployment, see [Operator properties](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.3/com.ibm.netcool_ops.doc/soc/integration/reference/int_installing-opsmg-rhocp-params.html)
 
 ## Storage
 
-You must create storage prior to your installation of Operations Management on OpenShift.
+You must create storage prior to your installation of Netcool Operations Insight on OpenShift.
 
-Due to the high I/O bandwidth and low network latency that is required by Operations Management, network-based storage options such as Network File System (NFS) and GlusterFS are not supported. vSphere or local storage are the currently supported storage classes.
-
-For more information on storage requirements and the steps required to set up your storage, see [Netcool Operations Insight Documentation: Preparing for installation](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.2/com.ibm.netcool_ops.doc/soc/integration/task/soc_int_preparing-rhocp-installation.html).
-
+For more information on storage requirements and the steps required to set up your storage, see [Netcool Operations Insight Documentation: Storage](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.3/com.ibm.netcool_ops.doc/soc/integration/concept/soc_int_storage_rhocp.html).
 
 ## Limitations
 
 * Platform limited, only supports `amd64` worker nodes.
 * StatefulSet are not currently scalable.
-* IBM Netcool Operations Insight has been tested on version 4.4 and 4.5 of OpenShift.
+* IBM Netcool Operations Insight has been tested on version 4.5 and 4.6 of OpenShift.
 
 ## Documentation
 
-Full documentation on deploying the ibm-netcool-prod chart can be found in the [Netcool Operations Insight documentation](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.2/com.ibm.netcool_ops.doc/soc/collaterals/soc_netops_kc_welcome.html).
+Full documentation on deploying the ibm-netcool-prod chart can be found in the [Netcool Operations Insight documentation](https://www.ibm.com/support/knowledgecenter/SSTPTP_1.6.3/com.ibm.netcool_ops.doc/soc/collaterals/soc_netops_kc_welcome.html).
+
+
+## Configuration
+
+## SecurityContextConstraints Requirements

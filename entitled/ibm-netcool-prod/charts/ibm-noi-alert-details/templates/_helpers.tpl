@@ -16,7 +16,7 @@ Helpers for calculating cluster.fqdns / URLs
   {{- $ingressDomain := include "ibm-noi-alert-details.cluster.fqdn" $root -}}
 
   {{- if $ingressGlobal.prefixWithReleaseName -}}
-    {{- printf "%s.%s.%s" $prefix $root.Release.Name $ingressDomain | trimPrefix "." -}}
+    {{- printf "%s%s%s.%s" $prefix $root.Values.global.urlDelimiter $root.Release.Name $ingressDomain | trimPrefix "." -}}
   {{- else -}}
     {{- printf "%s.%s" $prefix $ingressDomain | trimPrefix "." -}}
   {{- end -}}
@@ -67,7 +67,6 @@ securityContext:
   readOnlyRootFilesystem: false
   allowPrivilegeEscalation: false
   runAsNonRoot: true
-  runAsUser: 1000
   capabilities:
     drop:
     - ALL
@@ -79,7 +78,6 @@ hostPID: false
 hostIPC: false
 securityContext:
   runAsNonRoot: true
-  runAsUser: 1000
 {{- end -}}
 
 {{- /*

@@ -1,0 +1,48 @@
+{{/*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2020 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/}}
+
+{{- if ( and (.Capabilities.APIVersions.Has "route.openshift.io/v1") ( not ( .Values.global.ingress.api.enabled ))) }}
+{{- include "sch.config.init" (list . "metric-api-service.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.metricapiservice.name -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ $serviceName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+{{- include "sch.metadata.annotations.nginx.ingress" (list . .sch.chart.nginx.ingress) | indent 4 }}
+spec:
+  host: {{ include "metric-api-service.ingress.host" . }}
+  path: {{ .Values.ingress.path }}
+  port:
+    targetPort: {{ .Values.metricapiservice.port }}
+  subdomain: ""
+  tls:
+    insecureEdgeTerminationPolicy: Redirect
+    termination: edge 
+  to:
+    kind: Service
+    name:  {{ $serviceName }}
+    weight: 100
+  wildcardPolicy: None
+status:
+  ingress:
+  - routerName: default
+{{ end -}}
