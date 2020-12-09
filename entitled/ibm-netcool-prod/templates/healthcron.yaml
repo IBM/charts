@@ -49,9 +49,6 @@ spec:
             command: 
               - "sh"
               - "-c"
-              {{ if .Values.healthcron.command }}
-              {{ .Values.healthcron.command }} 
-              {{ else }}
               - |
                   NAMESPACE=`cat /var/run/secrets/kubernetes.io/serviceaccount/namespace`
                   KUBE_TOKEN=$(</var/run/secrets/kubernetes.io/serviceaccount/token)
@@ -93,11 +90,40 @@ spec:
                      SEVERITY=4 
                      curl -sSk -H "Authorization: Bearer $KUBE_TOKEN" -X DELETE https://$KUBERNETES_SERVICE_HOST/api/v1/namespaces/${NAMESPACE}/pods/$NOI_POD     
                   fi
+                  curl -sSk -H "Authorization: Bearer $KUBE_TOKEN" https://$KUBERNETES_SERVICE_HOST/apis/cem.ibm.com/v1beta1/namespaces/${NAMESPACE}/cemformations >/tmp/CEMS     
+                  LAST_REC=`cat /tmp/CEMS   | jq '.items[].status.updateTime' | cut -d'"' -f2`
+                  echo LAST_REC $LAST_REC
+                  NOW=`date +%s`
+                  DIFF=`expr $NOW - $LAST_REC `      
+                  MSG="$MSG\n CEM operator  last updated cemformation $DIFF seconds ago."  
+                  if [ $DIFF -gt $OPERATOR_TIMEOUT ] 
+                  then
+                     CEM_POD=`cat /tmp/PODS   | jq '.items[] | "\(.metadata.name)"' | sed "s/\"//g" | grep cem-operator`
+                     MSG="$MSG\necho deleting cem pod $CEM_POD as it has not updated noi instance in more than $OPERATOR_TIMEOUT seconds" 
+                     echo CEM_POD $CEM_POD
+                     SEVERITY=4 
+                     curl -sSk -H "Authorization: Bearer $KUBE_TOKEN" -X DELETE https://$KUBERNETES_SERVICE_HOST/api/v1/namespaces/${NAMESPACE}/pods/$CEM_POD     
+                  fi
+ 
+ 
+                  curl -sSk -H "Authorization: Bearer $KUBE_TOKEN" https://$KUBERNETES_SERVICE_HOST/apis/asm.ibm.com/v1beta1/namespaces/${NAMESPACE}/asmformations >/tmp/ASMS     
+                  LAST_REC=`cat /tmp/ASMS   | jq '.items[].status.updateTime' | cut -d'"' -f2`
+                  echo LAST_REC $LAST_REC
+                  NOW=`date +%s`
+                  DIFF=`expr $NOW - $LAST_REC `      
+                  MSG="$MSG\n ASM operator  last updated cemformation $DIFF seconds ago."  
+                  if [ $DIFF -gt $OPERATOR_TIMEOUT ] 
+                  then
+                     ASM_POD=`cat /tmp/PODS   | jq '.items[] | "\(.metadata.name)"' | sed "s/\"//g" | grep asm-operator`
+                     MSG="$MSG\necho deleting asm pod $ASM_POD as it has not updated noi instance in more than $OPERATOR_TIMEOUT seconds" 
+                     echo ASM_POD $ASM_POD
+                     SEVERITY=4 
+                     curl -sSk -H "Authorization: Bearer $KUBE_TOKEN" -X DELETE https://$KUBERNETES_SERVICE_HOST/api/v1/namespaces/${NAMESPACE}/pods/$ASM_POD     
+                  fi
                   echo $MSG
                   java -cp /usr/bin/commonscripts/updatealertstatus.jar:/usr/bin/commonscripts/jconn3.jar com.ibm.noi.sybase.UpdateStatus $OMNIBUS_HOST:4100 $OMNIBUS_USER $OMNIBUS_PWD "insert into alerts.status (  Identifier,Node,Severity,Summary,Type,AlertGroup ) values ('Pod status','Pod status',$SEVERITY,'$MSG',1,'NOI status')"
                 
-                  exit 0          
-            {{ end }}      
+                  exit 0                
             securityContext:
               privileged: false
               readOnlyRootFilesystem: false
@@ -138,7 +164,7 @@ spec:
               value: {{ .Release.Name }}-zookeeper
             - name: KAFKA_NOI_ZOOKEEPER_PORT
               value: "2181"        
-            image: {{ include "image.docker.repository" . -}}/ea-mime-classification-service:2.0.161
+            image: {{ include "image.docker.repository" . -}}/ea-mime-classification-service:2.0.166
             imagePullPolicy: {{ .Values.global.image.pullPolicy }}
             name: servicemonitor
             command: ["sh" ,"-c" , "/opt/app/scripts/healthcheck-orchestration.sh"] 

@@ -13,7 +13,7 @@
 
 {{- define "ncodatalayer.initcontainers.depwait" -}}
 - name: waitforagg
-  image: {{ .Values.global.image.repository }}/{{ .Values.ncodatalayer.image.name }}{{ include "ncodatalayer.image.suffix" (list . .Values.ncodatalayer.image) }}
+  image: {{ include "ncodatalayer.image.repository" . }}/{{ .Values.ncodatalayer.image.name }}{{ include "ncodatalayer.image.suffix" (list . .Values.ncodatalayer.image) }}
   volumeMounts:
   - name: ca
     mountPath: /ca
@@ -37,7 +37,7 @@
 
 {{- define "ncodatalayer.initcontainers.osschemaupgrade" -}}
 - name: osschemaupgrade
-  image: {{ .Values.global.image.repository }}/{{ .Values.ncodatalayer.image.name }}{{ include "ncodatalayer.image.suffix" (list . .Values.ncodatalayer.image) }}
+  image: {{ include "ncodatalayer.image.repository" . }}/{{ .Values.ncodatalayer.image.name }}{{ include "ncodatalayer.image.suffix" (list . .Values.ncodatalayer.image) }}
   volumeMounts:
   - name: ca
     mountPath: /ca
@@ -61,7 +61,7 @@
 
 {{- define "ncodatalayer.initcontainers.depwait.kafka" -}}
 - name: waitforkafka
-  image: {{ .Values.global.image.repository }}/{{ .Values.ncodatalayer.image.name }}{{ include "ncodatalayer.image.suffix" (list . .Values.ncodatalayer.image) }}
+  image: {{ include "ncodatalayer.image.repository" . }}/{{ .Values.ncodatalayer.image.name }}{{ include "ncodatalayer.image.suffix" (list . .Values.ncodatalayer.image) }}
 {{ include "container.security.context" . | indent 2 }}  
   command:
   - /bin/sh
@@ -166,6 +166,13 @@ Default URLs based on release name
   {{- $kafkaAdminSecretNameTemplate := "%s-kafka-admin-secret" -}}
 
   {{- include "ncodatalayer.geturl" (list . $integrations.kafka.adminSecretName $integrations.kafka.releaseName $kafkaAdminSecretNameTemplate) -}}
+{{- end -}}
+
+{{/*
+Redefine the repository name without the trailing /
+*/}}
+{{- define "ncodatalayer.image.repository" -}}
+{{ trimSuffix "/" .Values.global.image.repository }}
 {{- end -}}
 
 {{/*

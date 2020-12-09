@@ -1,0 +1,83 @@
+{{- if .Values.metrictriggerservice.enabled -}}
+{{- include "sch.config.init" (list . "metric-trigger-service.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.metrictriggerservice.name -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $serviceName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  strategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 100%
+    type: RollingUpdate
+{{- if  eq .Values.global.environmentSize  "size0" }}
+  replicas: 0
+{{- else if eq .Values.global.environmentSize "size1" }}
+  replicas: 0
+{{- else }}
+  replicas: {{ .Values.replicas }}
+{{- end }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      name: {{ $serviceName }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering "" "" nil) | indent 8 }}
+    spec:
+{{ include "metric-trigger-service.spec.security.context" . | indent 6}}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 3
+            preference:
+              matchExpressions:
+              - key: "kubernetes.io/arch"
+                operator: "In"
+                values:
+                - amd64
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secret }}
+      initContainers:
+      - name: waitforkafka
+        image: {{ include "metric-trigger-service.image.url" (list . .Values.image) | quote }}
+        command: ["sh", "-c", "i=1; until getent hosts {{ .Release.Name }}-kafka; do echo waiting for kafka $i; i=$((i+1)); sleep 2; done;"]
+        resources:
+{{ include "metric-trigger-service.comp.size.data" (list . "metric-trigger" "resources") | indent 10 }}
+{{ include "metric-trigger-service.container.security.context" . | indent 8}}
+        env:
+{{ include "metric-trigger-service.common.license" . | indent 8 }}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - image: {{ include "metric-trigger-service.image.url" (list . .Values.image) | quote }}
+        resources:
+{{ include "metric-trigger-service.comp.size.data" (list . "metric-trigger" "resources") | indent 10 }}
+        name:  {{ $serviceName }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.metrictriggerservice.port }}
+          name: unsecure-port
+          protocol: TCP
+{{ include "metric-trigger-service.probe.smonitor.all" . | indent 8 }}
+{{ include "metric-trigger-service.container.security.context" . | indent 8}}
+        env:
+{{ include "metric-trigger-service.application" . | indent 8 }}
+{{ include "metric-trigger-service.common.license" . | indent 8 }}
+{{ end }}

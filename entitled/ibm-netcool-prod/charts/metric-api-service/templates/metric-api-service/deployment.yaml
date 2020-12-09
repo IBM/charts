@@ -1,0 +1,81 @@
+{{- if .Values.metricapiservice.enabled -}}
+{{- include "sch.config.init" (list . "metric-api-service.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.metricapiservice.name -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $serviceName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  strategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 100%
+    type: RollingUpdate
+{{- if  eq .Values.global.environmentSize  "size0" }}
+  replicas: 0
+{{- else if eq .Values.global.environmentSize "size1" }}
+  replicas: 0
+{{- else }}
+  replicas: {{ .Values.replicas }}
+{{- end }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      name: {{ $serviceName }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering "" "" nil) | indent 8 }}
+    spec:
+{{ include "metric-api-service.spec.security.context" . | indent 6}}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 3
+            preference:
+              matchExpressions:
+              - key: "kubernetes.io/arch"
+                operator: "In"
+                values:
+                - amd64
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secret }}
+      initContainers:
+      - name: waitforcassandra
+        image:  {{ include "metric-api-service.image.url" (list . .Values.image) | quote }}
+        command: ["sh", "-c", "i=1; until getent hosts {{ .Release.Name }}-cassandra; do echo waiting for cassandra $i; i=$((i+1)); sleep 2; done;"]
+        resources:
+{{ include "metric-api-service.comp.size.data" (list . "metric-api-service" "resources") | indent 10 }}
+{{ include "metric-api-service.container.security.context" . | indent 8}}    
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - image: {{ include "metric-api-service.image.url" (list . .Values.image) | quote }}
+        resources:
+{{ include "metric-api-service.comp.size.data" (list . "metric-api-service" "resources") | indent 10 }}
+        name:  {{ $serviceName }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.metricapiservice.port }}
+          name: unsecure-port
+          protocol: TCP
+{{ include "metric-api-service.probe.smonitor.all" . | indent 8 }}
+{{ include "metric-api-service.container.security.context" . | indent 8}}
+        env:
+{{ include "metric-api-service.application" . | indent 8 }}
+{{ include "metric-api-service.common.license" . | indent 8 }}
+{{ end }}
