@@ -1,0 +1,193 @@
+{{- include "sch.config.init" (list . "ibmWatsonAssistantOperator.sch.chart.config.values") -}}
+{{- if .Values.crd.create }}
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: "watsonassistantdialogs.com.ibm.watson.watson-assistant"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . ) | indent 4 }}
+spec:
+  additionalPrinterColumns:
+    - JSONPath: .spec.version
+      description: Version of the resource
+      name: Version
+      type: string
+    - JSONPath: .status.conditions[?(@.type=="Ready")].status
+      description: Condition ready
+      name: Ready
+      type: string
+    - JSONPath: .status.conditions[?(@.type=="Ready")].reason
+      description: Condition ready reason
+      name: ReadyReason
+      type: string
+    - JSONPath: .status.conditions[?(@.type=="Updating")].status
+      description: Condition updating
+      name: Updating
+      type: string
+    - JSONPath: .status.conditions[?(@.type=="Updating")].reason
+      description: Condition updating reason
+      name: UpdatingReason
+      type: string
+    - JSONPath: .status.componentStatus.deployed
+      description: Fraction of deployed components
+      name: Deployed
+      type: string
+    - JSONPath: .status.componentStatus.verified
+      description: Fraction of verified components
+      name: Verified
+      type: string
+    - JSONPath: .metadata.creationTimestamp
+      description: Age of the resource
+      name: Age
+      type: date
+  group: com.ibm.watson.watson-assistant
+  names:
+    kind: WatsonAssistantDialog
+    listKind: WatsonAssistantDialogList
+    plural: watsonassistantdialogs
+    shortNames:
+      - dlg
+      - dlgs
+    singular: watsonassistantdialog
+  scope: Namespaced
+  subresources:
+    status: {}
+  validation:
+    openAPIV3Schema:
+      properties:
+        appConfigOverrides:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+        spec:
+          properties:
+            backup:
+              properties:
+                offlineQuiesce:
+                  description: whether to enter offlineQuiesce mode by scaling all deployments to zero
+                  type: boolean
+                onlineQuiesce:
+                  description: whether to enter onlineQuiesce mode by turning off authoring
+                  type: boolean
+              type: object
+            cluster:
+              properties:
+                dockerRegistryPrefix:
+                  description: (private only) Docker registry, including namespace, to get images from
+                  type: string
+                imagePullSecrets:
+                  items:
+                    type: string
+                  type: array
+                name:
+                  description: (public only) cluster environment name used by service team
+                  type: string
+                storageClassName:
+                  description: (private only) storage class for all datastores
+                  type: string
+                type:
+                  description: Cluster environment type
+                  type: string
+              type: object
+            labels:
+              additionalProperties:
+                type: string
+              description: Additional labels to be passed down to all objects created by Assistant operator
+              type: object
+            size:
+              description: The size of Watson Assistant Dialog to create
+              type: string
+            version:
+              description: The version of Watson Assistant Dialog to create
+              type: string
+          type: object
+        status:
+          description: Describes the observed state of the Dialog microservice
+          properties:
+            componentStatus:
+              description: The status of the individual managed components
+              properties:
+                allComponents:
+                  description: The names of all managed components
+                  items:
+                    type: string
+                  type: array
+                deployed:
+                  description: Fraction of components which have completed the deploy phase
+                  type: string
+                deployedComponents:
+                  description: The names of all managed components which have completed the deploy phase
+                  items:
+                    type: string
+                  type: array
+                failedComponents:
+                  description: The names of all managed components which have encountered an unexpected error during deploy or verify
+                  items:
+                    type: string
+                  type: array
+                unverifiedComponents:
+                  description: The names of all managed components which have not yet completed the verify phase
+                  items:
+                    type: string
+                  type: array
+                verified:
+                  description: Fraction of components which have completed the verify phase
+                  type: string
+              type: object
+            conditions:
+              description: Orthogonal status conditions of the resource
+              items:
+                oneOf:
+                  - required:
+                      - type
+                      - lastTransactionTime
+                      - message
+                      - status
+                  - required:
+                      - type
+                      - lastTransitionTime
+                      - ansibleResult
+                properties:
+                  ansibleResult:
+                    description: The ansible playbook result conditions
+                    properties:
+                      changed:
+                        type: number
+                      failures:
+                        type: number
+                      ok:
+                        type: number
+                      skipped:
+                        type: number
+                    type: object
+                  lastTransactionTime:
+                    description: The last time this condition was updated
+                    type: string
+                  lastTransitionTime:
+                    description: The last time the result changed
+                    type: string
+                  message:
+                    description: Plain text message describing the state
+                    type: string
+                  reason:
+                    description: Reason code describing the state
+                    type: string
+                  status:
+                    description: Boolean string indicating state
+                    enum:
+                      - "True"
+                      - "False"
+                    type: string
+                  type:
+                    description: The label for the condition type
+                    type: string
+                type: object
+              type: array
+          type: object
+      type: object
+  version: v1
+  versions:
+    - name: v1
+      served: true
+      storage: true
+
+{{- end }}
