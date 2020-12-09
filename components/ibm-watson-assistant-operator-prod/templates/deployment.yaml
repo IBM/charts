@@ -1,0 +1,92 @@
+{{- include "sch.config.init" (list . "ibmWatsonAssistantOperator.sch.chart.config.values") -}}
+{{- $appConfigDefaults  := ( tpl (.Files.Get "files/app-default-config.tpl") . ) | fromYaml }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . ) | indent 4 }}
+    icpdsupport/addOnId: {{ $appConfigDefaults.gateway.addon.label }}
+spec:
+  replicas: {{ tpl ( .Values.replicas | toString ) . }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . ) | indent 6 }}
+      icpdsupport/addOnId: {{ $appConfigDefaults.gateway.addon.label }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+{{- if .Values.annotations }}
+  {{- if kindIs "string" .Values.annotations }}
+{{ tpl .Values.annotations              . | indent 8 }}
+  {{- else }}
+{{ tpl ( .Values.annotations | toYaml ) . | indent 8 }}
+  {{- end }}
+{{- end }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . ) | indent 8 }}
+        icpdsupport/addOnId: {{ $appConfigDefaults.gateway.addon.label }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | indent 8 }}
+      containers:
+        - name: operator
+          image: {{ if tpl ( .Values.image.repository | toString ) . }}{{ trimSuffix "/" ( tpl ( .Values.image.repository | toString ) . ) }}{{ end }}/{{ tpl ( .Values.image.name | toString ) . }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ tpl ( .Values.image.pullPolicy | toString ) . }}
+          securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.containerSecurityContext) | indent 12 }}
+          env:
+            - name: WATCH_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: "assistant-operator"
+            - name: DEFAULT_IMAGE_PULL_SECRET_SA
+              value: {{ .Values.defaultPullSecretServiceAccount | default (include "assistant-operator.serviceAccount.name" . ) | quote }}
+
+          volumeMounts:
+          - mountPath: /tmp/ansible-operator/runner
+            name: runner
+          - mountPath: /opt/ansible/config
+            name: app-config
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          livenessProbe:
+            exec:
+              command:
+                - "true" # TODO: We need better probes not just dumy one
+{{ toYaml .Values.livenessProbe | indent 12 }}
+          readinessProbe:
+            exec:
+              command:
+                - "true" # TODO: We need better probes not just dumy one
+{{ toYaml .Values.readinessProbe | indent 12 }}
+      volumes:
+        - name: runner
+          emptyDir: {}
+        - name: app-config
+          configMap:
+            name: {{ include "assistant-operator.waDefaultConfig.name" . | quote }}
+      serviceAccountName: {{ include "assistant-operator.serviceAccount.name" . | quote }}
+      affinity:
+{{ include "assistant-operator.affinity"     . | indent 8 }}
+{{ include "assistant-operator.antiAffinity" . | indent 8 }}
+
+{{- if and (semverCompare ">=1.16" (printf "%s.%s" ( regexReplaceAll "[^0-9]" ( .Capabilities.KubeVersion.Major | toString ) "" ) ( regexReplaceAll "[^0-9]" ( .Capabilities.KubeVersion.Minor | toString ) "" ))) (include "assistant-operator.boolConvertor" (list .Values.topologySpreadConstraints.enabled . )) }}
+      topologySpreadConstraints:
+      - maxSkew:            {{ tpl (.Values.topologySpreadConstraints.maxSkew           | toString ) .         }}
+        topologyKey:        {{ tpl (.Values.topologySpreadConstraints.topologyKey       | toString ) . | quote }}
+        whenUnsatisfiable:  {{ tpl (.Values.topologySpreadConstraints.whenUnsatisfiable | toString ) . | quote }}
+        labelSelector:
+          matchLabels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 12 }}
+{{- end }}
