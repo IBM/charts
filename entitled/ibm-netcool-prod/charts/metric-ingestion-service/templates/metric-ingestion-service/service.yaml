@@ -1,0 +1,50 @@
+{{/*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/}}
+{{- if .Values.metricingestionservice.enabled -}}
+{{- include "sch.config.init" (list . "metric-ingestion-service.sch.chart.config.values") -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+{{- $compName :=  .sch.chart.components.metricingestionservice.name -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $serviceName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 4 }}
+spec:
+  selector:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  type: {{ .Values.metricingestionservice.serviceType }}
+  ports:
+   - name: unsecure-port
+     protocol: TCP
+     port: {{ .Values.metricingestionservice.port }}
+     targetPort: {{ .Values.metricingestionservice.port }}
+   - name: spark-driver-port
+     port: {{ .Values.spark.driverPort }}
+     protocol: TCP
+     targetPort: {{ .Values.spark.driverPort }}
+   - name: spark-driver-blockmgr-port
+     port: {{ .Values.spark.driverBlockMgrPort }}
+     protocol: TCP
+     targetPort: {{ .Values.spark.driverBlockMgrPort }}
+{{ end }}

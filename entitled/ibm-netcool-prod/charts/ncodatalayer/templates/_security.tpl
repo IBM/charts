@@ -20,7 +20,6 @@ securityContext:
   readOnlyRootFilesystem: false
   allowPrivilegeEscalation: false
   runAsNonRoot: true
-  runAsUser: 1000
   capabilities:
     drop:
     - ALL
@@ -30,7 +29,6 @@ securityContext:
 {{- define "deployment.security.context" -}}
 securityContext:
   runAsNonRoot: true
-  runAsUser: 1000
   fsGroup: 1000
 hostNetwork: false
 hostPID: false

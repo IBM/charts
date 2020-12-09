@@ -25,7 +25,7 @@ sch:
     labelType: "prefixed"
     nodeAffinity:
       nodeAffinityRequiredDuringScheduling:
-        key: beta.kubernetes.io/arch
+        key: kubernetes.io/arch
         operator: In
         values:
           - amd64

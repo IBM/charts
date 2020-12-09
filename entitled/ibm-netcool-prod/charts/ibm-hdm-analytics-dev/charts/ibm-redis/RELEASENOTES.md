@@ -1,8 +1,8 @@
 # Release Notes
 
-## What's new in Chart Version 2.3.3
+## What's new in Chart Version 2.4.0
 
-Added vmstat, pkill, and top tooling opencontent-redis-5 image
+Replaced `beta.kubernetes.io/arch` with `kubernetes.io/arch` due to being deprecated.
 
 ## Fixes
 
@@ -14,7 +14,7 @@ No changes
 
 ## Breaking Changes
 
-None
+Older versions of kubernetes 1.13 or less will no longer work
 
 ## Documentation
 
@@ -24,6 +24,9 @@ None
 
 | Chart | Date | Kubernetes Version Required | Breaking Changes | Details |
 | ----- | ---- | --------------------------- | ---------------- | ------- |
+| 2.4.1 | November 18, 2020 | >= 1.14 | None | None | Image update for security updates |
+| 2.4.0 | November 4, 2020 | >= 1.14 | None | Older versions of kubernetes 1.13 or less will no longer work | Removed beta.kubernetes.io/arch |
+| 2.3.4 | October 13, 2020 | >= 1.11 | None | Add global.networkpolicy.enabled to enable or disable the networkpolicy |
 | 2.3.3 | September 02, 2020 | >= 1.11 | None | Added vmstat, pkill, and top tooling using procps-ng package on opencontent-redis-5 image |
 | 2.3.2 | August 26, 2020 | >= 1.11 | None | Resolve security vulnerabilities contained within the opencontent-redis-5 image |
 | 2.3.1 | June 01, 2020 | >= 1.11 | None | Resolve security vulnerabilities contained within the opencontent-redis-5 image |

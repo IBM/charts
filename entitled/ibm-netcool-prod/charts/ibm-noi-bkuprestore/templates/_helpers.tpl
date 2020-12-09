@@ -30,7 +30,6 @@ securityContext:
   readOnlyRootFilesystem: false
   allowPrivilegeEscalation: false
   runAsNonRoot: true
-  runAsUser: 1001
   capabilities:
     drop:
     - ALL

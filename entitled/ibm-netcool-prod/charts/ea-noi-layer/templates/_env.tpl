@@ -220,6 +220,8 @@
   value: 'https://dummyUrl'
 - name: UISERVER_URL
   value: 'https://dummyUrl'
+- name: UIAPI_URL
+  value: 'https://dummyUrl'
 - name: EVENTPREPROCESSOR_URL
   value: 'https://dummyUrl'
 - name: INCIDENTPROCESSOR_URL
