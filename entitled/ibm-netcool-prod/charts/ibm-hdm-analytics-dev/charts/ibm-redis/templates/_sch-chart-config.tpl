@@ -45,7 +45,7 @@ sch:
         amd64:
           weight: 3
           operator: In
-          key: beta.kubernetes.io/arch
+          key: kubernetes.io/arch
     credsPodSecurityContext:
       runAsNonRoot: true
       runAsUser: 99
@@ -62,7 +62,7 @@ sch:
 metering:
   productID: "RedisHA_503r0_free_00000"
   productName: "Redis HA"
-  productVersion: "5.0.5"
+  productVersion: "5.0.9"
   productMetric: "FREE"
 {{- end -}}
 

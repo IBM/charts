@@ -1,0 +1,62 @@
+{{- include "sch.config.init" (list . "ibm-hdm-common-ui.sch.chart.config.values") -}}
+{{- if eq (toString .Values.global.katamari.enabled) "true" }}
+{{- $compName := "event-manager-extensions" -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    icpdata_addon: "true"
+data:
+  extensions: |
+    [
+      {
+        "extension_point_id": "left_menu_folder",
+        "extension_name": "global-event-manager-folder",
+        "display_name": "{{`{{.global_event_manager_nav_folder_aiops}}`}}",
+        "order_hint": 400,
+        "match_permissions": "",
+        "meta": {},
+        "details":
+        {
+          "icon": "nav/icons/unified-switcher"
+        }
+      },
+      {
+        "extension_point_id": "left_menu_item",
+        "extension_name": "event-manager-nav-menuitem-alerts",
+        "display_name": "{{`{{.global_event_manager_nav_menuitem_alerts}}`}}",
+        "order_hint": 100,
+        "match_permissions": "",
+        "meta": {},
+        "details": {
+          "parent_folder": "global-event-manager-folder",
+          "href": "/aiops/default/alerts"
+        }
+      },
+      {
+        "extension_point_id": "left_menu_item",
+        "extension_name": "event-manager-nav-menuitem-incidents",
+        "display_name": "{{`{{.global_event_manager_nav_menuitem_incidents}}`}}",
+        "order_hint": 200,
+        "match_permissions": "",
+        "meta": {},
+        "details": {
+          "parent_folder": "global-event-manager-folder",
+          "href": "/aiops/default/incidents/my"
+        }
+      }
+    ]
+  nginx.conf: |
+    location /aiops {
+        access_by_lua_file /nginx_data/checkjwt.lua;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Host $host;
+        proxy_pass http://{{ .releaseName }}-ibm-hdm-common-ui-uiserver.{{ .namespace }}.svc:8080;
+        proxy_read_timeout 10m;
+    }
+{{ end }}

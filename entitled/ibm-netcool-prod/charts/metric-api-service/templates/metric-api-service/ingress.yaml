@@ -1,0 +1,47 @@
+{{/*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/}}
+{{- if .Values.global.ingress.api.enabled }}
+{{- if .Values.ingress.enabled -}}
+{{- include "sch.config.init" (list . "metric-api-service.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.metricapiservice.name -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ $serviceName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    kubernetes.io/ingress.class: '{{ .Values.global.ingress.api.class }}'
+spec:
+  {{ if .Values.global.ingress.tlsSecret }}
+  tls:
+  - hosts:
+    - {{ include "metric-api-service.ingress.host" . | quote }}
+    secretName: {{ tpl .Values.global.ingress.tlsSecret . }}
+  {{ end }}
+  rules:
+  - http:
+      paths:
+      - backend:
+          serviceName: {{ $serviceName }}
+          servicePort:  {{ .Values.metricapiservice.port }}
+        path: {{ .Values.ingress.path }}
+    host: {{ include "metric-api-service.ingress.host" . }}
+{{- end -}}
+{{- end -}}
