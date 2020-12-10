@@ -48,7 +48,8 @@ By default, `ibm-security-solutions-prod` has the following resource requests re
 | TII | 900Mi | 600M |
 | TIS | 1536Mi | 600M |
 | CSA Adapter| 256Mi | 200M |
-| Toolbox | 128Mi | 50m |
+| Backup and Restore | 128Mi | 50m |
+| Risk Manager | 1012Mi | 700M |
 
 ## Storage
 IBM Cloud Pak for Security requires specific persistent volumes and persistent volume claims. To provide the required storage, persistent volume claims are created automatically during the installation of IBM Cloud Pak for Security.
