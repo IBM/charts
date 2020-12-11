@@ -97,12 +97,16 @@ hostPID: false
 hostIPC: false
 securityContext:
   runAsNonRoot: true
-  runAsUser: 1001
+  {{- if .Values.customization.runAsUser }}
+  runAsUser: {{ .Values.customization.runAsUser }}
+  {{- end }}
 {{- end -}}
 
 {{- define "odm-security-context" -}}
 securityContext:
-  runAsUser: 1001
+  {{- if .Values.customization.runAsUser }}
+  runAsUser: {{ .Values.customization.runAsUser }}
+  {{- end }}
   runAsNonRoot: true
   privileged: false
   readOnlyRootFilesystem: false
@@ -124,6 +128,20 @@ helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
 {{- if .Values.serviceAccountName -}}
 serviceAccountName: {{ .Values.serviceAccountName }}
 {{- else -}}
-serviceAccountName: default
+serviceAccountName: {{ template "fullname" . }}-service-account
 {{- end }}
 {{- end -}}
+
+{{- define "odm-route.fullname" -}}
+{{- printf "%s-%s" .Release.Name "route" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+Image tag or digest.
+*/}}{{- define "image.tagOrDigest" -}}
+{{- if hasPrefix "sha256" .root.Values.image.tag -}}
+image: {{ template "odm.repository.name" .root }}/{{ .containerName }}@{{ .root.Values.image.tag }}
+{{- else -}}
+image: {{ template "odm.repository.name" .root }}/{{ .containerName }}:{{ .root.Values.image.tag }}_{{ .root.Chart.Version }}{{ template "platform" .root }}
+{{- end -}}
+{{- end }}
