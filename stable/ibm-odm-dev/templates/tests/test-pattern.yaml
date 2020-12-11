@@ -17,8 +17,10 @@ spec:
   hostIPC: false
   securityContext:
     runAsNonRoot: true
+    {{- if .Values.customization.runAsUser }}
     runAsUser: 1000
     fsGroup: 10000
+    {{- end }}
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -34,7 +36,7 @@ spec:
             {{- end }}
   containers:
   - name: {{ template "odm.test.fullname" . }}
-    image: {{ template "odm.repository.name" . }}/odm:{{ .Values.image.tag }}_{{ .Chart.Version }}{{ template "platform" . }}
+{{ include "image.tagOrDigest" (dict "containerName" "odm" "root" .) | indent 4  }}
     resources:
       requests:
         cpu: 500m
@@ -43,7 +45,9 @@ spec:
         cpu: 2
         memory: 4096Mi
     securityContext:
+      {{- if .Values.customization.runAsUser }}
       runAsUser: 1000
+      {{- end }}
       runAsNonRoot: true
       privileged: false
       readOnlyRootFilesystem: false
@@ -64,3 +68,7 @@ spec:
         defaultMode: 0755
         name: {{ template "odm.test-configmap.fullname" . }}
   restartPolicy: Never
+  {{- if (not (empty .Values.image.pullSecrets )) }}
+  imagePullSecrets:
+  - name: {{ .Values.image.pullSecrets }}
+  {{- end }}

@@ -32,13 +32,16 @@ By default, the `internalDatabase.populateSampleData` parameter is set to `true`
 ## Prerequisites
 
 - Kubernetes 1.11+ with Beta APIs enabled
-- Helm 2.9.1 and later version
+- Helm 3.2 and later version
 - One PersistentVolume needs to be created prior to installing the chart if internalDatabase.persistence.enabled=true and internalDatabase.persistence.dynamicProvisioning=false. In that case, it is required that the securityContext.fsGroup 1001 has read and write permissions on the postgres data directory. You can update the permissions by mounting the volume temporarily or accessing the host machine and performing the following commands:
 ```console
 chown -R :1001 /config/dbdata/
 chmod -R ug+rw /config/dbdata/
 chmod o-t /config/dbdata/
 ```
+- Review  and accept the product license:
+  - Set license=view to print the license agreement
+  - Set license=accept to accept the license
 
 Ensure you have a good understanding of the underlying concepts and technologies:
 - Helm chart, Docker, container
@@ -46,36 +49,23 @@ Ensure you have a good understanding of the underlying concepts and technologies
 - Helm commands
 - Kubernetes command line tool
 
-Before you install ODM for developers, you need to gather all the configuration information that you will use for your release. For more details, refer to the [ODM for developers configuration parameters](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.icp/topics/ref_parameters_dev.html).
+Before you install ODM for developers, you need to gather all the configuration information that you will use for your release. For more details, refer to the [ODM for developers configuration parameters](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.kube/topics/ref_parameters_dev.html).
 
 If you want to create your own decision services from scratch, you need to install Rule Designer from the [Eclipse Marketplace](https://marketplace.eclipse.org/content/ibm-operational-decision-manager-developers-v-8104-rule-designer).
 
 ### Service Account Requirements
 
-By default, the chart uses the `default` serviceAccount defined in your Kubernetes namespace.
+By default, the chart creates and uses the custom serviceAccount named `<releasename>-ibm-odm-dev-service-account`.
 
-This means that the product must be deployed in its **own namespace** since the default serviceAccount is shared across the namespace. If another product is deployed in the namespace or if permissions change in the default service account, it will be reflected in the permissions given to the installed application.
+The serviceAccount should be granted the appropriate PodSecurityPolicy or SecurityContextConstraints depending on your cluster. Refer to the [PodSecurityPolicy Requirements](#podsecuritypolicy-requirements) or [Red Hat OpenShift SecurityContextConstraints Requirements](#red-hat-openshift-securitycontextconstraints-requirements) documentation.
 
-You can configure the chart to use a custom serviceAccount. In this case, a cluster administrator can create the custom serviceAccount by applying the following descriptor file in the appropriate namespace:
-
-```yaml
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: ibm-odm-dev-service-account
-```
-
-> **Note**: In OpenShift, the scc must be added to the created serviceAccount with the following command:
-> ```console
-  $ oc adm policy add-scc-to-user ibm-restricted-scc -z ibm-odm-dev-service-account -n <namespace>
-  ```
-
-The namespace administrator is then able to configure the chart to use the created serviceAccount by setting the parameter `serviceAccountName`:
+You can also configure the chart to use a custom serviceAccount. In this case, a cluster administrator can create a custom serviceAccount and the namespace administrator is then able to configure the chart to use the created serviceAccount by setting the parameter `serviceAccountName`:
 
 ```console
-$ helm install --name my-odm-dev-release \
+$ helm install my-odm-dev-release \
+  --set license=accept \
   --set serviceAccountName=ibm-odm-dev-service-account \
-  stable/ibm-odm-dev
+  ibm-charts/ibm-odm-dev
 ```
 
 ### PodSecurityPolicy Requirements
@@ -90,117 +80,126 @@ This chart also defines a custom PodSecurityPolicy which can be used to finely c
 A cluster administrator can create the custom PodSecurityPolicy and the ClusterRole by applying the following descriptors files in the appropriate namespace:
 * Custom PodSecurityPolicy definition:
 
-  ```yaml
-  apiVersion: extensions/v1beta1
-  kind: PodSecurityPolicy
-  metadata:
-    name: ibm-odm-psp
-  spec:
-    allowPrivilegeEscalation: false
-    forbiddenSysctls:
-    - '*'
-    fsGroup:
-      ranges:
-      - max: 65535
-        min: 1
-      rule: MustRunAs
-    requiredDropCapabilities:
-    - ALL
-    runAsUser:
-      rule: MustRunAsNonRoot
-    seLinux:
-      rule: RunAsAny
-    supplementalGroups:
-      ranges:
-      - max: 65535
-        min: 1
-      rule: MustRunAs
-    volumes:
-    - configMap
-    - emptyDir
-    - projected
-    - secret
-    - downwardAPI
-    - persistentVolumeClaim
-  ```
-
-* Custom ClusterRole for the custom PodSecurityPolicy:
-
-  ```yaml
-  apiVersion: rbac.authorization.k8s.io/v1
-  kind: ClusterRole
-  metadata:
-    name: ibm-odm-clusterrole
-  rules:
-  - apiGroups:
-    - extensions
-    resourceNames:
-    - ibm-odm-psp
-    resources:
-    - podsecuritypolicies
-    verbs:
-    - use
-  ```
-
-### Red Hat OpenShift SecurityContextConstraints Requirements
-
-This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to be performed by a cluster administrator.
-
-The predefined SecurityContextConstraints name: [`ibm-restricted-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
-
-This chart also defines a custom SecurityContextConstraints which can be used to finely control the permissions/capabilities needed to deploy this chart.
-
-From the user interface, you can copy and paste the following snippets to enable the custom SecurityContextConstraints
-* Custom SecurityContextConstraints definition:
-
-  ```yaml
-  apiVersion: security.openshift.io/v1
-  kind: SecurityContextConstraints
-  metadata:
-    annotations:
-    name: ibm-odm-scc
-  allowHostDirVolumePlugin: false
-  allowHostIPC: false
-  allowHostNetwork: false
-  allowHostPID: false
-  allowHostPorts: false
-  allowPrivilegedContainer: false
+```yaml
+apiVersion: extensions/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: ibm-odm-psp
+spec:
   allowPrivilegeEscalation: false
-  allowedCapabilities: []
-  allowedFlexVolumes: []
-  allowedUnsafeSysctls: []
-  defaultAddCapabilities: []
-  defaultPrivilegeEscalation: false
   forbiddenSysctls:
-    - "*"
+  - '*'
   fsGroup:
-    type: MustRunAs
     ranges:
     - max: 65535
       min: 1
-  readOnlyRootFilesystem: false
+    rule: MustRunAs
   requiredDropCapabilities:
   - ALL
   runAsUser:
-    type: MustRunAsNonRoot
-  seccompProfiles:
-  - docker/default
-  seLinuxContext:
-    type: RunAsAny
+    rule: MustRunAsNonRoot
+  seLinux:
+    rule: RunAsAny
   supplementalGroups:
-    type: MustRunAs
     ranges:
     - max: 65535
       min: 1
+    rule: MustRunAs
   volumes:
   - configMap
-  - downwardAPI
   - emptyDir
-  - persistentVolumeClaim
   - projected
   - secret
-  priority: 0
-  ```
+  - downwardAPI
+  - persistentVolumeClaim
+```
+
+* Custom ClusterRole for the custom PodSecurityPolicy:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ibm-odm-clusterrole
+rules:
+- apiGroups:
+  - extensions
+  resourceNames:
+  - ibm-odm-psp
+  resources:
+  - podsecuritypolicies
+  verbs:
+  - use
+```
+
+### Red Hat OpenShift SecurityContextConstraints Requirements
+
+This chart requires a SecurityContextConstraints to be granted to the serviceAccount prior to installation.
+A cluster administrator can either bind the SecurityContextConstraints to the target namespace or add the scc specifically to the serviceAccount.
+
+The predefined SecurityContextConstraints name: [`restricted`](https://ibm.biz/cpkspec-scc) has been verified for this chart. In Openshift, `restricted` is used by default for authenticated users.
+
+To use the `restricted` scc, you must define the `customization.runAsUser` parameter as empty since the restricted scc requires to used an arbitrary UID.
+
+```console
+$ helm install my-odm-dev-release \
+  --set customization.runAsUser='' \
+  /path/to/ibm-odm-dev-<version>.tgz
+```
+
+This chart also defines a custom SecurityContextConstraints which can be used to finely control the permissions/capabilities needed to deploy this chart.
+
+You can apply the following yaml file to create the custom SecurityContextConstraints.
+* Custom SecurityContextConstraints definition:
+
+```yaml
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  annotations:
+  name: ibm-odm-scc
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegedContainer: false
+allowPrivilegeEscalation: false
+allowedCapabilities: []
+allowedFlexVolumes: []
+allowedUnsafeSysctls: []
+defaultAddCapabilities: []
+defaultPrivilegeEscalation: false
+forbiddenSysctls:
+  - "*"
+fsGroup:
+  type: MustRunAs
+  ranges:
+  - max: 65535
+    min: 1
+readOnlyRootFilesystem: false
+requiredDropCapabilities:
+- ALL
+runAsUser:
+  type: MustRunAsNonRoot
+seccompProfiles:
+- docker/default
+seLinuxContext:
+  type: RunAsAny
+supplementalGroups:
+  type: MustRunAs
+  ranges:
+  - max: 65535
+    min: 1
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- persistentVolumeClaim
+- projected
+- secret
+priority: 0
+```
 
 ## Resources Required
 
@@ -215,11 +214,17 @@ From the user interface, you can copy and paste the following snippets to enable
 
 The following instructions should be executed as namespace administrator.
 
+Add the ibm chart repository:
+
+```console
+$ helm repo add ibm-charts https://raw.githubusercontent.com/IBM/charts/master/repo/stable/
+```
+
 A release must be configured before it is installed.
 To install a release with the default configuration and a release name of `my-odm-dev-release`, use the following command:
 
 ```console
-$ helm install --name my-odm-dev-release stable/ibm-odm-dev
+$ helm install my-odm-dev-release --set license=accept ibm-charts/ibm-odm-dev
 ```
 
 > **Tip**: List all existing releases with the `helm list` command.
@@ -228,18 +233,19 @@ Using Helm, you specify each parameter with a `--set key=value` argument in the 
 For example:
 
 ```console
-$ helm install --name my-odm-dev-release \
+$ helm install my-odm-dev-release \
+  --set license=accept \
   --set internalDatabase.databaseName=my-db \
   --set internalDatabase.user=my-user \
   --set internalDatabase.password=my-password \
-  stable/ibm-odm-dev
+  ibm-charts/ibm-odm-dev
 ```
 
 It is also possible to use a custom-made .yaml file to specify the values of the parameters when you install the chart.
 For example:
 
 ```console
-$ helm install --name my-odm-dev-release -f values.yaml stable/ibm-odm-dev
+$ helm install --set license=accept my-odm-dev-release -f values.yaml ibm-charts/ibm-odm-dev
 ```
 
 > **Tip**: The default values are in the `values.yaml` file of the `ibm-odm-dev` chart.
@@ -269,7 +275,7 @@ Now you want to execute the sample decision service to request a loan. Follow th
 To uninstall and delete a release named `my-odm-dev-release`, use the following command:
 
 ```console
-$ helm delete my-odm-dev-release --purge
+$ helm delete my-odm-dev-release
 ```
 
 The command removes all the Kubernetes components associated with the chart, except any Persistent Volume Claims (PVCs).  This is the default behavior of Kubernetes, and ensures that valuable data is not deleted.  In order to delete the ODM's data, you can delete the PVC using the following command:
@@ -288,7 +294,7 @@ $ kubectl delete pvc <release_name>-odm-pvclaim -n <namespace>
 
 ## Configuration
 
-To configure the `ibm-odm-dev` chart, check out the list of available [ODM for developers configuration parameters](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.icp/topics/ref_parameters_dev.html).
+To configure the `ibm-odm-dev` chart, check out the list of available [ODM for developers configuration parameters](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.kube/topics/ref_parameters_dev.html).
 
 ## Storage
 
@@ -310,7 +316,7 @@ Uses cases for H2 as an internal database:
 
 ## Limitations
 
-The following ODM on premises features are not supported: [Features not included in this platform.](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.icp/topics/con_limitations.html)
+The following ODM on premises features are not supported: [Features not included in this platform.](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.kube/topics/con_limitations.html)
 
 ## Documentation
 
