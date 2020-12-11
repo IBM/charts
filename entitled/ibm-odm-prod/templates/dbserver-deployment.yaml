@@ -1,0 +1,155 @@
+{{- if and (empty .Values.externalDatabase.serverName) (empty .Values.externalCustomDatabase.datasourceRef) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "odm.dbserver.fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: {{ template "odm.dbserver.fullname" . }}
+{{ include "odm-additional-labels" . | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      run: {{ template "odm.dbserver.fullname" . }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        run: {{ template "odm.dbserver.fullname" . }}
+        app: {{ template "name" . }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: {{ .Release.Name }}
+        heritage: "{{ .Release.Service }}"
+{{ include "odm-additional-labels" . | indent 8 }}
+{{ include "odm-annotations" . | indent 6 }}
+        productChargedContainers: ""
+    spec:
+{{ include "odm-serviceAccountName" . | indent 6 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsUser: {{ .Values.internalDatabase.runAsUser }}
+        fsGroup: {{ .Values.internalDatabase.runAsUser }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          #If you specify multiple nodeSelectorTerms associated with nodeAffinity types,
+          #then the pod can be scheduled onto a node if one of the nodeSelectorTerms is satisfied.
+          #
+          #If you specify multiple matchExpressions associated with nodeSelectorTerms,
+          #then the pod can be scheduled onto a node only if all matchExpressions can be satisfied.
+          #
+          #valid operators: In, NotIn, Exists, DoesNotExist, Gt, Lt
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                {{- if .Values.image.arch }}
+                - {{ .Values.image.arch }}
+                {{- else }}
+                - {{ template "arch" . }}
+                {{- end }}
+      {{- if .Values.internalDatabase.persistence.enabled }}
+      volumes:
+      - name: {{ template "fullname" . }}-volume
+        persistentVolumeClaim:
+          claimName: {{ template "odm.persistenceclaim.fullname" . }}
+      {{- end }}
+      containers:
+      - name: {{ template "odm.dbserver.fullname" . }}
+{{ include "image.tagOrDigest" (dict "containerName" "dbserver" "containerTag" .Values.internalDatabase.tagOrDigest "root" .) | indent 8  }}
+##        image: {{ template "odm.repository.name" . }}/dbserver:{{ .Values.image.tag }}{{ template "platform" . }}
+        securityContext:
+          runAsUser: {{ .Values.internalDatabase.runAsUser }}
+          runAsNonRoot: true
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: POSTGRESQL_DATABASE
+          value: "{{ .Values.internalDatabase.databaseName }}"
+        - name: POSTGRES_DB
+          value: "{{ .Values.internalDatabase.databaseName }}"
+        {{- if not (empty .Values.internalDatabase.secretCredentials) }}
+        - name: POSTGRESQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.internalDatabase.secretCredentials }}
+              key: db-user
+        - name: POSTGRESQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.internalDatabase.secretCredentials }}
+              key: db-password
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.internalDatabase.secretCredentials }}
+              key: db-user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.internalDatabase.secretCredentials }}
+              key: db-password
+        {{- else }}
+        - name: POSTGRESQL_USER
+          value: "{{ .Values.internalDatabase.user }}"
+        - name: POSTGRESQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "odm.secret.fullname" . }}
+              key: db-password
+        - name: POSTGRES_USER
+          value: "{{ .Values.internalDatabase.user }}"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "odm.secret.fullname" . }}
+              key: db-password
+        {{- end }}
+        - name: "KubeVersion"
+          value: "{{ .Capabilities.KubeVersion.GitVersion }}"
+        {{- if eq .Values.decisionCenter.persistenceLocale "en_US" }}
+        - name: SAMPLE
+          value: "{{ .Values.internalDatabase.populateSampleData }}"
+        {{- end }}
+        ports:
+        - name: db-port
+          containerPort: 5432
+        readinessProbe:
+          tcpSocket:
+            port: 5432
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+        livenessProbe:
+          tcpSocket:
+            port: db-port
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+        {{- if .Values.internalDatabase.persistence.enabled }}
+        volumeMounts:
+          - name: {{ template "fullname" . }}-volume
+            mountPath: /var/lib/pgsql/
+            subPath : data
+        {{- end }}
+        resources:
+{{ toYaml .Values.internalDatabase.resources | indent 10 }}
+{{ include "odm-pullsecret-spec" . | indent 6 }}
+{{- end }}

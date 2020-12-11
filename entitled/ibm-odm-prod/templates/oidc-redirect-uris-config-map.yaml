@@ -1,0 +1,28 @@
+{{- if and (.Values.oidc.enabled) (empty .Values.oidc.redirectUrisRef)  }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name:  {{ template "odm.oidc-redirect-uris-configmap.fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+{{ include "odm-additional-labels" . | indent 4 }}
+data:
+  {{- if and (.Values.service.enableRoute) (not (empty .Values.service.hostname)) }}
+  redirect-uris: "https://decisioncenter.odm.{{ .Release.Name }}.{{ .Values.service.hostname }}{{ .Values.decisionCenter.contextRoot }}/decisioncenter/openid/redirect/odm,https://decisionrunner.odm.{{ .Release.Name }}.{{ .Values.service.hostname }}{{ .Values.decisionRunner.contextRoot }}/DecisionRunner/openid/redirect/odm,https://decisionserverconsole.odm.{{ .Release.Name }}.{{ .Values.service.hostname }}{{ .Values.decisionServerConsole.contextRoot }}/res/openid/redirect/odm,https://decisionserverruntime.odm.{{ .Release.Name }}.{{ .Values.service.hostname }}{{ .Values.decisionServerRuntime.contextRoot }}/DecisionService/openid/redirect/odm"
+  {{- else }}
+  {{- if and (.Values.service.ingress.enabled) (not (empty .Values.service.ingress.host)) }}
+  redirect-uris: "https://{{ .Values.service.ingress.host }}{{ .Values.decisionCenter.contextRoot }}/decisioncenter/openid/redirect/odm,https://{{ .Values.service.ingress.host }}{{ .Values.decisionRunner.contextRoot }}/DecisionRunner/openid/redirect/odm,https://{{ .Values.service.ingress.host }}{{ .Values.decisionServerConsole.contextRoot }}/res/openid/redirect/odm,https://{{ .Values.service.ingress.host }}{{ .Values.decisionServerRuntime.contextRoot }}/DecisionService/openid/redirect/odm"
+  {{- else }}
+  redirect-uris: "TO_FILL"
+  {{- end }}
+  {{- end }}
+  server-url: "{{ .Values.oidc.serverUrl }}"
+  {{- if not (empty .Values.oidc.provider) }}
+  provider: "{{ .Values.oidc.provider }}"
+  {{- else }}
+  provider: "ums"
+  {{- end }}
+{{- end }}

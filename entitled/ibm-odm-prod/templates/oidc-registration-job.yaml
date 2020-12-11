@@ -1,0 +1,139 @@
+{{- if .Values.oidc.enabled  }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name:  {{ template "odm.oidc-job-registration.fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: {{ template "odm.oidc-registration.fullname" . }}
+{{ include "odm-additional-labels" . | indent 4 }}
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        run: {{ template "odm.oidc-job-registration.fullname" . }}
+        app: {{ template "name" . }}
+        chart: "{{ .Chart.Name }}"
+        release: {{ .Release.Name }}
+        heritage: "{{ .Release.Service }}"
+{{ include "odm-additional-labels" . | indent 8 }}
+{{ include "odm-annotations" . | indent 6 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        {{- if .Values.customization.runAsUser }}
+        runAsUser: {{ .Values.customization.runAsUser }}
+        fsGroup: 10000
+        {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                {{- if .Values.image.arch }}
+                - {{ .Values.image.arch }}
+                {{- else }}
+                - {{ template "arch" . }}
+                {{- end }}
+      containers:
+      - name: {{ template "odm.oidc-registration.fullname" . }}
+{{ include "image.tagOrDigest" (dict "containerName" "odm-decisionrunner" "containerTag" .Values.decisionRunner.tagOrDigest "root" .) | indent 8  }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.decisionRunner.resources | indent 10 }}
+{{ include "odm-security-context" . | indent 8 }}
+        command: ["/bin/bash", "-c", "/oidc/run.sh"]
+        volumeMounts:
+          - name: oidc
+            mountPath: /oidc
+          - name: redirect-uris
+            mountPath: /redirect_uris
+          - name: server-url
+            mountPath: /server_url
+          - name: provider
+            mountPath: /provider
+          - name: oidc-client-id
+            mountPath: /oidc-client-id
+          - name: oidc-client-secret
+            mountPath: /oidc-client-secret
+          - name: oidc-username
+            mountPath: /oidc-username
+          - name: oidc-password
+            mountPath: /oidc-password
+      volumes:
+        - name: oidc
+          configMap:
+            defaultMode: 0755
+            name: {{ template "odm.oidc-registration-configmap.fullname" . }}
+        - name: redirect-uris
+          configMap:
+          {{- if not (empty .Values.oidc.redirectUrisRef) }}
+            name: {{ .Values.oidc.redirectUrisRef }}
+          {{- else }}
+            name: {{ template "odm.oidc-redirect-uris-configmap.fullname" . }}
+          {{- end }}
+            items:
+              - key: redirect-uris
+                path: redirect_uris.properties
+        - name: server-url
+          configMap:
+          {{- if not (empty .Values.oidc.redirectUrisRef) }}
+            name: {{ .Values.oidc.redirectUrisRef }}
+          {{- else }}
+            name: {{ template "odm.oidc-redirect-uris-configmap.fullname" . }}
+          {{- end }}
+            items:
+              - key: server-url
+                path: server_url.properties
+        - name: provider
+          configMap:
+          {{- if not (empty .Values.oidc.redirectUrisRef) }}
+            name: {{ .Values.oidc.redirectUrisRef }}
+          {{- else }}
+            name: {{ template "odm.oidc-redirect-uris-configmap.fullname" . }}
+          {{- end }}
+            items:
+              - key: provider
+                path: provider.properties
+        - name: oidc-client-id
+          secret:
+            {{- if not (empty .Values.oidc.clientRef) }}
+            secretName: {{ .Values.oidc.clientRef }}
+            {{- else }}
+            secretName: {{ template "odm.oidc-client-id-secret.fullname" . }}
+            {{- end }}
+            items:
+            - key: clientId
+              path: oidc-client-id
+        - name: oidc-client-secret
+          secret:
+            {{- if not (empty .Values.oidc.clientRef) }}
+            secretName: {{ .Values.oidc.clientRef }}
+            {{- else }}
+            secretName: {{ template "odm.oidc-client-id-secret.fullname" . }}
+            {{- end }}
+            items:
+            - key: clientSecret
+              path: oidc-client-secret
+        - name: oidc-username
+          secret:
+            secretName: {{ .Values.oidc.adminRef }}
+            items:
+            - key: adminUser
+              path: oidc-username
+        - name: oidc-password
+          secret:
+            secretName: {{ .Values.oidc.adminRef }}
+            items:
+            - key: adminPassword
+              path: oidc-password
+      restartPolicy: Never
+{{ include "odm-pullsecret-spec" . | indent 6 }}
+{{- end }}

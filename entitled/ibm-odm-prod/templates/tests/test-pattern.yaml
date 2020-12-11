@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name:  {{ template "odm.test.fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+{{ include "odm-additional-labels" . | indent 4 }}
+  annotations:
+    helm.sh/hook: test-success
+spec:
+{{ include "odm-serviceAccountName" . | indent 2 }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    {{- if .Values.customization.runAsUser }}
+    runAsUser: 1000
+    fsGroup: 10000
+    {{- end }}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            {{- if .Values.image.arch }}
+            - {{ .Values.image.arch }}
+            {{- else }}
+            - {{ template "arch" . }}
+            {{- end }}
+  containers:
+  - name: {{ template "odm.test.fullname" . }}
+    image: {{ template "odm.repository.name" . }}/odm-decisionserverruntime:{{ .Values.image.tag }}{{ template "platform" . }}
+    imagePullPolicy: {{ .Values.image.pullPolicy }}
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 2
+        memory: 4096Mi
+    securityContext:
+      {{- if .Values.customization.runAsUser }}
+      runAsUser: 1000
+      {{- end }}
+      runAsNonRoot: true
+      privileged: false
+      readOnlyRootFilesystem: false
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+    env:
+      - name: DBSERVER
+        value: {{ template "odm.dbserver.fullname" . }}
+      - name: DECISION_SERVER_CONSOLE_NAME
+        value: {{ template "odm.dsc.checkurl" .  }}
+      - name: DECISION_SERVER_CONSOLE_ENABLED
+        value: {{ quote (and (or .Values.decisionServerRuntime.enabled .Values.decisionRunner.enabled) (or (gt (int .Values.decisionServerRuntime.replicaCount) 0) (gt (int .Values.decisionServerRuntime.replicaCount) 0))) }}
+      - name: DECISION_SERVER_RUNTIME_NAME
+        value: {{ template "odm.dsr.checkurl" .  }}
+      - name: DECISION_SERVER_RUNTIME_ENABLED
+        value: {{ quote (and (.Values.decisionServerRuntime.enabled) (gt (int .Values.decisionServerRuntime.replicaCount) 0)) }}
+      - name: DECISION_CENTER_NAME
+        value: {{ template "odm.dc.checkurl" .  }}
+      - name: DECISION_CENTER_ENABLED
+        value: {{ quote (and (.Values.decisionCenter.enabled) (gt (int .Values.decisionCenter.replicaCount) 0)) }}
+      - name: DECISION_RUNNER_NAME
+        value: {{ template "odm.dr.checkurl" .  }}
+      - name: DECISION_RUNNER_ENABLED
+        value: {{ quote (and (.Values.decisionRunner.enabled) (gt (int .Values.decisionRunner.replicaCount) 0)) }}
+      - name: PERSISTENCECLAIM
+        value: {{ template "odm.persistenceclaim.fullname" . }}
+      - name: HTTPPROTOCOL
+        value: {{ template "odm.http.protocol" . }}
+    command: ["/bin/bash", "-c", "/tests/suite.sh"]
+    volumeMounts:
+      - name: tests
+        mountPath: /tests
+  volumes:
+    - name: tests
+      configMap:
+        defaultMode: 0755
+        name: {{ template "odm.test-configmap.fullname" . }}
+  restartPolicy: Never
+{{ include "odm-pullsecret-spec" . | indent 2 }}
