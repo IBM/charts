@@ -1,3 +1,17 @@
+{{- if ne .Values.license "accept" -}}
+{{ .Files.Get "LICENSES/LICENSE-LI" }}
+--------------------------------------------------------------------------------
+Please read and accept the license agreement.
+
+To accept the license:
+
+  - Delete the release {{ .Release.Name }}
+    helm del {{ .Release.Name }}
+
+  - Launch the installation with the parameter license set to 'accept'
+    helm install {{ .Release.Name }} --set license=accept ibm-charts/ibm-odm-dev
+
+{{- else -}}
 {{ .Release.Name }} is ready to use. {{ .Release.Name }} is an instance of the {{ .Chart.Name }} chart.
 
 {{ .Release.Name }} uses version {{ .Values.image.tag }} of the IBM® Operational Decision Manager (ODM) components.
@@ -13,6 +27,26 @@ Username/Password :
 
 Get the application URLs by running these commands:
 
+{{- if .Values.service.enableRoute -}}
+
+  export ROUTE=$(oc get routes {{ .Release.Name }}-route -o jsonpath='{.spec.host}')
+
+  -- Decision Center Business Console
+  echo http://$ROUTE/decisioncenter
+
+  -- Decision Center Enterprise Server
+  echo http://$ROUTE/teamserver
+
+  -- Decision Server Console
+  echo http://$ROUTE/res
+
+  -- Decision Server Runtime
+  echo http://$ROUTE/DecisionService
+
+  -- Decision Runner
+  echo http://$ROUTE/DecisionRunner
+
+{{- else -}}
 
   export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "fullname" . }})
   export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
@@ -32,7 +66,7 @@ Get the application URLs by running these commands:
   -- Decision Runner
   echo http://$NODE_IP:$NODE_PORT/DecisionRunner
 
-
+{{- end }}
 
 To learn more about the {{ .Release.Name }} release, try:
 
@@ -42,10 +76,11 @@ To learn more about the {{ .Release.Name }} release, try:
 
 {{- if .Values.internalDatabase.persistence.useDynamicProvisioning }}
 
-  Your PersistenceVolumeClaim is configured with Dynamic Provisioning.
+Your PersistenceVolumeClaim is configured with Dynamic Provisioning.
 {{- else }}
 
-  Your PersistenceVolumeClaim is not created dynamically.
-  You should  create a Persistence Volume in your cluster or use the internalDatabase.persistence.useDynamicProvisioning=true
+Your PersistenceVolumeClaim is not created dynamically.
+You should  create a Persistence Volume in your cluster or use the internalDatabase.persistence.useDynamicProvisioning=true
 charts parameter.
+{{- end }}
 {{- end }}
