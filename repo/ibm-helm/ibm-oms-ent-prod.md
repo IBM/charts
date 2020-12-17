@@ -148,6 +148,7 @@ If the fix pack factory setup needs to be applied, ensure that the `datasetup.fi
 | `global.license`                                                                  | Set the value to `True` in order to accept the application license                                                                                                                                        |
 | `global.license_store_call_center`                                                | Set the value to `True` in order to accept the Store and Call Center application license                                                                                                                  |
 | `appserver.replicaCount`                                                          | Number of appserver instances                                                                                                                                                                             | `1`                                                      |
+| `appserver.deploymentStrategy`                                                                 | Deployment Strategy for Application servers                                                                                                                                                                      |
 | `appserver.image`                                                                 | Container image details of appserver                                                                                                                                                                      |
 | `appserver.exposeRestService`                                                     | This flag is applicable only when route API (`route.openshift.io/v1`) exists. When enabled a new deployment of `om-app` image is created exposing `/smcfs` with a new route having the prefix `xapirest`. |
 | `appserver.config.vendor`                                                         | OMS Vendor                                                                                                                                                                                                | `websphere`                                              |
@@ -182,6 +183,7 @@ If the fix pack factory setup needs to be applied, ensure that the `datasetup.fi
 | `appserver.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution`       | k8s PodSpec.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity and Tolerations".                                                                                    |
 | `appserver.podAntiAffinity.replicaNotOnSameNode`                                  | Directive to prevent scheduling of replica pod on the same node. valid values: `prefer`, `require`, blank. Refer section "Affinity and Tolerations".                                                      | `prefer`                                                 |
 | `appserver.podAntiAffinity.weightForPreference`                                   | Preference weighting 1-100. Used if 'prefer' is specified for `appserver.podAntiAffinity.replicaNotOnSameNode`. Refer section "Affinity and Tolerations".                                                 | 100                                                      |
+| `omserver.deploymentStrategy`                                                                  | Deployment Strategy for Agent/Integration servers                                                                                                                                                                   |
 | `omserver.image`                                                                  | Container image details of agent server                                                                                                                                                                   |
 | `omserver.deployHealthMonitor`                                                    | Deploy health monitor agent                                                                                                                                                                               | `true`                                                   |
 | `omserver.common.jvmArgs`                                                         | Default JVM args that will be passed to the list of agent servers                                                                                                                                         |
@@ -230,6 +232,8 @@ If the fix pack factory setup needs to be applied, ensure that the `datasetup.fi
 | `global.customerOverrides`                                                        | array of customer overrides properties as `key=value`                                                                                                                                                     |
 | `global.envs`                                                                     | environment variables as array of kubernetes `EnvVars` objects                                                                                                                                            |
 | `global.arch`                                                                     | Architecture affinity while scheduling pods                                                                                                                                                               | amd64: `2 - No preference`, ppc64le: `2 - No preference` |
+| `global.customConfigMaps`                                                        | array of custom config maps                                                                                                                                                     |
+| `global.customSecrets`                                                        | array of custom secrets                                                                                                                                                     |
 
 ### Deploying Multiple Application Images
 
@@ -270,6 +274,7 @@ In the above example, 4 deployments will be made for the 4 images listed (`om-ap
   - The probePath for `om-app-docs` should be `/smcfsdocs/yfscommon/api_javadocs`
   - After the `om-app-docs` image is deployed:
     - The API Javadocs can be accessed at `<routePrefix>.<appserver.ingress.host>/smcfsdocs/yfscommon/api_javadocs/index.html`
+    - The Core Javadocs can be accessed at `<routePrefix>.<appserver.ingress.host>/smcfsdocs/yfscommon/core_javadocs/index.html`
     - The ERD can be accessed at `<routePrefix>.<appserver.ingress.host>/smcfsdocs/yfscommon/ERD/HTML/erd.html`
 
 ### Deploying REST API Service
@@ -572,7 +577,7 @@ To install the chart with the release name `my-release`:
 2. Run the following command:
 
 ```sh
-helm install my-release -f values.yaml ./ibm-oms-ent-prod --timeout 3600 --namespace <namespace>
+helm install my-release -f values.yaml ./ibm-oms-ent-prod --timeout 3600s --namespace <namespace>
 ```
 
 Depending on the capacity of the kubernetes worker node and database connectivity, the whole deploy process can take on average:
@@ -657,7 +662,7 @@ You would want to upgrade your deployment when you have a new container image fo
 2. Ensure that the `datasetup.loadFactoryData` parameter is set to `donotinstall` or blank. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ./ibm-oms-ent-prod --timeout 3600
+helm upgrade my-release -f values.yaml ./ibm-oms-ent-prod --timeout 3600s
 ```
 
 ## Rollback
