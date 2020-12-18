@@ -1,4 +1,4 @@
-# IBM Sterling B2B Integrator Enterprise Edition v6.1
+# IBM Sterling B2B Integrator Enterprise Edition v6.1.0.1
 ## Introduction
 
 IBM Sterling B2B Integrator helps companies integrate complex B2B EDI processes with their partner communities. Organizations get a single, flexible B2B platform that supports most communication protocols, helps secure your B2B network and data, and achieves high-availability operations. The offering enables companies to reduce costs by consolidating EDI and non-EDI any-to-any transmissions on a single B2B platform and helps automate B2B processes across enterprises, while providing governance and visibility over those processes.
@@ -41,13 +41,19 @@ Services
     ```
     kubectl create secret docker-registry <name of secret> --docker-server=<your-registry-server> --docker-username=<your-username> --docker-password=<your-password> --docker-email=<your-email>
     ```
-11. When installing the chart on a new database which does not have IBM Sterling B2B Integrator Software schema tables and metadata, 
+
+11. If applicable, create secrets with confidential certificates required by Database, MQ or Liberty for SSL connectivity using below command
+    ```
+	kubectl create secret generic <secret-name> --from-file=/path/to/<certificate>
+	```
+
+12. When installing the chart on a new database which does not have IBM Sterling B2B Integrator Software schema tables and metadata, 
 * ensure that `dataSetup.enable` parameter is set to `true` and `dataSetup.upgrade` parameter is set as `false`. This will create the required database tables and metadata in the database before installing the chart.
 
-12. When installing the chart on a database on an older release version
+13. When installing the chart on a database on an older release version
 * ensure that `dataSetup.enable` parameter is set to `true`,`dataSetup.upgrade` parameter is set as `true` and `env.upgradeCompatibilityVerified` is set as `true`. This will upgrade the given database tables and metadata to the latest version.
 
-13. Automatically installing ibm-licensing-operator with a stand-alone IBM Containerized Software using Operator Lifecycle Manager (OLM) 
+14. Automatically installing ibm-licensing-operator with a stand-alone IBM Containerized Software using Operator Lifecycle Manager (OLM) 
 Use the automatic script to install License Service on any Kubernetes-orchestrated cloud. The script creates an instance and validates the steps. It was tested to work on OpenShift Container Platform 4.2+, vanilla Kubernetes custer, 
 and is available at:
  - pre-install/license/ibm_licensing_operator_install.sh
@@ -62,7 +68,7 @@ When installing the chart against a database which already has the Sterling B2B 
 ### PodSecurityPolicy Requirements
 
 This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation.  Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you:
-* ICPv3.2.0 and ICPv3.2.1 - Predefined PodSecurityPolicy name: [`ibm-anyuid-psp`](https://ibm.biz/cpkspec-psp)
+* Predefined PodSecurityPolicy name: [`ibm-anyuid-psp`](https://ibm.biz/cpkspec-psp)
 
 This chart optionally defines a custom PodSecurityPolicy which is used to finely control the permissions/capabilities needed to deploy this chart. It is based on the predefined PodSecurityPolicy name: [`ibm-restricted-psp`](https://github.com/IBM/cloud-pak/blob/master/spec/security/psp/ibm-anyuid-psp.yaml) with extra required privileges. You can enable this policy by using the Platform User Interface or configuration file available under pak_extensions/pre-install/ directory
 - From the user interface, you can copy and paste the following snippets to enable the custom PodSecurityPolicy
@@ -299,7 +305,7 @@ Depending on the capacity of the kubernetes worker node and database network con
 Parameter                                      | Description                                                          | Default 
 -----------------------------------------------| ---------------------------------------------------------------------| -------------
 `global.image.repository`                      | Repository for B2B docker images                                     | 
-`global.image.tag          `                   | Docker image tag                                                     | `6.1.0.0`
+`global.image.tag          `                   | Docker image tag                                                     | `6.1.0.1`
 `global.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `global.image.pullSecret `         			   | Pull secret for repository access                                    | 
 `arch`                                         | Compatible platform architecture                                     | `x86_64`
@@ -340,6 +346,8 @@ Parameter                                      | Description                    
 `env.license`                                  | view or accept license                                               | `accept`
 `env.upgradeCompatibilityVerified`             | Indicate release upgrade compatibility verification done             | `false`
 `logs.enableAppLogOnConsole`                   | Enable application logs redirection to pod console                   | `true` 
+`integrations.seasIntegration.isEnabled`       | Enable Seas integration. For more information, please refer to the product documentation           | false
+`integrations.seasIntegration.seasVersion`     | Seas version                                                         | `1.0`
 `setupCfg.basePort`                            | Base/initial port for the application                                | 50000
 `setupCfg.licenseAcceptEnableSfg`              | Consent for accepting license for Sterling File Gateway module       | false
 `setupCfg.licenseAcceptEnableEbics`            | Consent for accepting license for EBICs module                       | false
@@ -357,8 +365,10 @@ Parameter                                      | Description                    
 `setupCfg.dbCreateSchema`                      | Create/update database schema on install/upgrade                     | true
 `setupCfg.oracleUseServiceName`                | Use service name applicable if db vendor is Oracle                   | false
 `setupCfg.usessl`                              | Enable SSL for database connection                                   | false
-`setupCfg.dbTruststore`                        | Database SSL connection truststore file name                         | 
-`setupCfg.dbKeystore`                          | Database SSL connection keystore file name                           |
+`setupCfg.dbTruststore`                        | Database truststore file name including it's path relative to the mounted resources volume location. When `dbTruststoreSecret` is mentioned, provide the name of the key holding the certificate data.                         | 
+`setupCfg.dbTruststoreSecret`                  | Name of the Database truststore secret containing the certificate, if applicable.                      | 
+`setupCfg.dbKeystore`                          | Database keystore file name including it's path relative to the mounted resources volume location, if applicable. When `dbKeystoreSecret` is mentioned, provide the name of the key holding the certificate data.                         |
+`setupCfg.dbKeystoreSecret`                    | Name of the Database keystore secret containing the certificate, if applicable.                       | 
 `setupCfg.dbSecret`                            | Database user secret name                                            | 
 `setupCfg.adminEmailAddress`                   | Administrator email address                                          | 
 `setupCfg.smtpHost`                            | SMTP email server host                                               |
@@ -373,20 +383,21 @@ Parameter                                      | Description                    
 `setupCfg.jmsConnectionNameList`               | MQ connection name list                                              | 
 `setupCfg.jmsChannel`                          | MQ channel name                                                      |  
 `setupCfg.jmsEnableSsl`                        | Enable SSL for MQ server connection                                  | 
-`setupCfg.jmsKeystorePath`                     | MQ SSL connection keystore path                                      | 
-`setupCfg.jmsTruststorePath`                   | MQ SSL connection truststore path                                    |  
+`setupCfg.jmsKeystorePath`                     | MQ keystore file name including it's path relative to the mounted resources volume location, if applicable. When `jmsKeystoreSecret` is mentioned, provide the name of the key holding the certificate data.                                   | 
+`setupCfg.jmsKeystoreSecret`                   | Name of the JMS keystore secret containing the certificate, if applicable.                                   | 
+`setupCfg.jmsTruststorePath`                   | MQ truststore file name including it's path relative to the mounted resources volume location, if applicable. When `jmsTruststoreSecret` is mentioned, provide the name of the key holding the certificate data.                                 |  
+`setupCfg.jmsTruststoreSecret`                 | Name of the JMS truststore secret containing the certificate, if applicable.                                  | 
 `setupCfg.jmsCiphersuite`                      | MQ SSL connection ciphersuite                                        | 
 `setupCfg.jmsProtocol`                         | MQ SSL connection protocol                                           | `TLSv1.2` 
 `setupCfg.jmsSecret`                           | MQ user secret name                                                  |
-`setupCfg.libertyKeystoreLocation`             | Liberty API server keystore location                                 | 
+`setupCfg.libertyKeystoreLocation`             | Liberty keystore file name including it's path relative to the mounted resources volume location, if applicable. If `libertyKeystoreSecret` is mentioned, provide the name of the key holding the certificate data.                                  | 
+`setupCfg.libertyKeystoreSecret`               | Name of Liberty keystore secret containing the certificate, if applicable.                                  | 
 `setupCfg.libertyProtocol`                     | Liberty API server SSL connection protocol                           | `TLSv1.2` 
 `setupCfg.libertySecret`                       | Liberty API server SSL connection secret name                        | 
 `setupCfg.libertyJvmOptions`                   | Liberty API server JVM option                                        |
 `setupCfg.updateJcePolicyFile`                 | Enable JCE policy file update                                        | false
 `setupCfg.jcePolicyFile`                       | JCE policy file name                                                 |
 `asi.replicaCount`                             | Application server independent(ASI) deployment replica count         | 1
-`asi.seasIntegration.isEnabled`                | Enable Seas integration. For more information, please refer to the product documentation           | false
-`asi.seasIntegration.seasVersion`              | Seas version                                                         | `1.0`
 `asi.env.jvmOptions`                           | JVM options for asi                                                  | 
 `asi.frontendService.type`                             | Service type                                                         | `NodePort`
 `asi.frontendService.ports.http.name`                  | Service http port name                                               | `http`
@@ -409,10 +420,19 @@ Parameter                                      | Description                    
 `asi.frontendService.ports.soassl.targetPort`            | Service target port number or name on pod                          | `soassl`
 `asi.frontendService.ports.soassl.nodePort`              | Service node port                                                  | 30003
 `asi.frontendService.ports.soassl.protocol`              | Service port connection protocol                                   | `TCP`
+`asi.frontendService.ports.restHttpAdapter.name`                  | Service restHttpAdapter port name                                           | `rest-adapter`
+`asi.frontendService.ports.restHttpAdapter.port`                  | Service restHttpAdapter port number                                         | 35007
+`asi.frontendService.ports.restHttpAdapter.targetPort`            | Service target port number or name on pod                          | `rest-adapter`
+`asi.frontendService.ports.restHttpAdapter.nodePort`              | Service node port                                                  | 30007
+`asi.frontendService.ports.restHttpAdapter.protocol`              | Service port connection protocol                                   | `TCP`
 `asi.frontendService.extraPorts`                       | Extra ports for service                                              |
+`asi.frontendService.loadBalancerIP`                   | LoadBalancer IP for service                                          |
+`asi.frontendService.annotations`                      | Additional annotations for the asi frontendService                   |
 `asi.backendService.type`                             | Service type                                                         | `NodePort`
 `asi.backendService.ports`                       | Ports for service                                              |  
 `asi.backendService.portRanges`                       | Port ranges for service                                              |
+`asi.backendService.loadBalancerIP`                   | LoadBalancer IP for service                                          |
+`asi.backendService.annotations`                      | Additional annotations for the asi backendService                    |
 `asi.livenessProbe.initialDelaySeconds`        | Livenessprobe initial delay in seconds                               | 60
 `asi.livenessProbe.timeoutSeconds`             | Livenessprobe timeout in seconds                                     | 30
 `asi.livenessProbe.periodSeconds`              | Livenessprobe interval in seconds                                    | 60
@@ -448,7 +468,13 @@ Parameter                                      | Description                    
 `asi.podAffinity.requiredDuringSchedulingIgnoredDuringExecution`     | k8s PodSpec.podAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    | 
 `asi.podAffinity.preferredDuringSchedulingIgnoredDuringExecution`    | k8s PodSpec.podAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    | 
 `asi.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution` | k8s PodSpec.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	|
-`asi.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution`| k8s PodSpec.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	| 
+`asi.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution`| k8s PodSpec.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	|
+`asi.topologySpreadConstraints`    | Topology spread constraints to control how Pods are spread across your cluster among failure-domains such as regions, zones, nodes, and other user-defined topology domains.      |
+`asi.tolerations`                             | Tolerations to pods, and allow (but do not require) the pods to schedule onto nodes with matching taints  |  
+`asi.extraSecrets`                 | Extra secrets. `mountAsVolume` if `true`, the secrets will be mounted as a volume on `/ibm/resources/<secret-name>` folder else they will be exposed as environment variables.  | 
+`asi.extraConfigMaps`              | Extra configmaps. `mountAsVolume` if `true`, the configmap will be mounted as a volume on `/ibm/resources/<configmap-name>` folder else they will be exposed as environment variables.  | 
+`asi.myFgAccess.myFgPort`          | If myFG is hosted on HTTP Server adapter on ASI server, provide the internal port used while configuring that.  | 
+`asi.myFgAccess.myFgProtocol`      | If myFG is hosted on HTTP Server adapter on ASI server, provide the internal protocol used while configuring that.  | 
 `ac.replicaCount`                             | Adapter Container server (ac) deployment replica count               | 1
 `ac.env.jvmOptions`                           | JVM options for ac                                                   | 
 `ac.frontendService.type`                             | Service type                                                         | `NodePort`
@@ -458,9 +484,13 @@ Parameter                                      | Description                    
 `ac.frontendService.ports.http.nodePort`              | Service node port                                                    | 30001
 `ac.frontendService.ports.http.protocol`              | Service port connection protocol                                     | `TCP`
 `ac.frontendService.extraPorts`                       | Extra ports for service                                              | 
+`ac.frontendService.loadBalancerIP`                   | LoadBalancer IP for service                                          | 
+`ac.frontendService.annotations`                     | Additional annotations for the ac frontendService                     |
 `ac.backendService.type`                             | Service type                                                         | `NodePort`
 `ac.backendService.ports`                       | Ports for service                                              |  
 `ac.backendService.portRanges`                       | Port ranges for service                                              |
+`ac.backendService.loadBalancerIP`                  | LoadBalancer IP for service                                          |
+`ac.backendService.annotations`                     | Additional annotations for the ac backendService                     |
 `ac.livenessProbe.initialDelaySeconds`        | Livenessprobe initial delay in seconds                               | 60
 `ac.livenessProbe.timeoutSeconds`             | Livenessprobe timeout in seconds                                     | 5
 `ac.livenessProbe.periodSeconds`              | Livenessprobe interval in seconds                                    | 60
@@ -492,6 +522,12 @@ Parameter                                      | Description                    
 `ac.podAffinity.preferredDuringSchedulingIgnoredDuringExecution`    | k8s PodSpec.podAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    | 
 `ac.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution` | k8s PodSpec.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	|
 `ac.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution`| k8s PodSpec.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	| `api.replicaCount`                             | k8s PodSpec.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity". | 
+`ac.topologySpreadConstraints`    | Topology spread constraints to control how Pods are spread across your cluster among failure-domains such as regions, zones, nodes, and other user-defined topology domains.      | 
+`ac.tolerations`                             | Tolerations to pods, and allow (but do not require) the pods to schedule onto nodes with matching taints  | 
+`ac.extraSecrets`                 | Extra secrets. `mountAsVolume` if `true`, the secrets will be mounted as a volume on `/ibm/resources/<secret-name>` folder else they will be exposed as environment variables.  | 
+`ac.extraConfigMaps`              | Extra configmaps. `mountAsVolume` if `true`, the configmap will be mounted as a volume on `/ibm/resources/<configmap-name>` folder else they will be exposed as environment variables.  | 
+`ac.myFgAccess.myFgPort`          | If myFG is hosted on HTTP Server adapter on AC server, provide the internal port used while configuring that.  | 
+`ac.myFgAccess.myFgProtocol`      | If myFG is hosted on HTTP Server adapter on AC server, provide the internal protocol used while configuring that.  | 
 `api.replicaCount`                             | Liberty API server (API) deployment replica count                    | 1
 `api.env.jvmOptions`                           | JVM options for api                                                  | 
 `api.frontendService.type`                             | Service type                                                         | `NodePort`
@@ -506,6 +542,8 @@ Parameter                                      | Description                    
 `api.frontendService.ports.https.nodePort`             | Service node port                                                    | 30003
 `api.frontendService.ports.https.protocol`             | Service port connection protocol                                     | `TCP`
 `api.frontendService.extraPorts`                       | Extra ports for service                                              | 
+`api.frontendService.loadBalancerIP`                   | LoadBalancer IP for service                                          |
+`api.frontendService.annotations`                      | Additional annotations for the api frontendService                   |
 `api.livenessProbe.initialDelaySeconds`        | Livenessprobe initial delay in seconds                               | 120
 `api.livenessProbe.timeoutSeconds`             | Livenessprobe timeout in seconds                                     | 5
 `api.livenessProbe.periodSeconds`              | Livenessprobe interval in seconds                                    | 60
@@ -523,10 +561,6 @@ Parameter                                      | Description                    
 `api.extraVolumeMounts`                        | Extra volume mounts                                                  | 
 `api.extraInitContainers`                      | Extra init containers                                                | 
 `api.resources`                                | CPU/Memory resource requests/limits                                  | 
-`api.autoscaling.enabled`                      | Enable autoscaling                                                   | false
-`api.autoscaling.minReplicas`                  | Minimum replicas for autoscaling                                     | 1
-`api.autoscaling.maxReplicas`                  | Maximum replicas for autoscaling                                     | 2
-`api.autoscaling.targetCPUUtilizationPercentage`| Target CPU utilization                                              | 60
 `api.defaultPodDisruptionBudget.enabled`       | Enable default pod disruption budget                                 | false
 `api.defaultPodDisruptionBudget.minAvailable`  | Minimum available for pod disruption budget                          | 1
 `api.extraLabels`                              | Extra labels                                                         | 
@@ -535,7 +569,11 @@ Parameter                                      | Description                    
 `api.podAffinity.requiredDuringSchedulingIgnoredDuringExecution`     | k8s PodSpec.podAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    | 
 `api.podAffinity.preferredDuringSchedulingIgnoredDuringExecution`    | k8s PodSpec.podAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    | 
 `api.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution` | k8s PodSpec.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	|
-`api.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution`| k8s PodSpec.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity and Tolerations".	| 
+`api.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution`| k8s PodSpec.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity and Tolerations".	|
+`api.topologySpreadConstraints`    | Topology spread constraints to control how Pods are spread across your cluster among failure-domains such as regions, zones, nodes, and other user-defined topology domains.      | 
+`api.tolerations`                              | Tolerations to pods, and allow (but do not require) the pods to schedule onto nodes with matching taints  |  
+`api.extraSecrets`                 | Extra secrets. `mountAsVolume` if `true`, the secrets will be mounted as a volume on `/ibm/resources/<secret-name>` folder else they will be exposed as environment variables.  | 
+`api.extraConfigMaps`              | Extra configmaps. `mountAsVolume` if `true`, the configmap will be mounted as a volume on `/ibm/resources/<configmap-name>` folder else they will be exposed as environment variables.  | 
 `nameOverride`                                 | Chart resource short name override                                   | 
 `fullnameOverride`                             | Chart resource full name override                                    | 
 `dashboard.enabled`                            | Enable sample Grafana dashboard                                      | false
@@ -545,7 +583,7 @@ Parameter                                      | Description                    
 `test.image.pullPolicy`                        | Pull policy for helm test image repository                           | `IfNotPresent`
 `purge.enabled`                                | Enable external purge job                                            | 'false'
 `purge.image.repository          `             | External purge docker image repository                               | `purge`
-`purge.image.tag          `                    | External purge image tag                                             | `6.1.0.0`
+`purge.image.tag          `                    | External purge image tag                                             | `6.1.0.1`
 `purge.image.pullPolicy`                       | Pull policy for external purge docker image                          | `IfNotPresent`
 `purge.image.pullSecret`                       | Pull secret for repository access                                    | 
 `purge.schedule`                               | External purge job creation and execution schedule. Its a Cron format string such as 1 * * * * or 
