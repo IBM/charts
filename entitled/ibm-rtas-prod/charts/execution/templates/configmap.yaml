@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "execution.fullname" . }}
+  labels:
+{{ include "execution.labels" . | indent 4 }}
+data:
+  inventory.yml: |+
+    version: '3'
+    services:
+      shared:
+        runAsUser: {{ .Values.securityContext.runAsUser }}
+        serviceAccountName: {{ .Release.Name }}-engine
+        initImage: "{{ .Values.global.ibmRtasRegistry }}/{{ .Values.global.ibmRtasInitImage }}"
+        imagePullPolicy: {{ .Values.enginePullPolicy }}
+{{ if .Values.global.ibmRtasRegistryPullSecret }}
+        imagePullSecret: {{ .Values.global.ibmRtasRegistryPullSecret }}
+{{ end }}
+        ingressType: {{ .Values.ingress.type }}
+        ingressHostPattern: {{ tpl .Values.ingress.hostPattern $ }}
+        ingressGatwayName: {{ default (include "execution.fullname" .) .Values.ingress.gatewayName }}
+      api:
+        image: {{ .Values.global.ibmRtasRegistry }}/{{ .Values.apiImage }}
+        environment:
+      workbench:
+        image: {{ .Values.global.ibmRtasRegistry }}/{{ .Values.workbenchImage }}
+        environment:
+      agent:
+        image: {{ .Values.global.ibmRtasRegistry }}/{{ .Values.agentImage }}

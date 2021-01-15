@@ -1,5 +1,8 @@
+{{- $licenseEnabled := include "{{ .Chart.Name }}.licenseValidate" .  | required "License must be accepted by setting Values.license.accept to true." -}}
+{{- if $licenseEnabled }}
 {{- include "sch.config.init" (list . "ibm-ucda-prod.sch.chart.config.values") -}}
 {{- $fullName := include "sch.names.fullName" (list .) -}}
+{{- $imageSpec := include "{{ .Chart.Name }}.imageSpec" . | trim -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -18,17 +21,22 @@ spec:
 {{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
         ucdcomp: {{ .Release.Name }}-agent
       annotations:
-        productName: "UrbanCode Deploy Agent"
-        productID: "CC0QVML"
-        productVersion: "7.0.5.2"
+        productName: "IBM UrbanCode Deploy Server Agent"
+        productID: "f6a78b2d36ca400389f3a60332112399"
+        productVersion: "7.1.1"
+        productMetric: "MANAGED_VIRTUAL_SERVER"
+        productChargedContainers: "All"
     spec:
+      serviceAccount: {{ $fullName }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
       securityContext:
         runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
         runAsUser: 1001
-        fsGroup: 1001
+        fsGroup: {{ .Values.persistence.fsGroup }}
+{{- end }}
       affinity:
       {{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
         podAntiAffinity:
@@ -44,14 +52,16 @@ spec:
               topologyKey: "kubernetes.io/hostname"
       containers:
       - name: {{ .Chart.Name }}
-        image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.repository "${1}cp/" }}:{{ .Values.image.tag }}"
+        image: {{ $imageSpec | quote }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         securityContext:
           privileged: false
           readOnlyRootFilesystem: false
           allowPrivilegeEscalation: false
           runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
           runAsUser: 1001
+{{- end }}
           capabilities:
             drop:
             - ALL
@@ -73,6 +83,15 @@ spec:
             value: {{ .Values.agentTeams }}
           - name: EXECUTABLES_PATH
             value: {{ .Values.userUtils.executablesPath }}
+          - name: UCD_KEYSTORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                {{- if .Values.secret.name }}
+                name: {{ .Values.secret.name }}
+                {{- else }}
+                name: {{ .Release.Name }}-secrets
+                {{- end }}
+                key: keystorepassword
         volumeMounts:
           - name: "{{ $fullName }}-{{ .Values.confVolume.name }}"
             mountPath: "/opt/ibm-ucd/agent/configs"
@@ -108,4 +127,5 @@ spec:
         persistentVolumeClaim:
           claimName: {{ .Values.userUtils.existingClaimName }}
       {{- end }}
+{{- end }}
 

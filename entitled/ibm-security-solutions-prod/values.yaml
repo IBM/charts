@@ -12,6 +12,8 @@ global:
   replicas: 2
 ## default storage class
   storageClass: ""
+## storage class for ReadWriteMany
+  sharedStorageClass: ""
   nodeSelector: {}
   tolerations: {}
   csNamespace: ibm-common-services
@@ -28,8 +30,7 @@ global:
 
   adminUserId:
   defaultAccountName:
-
-  toolbox:
+  backup:
     size: 
     storageClass: 
 
@@ -49,10 +50,17 @@ global:
         data:
         server:
           requests:
-            memory:
+            memory: 200Mi
             cpu: 25m
           limits:
-            memory:
+            memory: "1Gi"
+            cpu: 50m
+        sentinel:
+          requests:
+            memory: 200Mi
+            cpu: 25m
+          limits:
+            memory: "1Gi"
             cpu: 50m
   arangodb:
     environment: Production 
@@ -119,7 +127,7 @@ global:
             cpu: "100m"
             memory: "256Mi"
           limits:
-            cpu: 1.5
+            cpu: 1500m
             memory: "1Gi"
           search:
             limits:
@@ -129,8 +137,9 @@ global:
               cpu: 100m
               memory: 2200Mi
 
-  serviceability:
-      toolbox:
+
+  maintenance:
+      backup:
         requests:
           cpu: 50m
           memory: 128Mi
@@ -181,12 +190,12 @@ global:
             cpu: 500m
             memory: 200Mi
   aitk:
-    analyticsImageTag: '1.4.0.0-amd64'
+    analyticsImageTag: '1.5.0.0-amd64'
     activeJobsLimit: 100
 
   bindings:
     authsvc:
-      replicas:
+      replicas: 3
     configstore:
       replicas:
     entitlements:
@@ -204,8 +213,6 @@ global:
     iscauth:
       replicas:
     orchestrator:
-      replicas:
-    aitkwebui:
       replicas:
     debackend:
       replicas:
@@ -226,13 +233,19 @@ global:
       replicas: 1
     uds:
      redis: "default"
-    tisrfi:
-      replicas:
     tisaia:
+      replicas:
+    tisconnectormanager:
+      replicas:
+    tiscoordinator:
+      replicas:
+    tiscortex:
       replicas:
     tisdatagateway:
       replicas:
-    tiscoordinator:
+    tisenrichqueue:
+      replicas:
+    tisrfi:
       replicas:
     tisscoring:
       replicas:
@@ -246,6 +259,20 @@ global:
       replicas:
     tiisettings:
       replicas:
+    tiicoordinator:
+      replicas:
+    idrmintex:
+      replicas:
+    idrmingestion:
+      replicas:
+    idrmdashboard:
+      replicas:
+    idrmapp:
+      replicas:
+    idrmrisk:
+      replicas:
+    idrmpostgres:
+      replicas:
 
   poddisruptionbudget:
     enabled: false
@@ -256,15 +283,19 @@ global:
     dynamicProvisioning: true
     limits:
       memory: 1Gi
+      cpu: 1000m
     requests:
       cpu: 100m
       memory: 1Gi
 
-  elastic:
-    cases:
-      installOptions:
-        storageSize: 25Gi
-        storageClassName: ""
+  rabbitmq:
+    replicas: 3
+    limits:
+      memory: 512Mi
+      cpu: 200m
+    requests:
+      cpu: 200m
+      memory: 512Mi
 
 # OIDC registration configuration
   oidc:
@@ -290,8 +321,13 @@ global:
     enabled: true
   ibm-isc-csaadapter-prod:
     enabled: false
-  ibm-isc-toolbox-prod:
+  ibm-isc-backup-restore-prod:
     enabled: true
+  ibm-isc-insiderthreat-prod:
+    enabled: true
+  ibm-isc-riskcenter-prod:
+    enabled: true
+   
 # Resource limits for microservices:
 
   resources:
@@ -338,46 +374,21 @@ global:
         requests:
           memory: 100Mi
           cpu: 10m
-      elastic:
-        client:
-          heapSize: 1024m
-          limits:
-            memory: 2Gi
-            cpu: 500m
-          requests:
-            memory: 1Gi
-            cpu: 50m
-        master:
-          heapSize: 1024m
-          limits:
-            memory: 2Gi
-            cpu: 500m
-          requests:
-            memory: 1Gi
-            cpu: 50m
-        data:
-          heapSize: 1024m
-          limits:
-            memory: 2Gi
-            cpu: 500m
-          requests:
-            memory: 1Gi
-            cpu: 50m
     platform:
       iscauth:
         requests:
-          cpu: 100m
-          memory: 128Mi
+          cpu: 50m
+          memory: 200Mi
         limits:
           cpu: 1
-          memory: 256Mi
+          memory: 250Mi
       iscprofile:
         requests:
-          cpu: 100m
-          memory: 128Mi
+          cpu: 50m
+          memory: 100Mi
         limits:
           cpu: 1
-          memory: 256Mi
+          memory: 200Mi
       authsvc:
         requests:
           cpu: 160m
@@ -413,13 +424,6 @@ global:
         limits:
           cpu: 500m
           memory: 512Mi
-      aitkwebui:
-        requests:
-          cpu: 100m
-          memory: 128Mi
-        limits:
-          cpu: 1
-          memory: 200Mi
       configstore:
         requests:
           cpu: 20m
@@ -460,7 +464,7 @@ global:
       webui:
         requests:
           cpu: 200m
-          memory: 256Mi
+          memory: 384Mi
         limits:
           cpu: 300m
           memory: 512Mi
@@ -469,29 +473,29 @@ global:
           cpu: 100m
           memory: 512Mi
         limits:
-          cpu: 1
+          cpu: 300m
           memory: 1024Mi
     car:
       car:
         requests:
-          cpu: 100m
+          cpu: 60m
           memory: 128Mi
         limits:
-          cpu: 1
-          memory: 256Mi
+          cpu: 600m
+          memory: 1Gi
       carConnectorConfig:
         requests:
-          cpu: 100m
+          cpu: 60m
           memory: 128Mi
         limits:
-          cpu: 1
+          cpu: 600m
           memory: 256Mi
       carFrontendUi:
         requests:
-          cpu: 100m
+          cpu: 250m
           memory: 128Mi
         limits:
-          cpu: 1
+          cpu: 500m
           memory: 512Mi
     uds:
       udswebui:
@@ -499,65 +503,72 @@ global:
           cpu: 150m
           memory: 250Mi
         limits:
-          cpu: 200m
+          cpu: 1
           memory: 500Mi
       udiendpoints:
         requests:
           cpu: 250m
           memory: 250Mi
         limits:
-          cpu: 500m
+          cpu: 1
           memory: 500Mi
       udiworkers:
         requests:
-          cpu: 200m
+          cpu: 400m
           memory: 250Mi
         limits:
-          cpu: 400m
+          cpu: 1
           memory: 500Mi
     tii:
       tiisearch:
         requests:
-          cpu: 100m
-          memory: 150Mi
+          cpu: 50m
+          memory: 200Mi
         limits:
-          cpu: 250m
-          memory: 256Mi
+          cpu: 1
+          memory: 400Mi
       tiiapp:
         requests:
-          cpu: 100m
-          memory: 150Mi
+          cpu: 50m
+          memory: 200Mi
         limits:
-          cpu: 250m
-          memory: 256Mi
+          cpu: 1
+          memory: 400Mi
       tiireports:
         requests:
-          cpu: 100m
-          memory: 150Mi
+          cpu: 50m
+          memory: 200Mi
         limits:
-          cpu: 250m
-          memory: 256Mi
+          cpu: 1
+          memory: 400Mi
       tiithreats:
         requests:
-          cpu: 100m
-          memory: 150Mi
+          cpu: 75m
+          memory: 200Mi
         limits:
-          cpu: 250m
-          memory: 256Mi
+          cpu: 1
+          memory: 400Mi
       tiisettings:
         requests:
-          cpu: 100m
+          cpu: 50m
           memory: 150Mi
         limits:
-          cpu: 250m
-          memory: 256Mi
+          cpu: 1
+          memory: 250Mi
       tiixfeproxy:
         requests:
-          cpu: 100m
-          memory: 150Mi
+          cpu: 75m 
+          memory: 120Mi
         limits:
-          cpu: 250m
-          memory: 256Mi
+          cpu: 1
+          memory: 200Mi
+      tiicoordinator:
+        requests:
+          cpu: 30m
+          memory: 80Mi
+        limits:
+          cpu: 1
+          memory: 200Mi
     csa:
       csaadapter:
         requests:
@@ -574,6 +585,13 @@ global:
         limits:
           cpu: 1
           memory: 256Mi
+      tisconnectormanager:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 1
+          memory: 256Mi
       tiscoordinator:
         requests:
           cpu: 50m
@@ -581,6 +599,13 @@ global:
         limits:
           cpu: 250m
           memory: 128Mi
+      tiscortex:
+        requests:
+          cpu: 100m
+          memory: 2048Mi
+        limits:
+          cpu: 1
+          memory: 2048Mi
       tisdatagateway:
         requests:
           cpu: 100m
@@ -588,6 +613,13 @@ global:
         limits:
           cpu: 1
           memory: 512Mi
+      tisenrichqueue:
+        requests:
+          cpu: 50m
+          memory: 100Mi
+        limits:
+          cpu: 1
+          memory: 128Mi
       tisrfi:
         requests:
           cpu: 100m
@@ -602,6 +634,35 @@ global:
         limits:
           cpu: 1
           memory: 256Mi
+      elastic:
+        storageSize: 20Gi 
+        client:
+          replicas: 3
+          heapSize: 1024m 
+          limit:
+            cpu: 400m
+            memory: 2Gi
+          requests:
+            cpu: 100m
+            memory: 2Gi          
+        data:
+          replicas: 3
+          heapSize: 1024m
+          limit:
+            cpu: 400m
+            memory: 2Gi
+          requests:
+            cpu: 100m
+            memory: 2Gi          
+        master:
+          replicas: 2
+          heapSize: 1024m
+          limit:
+            cpu: 400m
+            memory: 2Gi
+          requests:
+            cpu: 400m       
+            memory: 2Gi    
     carconnector:
       tenable:
         requests:
@@ -638,7 +699,28 @@ global:
         limits:
           cpu: 1
           memory: 256Mi
+      guardium:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 1
+          memory: 256Mi
+      drm:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 1
+          memory: 256Mi
     udiconnector:
+      arcsight:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 1
+          memory: 256Mi
       awscloudwatchlogs:
         requests:
           cpu: 100m
@@ -674,7 +756,7 @@ global:
         limits:
           cpu: 1
           memory: 256Mi
-      msatp:
+      guardium:
         requests:
           cpu: 100m
           memory: 128Mi
@@ -709,234 +791,322 @@ global:
         limits:
           cpu: 1
           memory: 256Mi
+    riskcenter:
+      idrmintex:
+        requests:
+          cpu: 100m
+          memory: 1Gi
+        limits:
+          cpu: 500m
+          memory: 2Gi
+      idrmingestion:
+        requests:
+          cpu: 100m
+          memory: 1Gi
+        limits:
+          cpu: 500m
+          memory: 2Gi
+      idrmdashboard:
+        requests:
+          cpu: 100m
+          memory: 1Gi
+        limits:
+          cpu: 500m
+          memory: 2Gi
+      idrmapp:
+        requests:
+          cpu: 50m
+          memory: 200Mi
+        limits:
+          cpu: 100m
+          memory: 500Mi
+      idrmrisk:
+        requests:
+          cpu: 100m
+          memory: 100Mi
+        limits:
+          cpu: 200m
+          memory: 500Mi
+      idrmpostgres:
+        requests:
+          cpu: 300m
+          memory: 512Mi
+        limits:
+          cpu: 750m
+          memory: 1Gi
 # IMAGES
   images:
     platform:
       authsvc:
         image: isc-authsvc
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       iscprofile:
         image: isc-common-xfeplus-profileservice-ocp
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       iscauth:
         image: isc-common-auth
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       shell:
         image: isc-common-shell
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       qproxy:
         image: homer-qproxy
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       console:
         image: isc-common-console
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       pulse:
         image: pulse-dashboard
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       configstore:
         image: isc-common-configstore
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       entitlements:
         image: isc-entitlements
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       orchestrator:
         image: isc-aitk-orchestrator
-        tag: 1.4.0.0-amd64
-      aitkwebui:
-        image: isc-aitk-webui
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       aitkuds2file:
         image: isc-uds2file
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       aitkdefeatureanalysis:
         image: isc-de-feature-analysis
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       aitkcommandinterpreter:
         image: command-interpreter
-        tag: 1.4.0.0-amd64
-
+        tag: 1.5.0.0-amd64
+      aitkudianalyzer:
+        image: isc-udi-analyzer
+        tag: 1.5.0.0-amd64
+      elastic:
+        image: ibmjava11
+        tag: 1.5.0.0-amd64
     cases:
       activemq:
         image: isc-cases-activemq
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       activemqLoggingSidecar:
         image: isc-cases-activemq-logging-sidecar
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       application:
         image: isc-cases-application
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       app_manager:
         image: apps-manager
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       databaseInit:
         image: isc-cases-database-init
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       databaseUpgrade:
         image: isc-cases-database-upgrade
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       loggingSidecar:
         image: isc-cases-logging-sidecar
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       operator:
         image: isc-cases-operator
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       resutil:
         image: isc-cases-resutil
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       scripting:
         image: isc-cases-scripting
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       postgresOperator:
         image: isc-postgresql-operator
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       crunchyPgo:
         image: postgres-operator
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       crunchyPgoApiServer:
         image: pgo-apiserver
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       crunchyPgoScheduler:
         image: pgo-scheduler
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       crunchyPgoEvent:
         image: pgo-event
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       crunchyPgoBackrestRepo:
         image: pgo-backrest-repo
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       crunchyPgoBackrest:
         image: pgo-backrest
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       crunchyPgoRmdata:
         image: pgo-rmdata
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       crunchyPgoBackrestRestore:
         image: pgo-backrest-restore
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       crunchyPostgresHa:
         image: crunchy-postgres96-ha
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
     tii:
       tiisearch:
         image: isc-common-xfeplus-search-service
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       tiiapp:
         image: isc-common-xfeplus-threat-intelligence-app
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       tiireports:
         image: isc-common-xfeplus-reports
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       tiithreats:
         image: isc-common-xfeplus-threat-cards
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       tiisettings:
         image: isc-common-xfeplus-settings
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       tiixfeproxy:
         image: isc-common-xfeplus-xfe-proxy
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
+      tiicoordinator:
+        image: isc-common-xfeplus-coordinator
+        tag: 1.5.0.0-amd64
     tis:
       tisaia:
         image: isc-tis-aia
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
+      tisconnectormanager:
+        image: isc-tis-connector-manager
+        tag: 1.5.0.0-amd64
       tiscoordinator:
         image: isc-tis-coordinator
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
+      tiscortex:
+        image: isc-tis-cortex
+        tag: 1.5.0.0-amd64
       tisdatagateway:
         image: isc-tis-data-gateway
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
+      tisenrichqueue:
+        image: isc-tis-enrich-queue
+        tag: 1.5.0.0-amd64
       tisrfi:
         image: isc-tis-rfi
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       tisscoring:
         image: isc-tis-score-controller
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
     de:
       webui:
         image: isc-investigate-webui
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       backend:
         image: isc-investigate-backend
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
     uds:
       udswebui:
         image: isc-settings-datasources
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       udiendpoints:
         image: isc-udi-endpoint
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       udiworkers:
         image: isc-udi-worker
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
     csa:
       csaadapter:
         image: isc-csaadapter
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
     car:
       car:
         image: isc-car
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       carConnectorConfig:
         image: cp4s-car-connector-config
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       carFrontendUi:
         image: cp4s-car-frontend-ui
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
     arangodb:
       arangodb:
         image: arangodb-community
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       exporter:
         image: arangodb-exporter
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
     carconnector:
       tenable:
         image: isc-car-connector-tenable
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       azure:
         image: isc-car-connector-azure
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       atp:
         image: isc-car-connector-atp
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       aws:
         image: isc-car-connector-aws
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       iam:
         image: isc-car-connector-iam
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
+      guardium:
+        image: isc-car-connector-guardium
+        tag: 1.5.0.0-amd64
+      drm:
+        image: isc-car-connector-drm
+        tag: 1.5.0.0-amd64
     udiconnector:
+      arcsight:
+        image: stix_shifter_modules_arcsight
+        tag: 1.5.0.0-amd64
       awscloudwatchlogs:
         image: stix_shifter_modules_aws_cloud_watch_logs
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       azuresentinel:
         image: stix_shifter_modules_azure_sentinel
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       bigfix:
         image: stix_shifter_modules_bigfix
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       carbonblack:
         image: stix_shifter_modules_carbonblack
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       elasticecs:
         image: stix_shifter_modules_elastic_ecs
-        tag: 1.4.0.0-amd64
-      msatp:
-        image: stix_shifter_modules_msatp
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
+      guardium:
+        image: stix_shifter_modules_guardium
+        tag: 1.5.0.0-amd64
       qradar:
         image: stix_shifter_modules_qradar
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       securityadvisor:
         image: stix_shifter_modules_security_advisor
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       splunk:
         image: stix_shifter_modules_splunk
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
       stixbundle:
         image: stix_shifter_modules_stix_bundle
-        tag: 1.4.0.0-amd64
-    serviceability:
-      toolbox:
-        image: cp4s-toolbox
-        tag: 1.4.0.0-amd64
+        tag: 1.5.0.0-amd64
+    maintenance:
+      backup:
+        image: cp4s-backup-restore
+        tag: 1.5.0.0-amd64
+    riskcenter:
+      idrmrisk:
+        image: idrmrisk
+        tag: 1.5.0.0-amd64
+      idrmintex:
+        image: idrmintex
+        tag: 1.5.0.0-amd64
+      idrmingestion:
+        image: idrmingestion
+        tag: 1.5.0.0-amd64
+      idrmdashboard:
+        image: idrmdashboard
+        tag: 1.5.0.0-amd64
+      idrmapp:
+        image: idrmnode
+        tag: 1.5.0.0-amd64
+      idrmpostgres:
+        image: idrmpostgres
+        tag: 1.5.0.0-amd64
+      crunchyPostgres10Ha:
+        image: crunchy-postgres10-ha
+        tag: 1.5.0.0-amd64

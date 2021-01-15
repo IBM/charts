@@ -1,0 +1,46 @@
+# (C) Copyright 2019-2020 Syncsort Incorporated. All rights reserved.
+
+{{ include "sch.config.init" (list . "b2bi.sch.chart.config.values") }}
+{{- $ingressEnabled := .Values.ingress.enabled | default false }}
+{{- if gt (.Values.ac.replicaCount|int) 0 }}
+{{- $serviceType := .Values.ac.frontendService.type }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.acFrontendService.name) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.acFrontendService.name) | indent 4 }}
+  annotations:
+{{- if .Values.ac.frontendService.annotations }}
+{{ toYaml .Values.ac.frontendService.annotations | indent 4 }}
+{{- end }}
+spec:
+  {{- if eq $ingressEnabled false }}
+  type: {{ .Values.ac.frontendService.type }}
+  {{- else }}
+  type: ClusterIP
+  {{- end }}
+  ports:
+    - port: {{ .Values.ac.frontendService.ports.http.port }}
+      targetPort: {{ .Values.ac.frontendService.ports.http.targetPort }}
+      protocol: {{ .Values.ac.frontendService.ports.http.protocol }}
+      name: {{ .Values.ac.frontendService.ports.http.name }}
+      {{- if eq $ingressEnabled false }}
+      nodePort: {{ .Values.ac.frontendService.ports.http.nodePort }}
+      {{- end }}
+    {{- range $i, $port := .Values.ac.frontendService.extraPorts }}
+    - port: {{ $port.port }}
+      targetPort: {{ $port.targetPort }}
+      protocol: {{ $port.protocol }}
+      name: {{ $port.name }}
+      {{- if eq $ingressEnabled false }}
+      nodePort: {{ $port.nodePort }}
+      {{- end }}
+    {{- end }}
+  sessionAffinity: ClientIP
+  selector:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.acServer.name) | indent 4 }}
+   {{- if and (eq $serviceType "LoadBalancer") (.Values.ac.frontendService.loadBalancerIP) }}
+  loadBalancerIP: {{ .Values.ac.frontendService.loadBalancerIP }}  
+   {{ end }}
+{{ end }}
