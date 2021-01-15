@@ -115,6 +115,16 @@ initSCC() {
 
   oc adm policy add-scc-to-user nonroot -z ibm-isc-operators --as system:admin
   oc adm policy add-scc-to-group anyuid  system:serviceaccounts:$NAMESPACE --as system:admin
+
+  # Elastic certificates
+  oc create serviceaccount ibm-dba-ek-isc-cases-elastic-bai-psp-sa
+#  test=$(kubectl get scc ibm-privileged-scc -o name 2>/dev/null)
+#  if [ "X$test" == "X" ]; then
+#    sa='privileged'
+#  else
+#    sa='ibm-privileged-scc'
+#  fi
+#  oc adm policy add-scc-to-user $sa -z ibm-dba-ek-isc-cases-elastic-bai-psp-sa
 }
 
 patchSecret() {

@@ -19,8 +19,9 @@
 FORCE=0
 NAMESPACE=$(oc project | sed -e 's/^[^"]*"//' -e 's/".*$//')
 dir="$(cd $(dirname $0) && pwd)/../../.."
+HELM2=""
 HELM3=""
-COUCH=0
+COUCH=1
 MIGRATE=1
 CLEANUP=0
 
@@ -201,27 +202,77 @@ delete_old_data() {
   # Delete unused secrets
   
   echo "INFO: Deleting unused secrets"
-  
-  # delete migration jobs
-  for job in $(kubectl get job -o name 2>/dev/null | grep -e '-migration')
+  kubectl get isccomponent -o jsonpath='{range .items[*]}{.spec.action.service.name}{"\n"}' | grep -ve '^$' | xargs kubectl delete secret --ignore-not-found=true
+
+  for secrets in uds-ow-secret udswebui ow-couch-couchdb uds-ow-secret v3-couchdb \
+    v3-deresults-couchdatabase couch-secret-v3 tis-user-register isc-openwhisk-openwhisk-nginx
   do
-     jn="${job##*/}"
-     kubectl delete $job
-     kubectl delete pod -ljob-name=$jn 2>/dev/null
+    kubectl delete secret $secrets --ignore-not-found=true
   done
   
-  helm3 delete ibm-dba-ek-isc-cases-elastic 2>/dev/null
-  kubectl delete deploy -lchart=ibm-dba-ek
-  kubectl delete sa ibm-dba-ek-isc-cases-elastic-bai-psp-sa --ignore-not-found=true
-  kubectl delete secret -lapp.kubernetes.io/instance=isc-cases-elastic
-  kubectl delete pvc -lchart=ibm-dba-ek --wait=false
+  # Delete unused jobs
+  echo "INFO: Deleting unused jobs"
+  kubectl delete job car-migration --ignore-not-found=true
+  kubectl delete job isc-entitlements-migration --ignore-not-found=true
+  
+  # Delete unused helm2 charts
+  echo "INFO: Deleting unused helm2 charts"
+  chartP=$(${HELM2} ls --tls | grep "couchdb-default" | awk '{print $1}')
+  if [ "X$chartP" != "X" ]; then
+    $HELM2 delete --tls --purge $chartP
+  fi
+  
+  # Delete unused PVCs
+  echo "INFO: Deleting unused PVCs"
+  for pvcs in database-storage-default-couchdb-0 database-storage-default-couchdb-1 \
+    database-storage-default-couchdb-2
+  do 
+    kubectl delete pvc $pvcs --ignore-not-found=true --wait=false
+  done
+  
+  kubectl get secret -o name | grep -e '-couchdatabase$' | xargs kubectl delete
+  
+  # Delete unused PVC from kube-system namespace
+  kubectl delete pvc cs-backupdata -n kube-system --ignore-not-found=true --wait=false
+  
+  # Delete unused statefulset
+  echo "INFO: Deleting unused statefulsets"
+  kubectl delete statefulset default-couchdb --ignore-not-found=true --wait=false
 
+  # Delete unused pods
+  echo "INFO: Deleting unused pods"
+  for pods in default-couchdb-0 default-couchdb-1 default-couchdb-3
+  do
+    kubectl delete pod $pods --ignore-not-found=true --wait=false
+  done
+  
+  # Delete unused services
+  echo "INFO: Deleting unused services"
+  for services in default-svc-couchdb default-couchdb
+  do
+    kubectl delete service $services --ignore-not-found=true
+  done
+  
+  # Delete unused configmap
+  #echo "INFO: Deleting unused configmaps"
+  
+  # Delete unused CRDs
+  echo "INFO: Deleting unused CRDs"
+  kubectl delete crd redis.isc.ibm.com --ignore-not-found=true --wait=false
+  kubectl delete crd iscopenwhisks.isc.ibm.com --ignore-not-found=true --wait=false
+  kubectl delete crd couchdbs.isc.ibm.com --ignore-not-found=true --wait=false
 }
 
 reenable() {
-  return
+ # restart as redis cache has been reset
+   kubectl delete services -lsvcowner=iscatkjob
+   kubectl delete job -ljobowner=iscatk
+   kubectl delete configmaps -lmapowner=iscatk
+   kubectl delete secrets -lsecretowner=iscatk
+   kubectl delete pod -lname=ibm-aitk-orchestrator
+   # restart arangodb operator and db
+   kubectl get pod --no-headers | awk '{print $1}' |grep arango | xargs kubectl delete pod
 }
-
 
 while true
 do
@@ -240,6 +291,7 @@ do
     shift
     ;;
   -helm2)
+    HELM2="$1"
     shift
     ;;
   -cleanup)
@@ -273,6 +325,7 @@ if [ "X$(which kubectl)" == "X" ]; then
   exit 1
 fi
 
+HELM2=$(check_helm "$HELM2" "helm2" 'SemVer:"v2.12' "--tls")
 HELM3=$(check_helm "$HELM3" "helm3" 'Version:"v3.2') 
 
 echo "INFO: Initiating Post-Upgrade Steps"

@@ -21,6 +21,3 @@ Product fixes to support Cloud Pak for Security
 | 1.0.5| Mar 26th, 2020|  >=1.11 | | None  |Threat Intelligence Service and Threat Intelligence Insights for Cloud Pak for Security and Cases subchart added to provide Postgresql Operator service|
 | 1.0.6| May 22nd, 2020|  >=1.11 | | None  | OCP 4.3 support,IBM Resilient support, Defect fixes|
 | 1.0.8| |  >=1.11 | | None  | Install Improvements, Helm 3 support, Product fixes to support Cloud Pak for Security|
-|1.0.10| |  >=1.11 | | None  |Product fixes to support Cloud Pak for Security|
-|1.0.11| |  >=1.11 | | None  |Product fixes to support Cloud Pak for Security|
-|1.0.12| |  >=1.11 | | None  |Product fixes to support Cloud Pak for Security|
