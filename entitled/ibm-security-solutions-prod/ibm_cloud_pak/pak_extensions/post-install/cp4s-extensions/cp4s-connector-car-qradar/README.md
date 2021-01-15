@@ -10,11 +10,11 @@ A QRadar connection must have already been set up in CP4S before running the ass
 
 ## Steps to run the Assets script
 
-1. Find the zip archive of the QRadar CAR connector (`UDA-ingestion-2.0.5.zip`) that is included in this folder.
-2. Secure copy the archive over to the root of the QRadar box: `scp UDA-ingestion-2.0.5.zip root@<IP Address>:/root`
+1. Find the zip archive of the QRadar CAR connector (`UDA-ingestion-2.0.4.zip`) that is included in this folder.
+2. Secure copy the archive over to the root of the QRadar box: `scp UDA-ingestion-2.0.4.zip root@<IP Address>:/root`
 2. SSH into your QRadar box.
 3. Create the following directory on your QRadar box: `/transient/car`: `mkdir -p /transient/car`
-4. Unzip the archive into the `car` folder created in the previous step: `unzip -j -d /transient/car UDA-ingestion-2.0.5.zip`
+4. Unzip the archive into the `car` folder created in the previous step: `unzip -j -d /transient/car UDA-ingestion-2.0.4.zip`
 5. Navigate to the new `car` directory: `cd /transient/car`.
 6. The archive contains the `assets.py` script which uses the following arguments: 
 

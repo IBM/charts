@@ -11,7 +11,6 @@ metadata:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
   annotations:
     "helm.sh/hook": test-success
-    #"helm.sh/hook-delete-policy": hook-succeeded [not supported in v1]
 spec:
   affinity:
     nodeAffinity:
@@ -24,17 +23,18 @@ spec:
             - amd64
   tolerations:
   - operator: "Exists"
-  hostNetwork: true
   serviceAccountName: ibmcloud-object-storage-driver
   containers:
     - name: {{ template "ibm-object-storage-plugin.drivername" . }}-test
       {{- if contains "ICP" (.Values.provider | quote | upper) }}
-      image: "{{ .Values.image.driverImage.publicRegistry }}"
+      image: "{{ .Values.image.driverImage.publicRegistry }}:{{ .Values.image.driverBuild }}"
       {{- else }}
-      image: "{{ .Values.image.driverImage.ibmContainerRegistry }}"
+      image: "{{ .Values.image.driverImage.ibmContainerRegistry }}:{{ .Values.image.driverBuild }}"
       {{- end }}
       imagePullPolicy: {{ .Values.image.pullPolicy }}
-      command: ["sh", "-c", 'ls /host/kubernetes/kubelet-plugins/volume/exec/ibm~ibmc-s3fs/ibmc-s3fs; rc=$?; exit $rc']
+      command: ["sh", "-c", 'version1=$(cat /home/s3-dep/version.txt | head -n 2 | tail -n 1);
+        version2=$(/host/kubernetes/kubelet-plugins/volume/exec/ibm~ibmc-s3fs/ibmc-s3fs version);
+        if [[ "$version1" == "$version2" ]]; then exit 0; else exit 1; fi']
       resources:
         requests:
           memory: {{ .Values.resource.memory }}
@@ -52,12 +52,4 @@ spec:
   volumes:
     - name: kube-driver
       hostPath:
-         {{- if contains "ICP" (.Values.provider | quote | upper) }}
-         {{- if contains "OPENSHIFT" (.Values.platform | quote | upper) }}
-         path: /etc/kubernetes
-         {{- else }}
          path: /usr/libexec/kubernetes
-         {{- end }}
-         {{- else }}
-         path: /usr/libexec/kubernetes
-         {{- end }}
