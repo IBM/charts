@@ -1,11 +1,10 @@
-# What's new in Chart Version 7.1.1
+# What's new in Chart Version 6.0.8
 
-* Support for UCD 7.1.1.1
-* Default service type is no longer NodePort, now set to ClusterIP
+* Support for UCD 7.0.5.2
+* Support for installing UCD Server as an Operator
 
 ## Breaking Changes
-* Rollback to previous versions of UCD server is not supported without manual intervention because database schema changes are present.  Manual steps can be found [here](https://www.urbancode.com/resource/running-urbancode-deploy-as-a-container-with-kubernetes/#upgrading-ucd-chart).
-* Helm 3 is now used for deploying the UCD Server.  Direct upgrade for UCD server deployed via Helm 2 is not supported. Please use the Helm 2to3 Plugin for to perform migration (https://github.com/helm/helm-2to3/blob/master/README.md)
+* Rollback to previous versions of UCD server is not supported without manual intervention because database schema changes are present.  Manual steps can be found [here](https://developer.ibm.com/urbancode/docs/running-urbancode-deploy-container-kubernetes/#upgrading-ucd-chart).
 
 # Fixes
 
@@ -16,13 +15,7 @@
 
 | Chart | Date | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------------ | ---------------- | ------- |
-| 7.1.1 | November 24th, 2020 | ucds: sha256:73130abeae856d2c3d08320d21ef3b677809419136c5880625206579ddb4af2c | Rollback to previous versions of UCD server not supported | Support for UCD Server 7.1.1.1 |
-| 7.1.0 | November 3rd, 2020 | ucds: sha256:4f1fdc20a2cb4eb789188428d89652681a6299beb0b665ff910182dc82c5ee60 | Rollback to previous versions of UCD server not supported | Support for UCD Server 7.1.1.0 |
-| 7.0.4 | September 15th, 2020 | ucds: 7.1.0.3.1069281 | Rollback to previous versions of UCD server not supported | Support for UCD Server 7.1.0.3 |
-| 7.0.3 | August 18th, 2020 | ucds: 7.1.0.2.1063225 | Rollback to previous versions of UCD server not supported | Support for UCD Server 7.1.0.2 |
-| 7.0.2 | July 21st, 2020 | ucds: 7.1.0.1.ifix01.1062130 | Rollback to previous versions of UCD server not supported | Support for UCD Server 7.1.0.1.ifix01 |
-| 7.0.1 | June 23rd, 2020 | ucds: 7.1.0.0.1058690 | Rollback to previous versions of UCD server not supported | Support for UCD Server 7.1.0.0 |
-| 6.0.8 | March 24th, 2020 | ucds: 7.0.5.2.1050384 | Rollback of previous versions of UCD server not supported | Support for UCD Server 7.0.5.2 |
+| 6.0.8 | March 24th, 2020 | ucds: 7.0.5.2.1050384 | Rollback to previous versions of UCD server not supported | Support for UCD Server 7.0.5.2 |
 | 6.0.7 | February 11th, 2020 | ucds: 7.0.5.1.1044461 | Rollback of previous versions of UCD server not supported | Support for UCD Server 7.0.5.1 |
 | 6.0.6 | January 14th, 2020 | ucds: 7.0.5.0.1041488 | Rollback to previous versions of UCD server not supported | Support for UCD Server 7.0.5.0 |
 | 6.0.5 | December 4th, 2019 | ucds: 7.0.4.2.1038002 | Rollback to previous versions of UCD server not supported | Support for UCD Server 7.0.4.2 |
@@ -41,4 +34,4 @@
 
 ## Documentation
 
--   UrbanCode Deploy Installing the server in a Kubernetes cluster [page](https://www.ibm.com/support/knowledgecenter/en/SS4GSP_7.1.0/com.ibm.udeploy.install.doc/topics/docker_cloud_over.html)
+-   UrbanCode Deploy Installing the server in a Kubernetes cluster [page](https://www.ibm.com/support/knowledgecenter/en/SS4GSP_7.0.4/com.ibm.udeploy.install.doc/topics/docker_cloud_over.html)

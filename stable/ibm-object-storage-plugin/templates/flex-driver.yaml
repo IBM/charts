@@ -3,9 +3,6 @@ kind: DaemonSet
 metadata:
   name: {{ template "ibm-object-storage-plugin.drivername" . }}
   namespace: {{ template "ibm-object-storage-plugin.namespace" . }}
-  annotations:
-    razee.io/source-url: {{ template "ibm-object-storage-plugin.repoSourceUrl" . }}
-    razee.io/build-url: {{ template "ibm-object-storage-plugin.buildUrl" . }}
   labels:
     app: {{ template "ibm-object-storage-plugin.drivername" . }}
     app.kubernetes.io/name: {{ template "ibm-object-storage-plugin.drivername" . }}
@@ -32,12 +29,9 @@ spec:
         release: {{ .Release.Name }}
       annotations:
         productID: "IBMCloudObjectStoragePlugin_{{ .Chart.AppVersion }}_Apache02_00000"
-        productMetric: "FREE"
         productName: "ibmcloud-object-storage-plugin"
         productVersion: "{{ .Chart.AppVersion }}"
         autoUpdate: {{ randAlphaNum 5 | quote }}
-        razee.io/source-url: {{ template "ibm-object-storage-plugin.repoSourceUrl" . }}
-        razee.io/build-url: {{ template "ibm-object-storage-plugin.buildUrl" . }}
     spec:
       affinity:
         nodeAffinity:
@@ -51,15 +45,13 @@ spec:
       tolerations:
       - operator: "Exists"
       hostNetwork: true
-      hostPID: false
-      hostIPC: false
       serviceAccountName: ibmcloud-object-storage-driver
       containers:
         - name: {{ template "ibm-object-storage-plugin.drivername" . }}-container
           {{- if contains "ICP" (.Values.provider | quote | upper) }}
-          image: "{{ .Values.image.driverImage.publicRegistry }}"
+          image: "{{ .Values.image.driverImage.publicRegistry }}:{{ .Values.image.driverBuild }}"
           {{- else }}
-          image: "{{ .Values.image.driverImage.ibmContainerRegistry }}"
+          image: "{{ .Values.image.driverImage.ibmContainerRegistry }}:{{ .Values.image.driverBuild }}"
           {{- end }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           resources:
@@ -72,11 +64,6 @@ spec:
           securityContext:
             capabilities:
               drop: ["ALL"]
-            privileged: false
-            allowPrivilegeEscalation: true
-            readOnlyRootFilesystem: false
-            runAsNonRoot: false
-            runAsUser: 0
           livenessProbe:
             exec:
               command:
@@ -84,7 +71,7 @@ spec:
               - -c
               - version1=$(cat /home/s3-dep/version.txt | grep "^Version" );
                 version2=$(/host/kubernetes/kubelet-plugins/volume/exec/ibm~ibmc-s3fs/ibmc-s3fs version);
-                if [ "$version1" = "$version2" ]; then exit 0; else exit 1; fi
+                if [[ "$version1" == "$version2" ]]; then exit 0; else exit 1; fi
             initialDelaySeconds: 60
             periodSeconds: 60
             failureThreshold: 1
@@ -95,7 +82,7 @@ spec:
               - -c
               - version1=$(cat /home/s3-dep/version.txt | grep "^Version" );
                 version2=$(/host/kubernetes/kubelet-plugins/volume/exec/ibm~ibmc-s3fs/ibmc-s3fs version);
-                if [ "$version1" == "$version2" ]; then exit 0; else exit 1; fi
+                if [[ "$version1" == "$version2" ]]; then exit 0; else exit 1; fi
             initialDelaySeconds: 60
             periodSeconds: 60
             failureThreshold: 1
@@ -106,11 +93,9 @@ spec:
                name: sysd-run
              - mountPath: /host/local
                name: usr-local
-             - mountPath: /host/usr/lib
-               name: usr-lib
-               readOnly: true
              - mountPath: /host/etc
                name: etc-mount
+               readOnly: true
              - mountPath: /hostetc/ssh
                name: etc-ssh-mount
              - mountPath: /host/.ssh
@@ -121,16 +106,13 @@ spec:
       volumes:
         - name: kube-driver
           hostPath:
-              path: {{.Values.kubeDriver}}
+             path: /usr/libexec/kubernetes
         - name: sysd-run
           hostPath:
              path: /run/systemd
         - name: usr-local
           hostPath:
              path: /usr/local
-        - name: usr-lib
-          hostPath:
-             path: /usr/lib
         - name: etc-mount
           hostPath:
              path: /etc

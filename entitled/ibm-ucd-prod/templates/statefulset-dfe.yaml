@@ -1,5 +1,4 @@
 {{- include "sch.config.init" (list . "ibm-ucd-prod.sch.chart.config.values") -}}
-{{- $imageSpec := include "{{ .Chart.Name }}.imageSpec" . | trim -}}
 {{- $fullName := include "sch.names.fullName" (list .) -}}
 apiVersion: apps/v1
 kind: StatefulSet
@@ -19,45 +18,40 @@ spec:
 {{ include "sch.metadata.labels.standard" (list . "dfe") | indent 8 }}
         ucdcomp: {{ .Release.Name }}-server-dfe
       annotations:
-        productName: "IBM UrbanCode Deploy Server Agent"
-        productID: "f6a78b2d36ca400389f3a60332112399"
-        productVersion: "7.1.1"
-        productMetric: "MANAGED_VIRTUAL_SERVER"
-        productChargedContainers: "All"
+        productName: "UrbanCode Deploy"
+        productID: "CC1C5ML"
+        productVersion: "7.0.5.2"
     spec:
-      serviceAccountName: {{ $fullName }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
       securityContext:
         runAsNonRoot: true
-{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
         runAsUser: 1001
         fsGroup: {{ .Values.persistence.fsGroup }}
-{{- end }}
       affinity:
       {{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
-        podAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: ucdcomp
-                operator: In
-                values:
-                - {{ .Release.Name }}-server
-            topologyKey: "kubernetes.io/hostname"
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: ucdcomp
+                  operator: In
+                  values:
+                  - {{ .Release.Name }}-server-dfe
+              topologyKey: "kubernetes.io/hostname"
       initContainers:
       - name: init
-        image: {{ $imageSpec | quote }}
+        image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.repository "${1}cp/" }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         securityContext:
           privileged: false
           readOnlyRootFilesystem: false
           allowPrivilegeEscalation: false
           runAsNonRoot: true
-{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
           runAsUser: 1001
-{{- end }}
           capabilities:
             drop:
             - ALL
@@ -93,19 +87,10 @@ spec:
                 name: {{ .Release.Name }}-secrets
                 {{- end }}
                 key: initpassword
-          - name: UCD_KEYSTORE_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                {{- if .Values.secret.name }}
-                name: {{ .Values.secret.name }}
-                {{- else }}
-                name: {{ .Release.Name }}-secrets
-                {{- end }}
-                key: keystorepassword
           - name: UCD_STS
             value: {{ .Release.Name }}
           - name: LICENSE_SERVER_URL
-            value: {{ .Values.license.serverUrl }}
+            value: {{ .Values.ucdLicense.serverUrl }}
           - name: DFE_SERVER
             value: "true"
         volumeMounts:
@@ -128,16 +113,14 @@ spec:
           {{- end }}
       containers:
       - name: {{ .Chart.Name }}
-        image: {{ $imageSpec | quote }}
+        image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.repository "${1}cp/" }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         securityContext:
           privileged: false
           readOnlyRootFilesystem: false
           allowPrivilegeEscalation: false
           runAsNonRoot: true
-{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
           runAsUser: 1001
-{{- end }}
           capabilities:
             drop:
             - ALL
@@ -201,15 +184,6 @@ spec:
             {{- else }}
             value: "N"
             {{- end }}
-          - name: UCD_KEYSTORE_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                {{- if .Values.secret.name }}
-                name: {{ .Values.secret.name }}
-                {{- else }}
-                name: {{ .Release.Name }}-secrets
-                {{- end }}
-                key: keystorepassword
           - name: UCD_STS
             value: {{ .Release.Name }}
           - name: DFE_SERVER
