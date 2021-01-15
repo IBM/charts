@@ -5,7 +5,7 @@ A Helm plugin that installs or upgrades Helm charts in IBM K8S Service
 * https://docs.helm.sh/helm/#helm-ibmc
 
 ## Fixes
-  * With v2.0.1, `ibmc` helm plugin supports installation of object-storage-plugin on ICP OpenShift clusters.
+  * With v2.0.0, `ibmc` helm plugin supports installation of object-storage-plugin with helm client `v2.x` and `v3.x`.
 
 ## Installation
   * `helm repo add ibm-charts https://icr.io/helm/ibm-charts`
