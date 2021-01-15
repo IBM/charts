@@ -20,43 +20,6 @@
 
 CS_NAMESPACE=''
 
-check_helm() {
-  binary="$1"
-  alias="$2"
-  version="$3"
-  flags="$4"
-
-  if [ "X$binary" == "X" ]; then
-
-     binary=$(which $alias)
-     if [ "X$binary" == "X" ]; then
-
-        binary=$(which helm )
-     fi
-  fi
-  if [ "X$binary" == "X" ]; then
-    echo "$alias is not set"
-    exit 1
-  fi
-
-  vcheck=$($binary version $flags 2>/dev/null)
-  if [ "X$vcheck" == "X" ]; then
-    echo "$binary has incorrect version"
-    echo "$binary version $flags"
-    exit 1
-  fi
-  echo "$binary"
-}
-
-checkapp() {
-  app="$1"
-
-  if [ "X$(which $app)" == "X" ]; then
-    echo "ERROR: $app not found on path"
-    exit 1
-  fi
-}
-
 getcrt() {
   certname="$1"
   fldname="$2"
@@ -76,10 +39,7 @@ checkClusterCA() {
     ing='icp-management-ingress-tls-secret'
     cafld='ca.crt'
   fi
-  if [ "X$(which openssl)" == "X" ]; then
-    echo "WARNING: no openssl found, cound not validate cert"
-    return
-  fi
+
   clcert=$(getcrt $cacrt "$cafld")
   ingcrt=$(getcrt $ing "ca.crt")
   if [ "X$clcert" != "X$ingcrt" ]; then
@@ -88,7 +48,7 @@ checkClusterCA() {
 }
 
 checkKubeSystem() {
-  pods=$(kubectl get pod --no-headers -n $CS_NAMESPACE| grep -vE 'Running|Completed'| grep -E 'auth|^platform-api|icp-mongo|helm')
+  pods=$(kubectl get pod --no-headers -n $CS_NAMESPACE| grep -vE 'Running|Completed'| grep -E 'auth|^platform-api|icp-mongo')
   if [ "X$pods" != "X" ]; then
     echo "ERROR: Some of $CS_NAMESPACE pods are in failed state:"
     echo "$pods"
@@ -102,7 +62,7 @@ checkKubeSystem() {
   fi
 
   # check if necessary components are installed
-  for app in auth-idp auth-pap auth-idp helm  \
+  for app in auth-idp auth-pap auth-idp \
              platform-api $xtra \
              oidcclient-watcher secret-watcher
   do
@@ -134,9 +94,6 @@ set_namespace()
     exit 1
   fi
 }
-
-checkapp kubectl
-checkapp oc
 
 NAMESPACE=$(oc project | sed -e 's/^[^"]*"//' -e 's/".*$//')
 SOLUTIONS=""
@@ -238,7 +195,6 @@ if [ "X$SOLUTIONS" == "X" ]; then
 fi
 
 isPresent secret isc-ingress-default-secret
-isPresent serviceaccount ibm-dba-ek-isc-cases-elastic-bai-psp-sa
 
 idp=$(kubectl get pod -lapp=auth-idp -n $CS_NAMESPACE -o jsonpath='{.items[0].status.phase}')
 if [ "X$idp" != "XRunning" ]; then

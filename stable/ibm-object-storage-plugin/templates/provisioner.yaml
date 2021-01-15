@@ -1,9 +1,13 @@
 #ibmcloud-object-storage-plugin deployment
+{{- $ns := include "ibm-object-storage-plugin.namespace" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ template "ibm-object-storage-plugin.name" . }}
-  namespace: {{ template "ibm-object-storage-plugin.namespace" . }}
+  namespace: {{ $ns }}
+  annotations:
+    razee.io/source-url: {{ template "ibm-object-storage-plugin.repoSourceUrl" . }}
+    razee.io/build-url: {{ template "ibm-object-storage-plugin.buildUrl" . }}
   labels:
     app: {{ template "ibm-object-storage-plugin.name" . }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
@@ -29,9 +33,12 @@ spec:
         app.kubernetes.io/managed-by: {{ .Release.Service }}
       annotations:
         productID: "IBMCloudObjectStoragePlugin_{{ .Chart.AppVersion }}_Apache02_00000"
+        productMetric: "FREE"
         productName: "ibmcloud-object-storage-plugin"
         productVersion: "{{ .Chart.AppVersion }}"
         autoUpdate: {{ randAlphaNum 5 | quote }}
+        razee.io/source-url: {{ template "ibm-object-storage-plugin.repoSourceUrl" . }}
+        razee.io/build-url: {{ template "ibm-object-storage-plugin.buildUrl" . }}
     spec:
       affinity:
         nodeAffinity:
@@ -44,13 +51,21 @@ spec:
                 - amd64
       tolerations:
       - operator: "Exists"
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       serviceAccountName: ibmcloud-object-storage-plugin
+      {{- if or (contains "default" $ns) (contains "kube-system" $ns) }}
+      securityContext:
+        runAsUser: 2121
+        fsGroup: 2121
+      {{- end }}
       containers:
         - name: {{ template "ibm-object-storage-plugin.name" . }}-container
           {{- if contains "ICP" (.Values.provider | quote | upper) }}
-          image: "{{ .Values.image.pluginImage.publicRegistry }}:{{ .Values.image.pluginBuild }}"
+          image: "{{ .Values.image.pluginImage.publicRegistry }}"
           {{- else }}
-          image: "{{ .Values.image.pluginImage.ibmContainerRegistry }}:{{ .Values.image.pluginBuild }}"
+          image: "{{ .Values.image.pluginImage.ibmContainerRegistry }}"
           {{- end }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           resources:
@@ -63,6 +78,13 @@ spec:
           securityContext:
             capabilities:
               drop: ["ALL"]
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            {{- if or (contains "default" $ns) (contains "kube-system" $ns) }}
+            runAsUser: 2121
+            {{- end }}
           livenessProbe:
             exec:
               command:
@@ -70,7 +92,7 @@ spec:
               - -c
               - ps aux | grep "provisioner=ibm.io/ibmc-s3fs" | grep -v grep > /dev/null
             initialDelaySeconds: 30
-            periodSeconds: 60
+            periodSeconds: 65
             failureThreshold: 1
           readinessProbe:
             exec:
@@ -83,6 +105,46 @@ spec:
             failureThreshold: 1
           args:
             - "-provisioner=ibm.io/ibmc-s3fs"
+            - --endpoint=$(ENDPOINT)
+            - --bucketAccessPolicy=$(CONFIG_BUCKET_ACCESS_POLICY)
           env:
-          - name: DEBUG_TRACE
-            value: 'false'
+            - name: DEBUG_TRACE
+              value: 'false'
+            - name: ENDPOINT
+              value: "/ibmprovider/provider.sock"
+            - name: CONFIG_BUCKET_ACCESS_POLICY
+              value: "{{ .Values.bucketAccessPolicy }}"
+          volumeMounts:
+            - mountPath: /ibmprovider
+              name: socket-dir
+
+        {{- if eq .Values.bucketAccessPolicy true }}
+        - name: ibmcloud-provider
+          image: "{{ .Values.image.providerImage.ibmContainerRegistry }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --endpoint=$(ENDPOINT)
+          env:
+            - name: ENDPOINT
+              value: "/ibmprovider/provider.sock"
+            - name: SECRET_CONFIG_PATH
+              value: /etc/storage_ibmc
+          volumeMounts:
+            - mountPath: /ibmprovider
+              name: socket-dir
+            - mountPath: /etc/storage_ibmc
+              name: customer-auth
+              readOnly: true
+            - mountPath: /etc/storage_ibmc/cluster_info
+              name: cluster-info
+              readOnly: true
+        {{- end }}
+      volumes:
+        - emptyDir: {}
+          name: socket-dir
+        - name: customer-auth
+          secret:
+            secretName: storage-secret-store
+        - name: cluster-info
+          configMap:
+            name: cluster-info

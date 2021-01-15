@@ -1,0 +1,201 @@
+# Licensed Materials - Property of IBM
+# IBM Order Management Software (5725-D10)
+# (C) Copyright IBM Corp. 2018, 2020 All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+{{- if and .Values.global.license  .Values.global.license_store_call_center }}
+{{ if (gt .Values.appserver.replicaCount 0.0) -}}
+{{- include "sch.config.init" (list . "om-chart.sch.chart.config.values") }}
+{{- $autoIngressSecret := include "om-chart.auto-ingress-secret" . -}}
+{{- $contextList := .Values.appserver.ingress.contextRoots | default (list "smcfs" "sbc" "sma" "isccs" "wsc") -}}
+{{- $varSslEnabled := .Values.appserver.ingress.ssl.enabled }}
+{{- $imgConfList := .Values.appserver.image.names }}
+{{- if and .Values.appserver.exposeRestService (.Capabilities.APIVersions.Has "route.openshift.io/v1") }}
+{{- $imgConfList = append $imgConfList (dict "name" "om-app" "purpose" "xapirest") }}
+{{- end }}
+{{- $varRoot := .}}
+
+{{- range $imgConfList }}
+{{- $imgConf := .}}
+{{- if $imgConf }}
+
+{{- $appConfig := list -}}
+{{- if index $imgConf "applications" }}
+# Applications are defined.
+{{- $paths := list -}}
+{{- range $imgConf.applications }}
+{{- $apps := .}}
+{{- if $apps }}
+{{- if contains "smcfsdocs" $apps.path }}
+{{- $docpaths := (list "/yfscommon/api_javadocs" "/yfscommon/core_javadocs" "/yfscommon/ERD/HTML") }}
+{{- range $docpaths }}
+{{- $docpath := .}}
+{{- $paths = append $paths (((cat ($apps.path | trimAll "/") $docpath) | nospace) | trimAll "/") }}
+{{- $path := ((cat ($apps.path | trimAll "/") $docpath) | nospace) | trimAll "/" }}
+{{- $appConfig = append $appConfig (dict "path" $path "routePrefix" ($apps.routePrefix | default (printf "%s-path-%s" $path "default"))) -}}
+{{- end }}
+{{- else }}
+{{- $paths = append $paths ($apps.path | trimAll "/") }}
+{{- $path := $apps.path | trimAll "/" }}
+{{- $appConfig = append $appConfig (dict "path" $path "routePrefix" ($apps.routePrefix | default (printf "%s-path-%s" $path "default"))) -}}
+{{- end }}
+{{- end }}
+{{- end }}
+# {{ printf "Exposing configured paths: %s \n" $paths }}
+{{- else }}
+{{- if eq $imgConf.name "om-app" }}
+{{- if hasKey $imgConf "purpose" }}
+{{- if eq $imgConf.purpose "xapirest" }}
+# appserver.exposeRestService is True. Exposing only /smcfs with the routePrefix xapirest.
+{{ $appConfig = append $appConfig (dict "path" "smcfs" "routePrefix" "xapirest") -}}
+{{- end }}
+{{- else }}
+# Applications are not defined for om-app image.
+# {{ printf "Exposing default paths: %s \n" $contextList }}
+{{- range $contextList }}
+{{- $path := .}}
+{{- $appConfig = append $appConfig (dict "path" $path "routePrefix" (printf "%s-%s" $path "default")) -}}
+{{- end }}
+{{- end }}
+
+{{- else }}
+# {{ printf "Applications are not defined for %s image." $imgConf.name }}
+{{- $paths := regexSplit "_" ($imgConf.name | trimPrefix "om-app-") -1 }}
+# {{ printf "Exposing paths based on image name suffixes: %s" $paths }}
+{{- range $paths }}
+{{- $path := .}}
+{{- $appConfig = append $appConfig (dict "path" $path "routePrefix" (printf "%s-app-%s" $path "default")) -}}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{- if ($varRoot.Capabilities.APIVersions.Has "route.openshift.io/v1") }}
+{{- /* Route begins */ -}}
+{{- range $appConfig }}
+{{- $ctxRoot := .}}
+{{- if $ctxRoot }}
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+{{- if hasKey $imgConf "purpose" }}
+{{- if eq $imgConf.purpose "xapirest" }}
+  name: {{ template "om-chart.fullname" $varRoot }}-route-{{ $ctxRoot.routePrefix | lower }}
+{{- end }}
+{{- else }}
+  name: {{ template "om-chart.fullname" $varRoot }}-route-{{ randAlphaNum 5 | lower }}
+{{- end }}
+{{- with $varRoot.Values.appserver.ingress.annotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list $varRoot) | indent 4 }}
+{{- with $varRoot.Values.appserver.ingress.labels }}
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+  host: {{ include "om-chart.route-host" (list $ctxRoot $varRoot) }}
+  path: {{printf "/%s" $ctxRoot.path | quote }}
+  to:
+    kind: Service
+    name: {{ template "om-chart.fullname" $varRoot }}-{{ include "om-chart.application" (list $imgConf) }}
+    weight: 100
+  port:
+    {{- if $varSslEnabled }}
+    targetPort: "https"
+    {{- else }}
+    targetPort: "http"
+    {{- end }}
+  tls:
+    insecureEdgeTerminationPolicy: Redirect
+  {{- if $varSslEnabled }}
+    termination: reencrypt
+    {{- else }}
+    termination: edge
+  {{- end }}
+  wildcardPolicy: None
+status:
+  ingress: []
+---
+{{- end }}
+{{- end }}
+{{- /* Route ends */ -}}
+{{- else }}
+{{- /* Ingress begins */ -}}
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+{{- if hasKey $imgConf "purpose" }}
+{{- if eq $imgConf.purpose "xapirest" }}
+  name: {{ template "om-chart.fullname" $varRoot }}-ingress-{{ include "om-chart.application" (list $imgConf) }}
+{{- end }}
+{{- else }}
+  name: {{ template "om-chart.fullname" $varRoot }}-ingress-{{ randAlphaNum 5 | lower }}
+{{- end }}
+  annotations:
+    {{- if $varRoot.Values.appserver.ingress.controller }}
+    kubernetes.io/ingress.class: {{ $varRoot.Values.appserver.ingress.controller | quote }}
+    {{- end }}
+    {{- if eq $varRoot.Values.appserver.ingress.controller "nginx" }}
+    {{- if $varSslEnabled }}
+    nginx.ingress.kubernetes.io/secure-backends: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    {{- else }}
+    nginx.ingress.kubernetes.io/secure-backends: "false"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    {{- end }}
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "route"
+    nginx.ingress.kubernetes.io/session-cookie-hash: "sha1"
+    {{- end }}
+    {{- if $varSslEnabled }}
+    ingress.kubernetes.io/secure-backends: "true"
+    ingress.kubernetes.io/backend-protocol: "HTTPS"
+    {{- else }}
+    ingress.kubernetes.io/secure-backends: "false"
+    ingress.kubernetes.io/backend-protocol: "HTTP"
+    {{- end }}
+    ingress.kubernetes.io/affinity: "cookie"
+    ingress.kubernetes.io/session-cookie-name: "route"
+    ingress.kubernetes.io/session-cookie-hash: "sha1"
+{{- with $varRoot.Values.appserver.ingress.annotations }}
+{{ toYaml . | indent 4 }}
+{{- end }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list $varRoot) | indent 4 }}
+{{- with $varRoot.Values.appserver.ingress.labels }}
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+  {{- if and $varSslEnabled $varRoot.Values.appserver.ingress.host }}
+  tls:
+  - hosts:
+    - {{ $varRoot.Values.appserver.ingress.host }}
+    secretName: {{ $varRoot.Values.appserver.ingress.ssl.secretname | default $autoIngressSecret }}
+  {{- end }}
+  rules:
+  - host: {{ $varRoot.Values.appserver.ingress.host }}
+    http:
+      paths:
+{{- $uniqApps := list -}} {{- range $appConfig -}} {{- $uniqApps = append $uniqApps .path -}} {{- end -}}
+{{- range (uniq $uniqApps) }}
+{{- $ctxRoot := .}}
+{{- if $ctxRoot }}
+      - path: {{printf "/%s/" $ctxRoot | quote }}
+        backend:
+          serviceName: {{ template "om-chart.fullname" $varRoot }}-{{ include "om-chart.application" (list $imgConf) }}
+          {{- if $varSslEnabled }}
+          servicePort: "https"
+          {{- else }}
+          servicePort: "http"
+          {{- end }}
+{{- end }}
+{{- end }}
+{{- /* Ingress ends */ -}}
+{{- end }}
+
+---
+{{- end }}
+{{- end }}
+
+{{ end -}}
+{{ end -}}

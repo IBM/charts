@@ -6,10 +6,11 @@ flag=0
 
 create_dir_flag=0
 
-CHARTREFERENCE="" # For example, ibm-charts/ibm-object-storage-plugin, ./ibm-object-storage-plugin-1.0.6.tgz, ./ibm-object-storage-plugin
+CHARTREFERENCE="" # For example, ibm-helm/ibm-object-storage-plugin, ./ibm-object-storage-plugin-1.0.6.tgz, ./ibm-object-storage-plugin
 CHARTNAME="" # Name of the chart. For example: ibm-object-storage-plugin
 CHARTVERSION=""
 PLUGIN_DIR_CACHE=""
+CONFIG_BUCKET_ACCESS_POLICY=""
 
 usage() {
 if [[ "$clientVersion" == "v2."* ]]; then
@@ -22,32 +23,27 @@ if [[ "$clientVersion" == "v2."* ]]; then
 fi
 cat << EOF
 Install or upgrade Helm charts in IBM K8S Service(IKS) and IBM Cloud Private(ICP)
-
 Usage:
   helm ibmc [command]
-
 Available Commands:
   install           Install a Helm chart
   upgrade           Upgrade the release to a new version of the Helm chart
-
 Available Flags:
   -h, --help        (Optional) This text.
   -u, --update      (Optional) Update this plugin to the latest version
-
 EOF
 
 if [[ "$clientVersion" == "v2."* ]]; then
   echo "Example Usage:"
-  echo "    Install: helm ibmc install ibm-charts/ibm-object-storage-plugin --name ibm-object-storage-plugin"
-  echo "    Upgrade: helm ibmc upgrade [RELEASE] ibm-charts/ibm-object-storage-plugin"
+  echo "    Install: helm ibmc install ibm-helm/ibm-object-storage-plugin --name ibm-object-storage-plugin"
+  echo "    Upgrade: helm ibmc upgrade [RELEASE] ibm-helm/ibm-object-storage-plugin"
 else
   echo "Example Usage:"
-  echo "    Install: helm ibmc install ibm-object-storage-plugin ibm-charts/ibm-object-storage-plugin"
-  echo "    Upgrade: helm ibmc upgrade [RELEASE] ibm-charts/ibm-object-storage-plugin"
+  echo "    Install: helm ibmc install ibm-object-storage-plugin ibm-helm/ibm-object-storage-plugin"
+  echo "    Upgrade: helm ibmc upgrade [RELEASE] ibm-helm/ibm-object-storage-plugin"
 fi
 
 cat << EOF
-
 Note:
     1. It is always recommended to install latest version of ibm-object-storage-plugin chart.
     2. It is always recommended to have 'kubectl' client up-to-date.
@@ -59,16 +55,13 @@ cat << EOF
 This command installs a chart archive in IBM K8S Service(IKS) and IBM Cloud Private(ICP).
 The install argument must be a chart reference, a path to a packaged chart,
 a path to an unpacked chart directory or a URL.
-
 Usage:
   helm ibmc install [CHART] [flags]
-
 EOF
 helm install --help | awk '/Flags/{y=1}y'
 cat << EOF
-
 Example Usage:
-    helm ibmc install ibm-charts/ibm-object-storage-plugin --name ibm-object-storage-plugin
+    helm ibmc install ibm-helm/ibm-object-storage-plugin --name ibm-object-storage-plugin
 EOF
 }
 
@@ -77,16 +70,13 @@ cat << EOF
 This command installs a chart archive in IBM K8S Service(IKS) and IBM Cloud Private(ICP).
 The install argument must be a chart reference, a path to a packaged chart,
 a path to an unpacked chart directory or a URL.
-
 Usage:
   helm ibmc install [NAME] [CHART] [flags]
-
 EOF
 helm install --help | awk '/Flags/{y=1}y'
 cat << EOF
-
 Example Usage:
-    helm ibmc install ibm-object-storage-plugin ibm-charts/ibm-object-storage-plugin
+    helm ibmc install ibm-object-storage-plugin ibm-helm/ibm-object-storage-plugin
 EOF
 }
 
@@ -97,17 +87,35 @@ The upgrade arguments must be a release and chart. The chart
 argument can be either: a chart reference('stable/mariadb'), a path to a chart directory,
 a packaged chart, or a fully qualified URL. For chart references, the latest
 version will be specified unless the '--version' flag is set.
-
 Usage:
   helm ibmc upgrade [RELEASE] [CHART] [flags]
-
 EOF
 helm upgrade --help | awk '/Flags/{y=1}y'
 cat << EOF
-
 Example Usage:
-    helm ibmc upgrade [RELEASE] ibm-charts/ibm-object-storage-plugin
+    helm ibmc upgrade [RELEASE] ibm-helm/ibm-object-storage-plugin
 EOF
+}
+
+check_pod_status() {
+  attempts=0
+  pod_name=$1
+  while true; do
+    attempts=$((attempts+1))
+    pod_status=$(kubectl get pod -n kube-system | grep $pod_name | awk '{print $3}')
+    if [[ "$pod_status" == "Completed" || "$pod_status" == "Running" ]]; then
+      echo "pod '$pod_name' is healthy."
+      break
+    fi
+    if [[ $attempts -gt 12 ]]; then
+      echo "$pod_name  is not running well."
+      kubectl get pod -n kube-system $pod_name
+      kubectl describe pod -n kube-system $pod_name
+      exit 1
+    fi
+    echo "pod '$pod_name' is not running. Sleeping 5 seconds..."
+    sleep 5
+  done
 }
 
 # Create the passthru array
@@ -144,7 +152,11 @@ do
 
         "-"*)
         if [[ $# -gt 1 ]] && [[ "$2" != "-"* ]]; then
-          FLAGS+=("$1" "$2")
+          if [[ "$2" = *"bucketAccessPolicy"* ]]; then
+            CONFIG_BUCKET_ACCESS_POLICY=$(echo $2 | cut -d "=" -f 2);
+          else
+            FLAGS+=("$1" "$2")
+          fi
           shift
         else
           FLAGS+=("$1")
@@ -214,7 +226,7 @@ if [ "$UPDATE" == "TRUE" ]; then
     cd $PLUGIN_DIR_CACHE
 
     # Pull latest chart for upgrading ibmc helm plugin
-    helm repo add ibmc-upgrade https://icr.io/helm/ibm-charts
+    helm repo add ibmc-upgrade https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm
     helm repo update
     helm fetch --untar ibmc-upgrade/ibm-object-storage-plugin
     helm repo remove ibmc-upgrade
@@ -279,12 +291,12 @@ fi
 if [[ `kubectl get nodes -o yaml | grep 'node-role\.kubernetes\.io'` == "" || \
   `kubectl get nodes -o yaml | grep 'ibm-cloud\.kubernetes\.io/worker-version'` == *"openshift"* ]]; then
   if [[ `kubectl get nodes -o yaml | grep 'ibm-cloud\.kubernetes\.io/iaas-provider\: \(gc\|g2\|ng\)'` != "" ]]; then
-    CLUSTER_PROVIDER="VPC-CLASSIC"
+    CLUSTER_PROVIDER="IBMC-VPC"
   else
-    CLUSTER_PROVIDER="CLASSIC"
+    CLUSTER_PROVIDER="IBMC"
   fi
   DC_NAME=$(kubectl get cm cluster-info -n kube-system -o jsonpath='{.data.cluster-config\.json}' | grep datacenter | awk -F ': ' '{print $2}' | sed 's/\"//g' |sed 's/,//g')
-elif [[ `kubectl get nodes -o yaml | grep 'node-role\.kubernetes\.io/\(etcd\|master\|management\|worker\|proxy\|va\)'` != "" ]]; then
+elif [[ `kubectl get nodes -o yaml | grep 'node-role\.kubernetes\.io/\(etcd\|master\|management\|worker\|proxy\|va\|compute\|infra\|icp-management\|icp-master\|icp-proxy\)'` != "" ]]; then
   CLUSTER_PROVIDER="ICP"
   DC_NAME=""
 else
@@ -292,18 +304,87 @@ else
   exit 1
 fi
 
+if [[ $CONFIG_BUCKET_ACCESS_POLICY == "" ]]; then
+  if [[ "$CLUSTER_PROVIDER" == "IBMC-VPC" ]]; then
+      if [[ `kubectl get nodes -o yaml | grep 'ibm-cloud\.kubernetes\.io/region\: \(eu-fr2\)'` != "" ]]; then
+        CONFIG_BUCKET_ACCESS_POLICY="true"
+      else
+        CONFIG_BUCKET_ACCESS_POLICY="false"
+      fi
+  else
+    CONFIG_BUCKET_ACCESS_POLICY="false"
+  fi
+fi
+
 # Check worker node's OS
 WORKER_OS=$(kubectl get nodes -o jsonpath='{ .items[0].status.nodeInfo.osImage }' | tr [:lower:] [:upper:])
-if [[ "$WORKER_OS" == "RED HAT"* ]]; then
+if [[ "$WORKER_OS" == "RED HAT"* || "$WORKER_OS" == "OPENSHIFT"* ]]; then
   WORKER_OS="redhat"
+  PLATFORM="openshift"
 else
   WORKER_OS="debian"
+  PLATFORM="k8s"
+fi
+
+KUBE_DRIVER_PATH="/usr/libexec/kubernetes"
+if [[ "$WORKER_OS" == "redhat" ]]; then
+  echo "Fetching WORKER OS details using pod..."
+  kubectl run get-os-info --overrides='
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "get-os-info",
+      "namespace": "kube-system",
+      "labels": {
+        "app": "ibmcloud-object-storage-plugin"
+      }
+    },
+    "spec": {
+      "containers": [{
+        "name": "get-os-info",
+        "image": "ibmcom/busybox:1.30.1",
+        "command": ["/bin/sh", "-c", "cat /hostetc/os-release"],
+        "volumeMounts": [{
+          "mountPath": "/hostetc/os-release",
+          "name": "os-info",
+          "readOnly": true
+        }, {
+          "mountPath": "/host/usr/lib",
+          "name": "usr-lib",
+          "readOnly": true
+        }]
+      }],
+      "volumes": [{
+        "name":"os-info",
+        "hostPath": {
+          "path": "/etc/os-release",
+          "type": "File"
+        }
+      }, {
+        "name":"usr-lib",
+        "hostPath": {
+          "path": "/usr/lib"
+        }
+      }]
+    }
+  }' --image=ibmcom/busybox:1.30.1 --namespace=kube-system --restart=Never
+  check_pod_status "get-os-info"
+  OS_DESTRO=$(kubectl logs -n kube-system $pod_name | grep ^'ID=')
+  kubectl delete pod -n kube-system $pod_name
+  if [[ "$OS_DESTRO" == "ID=\"rhcos\"" ]]; then
+    KUBE_DRIVER_PATH="/etc/kubernetes"
+  fi
 fi
 
 if [ "$COMMAND" == "install" ]; then
   echo "Installing the Helm chart..."
   echo "PROVIDER: ${CLUSTER_PROVIDER}"
-  if [[ "$CLUSTER_PROVIDER" == *"CLASSIC" ]]; then
+  echo "WORKER_OS: "${WORKER_OS}
+  echo "PLATFORM: "${PLATFORM}
+  echo "KUBE_DRIVER_PATH: ${KUBE_DRIVER_PATH}"
+  echo "CONFIG_BUCKET_ACCESS_POLICY: "${CONFIG_BUCKET_ACCESS_POLICY}
+  if [[ "$CLUSTER_PROVIDER" == *"IBMC" ]]; then
     echo "DC: ${DC_NAME}"
   fi
   echo "Chart: $CHARTREFERENCE"
@@ -324,9 +405,9 @@ if [ "$COMMAND" == "install" ]; then
   fi
   set +e
   if [[ ! -z "$CHARTVERSION" ]]; then
-    helm ${PASSTHRU[@]} --version "$CHARTVERSION" --set dcname="${DC_NAME}" --set provider="${CLUSTER_PROVIDER}" --set workerOS="${WORKER_OS}" "${FLAGS[@]}"
+    helm ${PASSTHRU[@]} --version "$CHARTVERSION" --set bucketAccessPolicy="${CONFIG_BUCKET_ACCESS_POLICY}" --set dcname="${DC_NAME}" --set provider="${CLUSTER_PROVIDER}" --set workerOS="${WORKER_OS}" --set platform="${PLATFORM}" --set kubeDriver="${KUBE_DRIVER_PATH}" "${FLAGS[@]}"
   else
-    helm ${PASSTHRU[@]} --set dcname="${DC_NAME}" --set provider="${CLUSTER_PROVIDER}" --set workerOS="${WORKER_OS}" "${FLAGS[@]}"
+    helm ${PASSTHRU[@]} --set dcname="${DC_NAME}" --set bucketAccessPolicy="${CONFIG_BUCKET_ACCESS_POLICY}" --set provider="${CLUSTER_PROVIDER}" --set workerOS="${WORKER_OS}" --set platform="${PLATFORM}" --set kubeDriver="${KUBE_DRIVER_PATH}" "${FLAGS[@]}"
   fi
   exit_status=$(echo $?)
   if [[ $exit_status -ne 0 ]]; then
@@ -343,7 +424,7 @@ if [ "$COMMAND" == "install" ]; then
 elif [[ "$COMMAND" == "upgrade" ]]; then
   echo "Upgrading the Helm chart..."
   echo "PROVIDER: ${CLUSTER_PROVIDER}"
-  if [[ "$CLUSTER_PROVIDER" == *"CLASSIC" ]]; then
+  if [[ "$CLUSTER_PROVIDER" == *"IBMC" ]]; then
     echo "DC: ${DC_NAME}"
   fi
   echo "Chart: $CHARTREFERENCE"
@@ -364,9 +445,9 @@ elif [[ "$COMMAND" == "upgrade" ]]; then
   fi
   set +e
   if [[ ! -z "$CHARTVERSION" ]]; then
-    helm ${PASSTHRU[@]} --version "$CHARTVERSION" --set dcname="${DC_NAME}" --set provider="${CLUSTER_PROVIDER}" --set workerOS="${WORKER_OS}" "${FLAGS[@]}"
+    helm ${PASSTHRU[@]} --version "$CHARTVERSION" --set bucketAccessPolicy="${CONFIG_BUCKET_ACCESS_POLICY}" --set dcname="${DC_NAME}" --set provider="${CLUSTER_PROVIDER}" --set workerOS="${WORKER_OS}" --set platform="${PLATFORM}" --set kubeDriver="${KUBE_DRIVER_PATH}" "${FLAGS[@]}"
   else
-    helm ${PASSTHRU[@]} --set dcname="${DC_NAME}" --set provider="${CLUSTER_PROVIDER}" --set workerOS="${WORKER_OS}" "${FLAGS[@]}"
+    helm ${PASSTHRU[@]} --set dcname="${DC_NAME}" --set bucketAccessPolicy="${CONFIG_BUCKET_ACCESS_POLICY}" --set provider="${CLUSTER_PROVIDER}" --set workerOS="${WORKER_OS}" --set platform="${PLATFORM}" --set kubeDriver="${KUBE_DRIVER_PATH}" "${FLAGS[@]}"
   fi
   exit_status=$(echo $?)
   if [[ $exit_status -ne 0 ]]; then

@@ -17,13 +17,11 @@
 #
 
 dir="$(cd $(dirname $0) && pwd)/../../.."
-HELM2=""
 HELM3=""
 NAMESPACE=$(oc project | sed -e 's/^[^"]*"//' -e 's/".*$//')
-RENV='prod'
 
 usage() {
-echo "Usage $0 [ -n <NAMESPACE> ] [ -helm2 path ] [ -helm3 path ] [ -env prod|dev ]"
+echo "Usage $0 [ -n <NAMESPACE> ] [ -helm3 path ]"
 exit 1
 }
 
@@ -127,103 +125,6 @@ spec:
 EOF
 }
 
-
-mwUpgradeHelm3() {
-
-echo "INFO: Start re-creating CRs to redeploy minio and elastic"
-for type in minio elastic
-do
-   for cr in $(kubectl get $type -o name)
-   do
-     kubectl patch $cr --type merge --patch '{"spec":{"uuid":"'$(date +%s)'"}}' 
-     if [ $? -ne 0 ]; then
-       echo "ERROR: failed to patch $cr"
-       exit 1
-     fi
-   done
-done
-
-}
-
-removeOldAppSecrets() {
-  echo "INFO: Removing old application secrets"
-  for sn in $(kubectl get isccomponent \
-    -o jsonpath='{range .items[*]}{.spec.action.service.name}{"\n"}')
-  do
-    if [ "X$sn" == "X" ]; then
-      continue
-    fi
-    if [ "X$(kubectl get secret $sn -o name)" == "X" ]; then 
-      continue
-    fi
-    kubectl delete secret $sn
-  done
-}
-
-label() {
-  sort="$1"
-  for obj in $(kubectl get $sort -lrelease=$RELEASE -o name)
-  do
-    kubectl patch $obj --type merge --patch="$PATCH"
-    if [ $? -ne 0 ]; then
-      echo "ERROR: failed to patch $obj"
-      exit 1
-    fi
-  done
-}
-
-relabelChart() {
-  type="$1"
-  name="$2"
-  RELEASE=$(kubectl get $type $name -o jsonpath='{.metadata.labels.release}')
-  if [ "X$RELEASE" == "X" ]; then 
-    echo "Not found $1:$2 - skip chart upgrade"
-    return
-  fi
-  PATCH='{"metadata":{"annotations":{"meta.helm.sh/release-name":"'$RELEASE'","meta.helm.sh/release-namespace":"'$NAMESPACE'"},"labels":{"app.kubernetes.io/managed-by":"Helm"}}}'
-
-  label iscinventory
-  label service
-  label isccomponent
-  label iscsequence
-  label configmap
-  label deployment
-  label couchdb
-  label minio
-  label job
-  label PodDisruptionBudget
-  label cases
-  label PostgresqlOperator
-  label Client
-  label Route
-  label ArangoDeployment
-  label AppEntitlements
-  label Offerings
-}
-
-relabel() {
-
-# patch empty resources field 
-  kubectl patch isccomponent orchestrator --type=json \
-    -p='[{"op": "remove", "path": "/spec/action/resources"}]'  2>/dev/null
-    
-  case $RENV in
-    prod)
-      relabelChart route isc-route-default
-      ;;
-    dev)
-      relabelChart iscsequence iscplatform
-      relabelChart iscsequence car
-      relabelChart deploy isc-cases-operator
-      relabelChart iscsequence csaadapter
-      relabelChart iscsequence de
-      relabelChart iscsequence tiiapp
-      relabelChart iscsequence tisaia
-      relabelChart iscsequence uds
-      ;;
-  esac
-}
-
 set_namespace() {
   NAMESPACE="$1"
   ns=$(kubectl get namespace $NAMESPACE -o name 2>/dev/null)
@@ -261,43 +162,6 @@ if [ $? -ne 0 ]; then
 fi
 }
 
-patchCpu() {
-  component="$1"
-
-isPresent=$(kubectl get isccomponent $component -o name 2>/dev/null)
-if [ "X$isPresent" == "X" ]; then
-  return
-fi
-
-read -r -d '' PATCH << EOF
-{ "spec": {
-  "action": {
-    "resources": {
-      "limits": {
-        "cpu": "250m"
-} } } } }
-EOF
-kubectl patch isccomponent $component --type merge -p "$PATCH"
-if [ $? -ne 0 ]; then
-  echo "ERROR: failed to patch $component"
-  exit 1
-fi
-}
-
-patchPort (){
-read -r -d '' PATCH << EOF
-[ { "op": "replace",
-  "path": "/spec/ports/0/port",
-  "value": 443
-} ]
-EOF
-kubectl patch service cp4sint --type json -p "$PATCH"
-if [ $? -ne 0 ]; then
-  echo "ERROR: failed to patch cp4sint"
-  exit 1
-fi
-}
-
 couchResources(){
 
   csv=$(kubectl get csv -o name | grep couchdb-operator | tail -1) 
@@ -316,10 +180,6 @@ couchResources(){
   else
     echo "CouchDB Operator CPU limits have already been adjusted to $cpu"
   fi
-}
-
-toolboxSA(){
-  oc adm policy add-scc-to-user ibm-isc-scc -z cp4s-toolbox-sa --as system:admin
 }
 
 applyDir() {
@@ -373,69 +233,6 @@ applyResources() {
   done
 }
 
-patchArango() {
-  REPOSITORY=$(kubectl describe deploy middleware | grep REPO_URL | awk {'print $2'} | sed -e 's!/[^/]*$!!')
-  read -r -d '' PATCH << EOF
-{ "metadata": {
-    "annotations": {
-      "meta.helm.sh/release-name": "$RELEASE",
-      "meta.helm.sh/release-namespace": "$NAMESPACE"
-    }, "labels": {
-      "app.kubernetes.io/instance": "$RELEASE",
-      "app.kubernetes.io/managed-by": "Helm",
-      "app.kubernetes.io/name": "car-1.0.8",
-      "chart": "car-1.0.8",
-      "helm.sh/chart": "car-1.0.8",
-      "release": "$RELEASE"
-    } },
-  "spec": {
-    "agents": {
-       "resources": {
-          "limits": {
-             "cpu": "400m"
-          }, "requests": {
-             "cpu": "50m"
-          }, "securityContext": {
-            "allowPrivilegeEscalation": false,
-            "fsGroup": 1001,
-            "privileged": false,
-            "readOnlyRootFilesystem": false,
-            "runAsNonRoot": true,
-            "runAsUser": 1001,
-            "supplementalGroups": [ 1001 ]
-          }
-      }
-    }, "image": "$REPOSITORY/solutions/arangodb-community:1.4.0.0-amd64",
-    "labels": {
-        "app.kubernetes.io/instance": "$RELEASE",
-        "app.kubernetes.io/managed-by": "Helm",
-        "app.kubernetes.io/name": "car-1.0.8"
-     }, "metrics": {
-        "image": "$REPOSITORY/solutions/arangodb-exporter:1.4.0.0-amd64"
-     }, "single": {
-        "resources": {
-          "limits": { "cpu": "600m" },
-          "requests": { "cpu": "15m" }
-         }, "securityContext": {
-            "allowPrivilegeEscalation": false,
-            "fsGroup": 1001,
-            "privileged": false,
-            "readOnlyRootFilesystem": false,
-            "runAsNonRoot": true,
-            "runAsUser": 1001,
-            "supplementalGroups": [ 1001 ]
-          }
-     }
-  }
-}
-EOF
-  kubectl patch arangodeployment arangodb --type=merge -p "$PATCH"
-  if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to patch arango deployment"
-  fi
-}
-
-
 checkICPCA() {
   check=$(kubectl get secret icp-ca-cert -o name 2>/dev/null)
   if [ "X$check" == "X" ]; then
@@ -473,6 +270,24 @@ deleteCR()
   done
 }
 
+removeAitkwebui(){
+
+ kubectl delete deployment aitk-webui
+
+}
+
+delete_toolbox() {
+  echo "Deleting toolbox"
+  kubectl label --overwrite pvc cp4s-backup-pv-claim sequence=cp4s-backup-restore
+  kubectl patch iscsequence cp4s-toolbox --type json -p='[{"op": "remove", "path": "/metadata/finalizers"}]' --ignore-not-found=true 2>/dev/null
+  kubectl delete iscsequence cp4s-toolbox --ignore-not-found=true --wait=false
+  kubectl delete isccomponent cp4s-toolbox --ignore-not-found=true
+  kubectl delete pod cp4s-toolbox --ignore-not-found=true --wait=false
+  kubectl delete sa cp4s-toolbox-sa --ignore-not-found=true
+  kubectl delete clusterrole cp4s-toolbox-role --ignore-not-found=true
+  kubectl delete clusterrolebinding cp4s-toolbox-rolebinding --ignore-not-found=true
+}
+
 if [ "X$(which kubectl)" == "X" ]; then
   echo "ERROR: kubectl should be in the PATH: $PATH"
   exit 1
@@ -491,7 +306,7 @@ do
     shift
     ;;
   -helm2)
-    HELM2="$1"
+# for compatibilty
     shift
     ;;
   -helm3)
@@ -499,12 +314,6 @@ do
     shift
     ;;
   -env)
-    RENV="$1"
-    case $RENV in 
-     prod|dev) ;;
-     *) echo "ERROR: invalid -env flag: $RENV, prod or dev are expected"
-        ;;
-    esac
     shift
     ;;
   *)
@@ -515,14 +324,13 @@ do
 esac
 done
 
-HELM2=$(check_helm "$HELM2" "helm2" 'SemVer:"v2.12' "--tls")
 HELM3=$(check_helm "$HELM3" "helm3" 'Version:"v3.2') 
 
 kubectl delete job -n $NAMESPACE uds-deploy-functions 2>/dev/null
 
 kubectl get connector | grep connector | awk '{print $1}' | xargs -L 1 kubectl delete connector
 
-if [ $RENV == 'prod' ]; then
+if [ "X$RENV" == "Xprod" ]; then
   csa=$(kubectl get isccomponent csaadapter -o name 2>/dev/null)
   if [ "X$csa" != "X" ]; then
     release=$(kubectl get secret -o name | grep 'secret/sh.helm.release.v1.ibm-security-solutions.')
@@ -537,16 +345,14 @@ fi
 
 checkSelfSigned
 checkICPCA
-patchPort
 patchCouchCpu
-mwUpgradeHelm3
-removeOldAppSecrets
-deleteCR appentitlements.entitlements.extensions.platform.cp4s.ibm.com
-deleteCR minios.isc.ibm.com
 
-relabel
 runSubcharts
 applyResources
 couchResources
-toolboxSA
-patchArango
+delete_toolbox
+removeAitkwebui
+
+# For Risk Manager
+kubectl delete job idrmpostgres --ignore-not-found=true
+kubectl delete pod -ljob-name=idrmpostgres 2>/dev/null
