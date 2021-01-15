@@ -1,0 +1,29 @@
+Please wait while the application is getting deployed.
+1. Run the below command to check the status of application server replica sets. At least 1 replica must be in 'READY' state. 
+  kubectl get replicasets -l release={{ .Release.Name }} -n {{ .Release.Namespace }}
+
+2. Run the below command to check the status of the application server pods for the release.
+  kubectl get pods -l release={{ .Release.Name }} -n {{ .Release.Namespace }} -o wide
+
+    To view the logs for a pod, run the below command.
+  kubectl logs <pod name> -n {{ .Release.Namespace }}
+
+3. Access the application by running the following url
+
+{{- if .Values.ingress.enabled }}
+{{- if .Values.asi.ingress.host }}
+{{- if .Values.asi.ingress.tls.enabled }}
+  echo "dashboard: https://{{ .Values.asi.ingress.host }}/dashboard"
+{{- else }}
+  echo "dashboard: http://{{ .Values.asi.ingress.host }}/dashboard"
+  echo "Warning: It is recommended to enable SSL"
+{{- end }}  
+{{- end }} 
+{{- end }}
+
+{{- if contains "NodePort" .Values.asi.frontendService.type }}
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[1].nodePort}" services {{ template "b2bi.fullname" . }})
+  echo "dashboard: https://$NODE_IP:$NODE_PORT/dashboard"
+  echo "filegateway : https://$NODE_IP:$NODE_PORT/filegateway"
+{{- end }}

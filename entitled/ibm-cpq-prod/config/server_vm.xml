@@ -1,0 +1,72 @@
+<!--
+ Licensed Materials - Property of IBM
+ IBM Sterling Configure Price Quote Software (5725-D11)
+ (C) Copyright IBM Corp. 2018, 2019 All Rights Reserved.
+ US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp. 
+-->
+{{- $varSslEnabled := .Values.vmappserver.ingress.ssl.enabled }}
+<server description="VM server">
+{{- if and $varSslEnabled .Values.vmappserver.ingress.host }}
+    <!-- Enable features -->
+    <featureManager>
+        <feature>webProfile-7.0</feature>
+        <feature>adminCenter-1.0</feature>
+        <feature>jdbc-4.1</feature>
+        <feature>jndi-1.0</feature>
+        <feature>jsp-2.3</feature>
+        <feature>servlet-3.1</feature>
+        <feature>ssl-1.0</feature>
+        <feature>monitor-1.0</feature>
+        <feature>localConnector-1.0</feature>
+        <feature>transportSecurity-1.0</feature>
+    </featureManager>
+
+    <httpSession useContextRootAsCookiePath="true" cookiePath="/Sterling"/>
+    <httpDispatcher enableWelcomePage="false" />
+    <httpSession invalidateOnUnauthorizedSessionRequestException="true" />
+    <webContainer trustHostHeaderPort="true" extractHostHeaderPort="true"/>
+    <webContainer disableXPoweredBy="true"/>
+    <httpOptions removeServerHeader="true"/>
+
+    <!-- Define an Administrator and non-Administrator -->
+    <basicRegistry id="basic">
+      <user name="admin" password="admin" />
+      <user name="nonadmin" password="nonadminpwd" />
+    </basicRegistry>
+
+    <!-- Assign 'admin' to Administrator --> 
+    <administrator-role>
+      <user>admin</user>
+    </administrator-role>
+
+    <executor name="Default Executor" coreThreads="10" maxThreads="50"/>
+    <applicationMonitor updateTrigger="disabled"/>
+    <sslDefault sslRef="defaultSSLSettings" />
+    <ssl id="defaultSSLSettings" sslProtocol="TLSv1.2" keyStoreRef="defaultKeyStore" trustStoreRef="defaultTrustStore" clientAuthenticationSupported="true" />
+    <keyStore id="defaultKeyStore" type="PKCS12" password="${env.tlskeystorepassword}" location="/opt/ibm/wlp/output/defaultServer/resources/security/key.p12"/>
+    <keyStore id="defaultTrustStore" type="PKCS12" password="${env.tlskeystorepassword}" location="/home/default/trustStore.p12"/>
+    <httpSession cookieSecure="true"/>
+
+{{- else }}
+    <featureManager>
+        <feature>webProfile-7.0</feature>
+    </featureManager>
+{{- end }}
+           
+    <httpEndpoint id="defaultHttpEndpoint" host="*" httpPort={{ .Values.vmappserver.service.http.port | default 9080 | quote }} httpsPort={{ .Values.vmappserver.service.https.port | default 9443 | quote }} />
+        
+    <application context-root="VisualModeler" type="war" id="VisualModeler"
+                location="/config/dropins/VisualModeler.war" name="VisualModeler">
+    </application>
+
+    <applicationManager autoExpand="true" />
+
+    <logging messageFileName="@POD_HOSTNAME@_messages.log"
+             traceFileName="@POD_HOSTNAME@_trace.log"
+             consoleLogLevel="OFF"
+             copySystemStreams="false"
+             traceSpecification="*=info"/>
+
+    <applicationMonitor updateTrigger="disabled"/>
+
+</server>

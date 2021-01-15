@@ -1,16 +1,21 @@
+---
 # ServiceAccount for ibmcloud-object-storage-driver
+{{- include "ibm-object-storage-plugin.licenseValidate" .  | required "License must be accepted by setting license key to true" }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: ibmcloud-object-storage-driver
-  namespace: {{ template "ibm-object-storage-plugin.namespace" . }}
+  namespace: {{template "ibm-object-storage-plugin.namespace" .}}
+  annotations:
+    razee.io/source-url: {{ template "ibm-object-storage-plugin.repoSourceUrl" . }}
+    razee.io/build-url: {{ template "ibm-object-storage-plugin.buildUrl" . }}
   labels:
-    app.kubernetes.io/name: {{ template "ibm-object-storage-plugin.drivername" . }}
-    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
-    release: {{ .Release.Name }}
-{{- if contains "CLASSIC" (.Values.provider | quote | upper) }}
+    app.kubernetes.io/name: {{template "ibm-object-storage-plugin.drivername" .}}
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_"}}
+    app.kubernetes.io/instance: {{.Release.Name}}
+    app.kubernetes.io/managed-by: {{.Release.Service}}
+    release: {{.Release.Name}}
+{{- if contains "IBMC" (.Values.provider | quote | upper)}}
 imagePullSecrets:
   - name: bluemix-default-secret
   - name: bluemix-default-secret-regional
@@ -21,22 +26,77 @@ imagePullSecrets:
   - name: kube-system-de-icr-io
   - name: kube-system-au-icr-io
   - name: kube-system-jp-icr-io
-{{- end }}
+{{- end}}
 ---
+# Create SCC / PSP
+{{- if contains "OPENSHIFT" (.Values.platform | quote | upper)}}
+# Create SCC for OpenShift, both form IKS and RHOCP
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: s3fs-cos-driver-scc
+  annotations:
+    razee.io/source-url: {{ template "ibm-object-storage-plugin.repoSourceUrl" . }}
+    razee.io/build-url: {{ template "ibm-object-storage-plugin.buildUrl" . }}
+  labels:
+    app.kubernetes.io/name: {{template "ibm-object-storage-plugin.drivername" .}}
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_"}}
+    app.kubernetes.io/instance: {{.Release.Name}}
+    app.kubernetes.io/managed-by: {{.Release.Service}}
+    release: {{.Release.Name}}
+priority: 0
+defaultAddCapabilities: []
+allowedCapabilities: []
+allowHostDirVolumePlugin: true
+allowHostIPC: false
+allowHostPID: false
+allowHostPorts: false
+allowHostNetwork: true
+allowPrivilegedContainer: false
+allowPrivilegeEscalation: true
+requiredDropCapabilities:
+ - KILL
+ - MKNOD
+ - SETUID
+ - SETGID
+readOnlyRootFilesystem: false
+runAsUser:
+  type: RunAsAny
+seLinuxContext:
+  type: RunAsAny
+fsGroup:
+  type: RunAsAny
+supplementalGroups:
+  type: RunAsAny
+users:
+- system:serviceaccount:{{template "ibm-object-storage-plugin.namespace" .}}:ibmcloud-object-storage-driver
+groups: []
+volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - hostPath
+  - persistentVolumeClaim
+  - projected
+  - secret
+{{- else if and (contains "ICP" (.Values.provider | quote | upper)) (not .Values.useCustomPSP)}}
+# Otherwise create PSP for ICP
 # In ICP, create RoleBinding to bind "ibm-privileged-clusterrole" PSP
 # to "ibmcloud-object-storage-driver" ServiceAccount, when using privileged PSP.
-{{- if and (contains "ICP" (.Values.provider | quote | upper)) (not .Values.useCustomPSP) }}
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: ibmcloud-object-storage-driver
-  namespace: {{ .Release.Namespace }}
+  namespace: {{.Release.Namespace}}
+  annotations:
+    razee.io/source-url: {{ template "ibm-object-storage-plugin.repoSourceUrl" . }}
+    razee.io/build-url: {{ template "ibm-object-storage-plugin.buildUrl" . }}
   labels:
-    app.kubernetes.io/name: {{ template "ibm-object-storage-plugin.drivername" . }}
-    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
-    release: {{ .Release.Name }}
+    app.kubernetes.io/name: {{template "ibm-object-storage-plugin.drivername" .}}
+    helm.sh/chart: {{.Chart.Name}}-{{.Chart.Version | replace "+" "_"}}
+    app.kubernetes.io/instance: {{.Release.Name}}
+    app.kubernetes.io/managed-by: {{.Release.Service}}
+    release: {{.Release.Name}}
 roleRef:
   kind: ClusterRole
   name: ibm-privileged-clusterrole
@@ -44,5 +104,5 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: ibmcloud-object-storage-driver
-  namespace: {{ .Release.Namespace }}
-{{- end }}
+  namespace: {{.Release.Namespace}}
+{{- end}}
