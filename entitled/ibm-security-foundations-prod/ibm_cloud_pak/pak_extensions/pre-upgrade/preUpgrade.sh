@@ -34,15 +34,17 @@ set_namespace()
   oc project $NAMESPACE
 }
 
-upgradeElastic() {
-   for cr in $(kubectl get elastics.isc.ibm.com -o name 2>/dev/null)
-   do
-     echo "Removing finalizers from $cr"
-     kubectl patch -n $NAMESPACE $cr --type json -p='[{"op": "remove", "path": "/metadata/finalizers"}]' 2>/dev/null
-     echo "Removing $cr"
-     kubectl delete -n $NAMESPACE $cr 2>&1 | grep -v 'NotFound'
-   done
- }
+cleanDeploySelector()
+{
+  deploy="$1"
+  
+  echo "INFO: Clean deploy selector for $deploy"
+  
+  dd=$(kubectl get deploy $deploy -o jsonpath="{.spec.selector.matchLabels['app\.kubernetes\.io/managed-by']}")
+  if [ "X$dd" == "XTiller" ]; then
+     kubectl delete deploy $deploy
+  fi
+}
 
 label() {
   
@@ -87,7 +89,24 @@ usage() {
 Usage: preUpgrade.sh [args]
 where args may be
 -n <NAMESPACE>     : if NAMESPACE is different from current
+-helm2 <PATH TO HELM2.12 executable>: if not default helm binary
 EOF
+}
+
+removeOldMwCharts() {
+  echo "INFO: Deleting middleware helm2 sub-charts"
+  for chart in ibm-dba-ek-isc-cases-elastic ibm-etcd-default ibm-minio-ow-minio
+  do
+    exists=$($HELM2 status --tls $chart 2>/dev/null)
+    if [ "X$exists" == "X" ]; then
+      continue
+    fi
+    echo "INFO: Force deleting old $chart"
+    $HELM2 delete --tls --purge $chart
+  done
+  
+  kubectl patch etcds.isc.ibm.com default --type json -p='[{"op": "remove", "path": "/metadata/finalizers"}]' 2>/dev/null
+  kubectl delete etcds.isc.ibm.com default --ignore-not-found=true --wait=false
 }
 
 provision() {
@@ -101,6 +120,26 @@ provision() {
       exit 1
     fi
   done
+}
+
+patchAmbassador() {
+  
+  echo "INFO: Patching Ambassador"
+  
+  # change ambassador from LoadBalancer to ClusterIP
+  kubectl patch svc ambassador --type json -p='[{"op": "remove", "path": "/metadata/finalizers"}]'
+  kubectl get svc ambassador -o yaml |\
+  sed -e '/resourceVersion:/d' -e '/selfLink:/d' -e '/uid:/d' \
+  -e '/clusterIP:/d' -e '/nodePort:/d' -e '/externalTrafficPolicy:/d' \
+  -e 's/type: LoadBalancer/type: ClusterIP/' -e '/^status:/,$d' > /tmp/ambassador.$$.yaml
+  kubectl delete svc ambassador
+  kubectl create -f /tmp/ambassador.$$.yaml
+  if [ $? -ne 0 ]; then
+    echo "ERROR: failed to update ambassador service"
+    cat /tmp/ambassador.$$.yaml
+    exit 1
+  fi
+  rm -f /tmp/ambassador.$$.yaml
 }
 
 setExtensionDiscoveryOperatorSecret() {
@@ -120,7 +159,6 @@ setExtensionDiscoveryOperatorSecret() {
   kubectl label --overwrite=true secret cp4s-extension-rootca app.kubernetes.io/instance=ibm-security-foundations-prod app.kubernetes.io/managed-by=Helm app.kubernetes.io/name=cp4s-extension-rootca
 }
 
-# not used: 1.3 -> 1.4 migration
 preserveCACert() {
   oldCaCert=$(kubectl get secret -n kube-system cluster-ca-cert -o name 2>/dev/null)
   if [ "X$oldCaCert" == "X" ]; then
@@ -175,26 +213,101 @@ delete_chart() {
   fi
 }
 
-delete_objects() {
+delete_toolbox() {
 
-  kubectl delete job --all
+  echo "INFO: Delete old toolbox"
+  
+  kubectl delete pod cp4s-toolbox --ignore-not-found=true
+  kubectl delete sa cp4s-toolbox-sa --ignore-not-found=true
+  kubectl delete clusterrole cp4s-toolbox-role --ignore-not-found=true
+  kubectl delete clusterrolebinding cp4s-toolbox-rolebinding --ignore-not-found=true
 }
 
+delete_objects() {
 
-initSCC() {
+  echo "INFO: Deleting old sequences, inventory, components, job, ISC deployments, and secrets"
+  
+  for seq in $(kubectl get iscsequence -o name)
+  do
+    kubectl patch $seq --type json -p='[{"op": "remove", "path": "/metadata/finalizers"}]' 2>/dev/null
+    kubectl delete $seq
+  done
+  kubectl delete iscinventory --all
+  kubectl delete isccomponent --all
+  kubectl delete job --all
+  kubectl delete deploy -lplatform=isc
+  
+  echo "Deleting openwhisk invoker pods"
+  kubectl get pod -o name | grep openwhisk | xargs kubectl delete
+  
+  echo "INFO: removing old middleware TLS secrets"
+  kubectl delete secret default-ibm-etcd-tls \
+    ow-minio-ibm-minio-tls
+  
+  kubectl delete deploy isc-cases-operator
+  
+  kubectl delete secret default-ibm-redis-authsecret
+  kubectl delete secret redis-secret-default
+  kuberm deploy isc-entitlements-operator
+  kubectl delete secret isc-helm-account
+  
+  kubectl delete service udswebui
+  kubectl delete service uds-ambassador-config
 
-  kubectl delete scc ibm-isc-scc --ignore-not-found=true
-  kubectl delete scc ibm-isc-elastic --ignore-not-found=true
+}
 
-  sed -e "s/:cp4s:/:${NAMESPACE}:/" $dir/../pre-install/clusterAdministration/ibm-isc-scc-42.yaml |\
-           kubectl create --validate=false -f -
-  sed -e "s/:cp4s:/:${NAMESPACE}:/" $dir/../pre-install/clusterAdministration/isc-elastic-scc.yaml |\
-           kubectl create --validate=false -f -
-        rc=$?
+function login() {
+	
+  method="$1"
+
+    local cs_namespace='kube-system'
+    
+    if [ "X$method" == 'X--icp' ]; then
+                  
+        cs_host=$(kubectl get route --no-headers -n "$cs_namespace" | grep "cp-console" | awk '{print $2}')
+        cs_pass=$(oc -n "$cs_namespace" get secret platform-auth-idp-credentials -o jsonpath='{.data.admin_password}' | base64 --decode)
+        cs_user=$(oc -n "$cs_namespace" get secret platform-auth-idp-credentials -o jsonpath='{.data.admin_username}' | base64 --decode)
+
+        if [[ -z "$cs_host" || -z "$cs_pass" || -z "$cs_user" ]]; then
+            echo "Info: common services 3.2.4 not found. Continuing with oc login"
+            return 0
+        fi
+
+        if ! cloudctl login -a "$cs_host" -u "$cs_user" -p "$cs_pass" -n "$NAMESPACE" --skip-ssl-validation; then
+            echo "ERROR: failure on common services login"
+            exit 1
+        fi
+
+        LOGGED_ICP=1
+  
+    elif [ "X$method" == 'X--ocp' ]; then         
+
+        api_server=$(kubectl get configmap -n kube-public ibmcloud-cluster-info -o jsonpath='{.data.cluster_kube_apiserver_host}')
+        api_server_port=$(kubectl get configmap -n kube-public ibmcloud-cluster-info -o jsonpath='{.data.cluster_kube_apiserver_port}')
+
+        if [[ -z "$oc_token" || -z "$api_server" || -z "$api_server_port" ]]; then
+            echo "Info: common service details not found"
+            return 0
+        fi
+
+        if ! oc login --token="$oc_token"  --server="https://$api_server:$api_server_port" -n "$NAMESPACE"; then
+            echo "Error: failed to login to oc"
+            exit 1
+        fi
+
+    fi
+
+
 }
 
 NAMESPACE=$(oc project | sed -e 's/^[^"]*"//' -e 's/".*$//')
 HELM2=""
+LOGGED_ICP=0
+
+if [ "X$(which kubectl)" == "X" ]; then
+  echo "ERROR: kubectl should be in the PATH: $PATH"
+  exit 1
+fi
 
 while true
 do
@@ -209,7 +322,7 @@ do
       shift
       ;;
     -helm2)
-# kept for backward compatibility
+      HELM2="$1"
       shift
       ;;
      *)
@@ -220,6 +333,28 @@ do
   esac
 done
 
+if [ "X$HELM2" == "X" ]; then
+  HELM2=$(which helm2)
+  if [ "X$HELM2" == "X" ]; then
+     HELM2=$(which helm)
+  fi
+  if [ "X$HELM2" == "X" ]; then
+    echo "ERROR: Helm executable not found"
+    exit 1
+  fi
+fi
+
+echo "INFO: Setting TILLER_NAMESPACE to kube-system"
+export TILLER_NAMESPACE='kube-system'
+login --icp
+
+HVER=$($HELM2 version --tls| grep ^Client: | grep 'SemVer:"v2.12')
+if [ "X$HVER" == "X" ]; then
+  echo "ERROR: Invalid version (2.12 is expected) for $HELM2"
+  $HELM2 vesion --tls
+  exit 1
+fi
+
 RELEASE=$(kubectl get deploy sequences -o jsonpath='{.metadata.labels.release}')
 if [ "X$RELEASE" == "X" ]; then
   echo "ERROR: Foundation chart was not installed"
@@ -227,12 +362,36 @@ if [ "X$RELEASE" == "X" ]; then
 fi
 
 # Delete charts, deployments, inventories, components, and old toolbox
+delete_chart redis.isc.ibm.com default ibm-redis-default
+delete_chart couchdbs.isc.ibm.com v3 couchdb-v3 -lrelease=couchdb-v3
+delete_chart couchdbs.isc.ibm.com ow-couch couchdb-ow-couch -lrelease=couchdb-ow-couch
+delete_chart iscopenwhisks.isc.ibm.com openwhisk isc-openwhisk-openwhisk -lapp.kubernetes.io/instance=isc-openwhisk-openwhisk
+delete_toolbox
 delete_objects
-initSCC
-upgradeElastic
+
+patchAmbassador
+removeOldMwCharts
 
 setExtensionDiscoveryOperatorSecret
+cleanDeploySelector "arango-operator"
+
+pgo=$(kubectl get deploy cp4s-pgoperator -o jsonpath="{.spec.template.spec.containers[0].name}" 2>/dev/null)
+if [ "X$pgo" == "Xansible" ]; then
+  kubectl patch deploy cp4s-pgoperator --type json -p='[{"op": "remove", "path": "/spec/template/spec/containers/0"}]' 
+fi
+
+label "deploy"
+label "service"
+label "configmap"
+label "pdb"
 
 cd "${dir}/../../../resources"
 provision crds
 provision sa
+
+preserveCACert
+
+echo "INFO: Logging in into ocp"
+if [ $LOGGED_ICP -ne 0 ]; then 
+  login --ocp
+fi

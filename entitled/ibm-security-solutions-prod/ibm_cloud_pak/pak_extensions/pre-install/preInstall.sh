@@ -23,49 +23,7 @@ where options are one or more of the following options
 -force                     - to replace existing secrets  
 -cert certfile -key keyfile [-ca cacert] - to associate cp4s ingress with 
                               provided set of SSL keys
--roks                      - apply for ROKS specific processing
 EOF
-}
-
-setupROKSCerts() {
-  SECRET_NAME="isc-ingress-default-secret"
-  exists=$(kubectl get secret $SECRET_NAME -o name 2>/dev/null)
-  if [ ! -z "$exists" ]; then
-     echo "INFO: TLS secret already set"
-     return
-  fi
-  console=$(oc get route -n openshift-console console \
-     -o jsonpath="{.spec.host}" | cut -d '.' -f 2)  
-  if [ -z "$console" ]; then
-    echo "ERROR: No console route for ROKS processing"
-    exit 1
-  fi
-  cat << EOF | kubectl create -f -
-apiVersion: v1
-kind: Secret
-type: kubernetes.io/tls
-metadata:
-  name: $SECRET_NAME
-$(kubectl get secret -n openshift-ingress $console -o yaml | grep -A 2 ^data:)
-EOF
-
-  kubectl delete isctrust.isc.ibm.com -lapp.kubernetes.io/instance=isc-ingress-default-secret --wait=false 2>/dev/null
-  if [ "X$CA_FILE" != "X" ]; then
-    cat << EOF | kubectl apply -f -
-apiVersion: isc.ibm.com/v1
-kind: ISCTrust
-metadata:
-  name: ${SECRET_NAME}-$$
-  labels:
-    sort: isc-custom-ca
-    app.kubernetes.io/instance: isc-ingress-default-secret
-    app.kubernetes.io/managed-by: ibm-security-solutions-prod
-    app.kubernetes.io/name: isc-ingress-default-secret
-spec:
-  field: tls.crt
-  secret: isc-ingress-default-secret
-EOF
-  fi
 }
 
 runSubcharts() {
@@ -270,7 +228,7 @@ EOF
     -out tls.crt \
     -CA ca.crt -CAkey ca.key \
     -CAcreateserial -CAserial ca.serial \
-    -days 398 -extensions usr_cert -extfile openssl.cfg
+    -days 825 -extensions usr_cert -extfile openssl.cfg
 
   cat ca.crt >> tls.crt
   createTLSSecret tls.key tls.crt ca.crt
@@ -367,7 +325,6 @@ domain=""
 FORCE=0
 NAMESPACE=$(oc project | sed -e 's/^[^"]*"//' -e 's/".*$//')
 RESOURCES=0
-ROKS=0
 
 while true
 do
@@ -423,9 +380,6 @@ do
       domain="$1"
       shift
       ;;
-    -roks)
-      ROKS=1
-      ;;
     *)
       echo "Invalid argument: $arg"
       usage
@@ -445,10 +399,6 @@ if [ "X$certfile_path" != "X" ]; then
     echo "ERROR: parameter -cert requires parameter -key"
     exit 1
   fi
-else 
-  if [ $ROKS -eq 1 ]; then
-     setupROKSCerts
-  fi
 fi
 
 if [ $RESOURCES -eq 1 ]; then
@@ -456,7 +406,7 @@ if [ $RESOURCES -eq 1 ]; then
       runSubcharts
 fi
 
-if [ "X${certfile_path}" != "X" ]; then
+if [ "X${keyfile_path}${certfile_path}" != "X" ]; then
       createTLSSecret $keyfile_path $certfile_path $cafile_path
 fi
 

@@ -8,9 +8,7 @@ LOGFILE="${BAAS_LOG_DIR}/${THIS_SCRIPT}_$(date +%Y%m%d-%H%M%S).log"
 KUBERNETES_MIN_VERSION=1.17
 DOCKER_MIN_VERSION=17.09.00
 HELM_MIN_VERSION=3.3.0
-HELM_ERR_VERSION=3.3.3
 OCP_MIN_VERSION=4.5.0
-HELM_WARNING=""
 
 # Print a message and exit
 function err_exit()
@@ -47,66 +45,6 @@ function check_license_prereqs()
 
   print_msg "INFORMATION: Passed"
   return 0
-}
-
-function valid_ip()
-{
-  local  ip=$1
-  local  stat=1
-
-  if [[ $ip =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-      OIFS=$IFS
-      IFS='.'
-      ip=($ip)
-      IFS=$OIFS
-      [[ ${ip[0]} -le 255 && ${ip[1]} -le 255 \
-          && ${ip[2]} -le 255 && ${ip[3]} -le 255 ]]
-      stat=$?
-  fi
-  return $stat
-}
-
-
-function check_sppaddress_prereqs()
-{
-  # Check if license value is true
-  print_msg "INFORMATION: Checking the values of SPPips and SPPfqdn..."
-  if ! cat ./baas-values.yaml | grep "SPPips:" >>$LOGFILE 2>&1
-  then
-    print_msg "ERROR: SPPips is missing from baas-values.yaml."
-    return 1
-  fi
-
-  ip=$(grep -oP '^SPPips:\s+\K\S+' ./baas-values.yaml)
-  print_msg "INFORMATION:  - Using SPPips: ${ip}"
-  if ! valid_ip $ip
-  then
-    print_msg "ERROR: The value for SPPips is not a valid IP address."
-    return 1
-  fi
-
-  if ! cat ./baas-values.yaml | grep "SPPfqdn:" >>$LOGFILE 2>&1
-  then
-    print_msg "ERROR: SPPfqdn is missing from baas-values.yaml."
-    return 1
-  fi
-
-  fqdn=$(grep -oP '^SPPfqdn:\s+\K\S+' ./baas-values.yaml)
-  print_msg "INFORMATION:  - Using SPPfqdn: ${fqdn}"
-  result=`echo $fqdn | grep -P '(?=^.{1,254}$)(^(?>(?!\d+\.)[a-zA-Z0-9_\-]{1,63}\.?)+(?:[a-zA-Z]{2,})$)'`
-  if [[ -z "$result" ]]
-  then
-    # SPPfqdn can be a IPaddress too
-    if ! valid_ip $fqdn
-    then
-      print_msg "ERROR: The value for SPPfqdn is not a valid fully qualified domain name."
-      return 1
-    fi
-  fi
-    
-  print_msg "INFORMATION: Passed"
-  return 0
-
 }
 
 function check_kubectl_prereqs()
@@ -292,37 +230,20 @@ function check_helm3_prereqs()
   # Check for valid helm version
 
   print_msg "INFORMATION: Checking for minimum Helm version ${HELM_MIN_VERSION}..."
-  HELM_VERSION=$(helm3 version 2>/dev/null | grep "version.BuildInfo" | awk -F\{ '{print $2}' | awk -F\Version: '{print $2}' | awk -F\" '{print $2}' | awk -F\v '{print $2}')
-  print_msg "INFORMATION:  - Detected Helm version ${HELM_VERSION}"
+  HELM_VERSION=$(helm3 version | awk -F\{ '{print $2}' | awk -F\Version: '{print $2}' | awk -F\" '{print $2}' | awk -F\v '{print $2}')
+  print_msg "INFORMATION:  - Detected Helm version ${HELM_VERSION}."
 
   if [ "$HELM_VERSION" != "$(printf "$HELM_VERSION\n$HELM_MIN_VERSION\n" | sort -gr | head -1 )" ]
   then
     return 1
   fi
 
-  # check helm3 Warning, WARNING: Kubernetes configuration file is group-readable. This is insecure. Location: /home/labuser/.kube/config
-  if [[ $HELM_VERSION == $HELM_ERR_VERSION  ]]
-  then
-    HELM_WARNING=$(helm3 version | grep "WARNING: Kubernetes configuration file is group-readable. This is insecure.")
-  fi
-
-  # helm3.3.3 report "WARNING: Kubernetes configuration file is group-readable. This is insecure...". It is an issue, we should report error for this version
-  if [[ $HELM_VERSION == $HELM_ERR_VERSION && $HELM_WARNING != "" ]]
-  then
-    echo "WARNINGS FROM HELM OUTPUT: $HELM_WARNING"
-    print_msg "ERROR: helm version $HELM_ERR_VERSION has an issue and is not supported. Please refer to https://github.com/helm/helm/issues/8776"
-    return 1
-  fi
-  
   print_msg "INFORMATION: Passed"
   return 0
 }
 
 # Ensure that the license has been accepted
 check_license_prereqs || err_exit "The value for license in baas-values.yaml must be set to true to accept the license before continuing."
-
-# Ensure that SPPips and SPPfqdn are in the baas-values.yaml file and are valid
-check_sppaddress_prereqs || err_exit "The value for SPPips and SPPfqdn in baas-values.yaml must exist and be in the correct format before continuing."
 
 # Check for the minimum version of kubernetes
 check_kubectl_prereqs || err_exit "Kubernetes ${KUBERNETES_MIN_VERSION} or higher needs to be installed and configured before continuing."
