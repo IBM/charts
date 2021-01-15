@@ -4,32 +4,16 @@
 
 ## Introduction
 
-This chart deploys a single instance of the IBM UrbanCode Deploy agent relay that may be scaled to multiple instances.
+This chart deploys a single instance of the IBM UrbanCode Deploy agent relay.
 
 ## Chart Details
-* Includes a StatefulSet workload object and corresponding service
+* Includes a StatefulSet workload object
 
 ## Prerequisites
 
-1. Kubernetes 1.16.0+; kubectl and oc CLI; Helm 3; 
-* [Install and setup oc/kubectl CLI](https://docs.okd.io/latest/cli_reference/get_started_cli.html#installing-the-cli)
-* [Install and setup the Helm 3 CLI](https://helm.sh/docs/intro/install/).
+1. The UrbanCode agent relay must have a UrbanCode Deploy server to connect to.
 
-2. Image and Helm Chart - The UCD agent relay image and helm chart can be accessed via the Entitled Registry and public Helm repository.
-* Entitled Registry
-    * The public Helm chart repository can be accessed at https://github.com/IBM/charts/tree/master/repo/ibm-helm and directions for accessing the UrbanCode Deploy agent relay chart will be discussed later in this README.
-    * Get a key to the entitled registry
-        * Log in to [MyIBM Container Software Library](https://myibm.ibm.com/products-services/containerlibrary) with the IBMid and password that are associated with the entitled software.
-        * In the Entitlement keys section, select Copy key to copy the entitlement key to the clipboard.
-        * An imagePullSecret must be created to be able to authenticate and pull images from the Entitled Registry.  Once this secret has been created you will specify the secret name as the value for the image.secret parameter in the values.yaml you provide to 'helm install ...'  Note: Secrets are namespace scoped, so they must be created in every namespace you plan to install UCD into.  Example Docker registry secret to access Entitled Registry with an Entitlement key. 
-
-```
-oc create secret docker-registry entitledregistry-secret --docker-username=cp --docker-password=<EntitlementKey> --docker-server=cp.icr.io
-``` 
-
-3. The UrbanCode agent relay must have a UrbanCode Deploy server to connect to.
-
-4. A PersistentVolume (PV) that will hold the conf directory for the UrbanCode Deploy agent relay is required.  This same PV is used to persist the agent relay cache data if caching is enabled and persisted.  If your cluster supports dynamic volume provisioning you will not need to create a PV or PersistentVolumeClaim (PVC) before installing this chart.  If your cluster does not support dynamic volume provisioning, you will need to either ensure a PV is available or you will need to create one before installing this chart.  You can optionally create the PVC to bind it to a specific PV, or you can let the chart create a PVC and bind to any available PV that meets the required size and storage class.  Sample YAML to create the PV and PVC are provided below.
+2. A PersistentVolume (PV) that will hold the conf directory for the UrbanCode Deploy agent relay is required.  This same PV is used to persist the agent relay cache data if caching is enabled and persisted.  If your cluster supports dynamic volume provisioning you will not need to create a PV or PersistentVolumeClaim (PVC) before installing this chart.  If your cluster does not support dynamic volume provisioning, you will need to either ensure a PV is available or you will need to create one before installing this chart.  You can optionally create the PVC to bind it to a specific PV, or you can let the chart create a PVC and bind to any available PV that meets the required size and storage class.  Sample YAML to create the PV and PVC are provided below.
 
 ```
 apiVersion: v1
@@ -65,7 +49,20 @@ spec:
 
 Example setup scripts to create the Persistent Volume and Persistent Volume Claim are included in the Helm chart under pak_extensions/pre-install/persistentStorageAdministration directory.
 
-5. Secret - A Kubernetes Secret object must be created to store the CodeStation authentication token and the password for all keystores used by the product.  The authentication token and keystore password are retrieved during Helm chart installation.  By default, the chart will look for a secret named 'HelmReleaseName-secrets' where 'HelmReleaseName' is the release name you give when installing this Helm chart.  You can also create a secret with a different name and specify it in the Values.secret.name field
+3. Secret - A Kubernetes Secret object must be created to store the CodeStation authentication token.  The authentication token is retrieved during Helm chart installation.  By default, the chart will look for a secret named 'HelmReleaseName-secrets' where 'HelmReleaseName' is the release name you give when installing this Helm chart.  You can also create a secret with a different name and specify it in the Values.secret.name field 
+
+The secret can be created either by using the Cluster Console or using the kubectl CLI.
+
+* Through the Cluster Console, create Secret objects in the target namespace.
+    * Click on Configuration->Secrets in the left navigation view
+    * Click the New Secret button
+    * On the General tab:
+        * Enter the name of the secret object.  For example:  MyRelease-secrets
+        * Choose the namespace where the chart is to be installed.
+    * On the Data tab:
+        * Enter 'cspassword' in the Name field.
+        * Use your favorite base64 encoding tool to encode the CodeStation authentication token and paste it into the Value field.
+    * Click the Create button.
 
 * Through the kubectl CLI, create a Secret object in the target namespace.
     Generate the base64 encoded value for the CodeStation authentication token.
@@ -73,8 +70,6 @@ Example setup scripts to create the Persistent Volume and Persistent Volume Clai
 ```
 echo -n 255b21b7-ca48-4f2e-95c0-048fdbff4197 | base64
 MjU1YjIxYjctY2E0OC00ZjJlLTk1YzAtMDQ4ZmRiZmY0MTk3
-echo -n 'MyKeystorePassword' | base64
-TXlLZXlzdG9yZVBhc3N3b3Jk
 ```
 
 Create a file named secret.yaml with the following contents, using your Helm Relese name and base64 encoded values.
@@ -87,7 +82,6 @@ metadata:
 type: Opaque
 data:
   cspassword: MjU1YjIxYjctY2E0OC00ZjJlLTk1YzAtMDQ4ZmRiZmY0MTk3
-  keystorepassword: TXlLZXlzdG9yZVBhc3N3b3Jk
 ```
 
 Create the Secret using kubectl apply
@@ -100,8 +94,6 @@ Delete or shred the secret.yaml file.
 
 
 ### PodSecurityPolicy Requirements
-
-If you are running on OpenShift, skip this section and continue to the [SecurityContextConstraints Requirements](#securitycontextconstraints-requirements) section below.
 
 This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you.
 
@@ -191,7 +183,7 @@ This chart also defines a custom PodSecurityPolicy which can be used to finely c
   As team admin/operator the namespace scoped scripts and instructions are located at:
   * pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh
 
-### SecurityContextConstraints Requirements
+### Red Hat OpenShift SecurityContextConstraints Requirements
 
 If running in a Red Hat OpenShift cluster, this chart requires a `SecurityContextConstraints` to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
 
@@ -257,39 +249,29 @@ This chart defines a custom `SecurityContextConstraints` which can be used to fi
   * `pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh`
 
 ## Resources Required
-Kubernetes 1.16.0+
+Kubernetes 1.9
 
 ## Installing the Chart
 
-Add the IBM helm chart repository to the local client.
-```bash
-$ helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm/
-```
-
-Get a copy of the values.yaml file from the helm chart so you can update it with values used by the install.
-```bash
-$ helm inspect values ibm-helm/ibm-ucdr-prod > myvalues.yaml
-```
-
-Edit the file myvalues.yaml to specify the parameter values to use when installing the UCD agent relay instance.  The [configuration](#Configuration) section lists the parameter values that can be set.
-
-To install the chart into namespace 'ucdtest' with the release name `my-ucdr-release` and use the values from myvalues.yaml:
+To install the chart into the namespace 'default', with the release name `my-ucdrelay`, and reading all remaining installation values from a file named my-relay-values.yaml:
 
 ```bash
-$ helm install my-ucdr-release ibm-helm/ibm-ucdr-prod --namespace ucdtest --values myvalues.yaml
+$ helm install ibm-ucdr-prod-2.0.9.tgz --namespace default --name my-ucdrelay -f my-relay-values.yaml --tls
 ```
 
-> **Tip**: List all releases using `helm list`.
+The [configuration](#Configuration) section lists the parameters that can be set during installation.
+
+> **Tip**: List all releases using `helm list`
 
 ## Verifying the Chart
 Check the Resources->Agent Relays page of the UrbanCode Deploy server UI to verify the agent relay has connected successfully.
 
 ## Uninstalling the Chart
 
-To uninstall/delete the `my-ucdr-release` deployment:
+To uninstall/delete the `my-ucdrelay` deployment:
 
 ```bash
-$ helm delete my-ucdr-release
+$ helm delete --purge my-ucdrelay --tls
 ```
 
 The command removes all the Kubernetes components associated with the chart and deletes the release.
@@ -305,38 +287,28 @@ The Helm chart has the following values that can be overriden using the --set pa
 
 | Qualifier | Parameter  | Definition | Allowed Value |
 |---|---|---|---|
-| version |  | The product version to install |  |
 | image | pullPolicy | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to Always |
+|       | repository | Name of image, including repository prefix (if required) | See [Extended description of Docker tags](https://docs.docker.com/engine/reference/commandline/tag/#extended-description) |
+|       | tag | Docker image tag | See [Docker tag description](https://docs.docker.com/engine/reference/commandline/tag/) |
 |       | secret |  An image pull secret used to authenticate with the image registry | Empty (default) if no authentication is required to access the image registry. |
-| license | accept | Set to true to accept license agreement |  |
 | persistence | enabled | Determines if persistent storage will be used to hold the UCD server appdata directory contents. This should always be true to preserve server data on container restarts. | Default value "true" |
 |             | useDynamicProvisioning | Set to "true" if the cluster supports dynamic storage provisoning | Default value "false" |
-|             | fsGroup | fsGroup value to use for gid when accessing persistent storage | Default value is "0" |
 | confVolume | name | The base name used when the Persistent Volume and/or Persistent Volume Claim for the UCD agent conf directory is created by the chart. | Default value is "conf" |
 |            | existingClaimName | The name of an existing Persistent Volume Claim that references the Persistent Volume that will be used to hold the UCD agent conf directory. |  |
 |            | storageClassName | The name of the storage class to use when persistence.useDynamicProvisioning is set to "true". |  |
 |            | size | Size of the volume to hold the UCD agent conf directory |  |
-| serverHostPort |  | UCD server hostname and WSS port in the form hostname:port. If specifying failover info, separate multiple hostname:port with a comma. For example, wss://ucd1.example.com:7919,wss://ucd2.example.com:7919) |  |
+| serverHostPort |  | UCD server hostname and JMS port in the form hostname:port. If specifying failover info, separate multiple hostname:port with a comma. For example, ucd1.example.com:7918,ucd2.example.com:7918) |  |
 | codeStationReplication | enabled | Specify true to enable artifact caching on the relay. |  |
 |                        | persisted | Specify true to persist the artifact cache when the relay container is restarted. |  |
 |                        | serverUrl | The full URL of the central server to connect to, such as https://myserver.example.com:8443. |  |
 |                        | serverPassword | An authentication token from the server. |  |
 |                        | maxCacheSize | The size to which to limit the artifact cache, such as 500M for 500 MB or 5G for 5 GB. To not put a limit on the cache, specify none. |  |
 |                        | geotags | If you choose to cache files on the relay, you can specify one or more component version statuses here, separated by semicolons. The agent relay automatically caches component versions with any of these statuses so that those versions are ready when they are needed for a deployment. A status can contain a space except in the first or last position. A status can contain commas. The special * status replicates all artifacts, but use this status with caution, because it can make the agent relay store a large amount of data. If no value is specified, no component versions are cached automatically. |  |
-| ingress | httpproxyhost | Hostname used by UrbanCode Deploy Agent Relay for HTTP proxy connections via Ingress (e.g. relayhttpproxyhost.<proxy node address>.nip.io). | |
-|          | codestationhost | Hostname used by UrbanCode Deploy Agent Relay for artifact cache requests via Ingress (e.g. codestationhost.<proxy node address>.nip.io:443). See chart readme documentation for more details | |
 | resources | constraints.enabled | Specifies whether the resource constraints specified in this helm chart are enabled.   | false (default) or true  |
 |           | limits.cpu  | Describes the maximum amount of CPU allowed | Default is 2000m. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu)  |
 |           | limits.memory | Describes the maximum amount of memory allowed | Default is 2Gi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
 |           | requests.cpu  | Describes the minimum amount of CPU required - if not specified will default to limit (if specified) or otherwise implementation-defined value. | Default is 1000m. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu) |
 |           | requests.memory | Describes the minimum amount of memory required If not specified, the memory amount will default to the limit (if specified) or the implementation-defined value | Default is 1Gi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
-
-## Scaling
-To increase or decrease the number of UrbanCode Deploy Agent Relay instances/replicas issue the following command:
-
-```bash
-$ oc scale --replicas=2 statefulset/releaseName-ibm-ucdr-prod
-```
 
 ## Storage
 See the Prerequisites section of this page for storage information.
