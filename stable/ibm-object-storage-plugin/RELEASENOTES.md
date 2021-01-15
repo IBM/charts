@@ -1,16 +1,14 @@
 # Breaking Changes
 None
 
-# What’s new in Chart Version 2.0.6
+# What’s new in Chart Version 1.1.5
 
-With ibm-object-storage-plugin chart version 2.0.6, the following new
+With ibm-object-storage-plugin chart version 1.1.5, the following new
 features are available:
-* Enabled optional default parameters like secret name, bucket name and other for storage class
+* No new feature
 
 # Fixes
-* GoLang update to 1.15.5
-* Fixed CVEs CVE-2020-28362, CVE-2020-28367, CVE-2020-28366
-* Enabled image signing and updated images labels
+* Resolved high security issuees CVE-2019-19126, CVE-2019-15847, CVE-2019-14822 and other.
 
 # Prerequisites
 Install [Helm client v3](https://cloud.ibm.com/docs/containers?topic=containers-helm#install_v3) on your local machine.
@@ -24,13 +22,7 @@ For install/upgrade, follow instructions [here](https://cloud.ibm.com/docs/conta
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
-| 2.0.6 | Dec 19, 2020| >=1.10.1-0 | 1.8.23 | None | Enabled optional default parameters like secret name, bucket name and other for storage class, GoLang update to 1.15.5, Enabled image signing and updated images labels  and Fixed CVE-2020-28362 CVE-2020-28367 CVE-2020-28366 |
-| 2.0.5 | Nov 25, 2020| >=1.10.1-0 | 1.8.22 | None | Fixed NilPointer error and CVEs CVE-2018-20843 CVE-2019-13050 CVE-2019-13627 CVE-2019-14889 CVE-2019-1551 CVE-2019-15903 CVE-2019-16168 CVE-2019-16935 CVE-2019-19221 CVE-2019-19906 CVE-2019-19956 CVE-2019-20218 CVE-2019-20386 CVE-2019-20387 CVE-2019-20388 CVE-2019-20454 CVE-2019-20907 CVE-2019-5018 CVE-2020-10029 CVE-2020-13630 CVE-2020-13631 CVE-2020-13632 CVE-2020-14422 CVE-2020-1730 CVE-2020-1751 CVE-2020-1752 CVE-2020-6405 CVE-2020-7595 CVE-2020-8177 |
-| 2.0.4 | Oct 07, 2020| >=1.10.1-0 | 1.8.21 | None | Updated s3fs-fuse to fix IAM Apikey token refresh issue, Upgraded Golang to v1.15.2 for fixing CVE-2020-24553 |
-| 2.0.3 | Sep 23, 2020| >=1.10.1-0 | 1.8.20 | None | Enabled Bucket AccessPolicy for VPC-Gen2 clusters, Upgraded Golang to v1.13.15 for fixing CVE-2020-16845 and CVE-2020-24553, Upgraded UBI base image to 8.2-349 for fixing CVE-2020-14352 |
-| 2.0.2 | Aug 06, 2020| >=1.10.1-0 | 1.8.19 | None | Upgraded Golang to v1.13.14 for fixing CVE-2020-15586 and CVE-2020-14039, Fix for plugin deployment in custom namespace for IKS cluster |
-| 2.0.1 | July 10, 2020| >=1.10.1 | 1.8.18 | None | Update UBI base Image, Set default values for `auto-create-bucket`, `auto-delete-bucket` and `bucket` annotations in PVC |
-| 2.0.0 | June 16, 2020| >=1.10.1 | 1.8.17 | None | Cert 2.0 Certification, Restrict COS Access Secret for selected namespaces, Allowed re-using existing bucket with `auto-create-bucket: true`, GoLang: v1.13.5 |
+| 1.1.5 | May 13, 2020| >=1.10.1 | 1.8.16 | None | Resolved high severity security issue  CVE-2019-19126, CVE-2019-15847, CVE-2019-14822 and other, GoLang: v1.13.5 |
 | 1.1.4 | Mar 10, 2020| >=1.10.1 | 1.8.13 | None | Resolved security issue CVE-2020-1712, Updated s3fs-fuse to use latest commit, Enabled support for 'auto_cache' option from pvc spec, GoLang: v1.13.4 |
 | 1.1.3 | Feb 13, 2020| >=1.10.1 | 1.8.12 | None | Resolved security issues CVE-2019-13734 and CVE-2019-18408, Updated `ibmc` helm plugin to support object-storage plugin installation/upgradation with `helm v2` and `helm v3`, Updated helm chart to auto-recreate plugin pods when upgrading plugin, GoLang: v1.13.4 |
 | 1.1.2 | Dec 09, 2019| >=1.10.1 | 1.8.11 | None | Non-root user access broken for K8S >= 1.15.4, GoLang: v1.13.4 |

@@ -1,18 +1,18 @@
 {{- include "sch.config.init" (list . "ibm-ucd-prod.sch.chart.config.values") -}}
 {{- $fullName := include "sch.names.fullName" (list .) -}}
 1. Get the application URL by running these commands:
-{{- if (.Capabilities.APIVersions.Has "route.openshift.io/v1") }}
-  export HOST_NAME=$(oc get routes/{{.Release.Name}}-ibm-ucd-prod -o=custom-columns=HOST:.spec.host --no-headers)
-  echo https://$HOST_NAME
-{{- else if .Values.ingress.host }}
-  export HOST_NAME=$(kubectl get ing/{{.Release.Name}}-ibm-ucd-prod -o=custom-columns=HOSTS:.spec.rules[0].host --no-headers)
-  echo http://$HOST_NAME
+{{- if contains "NodePort" .Values.service.type }}
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ $fullName }})
+  if kubectl get configMap -n kube-public ibmcloud-cluster-info >/dev/null 2>&1
+  then
+    export NODE_IP=$(kubectl get configmap ibmcloud-cluster-info --namespace kube-public -o jsonpath="{.data.proxy_address}")
+  else
+    export NODE_IP=$(kubectl get nodes -l proxy=true -o jsonpath="{.items[0].status.addresses[?(@.type==\"Hostname\")].address}")
+  fi
+  echo https://$NODE_IP:$NODE_PORT
 {{- else if contains "LoadBalancer" .Values.service.type }}
      NOTE: It may take a few minutes for the LoadBalancer IP to be available.
            You can watch the status of by running 'kubectl get svc -w {{ $fullName }}'
   export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ $fullName }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
   echo https://$SERVICE_IP:8443
-{{- else }}
-  NOTE: Please check the Kubernetes documentation to create an ingress to expose the UCD https service.  See https://kubernetes.io/docs/concepts/services-networking/ingress for more info.
 {{- end }}
-
