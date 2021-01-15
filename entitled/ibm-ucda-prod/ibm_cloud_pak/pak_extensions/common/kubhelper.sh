@@ -3,7 +3,7 @@
 # Source this file
 # . kubhelper.sh
 
-
+set -x
 
 # Test the target Kubernetes cluster supports the specified resource name and API version.
 # Parameters:

@@ -1,0 +1,335 @@
+# (C) Copyright 2019-2020 Syncsort Incorporated. All rights reserved.
+
+{{ include "sch.config.init" (list . "b2bi.sch.chart.config.values") }}
+{{- $resourcesPVCName := .Values.appResourcesPVC.name }}
+{{- $logsPVCName := .Values.appLogsPVC.name }}
+{{- $documentsPVCName := .Values.appDocumentsPVC.name }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.statefulSetName" (list . .sch.chart.components.apiServer.name) | quote }}
+  labels:
+    tier: {{ .Release.Name }}-backend
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.apiServer.name) | indent 4 }}
+{{- if .Values.api.extraLabels }}
+{{ toYaml .Values.api.extraLabels | indent 4 }}
+{{- end }}
+spec:
+  replicas: {{ .Values.api.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.apiServer.name) | indent 6 }}
+  serviceName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.headlessService.name) | quote }}
+  template:
+    metadata:
+      labels:
+        tier: {{ .Release.Name }}-backend
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.apiServer.name) | indent 8 }}
+{{- if .Values.api.extraLabels }}
+{{ toYaml .Values.api.extraLabels | indent 8 }}
+{{- end }}    
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering .sch.chart.nonMetering.nonChargeableProductMetric nil "api") | indent 8 }}
+    spec:
+{{- if .Values.serviceAccount.create }} 
+      serviceAccountName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.podServiceAccount.name) | quote }}
+{{- else }}
+      serviceAccountName: {{ .Values.serviceAccount.name  | default "default" }}
+{{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | indent 8 }}
+      volumes:
+        {{- if .Values.persistence.enabled }}
+        {{- if .Values.appResourcesPVC.enabled }} 
+        - name: {{ .Values.appResourcesPVC.name }}
+          persistentVolumeClaim:
+            claimName: {{ include "sch.names.fullCompName" (list . $resourcesPVCName) | quote }}
+        {{- end }}
+        {{- if not .Values.logs.enableAppLogOnConsole }}   
+        - name: {{ .Values.appLogsPVC.name }}
+          persistentVolumeClaim:
+            claimName: {{ include "sch.names.fullCompName" (list . $logsPVCName) | quote }}
+        {{- end }} 
+        {{- if .Values.appDocumentsPVC.enabled }}
+        - name: "{{ .Values.appDocumentsPVC.name }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "sch.names.fullCompName" (list . $documentsPVCName) | quote }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        {{- end }}
+        {{- end }}
+        - name: configmap-resources-volume
+          configMap:
+           name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.configmap.name) | quote }}
+        - name: configmap-properties-volume
+          configMap:
+           name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.propertyConfigmap.name) | quote }}           
+        # extra configured volumes
+        {{- if .Values.persistence.enabled }}
+        {{- range $i, $pvc := .Values.api.extraPVCs }}
+        - name: {{ $pvc.name }}
+          persistentVolumeClaim:
+            claimName: {{ include "sch.names.fullCompName" (list $ $pvc.name) | quote }}
+        {{- end }}
+        {{- end }}
+
+        {{- if and (.Values.setupCfg.usessl) (.Values.setupCfg.dbTruststoreSecret) }}
+        - name: secret-{{ .Values.setupCfg.dbTruststoreSecret }}
+          secret:
+            secretName: {{ .Values.setupCfg.dbTruststoreSecret }}
+        {{- end }}
+        {{- if and (.Values.setupCfg.usessl) (.Values.setupCfg.dbKeystoreSecret) }}
+        - name: secret-{{ .Values.setupCfg.dbKeystoreSecret }}
+          secret:
+            secretName: {{ .Values.setupCfg.dbKeystoreSecret }}
+        {{- end }}
+        {{- if and (.Values.setupCfg.jmsEnableSsl) (.Values.setupCfg.jmsTruststoreSecret) }}
+        - name: secret-{{ .Values.setupCfg.jmsTruststoreSecret }}
+          secret:
+            secretName: {{ .Values.setupCfg.jmsTruststoreSecret }}
+        {{- end }}
+        {{- if and (.Values.setupCfg.jmsEnableSsl) (.Values.setupCfg.jmsKeystoreSecret) }}
+        - name: secret-{{ .Values.setupCfg.jmsKeystoreSecret }}
+          secret:
+            secretName: {{ .Values.setupCfg.jmsKeystoreSecret }}
+        {{- end }}
+        {{- if .Values.setupCfg.libertyKeystoreSecret }}
+        - name: secret-{{ .Values.setupCfg.libertyKeystoreSecret }}
+          secret:
+            secretName: {{ .Values.setupCfg.libertyKeystoreSecret }}        
+        {{- end }}
+        {{- if .Values.api.extraConfigMaps }}
+        {{- range $i, $cmaps :=  .Values.api.extraConfigMaps }}
+        {{ if $cmaps.mountAsVolume }}
+        - name: configmap-{{ $cmaps.configMapName }}
+          configMap:
+            name: {{ $cmaps.configMapName }}
+        {{- end }}             
+        {{- end }}
+        {{- end }}
+        {{- if .Values.api.extraSecrets }}
+        {{- range $i, $secrets :=  .Values.api.extraSecrets }}
+        {{ if $secrets.mountAsVolume }}
+        - name: secret-{{ $secrets.secretName }}
+          secret:
+            secretName: {{ $secrets.secretName }}
+        {{- end }}             
+        {{- end }}
+        {{- end }}
+
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      {{- if .Values.api.extraInitContainers }}
+      initContainers:
+      {{- range $i, $initContainer := .Values.api.extraInitContainers }}
+      - name: {{ $initContainer.name }}
+        image: {{ $initContainer.image }}
+        imagePullPolicy: {{ $initContainer.imagePullPolicy }}
+        command: {{ $initContainer.command }}
+      {{- end }}
+      {{- end }}
+      containers:
+        - name: "api"
+          image: "{{ .Values.global.image.repository }}:{{ .Values.global.image.tag }}"
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ add ($.Values.setupCfg.basePort|int) 83 }}
+              protocol: TCP
+            - name: https
+              containerPort: {{ add ($.Values.setupCfg.basePort|int) 84 }}
+              protocol: TCP
+            {{- if .Values.api.frontendService.extraPorts }}
+            {{- range $i, $port := .Values.api.frontendService.extraPorts }}
+            - name: {{ $port.name }}
+              containerPort: {{ $port.targetPort }}
+              protocol: {{ $port.protocol }}
+            {{- end }}
+            {{- end }}
+          env:
+            - name: "TZ"
+              value: "{{ .Values.env.tz }}"
+            - name: "LICENSE"
+              value: "{{ .Values.env.license }}"
+            - name: "JAVA_TOOL_OPTIONS"
+              value: "{{ .Values.api.env.jvmOptions }}"
+            - name: "NODE_NUMBER_IN_HOST"
+              value: "true"
+            - name: "SANDBOX_CC_INSTALL"
+              value: {{ .Values.env.containerInstallation | default "true" | quote }}
+            - name: "SANDBOX_CC_NODE_NAME"
+              value: "node_b2biNodeNumber__libertyNode"      
+            - name: "SERVER_TYPE"
+              value: "api"              
+            - name: "SANDBOX_CC_SERVICE_TYPE"
+              value: "api"
+            - name: "SANDBOX_API_GATEWAY_IP"
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: "SANDBOX_API_GATEWAY_PORT"
+              value: "{{ add ($.Values.setupCfg.basePort|int) 83 }}"
+            - name: "SANDBOX_MYFG_PROTOCOL"  
+            {{- if .Values.api.internalAccess.enableHttps }}
+              value: "https"
+            {{- else }}
+              value: "http"
+            {{ end }}
+            - name: "SANDBOX_REST_HTTP_SERVER_ADAPTER_SERVICE_HOST"
+              value: {{ include "sch.names.fullCompName" (list . .sch.chart.components.asiFrontendService.name) | quote }}
+            - name: "SANDBOX_REST_HTTP_SERVER_ADAPTER_SERVICE_PORT"
+              value: "{{ .Values.asi.frontendService.ports.restHttpAdapter.port }}"
+            - name: "UPGRADE_COMPATIBILITY_VERIFIED"
+              value: "{{ .Values.env.upgradeCompatibilityVerified }}"
+            - name: "ENABLE_APP_LOG_ON_CONSOLE"
+              value: "{{ .Values.logs.enableAppLogOnConsole }}"  
+            - name: "PROPERTY_jndiU2022noapp_javaU2022namingU2022providerU2022url"
+              value: "rmi://{{ include "sch.names.statefulSetName" (list . .sch.chart.components.asiServer.name) }}-0.{{ include "sch.names.fullCompName" (list . .sch.chart.components.headlessService.name) }}:{{ add (.Values.setupCfg.basePort|int) 14  }}"
+#            - name: "NODE_NUMBER"
+#              valueFrom:
+#                fieldRef:
+#                  fieldPath: metadata.annotations['spec.pod.beta.kubernetes.io/statefulset-index']
+          envFrom:
+          {{if .Values.setupCfg.systemPassphraseSecret}}
+          - secretRef:
+                name: "{{ .Values.setupCfg.systemPassphraseSecret }}"
+{{ end }}
+{{if .Values.setupCfg.dbSecret}}
+          - secretRef:
+                name: "{{ .Values.setupCfg.dbSecret }}"
+{{ end }}
+{{if .Values.setupCfg.jmsSecret}}
+          - secretRef:
+                name: "{{ .Values.setupCfg.jmsSecret }}"
+{{ end }}
+{{if .Values.setupCfg.libertySecret}}
+          - secretRef:
+                name: "{{ .Values.setupCfg.libertySecret }}"
+{{ end }}
+          {{ if .Values.api.extraSecrets }}
+          {{- range $i, $secrets :=  .Values.api.extraSecrets }}
+          {{- if not ($secrets.mountAsVolume) }} 
+          - secretRef:
+                name: {{ $secrets.secretName }}
+          {{- end }}
+          {{- end }}
+          {{- end }}
+          {{ if .Values.api.extraConfigMaps }}
+          {{- range $i, $cmaps :=  .Values.api.extraConfigMaps }}
+          {{- if not ($cmaps.mountAsVolume) }}
+          - configMapRef:
+                name: {{ $cmaps.configMapName }}
+          {{- end }}
+          {{- end }}
+          {{- end }}
+
+          volumeMounts:
+            {{- if .Values.persistence.enabled }}
+            {{- if .Values.appResourcesPVC.enabled }}
+            - name: {{ .Values.appResourcesPVC.name }}
+              mountPath: /ibm/resources
+            {{- end }} 
+            {{- if not .Values.logs.enableAppLogOnConsole }}  
+            - name: {{ .Values.appLogsPVC.name }}
+              mountPath: /ibm/trace
+            {{- end }} 
+            {{- if .Values.appDocumentsPVC.enabled }}  
+            - name: {{ .Values.appDocumentsPVC.name }}
+              mountPath: {{ .Values.appDocumentsPVC.mountPath | default "/ibm/b2bi/install/documents" }}
+            {{- end }}
+            {{- range $i, $volumeMount := .Values.api.extraVolumeMounts }}
+            - name: {{ $volumeMount.name }}
+              mountPath: {{ $volumeMount.mountPath }}
+            {{- end }}
+            {{ end }}
+            - name: configmap-resources-volume
+              mountPath: /ibm/resources/setup.cfg
+              subPath: setup.cfg
+            - name: configmap-properties-volume
+              mountPath: /ibm/b2bi/ext-resources/properties
+
+            {{- if and (.Values.setupCfg.usessl) (.Values.setupCfg.dbTruststoreSecret) }}
+            - name: secret-{{ .Values.setupCfg.dbTruststoreSecret }}
+              mountPath: /ibm/resources/{{ .Values.setupCfg.dbTruststoreSecret }}
+            {{- end }}
+            {{- if and (.Values.setupCfg.usessl) (.Values.setupCfg.dbKeystoreSecret) }}
+            - name: secret-{{ .Values.setupCfg.dbKeystoreSecret }}
+              mountPath: /ibm/resources/{{ .Values.setupCfg.dbKeystoreSecret }}
+            {{- end }}
+            {{- if and (.Values.setupCfg.jmsEnableSsl) (.Values.setupCfg.jmsTruststoreSecret) }}
+            - name: secret-{{ .Values.setupCfg.jmsTruststoreSecret }}
+              mountPath: /ibm/resources/{{ .Values.setupCfg.jmsTruststoreSecret }}
+            {{- end }}
+            {{- if and (.Values.setupCfg.jmsEnableSsl) (.Values.setupCfg.jmsKeystoreSecret) }}
+            - name: secret-{{ .Values.setupCfg.jmsKeystoreSecret }}
+              mountPath: /ibm/resources/{{ .Values.setupCfg.jmsKeystoreSecret }}
+            {{- end }}
+            {{- if .Values.setupCfg.libertyKeystoreSecret }}
+            - name: secret-{{ .Values.setupCfg.libertyKeystoreSecret }}
+              mountPath: /ibm/resources/{{ .Values.setupCfg.libertyKeystoreSecret }}
+            {{- end }}
+            {{- if .Values.api.extraConfigMaps }}
+            {{- range $i, $cmaps :=  .Values.api.extraConfigMaps }}
+            {{- if $cmaps.mountAsVolume }}
+            - name: configmap-{{ $cmaps.configMapName }}
+              mountPath: /ibm/resources/{{ $cmaps.configMapName }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.api.extraSecrets }}
+            {{- range $i, $secrets :=  .Values.api.extraSecrets }}
+            {{- if $secrets.mountAsVolume }}
+            - name: secret-{{ $secrets.secretName }}
+              mountPath: /ibm/resources/{{ $secrets.secretName }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+
+          args: ["b2bi_run", "api"]
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.containerSecurityContext) | indent 12 }}
+          livenessProbe:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - /ibm/b2bi/install/bin/b2biLivelinessCheck.sh api
+            initialDelaySeconds: {{ .Values.api.livenessProbe.initialDelaySeconds }}
+            timeoutSeconds: {{ .Values.api.livenessProbe.timeoutSeconds }}
+            periodSeconds:  {{ .Values.api.livenessProbe.periodSeconds }}
+          readinessProbe:
+            httpGet:
+              path: /propertyUI/app
+              port: {{ add (.Values.setupCfg.basePort) 83 }}
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.api.readinessProbe.initialDelaySeconds }}
+            timeoutSeconds: {{ .Values.api.readinessProbe.timeoutSeconds }}
+            periodSeconds: {{ .Values.api.readinessProbe.periodSeconds }}
+      affinity:
+{{- include "b2bi.nodeAffinity" (list . .Values.api.nodeAffinity) | indent 8 }}
+{{- include "b2bi.podAffinity" (list . .Values.api.podAffinity) | indent 8 }}
+{{- include "b2bi.podAntiAffinity" (list . .Values.api.podAntiAffinity) | indent 8 }}
+      tolerations:
+{{- if .Values.api.tolerations}}
+{{ toYaml .Values.api.tolerations| indent 8 }}
+{{- end }}
+      {{- if .Values.api.topologySpreadConstraints }}
+      topologySpreadConstraints:
+      {{- range $i, $topologySpreadConstraint := .Values.api.topologySpreadConstraints }}
+      - maxSkew: {{ $topologySpreadConstraint.maxSkew }}
+        topologyKey: {{ $topologySpreadConstraint.topologyKey }}
+        whenUnsatisfiable: {{ $topologySpreadConstraint.whenUnsatisfiable }}
+        labelSelector: 
+          matchLabels: 
+{{ include "sch.metadata.labels.standard" (list $ $.sch.chart.components.apiServer.name) | indent 12 }}
+  {{- end }}
+  {{- end }}

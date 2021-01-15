@@ -92,6 +92,7 @@ then
   exit 1
 fi
 oc delete pod cp4s-toolbox 2>/dev/null
+oc delete deployment cp4s-backup-restore 2>/dev/null
 oc delete pvc $PVC -n $FROMNAMESPACE --wait=false
 oc patch pvc $PVC -n $FROMNAMESPACE -p '{"metadata":{"finalizers":null}}' 2>/dev/null
 oc patch pv $PV --type json -p='[{"op": "remove", "path": "/spec/claimRef"}]'

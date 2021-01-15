@@ -1,0 +1,104 @@
+{{- $ingress := .Values.ingress -}}
+{{- if and $ingress.enabled (eq $ingress.type "generic") -}}
+{{- $paths := $ingress.paths -}}
+{{- $fullName := include "gateway.fullname" . -}}
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}
+  labels:
+{{ include "gateway.labels" . | indent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    kubernetes.io/ingress.allow-http: "false"
+  {{- with $ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if $ingress.tls.secretName }}
+  tls:
+  - hosts:
+      - {{ .Values.global.ibmRtasIngressDomain }}
+    secretName: {{ $ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.global.ibmRtasIngressDomain }}
+      http:
+        paths:
+          - path: /auth{{ .Values.ingress.trailer }}
+            backend:
+              serviceName: {{ printf "%s-%s" .Release.Name "ssocloak" | trunc 20 | trimSuffix "-" }}-http
+              servicePort: 80
+          - path: /api/{{ .Values.ingress.trailer }}
+            backend:
+              serviceName: gateway
+              servicePort: 8080
+          - path: /datasets/v2/api-docs{{ .Values.ingress.trailer }}
+            backend:
+              serviceName: gateway
+              servicePort: 8080
+          - path: /jobservice/v2/api-docs{{ .Values.ingress.trailer }}
+            backend:
+              serviceName: gateway
+              servicePort: 8080
+          - path: /management/{{ .Values.ingress.trailer }}
+            backend:
+              serviceName: gateway
+              servicePort: 8080
+          - path: /rest/{{ .Values.ingress.trailer }}
+            backend:
+              serviceName: gateway
+              servicePort: 8080
+          - path: /results/analytics/{{ .Values.ingress.trailer }}
+            backend:
+              serviceName: gateway
+              servicePort: 8080
+          - path: /results/ftwebreport/{{ .Values.ingress.trailer }}
+            backend:
+              serviceName: gateway
+              servicePort: 8080
+          - path: /results/rest/{{ .Values.ingress.trailer }}
+            backend:
+              serviceName: gateway
+              servicePort: 8080
+          - path: /results/static/{{ .Values.ingress.trailer }}
+            backend:
+              serviceName: gateway
+              servicePort: 8080
+          - path: /results/v2/api-docs{{ .Values.ingress.trailer }}
+            backend:
+              serviceName: gateway
+              servicePort: 8080
+          - path: /rm/{{ .Values.ingress.trailer }}
+            backend:
+              serviceName: gateway
+              servicePort: 8080
+          - path: /sse/{{ .Values.ingress.trailer }}
+            backend:
+              serviceName: gateway
+              servicePort: 8080
+          - path: /sso/{{ .Values.ingress.trailer }}
+            backend:
+              serviceName: gateway
+              servicePort: 8080
+          - path: /swagger-resources
+            backend:
+              serviceName: gateway
+              servicePort: 8080
+          - path: /testassets/v2/api-docs{{ .Values.ingress.trailer }}
+            backend:
+              serviceName: gateway
+              servicePort: 8080
+          - path: /v2/api-docs{{ .Values.ingress.trailer }}
+            backend:
+              serviceName: gateway
+              servicePort: 8080
+          - path: /webhook/{{ .Values.ingress.trailer }}
+            backend:
+              serviceName: tam
+              servicePort: 8900
+          - path: /{{ .Values.ingress.trailer }}
+            backend:
+              serviceName: {{ printf "%s-%s" .Release.Name "frontend" | trunc 63 | trimSuffix "-" }}
+              servicePort: 80
+{{- end }}

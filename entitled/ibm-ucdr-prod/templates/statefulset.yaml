@@ -1,4 +1,7 @@
+{{- $licenseEnabled := include "{{ .Chart.Name }}.licenseValidate" .  | required "License must be accepted by setting Values.license.accept to true." -}}
+{{- if $licenseEnabled }}
 {{- include "sch.config.init" (list . "ibm-ucdr-prod.sch.chart.config.values") -}}
+{{- $imageSpec := include "{{ .Chart.Name }}.imageSpec" . | trim -}}
 {{- $fullName := include "sch.names.fullName" (list .) -}}
 apiVersion: apps/v1
 kind: StatefulSet
@@ -18,17 +21,22 @@ spec:
 {{ include "sch.metadata.labels.standard" (list . "rly") | indent 8 }}
         ucdcomp: {{ .Release.Name }}-relay
       annotations:
-        productName: "UrbanCode Deploy Agent Relay"
-        productID: "CC0QYML"
-        productVersion: "7.0.5.2"
+        productName: "UrbanCode Deploy Server Agent"
+        productID: "f6a78b2d36ca400389f3a60332112399"
+        productVersion: "7.1.1"
+        productMetric: "MANAGED_VIRTUAL_SERVER"
+        productChargedContainers: "All"
     spec:
+      serviceAccount: {{ $fullName }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
       securityContext:
         runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
         runAsUser: 1001
-        fsGroup: 1001
+        fsGroup: {{ .Values.persistence.fsGroup }}
+{{- end }}
       affinity:
       {{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
         podAntiAffinity:
@@ -44,19 +52,20 @@ spec:
               topologyKey: "kubernetes.io/hostname"
       containers:
       - name: {{ .Chart.Name }}
-        image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.repository "${1}cp/" }}:{{ .Values.image.tag }}"
+        image: {{ $imageSpec | quote }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         securityContext:
           privileged: false
           readOnlyRootFilesystem: false
           allowPrivilegeEscalation: false
           runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
           runAsUser: 1001
+{{- end}}
           capabilities:
             drop:
             - ALL
         ports:
-        - containerPort: 7916
         - containerPort: 20080
         - containerPort: 20081
         readinessProbe:
@@ -70,7 +79,7 @@ spec:
           initialDelaySeconds: 30
           periodSeconds: 30
         env:
-          - name: JMS_PROXY_SERVER
+          - name: WEB_PROXY_SERVER
             value: "{{ .Values.serverHostPort }}"
           - name: CODESTATION_ENABLE_REPLICATION
             value: "{{ .Values.codeStationReplication.enabled }}"
@@ -91,6 +100,15 @@ spec:
                 key: cspassword
           - name: CODESTATION_GEOTAGS
             value: "{{ .Values.codeStationReplication.geotags }}"
+          - name: UCD_KEYSTORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                {{- if .Values.secret.name }}
+                name: {{ .Values.secret.name }}
+                {{- else }}
+                name: {{ .Release.Name }}-secrets
+                {{- end }}
+                key: keystorepassword
         volumeMounts:
           - name: "{{ $fullName }}-{{ .Values.confVolume.name }}"
             mountPath: "/opt/ibm-ucd/agentrelay/configs"
@@ -117,4 +135,4 @@ spec:
       {{- else }}
         emptyDir: {}
       {{- end }}
-
+{{- end }}

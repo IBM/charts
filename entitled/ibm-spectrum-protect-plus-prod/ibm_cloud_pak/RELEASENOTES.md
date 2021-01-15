@@ -6,7 +6,7 @@ None
 
 ## What’s new in Chart ibm-spectrum-protect-plus-prod
 
-Version 1.1.0 of this chart supports the Container Backup Support component of IBM Spectrum Protect Plus 10.1.7.
+Version 1.1.1 of this chart supports the Container Backup Support component of IBM Spectrum Protect Plus 10.1.7.1.
 
 ## Fixes
 
@@ -31,3 +31,4 @@ For more information about Container Backup Support, see the following resources
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
 | 1.0.0 | June 12, 2020 | >=1.16.0 | N/A | None | Supports the Container Backup Support component of IBM Spectrum Protect Plus 10.1.6. |
 | 1.1.0 | November 20, 2020 | >=1.17.0 | N/A | None | Supports the Container Backup Support component of IBM Spectrum Protect Plus 10.1.7. |
+| 1.1.1 | December 18, 2020 | >=1.17.0 | N/A | None | Supports the Container Backup Support component of IBM Spectrum Protect Plus 10.1.7.1. |

@@ -1,0 +1,225 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "tam.fullname" . }}
+  labels:
+{{ include "tam.labels" . | indent 4 }}
+spec:
+  replicas: 1
+  serviceName: tam
+{{- if not .Values.persistence.existingClaim }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    {{- with .Values.persistence.annotations }}
+      annotations:
+      {{- range $key, $value := . }}
+        {{ $key }}: {{ $value }}
+      {{- end }}
+    {{- end }}
+    spec:
+      accessModes:
+      {{- range .Values.persistence.accessModes }}
+        - {{ . | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.persistence.size | quote }}
+  {{- if .Values.persistence.storageClass -}}
+      {{- if (eq "-" .Values.persistence.storageClass) -}}
+          {{- printf "storageClassName: \"\"" -}}
+      {{- else }}
+          {{- printf "storageClassName: %s" .Values.persistence.storageClass -}}
+      {{- end -}}
+  {{- end -}}
+{{- end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "tam.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels: {{ include "tam.labels" . | nindent 10 }}
+      annotations:
+        productName: "IBM Rational Test Automation Server"
+        productID: "5874d2c1cb5640d091d91b819bf76a45"
+        productVersion: "10.1.2"
+        productMetric: RESOURCE_UNIT
+    spec:
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+      serviceAccountName: {{ include "tam.fullname" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.securityContext.runAsUser }}
+        fsGroup: {{ .Values.securityContext.fsGroup }}
+{{ if .Values.global.ibmRtasRegistryPullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.ibmRtasRegistryPullSecret }}
+{{ end }}
+      volumes:
+        - name: extlibs
+          persistentVolumeClaim:
+{{- if .Values.global.ibmRtasUserlibsPersistenceExistingClaim }}
+            claimName: {{ .Values.global.ibmRtasUserlibsPersistenceExistingClaim }}
+{{- else }}
+            claimName: data-{{ .Release.Name }}-userlibs-0
+{{- end }}
+        - name: trust-store
+          emptyDir: {}
+        - name: usercerts
+          secret:
+            secretName: {{ tpl .Values.global.ibmRtasUserCertsSecretName $ }}
+            optional: true
+        - name: ingress
+          secret:
+            secretName: {{ tpl .Values.global.ibmRtasCertSecretName $ }}
+            optional: {{ .Values.global.ibmRtasCertSecretOptional }}
+{{- if .Values.persistence.existingClaim }}
+        - name: data
+          persistentVolumeClaim:
+{{- with .Values.persistence.existingClaim }}
+            claimName: {{ tpl . $ }}
+{{- end }}
+{{- end }}
+      initContainers:
+        - name: trust-store
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: {{ .Values.securityContext.runAsUser }}
+          resources:
+            limits:
+              memory: 64Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+          image: "{{ .Values.global.ibmRtasRegistry }}/{{ .Values.global.ibmRtasInitImage }}"
+          command:
+            - sh
+            - -c
+            - |
+              cp /opt/java/openjdk/jre/lib/security/cacerts /etc/pki/java/cacerts
+              if [ -s /usr/share/pki/ingress/ca.crt ]; then
+                keytool -import -noprompt -alias ingress-ca -file /usr/share/pki/ingress/ca.crt -keystore /etc/pki/java/cacerts -storepass changeit
+              fi
+              find /usr/share/pki/usercerts -maxdepth 1 -name *.crt -exec keytool -import -noprompt -alias {} -file {} -keystore /etc/pki/java/cacerts -storepass changeit \;
+              keytool -list -keystore /opt/java/openjdk/jre/lib/security/cacerts -storepass changeit | grep entries
+              keytool -list -keystore /etc/pki/java/cacerts -storepass changeit
+          volumeMounts:
+            - mountPath: /etc/pki/java
+              name: trust-store
+            - mountPath: /usr/share/pki/usercerts
+              name: usercerts
+              readOnly: true
+            - mountPath: /usr/share/pki/ingress
+              name: ingress
+              readOnly: true
+        - name: pg-isready
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: {{ .Values.securityContext.runAsUser }}
+          resources:
+            limits:
+              memory: 64Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+          image: "{{ .Values.global.ibmRtasRegistry }}/ibm-rtas-postgresql:11.7.0-debian-10-r90"
+          command:
+            - sh
+            - -c
+            - 'until pg_isready -U {{ .Values.postgresql.postgresqlUsername }} -h {{ .Release.Name }}-{{ .Values.postgresql.nameOverride }} -p 5432; do sleep 15; done;'
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: {{ .Values.securityContext.runAsUser }}
+          image: {{ .Values.global.ibmRtasRegistry }}/{{ regexReplaceAll .Values.global.ibmRtasImageRegex .Values.image .Values.global.ibmRtasImageRepl }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8900
+              protocol: TCP
+          livenessProbe:
+            initialDelaySeconds: 180
+            httpGet:
+              path: /management/health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /management/health
+              port: http
+          env:
+          {{- range $key, $value := .Values.extraEnv }}
+            - name: {{ $key }}
+              value: {{ tpl $value $ | quote }}
+          {{- end }}
+            - name: JAVA_OPTS
+              value: -Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8
+            - name: SERVER_USE_FORWARD_HEADERS
+              value: "true"
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tam.fullname" . }}
+                  key: postgresql-password
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://{{ .Release.Name }}-{{ .Values.postgresql.nameOverride }}:5432/{{ .Values.postgresql.postgresqlDatabase }}"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: {{ .Values.postgresql.postgresqlUsername }}
+            - name: SPRING_PROFILES_ACTIVE
+              value: prod,swagger
+            - name: SPRING_RABBITMQ_HOST
+              value: '{{ .Release.Name }}-rabbitmq'
+            - name: SPRING_RABBITMQ_PORT
+              value: '5672'
+            - name: SPRING_RABBITMQ_USERNAME
+              value: user
+            - name: SPRING_RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: '{{ .Release.Name }}-rabbitmq-custom'
+                  key: rabbitmq-password
+          volumeMounts:
+            - mountPath: /extlibs/TAM
+              name: extlibs
+              subPath: tam-ext
+            - mountPath: /app/target
+              name: data
+            - mountPath: /opt/java/openjdk/jre/lib/security/cacerts
+              subPath: cacerts
+              name: trust-store
+              readOnly: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
