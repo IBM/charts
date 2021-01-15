@@ -1,0 +1,518 @@
+# (C) Copyright 2019-2020 Syncsort Incorporated. All rights reserved.
+
+{{ if .Values.ingress.enabled }}
+
+{{/*
+A function to prepare host list based on access
+*/}}
+
+{{- include "sch.config.init" (list . "b2bi.sch.chart.config.values") -}}
+{{- $tlsEnabledAsiInternal := .Values.asi.ingress.internal.tls.enabled }}
+{{- $tlsEnabledAcInternal := .Values.ac.ingress.internal.tls.enabled }}
+{{- $tlsEnabledApiInternal := .Values.api.ingress.internal.tls.enabled }}
+
+{{- $tlsEnabledAsiExternal := .Values.asi.ingress.external.tls.enabled }}
+{{- $tlsEnabledAcExternal := .Values.ac.ingress.external.tls.enabled }}
+
+{{- $asiInternalPaths := list -}}
+{{- $asiExternalPaths := list -}}
+{{- $asiInternalPaths = append $asiInternalPaths (dict "routePrefix" "dashboard" "path" "/dashboard" "access" "internal") -}}
+{{ if .Values.setupCfg.licenseAcceptEnableSfg }}
+{{- $asiInternalPaths = append $asiInternalPaths (dict "routePrefix" "filegateway" "path" "/filegateway" "access" "internal") -}}
+{{- $asiInternalPaths = append $asiInternalPaths (dict "routePrefix" "myfilegateway" "path" "/myfilegateway" "access" "both") -}}
+{{- $asiInternalPaths = append $asiInternalPaths (dict "routePrefix" "myfg" "path" "/myfg" "access" "both") -}}
+{{- $asiExternalPaths = append $asiExternalPaths (dict "routePrefix" "myfilegateway" "path" "/myfilegateway" "access" "both") -}}
+{{- $asiExternalPaths = append $asiExternalPaths (dict "routePrefix" "myfg" "path" "/myfg" "access" "both") -}}
+{{- end }}
+{{ if .Values.setupCfg.licenseAcceptEnableFinancialServices }}
+{{- $asiInternalPaths = append $asiInternalPaths (dict "routePrefix" "ebicsClient" "path" "/ebicsClient" "access" "both") -}}
+{{- $asiExternalPaths = append $asiExternalPaths (dict "routePrefix" "ebicsClient" "path" "/ebicsClient" "access" "both") -}}
+{{- end }}
+{{- $asiInternalPaths = append $asiInternalPaths (dict "routePrefix" "mailbox" "path" "/mailbox" "access" "both") -}}
+{{- $asiExternalPaths = append $asiExternalPaths (dict "routePrefix" "mailbox" "path" "/mailbox" "access" "both") -}}
+{{- $asiInternalPaths = append $asiInternalPaths (dict "routePrefix" "queueWatch" "path" "/queueWatch" "access" "internal") -}}
+{{- $asiInternalPaths = append $asiInternalPaths (dict "routePrefix" "wsdl" "path" "/wsdl" "access" "internal" "port" "soa" "sslPort" "soassl") -}}
+{{- $asiInternalPaths = append $asiInternalPaths (dict "routePrefix" "soap" "path" "/soap" "access" "internal" "port" "soa" "sslPort" "soassl") -}}
+{{- $asiInternalPaths = append $asiInternalPaths (dict "routePrefix" "soap-new" "path" "/soap-new" "access" "internal" "port" "soa" "sslPort" "soassl") -}}
+{{- $asiInternalPaths = append $asiInternalPaths (dict "routePrefix" "soap-sync" "path" "/soap-sync" "access" "internal" "port" "soa" "sslPort" "soassl") -}}
+{{- $asiInternalPaths = append $asiInternalPaths (dict "routePrefix" "soap-sync-new" "path" "/soap-sync-new" "access" "internal" "port" "soa" "sslPort" "soassl") -}}
+
+{{- $apiInternalPaths := list -}}
+{{- $apiInternalPaths = append $apiInternalPaths (dict "routePrefix" "b2bapi" "path" "/B2BAPIs/svc" "access" "internal") -}}
+{{- $apiInternalPaths = append $apiInternalPaths (dict "routePrefix" "customization" "path" "/propertyUI/app" "access" "internal") -}}
+
+{{- if (.Capabilities.APIVersions.Has "route.openshift.io/v1") }}
+
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.asiInternalRoute.name) | quote }}
+  annotations:
+    haproxy.router.openshift.io/balance: source
+    haproxy.router.openshift.io/timeout: 180s
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.asiInternalRoute.name) | indent 4 }}
+    route: "internal"
+spec:
+  host: {{ .Values.asi.ingress.internal.host | quote }}  
+  to:
+    kind: Service
+    name: {{ include "sch.names.fullCompName" (list $ $.sch.chart.components.asiFrontendService.name) | quote }}
+    weight: 100
+  port:
+    {{- if and ($tlsEnabledAsiInternal) (.Values.asi.internalAccess.enableHttps) }}
+    targetPort: "https"
+    {{- else }}
+    targetPort: "http"
+    {{- end }}
+  {{- if $tlsEnabledAsiInternal }}
+  tls:
+    {{- if .Values.asi.internalAccess.enableHttps }}
+    termination: passthrough
+    {{- else }}
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+    {{- end }}
+  {{- end }}
+  wildcardPolicy: None
+
+---
+{{- if .Values.asi.ingress.internal.host }}
+{{- range $i, $path := $asiInternalPaths }}
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+{{ $routeName := printf "%s-%s" ($.sch.chart.components.asiInternalRoute.name) $path.routePrefix }}
+  name: {{ include "sch.names.fullCompName" (list $ $routeName) | quote }}
+{{- if or (eq $path.routePrefix "filegateway") (eq $path.routePrefix "dashboard") (eq $path.routePrefix "myfg") }}
+  annotations:
+    haproxy.router.openshift.io/balance: source
+    haproxy.router.openshift.io/timeout: 180s
+{{- end }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list $ $routeName) | indent 4 }}
+    route: "internal"
+spec:
+  host: {{ $.Values.asi.ingress.internal.host | quote }}  
+  path: {{ $path.path }}
+  to:
+    kind: Service
+    name: {{ include "sch.names.fullCompName" (list $ $.sch.chart.components.asiFrontendService.name) | quote }}
+    weight: 100
+  port:
+    {{- if and ($tlsEnabledAsiInternal) ($.Values.asi.internalAccess.enableHttps) }}
+    
+    {{- if ($path.sslPort) }}
+    targetPort: "{{ $path.sslPort }}"
+    {{- else }}
+    targetPort: "https"
+    {{- end }}
+    
+    {{- else }}
+    
+    {{- if ($path.port) }}
+    targetPort: "{{ $path.port }}"
+    {{- else }}
+    targetPort: "http"
+    {{- end }}
+    
+    {{- end }}
+  {{- if $tlsEnabledAsiInternal }}
+  tls:
+    {{- if $.Values.asi.internalAccess.enableHttps }}
+    termination: reencrypt
+    {{- else }}
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+    {{- end }}
+  {{- end }}
+  wildcardPolicy: None
+---
+{{- end }} 
+
+{{- range $i, $path := .Values.asi.ingress.internal.extraPaths }}
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+{{ $routeName := printf "%s-%s" ($.sch.chart.components.asiInternalRoute.name) $path.routePrefix }}
+  name: {{ include "sch.names.fullCompName" (list $ $routeName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list $ $routeName) | indent 4 }}
+    route: "internal"
+spec:
+  host: {{ $.Values.asi.ingress.internal.host | quote }}  
+  path: {{ $path.path }}
+  to:
+    kind: Service
+    name: {{ include "sch.names.fullCompName" (list $ $.sch.chart.components.asiFrontendService.name) | quote }}
+    weight: 100
+  port:
+    targetPort: "{{ $path.servicePort }}"
+  {{- if $tlsEnabledAsiInternal }}
+  tls:
+    {{- if $path.enableHttps }}
+    termination: reencrypt
+    {{- else }}
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+    {{- end }}
+  {{- end }}
+  wildcardPolicy: None
+--- 
+{{- end }} 
+{{- end }}
+
+{{- if .Values.asi.ingress.external.host }}
+{{- range $i, $path := $asiExternalPaths }}
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+{{ $routeName := printf "%s-%s" ($.sch.chart.components.asiExternalRoute.name) $path.routePrefix }}
+  name: {{ include "sch.names.fullCompName" (list $ $routeName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list $ $routeName) | indent 4 }}
+    route: "external"
+spec:
+  host: {{ $.Values.asi.ingress.external.host | quote }}  
+  path: {{ $path.path }}
+  to:
+    kind: Service
+    name: {{ include "sch.names.fullCompName" (list $ $.sch.chart.components.asiFrontendService.name) | quote }}
+    weight: 100
+  port:
+    {{- if and ($tlsEnabledAsiExternal) ($.Values.asi.internalAccess.enableHttps) }}
+    targetPort: "https"
+    {{- else }}
+    targetPort: "http"
+    {{- end }}
+  {{- if $tlsEnabledAsiExternal }}
+  tls:
+    {{- if $.Values.asi.internalAccess.enableHttps }}
+    termination: reencrypt
+    {{- else }}
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+    {{- end }}
+  {{- end }}
+  wildcardPolicy: None
+---
+{{- end }} 
+
+{{- range $i, $path := .Values.asi.ingress.external.extraPaths }}
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+{{ $routeName := printf "%s-%s" ($.sch.chart.components.asiExternalRoute.name) $path.routePrefix }}
+  name: {{ include "sch.names.fullCompName" (list $ $routeName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list $ $routeName) | indent 4 }}
+    route: "external"
+spec:
+  host: {{ $.Values.asi.ingress.external.host | quote }}  
+  path: {{ $path.path }}
+  to:
+    kind: Service
+    name: {{ include "sch.names.fullCompName" (list $ $.sch.chart.components.asiFrontendService.name) | quote }}
+    weight: 100
+  port:
+    targetPort: "{{ $path.servicePort }}"
+  {{- if $tlsEnabledAsiExternal }}
+  tls:
+    {{- if $path.enableHttps }}
+    termination: reencrypt
+    {{- else }}
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+    {{- end }}
+  {{- end }}
+  wildcardPolicy: None
+--- 
+{{- end }} 
+{{- end }}
+
+{{- if and (.Values.ac.ingress.internal.host) (.Values.ac.ingress.internal.extraPaths) }}
+{{- range $i, $path := .Values.ac.ingress.internal.extraPaths }}
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+{{ $routeName := printf "%s-%s" ($.sch.chart.components.acInternalRoute.name) $path.routePrefix }}
+  name: {{ include "sch.names.fullCompName" (list $ $routeName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list $ $routeName) | indent 4 }}
+    route: "internal"
+spec:
+  host: {{ $.Values.ac.ingress.internal.host | quote }}  
+  path: {{ $path.path }}
+  to:
+    kind: Service
+    name: {{ include "sch.names.fullCompName" (list $ $.sch.chart.components.acFrontendService.name) | quote }}
+    weight: 100
+  port:
+    targetPort: "{{ $path.servicePort }}"
+  {{- if $tlsEnabledAcInternal }}
+  tls:
+    {{- if $path.enableHttps }}
+    termination: reencrypt
+    {{- else }}
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+    {{- end }}
+  {{- end }}
+  wildcardPolicy: None
+--- 
+{{- end }}
+{{- end }}
+
+{{- if and (.Values.ac.ingress.external.host) (.Values.ac.ingress.external.extraPaths) }}
+{{- range $i, $path := .Values.ac.ingress.external.extraPaths }}
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+{{ $routeName := printf "%s-%s" ($.sch.chart.components.acExternalRoute.name) $path.routePrefix }}
+  name: {{ include "sch.names.fullCompName" (list $ $routeName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list $ $routeName) | indent 4 }}
+    route: "external"
+spec:
+  host: {{ $.Values.ac.ingress.external.host | quote }}  
+  path: {{ $path.path }}
+  to:
+    kind: Service
+    name: {{ include "sch.names.fullCompName" (list $ $.sch.chart.components.acFrontendService.name) | quote }}
+    weight: 100
+  port:
+    targetPort: "{{ $path.servicePort }}"
+  {{- if $tlsEnabledAcExternal }}
+  tls:
+    {{- if $path.enableHttps }}
+    termination: reencrypt
+    {{- else }}
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+    {{- end }}
+  {{- end }}
+  wildcardPolicy: None
+--- 
+{{- end }}
+{{- end }}
+
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.apiInternalRoute.name) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.apiInternalRoute.name) | indent 4 }}
+    route: "internal"
+spec:
+  host: {{ .Values.api.ingress.internal.host | quote }}  
+  to:
+    kind: Service
+    name: {{ include "sch.names.fullCompName" (list $ $.sch.chart.components.apiFrontendService.name) | quote }}
+    weight: 100
+  port:
+    {{- if and ($tlsEnabledApiInternal) (.Values.api.internalAccess.enableHttps) }}
+    targetPort: "https"
+    {{- else }}
+    targetPort: "http"
+    {{- end }}
+  {{- if $tlsEnabledApiInternal }}
+  tls:
+    {{- if .Values.api.internalAccess.enableHttps }}
+    termination: passthrough
+    {{- else }}
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+    {{- end }}
+  {{- end }}
+  wildcardPolicy: None
+---
+
+{{- range $i, $path := $apiInternalPaths }}
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+{{ $routeName := printf "%s-%s" ($.sch.chart.components.apiInternalRoute.name) $path.routePrefix }}
+  name: {{ include "sch.names.fullCompName" (list $ $routeName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list $ $routeName) | indent 4 }}
+    route: "internal"
+spec:
+  host: {{ $.Values.api.ingress.internal.host | quote }}  
+  path: {{ $path.path }}
+  to:
+    kind: Service
+    name: {{ include "sch.names.fullCompName" (list $ $.sch.chart.components.apiFrontendService.name) | quote }}
+    weight: 100
+  port:
+    {{- if and ($tlsEnabledApiInternal) ($.Values.api.internalAccess.enableHttps) }}
+    targetPort: "https"
+    {{- else }}
+    targetPort: "http"
+    {{- end }}
+  {{- if $tlsEnabledApiInternal }}
+  tls:
+    {{- if $.Values.api.internalAccess.enableHttps }}
+    termination: reencrypt
+    {{- else }}
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+    {{- end }}
+  {{- end }}
+  wildcardPolicy: None
+---
+{{- end }} 
+
+{{- else }}
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.ingress.name) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ingress.name) | indent 4 }}
+  annotations:
+{{- if .Values.ingress.controller }}
+    kubernetes.io/ingress.class: {{ .Values.ingress.controller | quote }}
+{{- end }}
+{{- if eq .Values.ingress.controller "nginx" }}
+{{- if $tlsEnabledAsiInternal }}
+    nginx.ingress.kubernetes.io/secure-backends: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+{{- else }}
+    nginx.ingress.kubernetes.io/secure-backends: "false"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+{{- end }}
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "route"
+    nginx.ingress.kubernetes.io/session-cookie-hash: "sha1"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/session-cookie-path: "/"
+{{- end }}
+{{- if $tlsEnabledAsiInternal }}
+    ingress.kubernetes.io/secure-backends: "true"
+    ingress.kubernetes.io/backend-protocol: "HTTPS"
+{{- else }}
+    ingress.kubernetes.io/secure-backends: "false"
+    ingress.kubernetes.io/backend-protocol: "HTTP"
+{{- end }}
+    ingress.kubernetes.io/affinity: "cookie"
+    ingress.kubernetes.io/session-cookie-name: "route"
+    ingress.kubernetes.io/session-cookie-hash: "sha1"
+    ingress.kubernetes.io/use-regex: "true"
+    ingress.kubernetes.io/session-cookie-path: "/"
+{{- if .Values.ingress.annotations }}
+{{- range $key, $value := .Values.ingress.annotations }}
+    {{ $key }}: {{ $value | quote }}
+{{- end }}
+{{- end }}
+spec:
+  tls:
+{{- if .Values.asi.ingress.internal.tls.enabled }}
+    - hosts:
+      - {{ .Values.asi.ingress.internal.host | quote }}      
+      secretName: {{ .Values.asi.ingress.internal.tls.secretName | quote }}
+{{- end }}
+{{- if .Values.asi.ingress.external.tls.enabled }}
+    - hosts:
+      - {{ .Values.asi.ingress.external.host | quote }}      
+      secretName: {{ .Values.asi.ingress.external.tls.secretName | quote }}
+{{- end }}
+{{- if .Values.ac.ingress.internal.tls.enabled }}
+    - hosts:
+      - {{ .Values.ac.ingress.internal.host | quote }}      
+      secretName: {{ .Values.ac.ingress.internal.tls.secretName | quote }}
+{{- end }}
+{{- if .Values.ac.ingress.external.tls.enabled }}
+    - hosts:
+      - {{ .Values.ac.ingress.external.host | quote }}      
+      secretName: {{ .Values.ac.ingress.external.tls.secretName | quote }}
+{{- end }}
+{{- if .Values.api.ingress.internal.tls.enabled }}
+    - hosts:
+      - {{ .Values.api.ingress.internal.host | quote }}      
+      secretName: {{ .Values.api.ingress.internal.tls.secretName | quote }}
+{{- end }}
+  rules:
+    - host: {{ .Values.asi.ingress.internal.host | quote }}
+      http:
+        paths:
+          - path: /*
+            backend:
+              serviceName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.asiFrontendService.name) | quote }}
+              {{- if and ($tlsEnabledAsiInternal) (.Values.asi.internalAccess.enableHttps) }}
+              servicePort: https
+              {{- else }}
+              servicePort: http
+              {{- end }}
+{{- range $i, $path := $asiInternalPaths }}
+          - path: {{ $path.path }}
+            backend:
+              serviceName: {{ include "sch.names.fullCompName" (list $ $.sch.chart.components.asiFrontendService.name) | quote }}
+              {{- if and ($tlsEnabledAsiInternal) ($.Values.asi.internalAccess.enableHttps) }}
+              servicePort: https
+              {{- else }}
+              servicePort: http
+              {{- end }}
+{{- end }}
+{{- range $i, $path := .Values.asi.ingress.internal.extraPaths }}
+          - path: {{ $path.path }}
+            backend:
+              serviceName: {{ include "sch.names.fullCompName" (list $ $.sch.chart.components.asiFrontendService.name) | quote }}
+              servicePort: {{ $path.servicePort }}
+{{- end }}
+{{- if and (.Values.asi.ingress.external.host) (.Values.asi.ingress.external.extraPaths) }}
+    - host: {{ .Values.asi.ingress.external.host | quote }}
+      http:
+        paths:
+{{- range $i, $path := .Values.asi.ingress.external.extraPaths }}
+          - path: {{ $path.path }}
+            backend:
+              serviceName: {{ include "sch.names.fullCompName" (list $ $.sch.chart.components.asiFrontendService.name) | quote }}
+              servicePort: {{ $path.servicePort }}
+{{- end }}
+{{- end }}
+{{- if and (.Values.ac.ingress.internal.host) (.Values.ac.ingress.internal.extraPaths) }}
+    - host: {{ .Values.ac.ingress.internal.host | quote }}
+      http:
+        paths:
+{{- range $i, $path := .Values.ac.ingress.internal.extraPaths }}
+          - path: {{ $path.path }}
+            backend:
+              serviceName: {{ include "sch.names.fullCompName" (list $ $.sch.chart.components.acFrontendService.name) | quote }}
+              servicePort: {{ $path.servicePort }}
+{{- end }}
+{{- end }}
+{{- if and (.Values.ac.ingress.external.host) (.Values.ac.ingress.external.extraPaths) }}
+    - host: {{ .Values.ac.ingress.external.host | quote }}
+      http:
+        paths:
+{{- range $i, $path := .Values.ac.ingress.external.extraPaths }}
+          - path: {{ $path.path }}
+            backend:
+              serviceName: {{ include "sch.names.fullCompName" (list $ $.sch.chart.components.acFrontendService.name) | quote }}
+              servicePort: {{ $path.servicePort }}
+{{- end }}
+{{- end }}
+    - host: {{ .Values.api.ingress.internal.host | quote }}
+      http:
+        paths:
+          - path: /*
+            backend:
+              serviceName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.apiFrontendService.name) | quote }}
+{{- if and ($tlsEnabledApiInternal) (.Values.api.internalAccess.enableHttps) }}
+              servicePort: https
+{{- else }}
+              servicePort: http
+{{- end }}    
+{{- range $i, $path := $apiInternalPaths }}
+          - path: {{ $path.path }}
+            backend:
+              serviceName: {{ include "sch.names.fullCompName" (list $ $.sch.chart.components.apiFrontendService.name) | quote }}
+{{- if and ($tlsEnabledApiInternal) ($.Values.api.internalAccess.enableHttps) }}
+              servicePort: https
+{{- else }}
+              servicePort: http
+{{- end }}
+{{- end }}
+
+{{- end }}
+{{- end }}

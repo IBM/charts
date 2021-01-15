@@ -1,6 +1,7 @@
 {{- include "sch.config.init" (list . "ibm-ucd-prod.sch.chart.config.values") -}}
 {{- $fullName := include "sch.names.fullName" (list .) -}}
 {{- $helmTest := default "disabled" .Values.helmTestOverride }}
+{{- $imageSpec := include "{{ .Chart.Name }}.imageSpec" . | trim -}}
 {{- if ne $helmTest "disabled" }}
 apiVersion: v1
 kind: Pod
@@ -11,7 +12,9 @@ metadata:
     type: "test"
   annotations:
     "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": hook-succeeded
 spec:
+  serviceAccountName: "{{ $fullName }}"
   affinity:
   {{- include "sch.affinity.nodeAffinity" (list .) | indent 4 }}
   hostNetwork: false
@@ -22,7 +25,7 @@ spec:
     runAsUser: 1001
   containers:
     - name: "{{ $fullName }}-wget-test"
-      image: alpine:3.8
+      image: {{ $imageSpec | quote }}
       securityContext:
         privileged: false
         readOnlyRootFilesystem: false

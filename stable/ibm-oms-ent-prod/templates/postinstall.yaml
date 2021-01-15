@@ -1,0 +1,79 @@
+# Licensed Materials - Property of IBM
+# IBM Order Management Software (5725-D10)
+# (C) Copyright IBM Corp. 2019 All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+{{- if and .Values.global.license  .Values.global.license_store_call_center }}
+{{- if and (.Capabilities.APIVersions.Has "route.openshift.io/v1") (.Values.appserver.ingress.ssl.enabled) }}
+{{- include "sch.config.init" (list . "om-chart.sch.chart.config.values") }}
+{{- $type := "postinstall" }}
+{{- $tlssecretname := .Values.appserver.ingress.ssl.secretname | default (include "om-chart.auto-ingress-secret" .) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "om-chart.fullname" . }}-postinstall
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "" (dict "type" $type)) | indent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "" (dict "type" $type)) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+    spec:
+      affinity:
+{{- include "om-chart.nodeaffinity.onlyArch" . | indent 8 }}
+      serviceAccountName: {{ .Values.global.serviceAccountName | default "default" }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: {{ .Values.global.persistence.securityContext.fsGroup | default 0 }}
+        supplementalGroups: [{{ .Values.global.persistence.securityContext.supplementalGroup | default 0 }}]
+      restartPolicy: "Never"
+      containers:
+        - name: {{ template "om-chart.fullname" . }}-tls-secret-updater
+          env:
+          - name: OM_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: OM_RELEASE
+            value: {{ .Release.Name }}
+          - name: LOG_FORMAT
+            value: {{ .Values.global.log.format | default "json" }}
+{{- with .Values.global.envs }}
+{{ toYaml . | indent 10 }}
+{{- end }}
+          image: "{{ .Values.global.image.repository }}/{{ .Values.omserver.image.name }}:{{ .Values.omserver.image.tag }}"
+          imagePullPolicy: {{ .Values.omserver.image.pullPolicy }}
+          resources:
+{{ toYaml .Values.appserver.resources | indent 12 }}
+          securityContext:
+            privileged: false
+            runAsUser: 1000
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+          command: ["/bin/bash", "-c"]
+          args:
+          - |-
+            kubectl version || exit 1;
+            openssl version || exit 1;
+            kubectl get secret {{ $tlssecretname }} -n {{ .Release.Namespace }} -o jsonpath="{.data.tls\.crt}" | base64 -d > /tmp/tls.crt;
+            kubectl get secret {{ $tlssecretname }} -n {{ .Release.Namespace }} -o jsonpath="{.data.tls\.key}" | base64 -d > /tmp/tls.key;
+            CRT="$(awk '{printf "%s\\n", $0}' /tmp/tls.crt)";
+            KEY="$(awk '{printf "%s\\n", $0}' /tmp/tls.key)";
+            for i in $(kubectl get routes -n {{ .Release.Namespace }} -l release={{ .Release.Name }} -o jsonpath="{.items[*].metadata.name}"); do
+              kubectl patch route -n {{ .Release.Namespace }} $i -p '{"spec":{"tls":{"certificate":"'"${CRT}"'", "key":"'"${KEY}"'"}}}';
+            done
+{{- end }}
+{{- end }}

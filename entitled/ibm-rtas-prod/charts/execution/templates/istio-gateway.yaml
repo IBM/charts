@@ -1,0 +1,35 @@
+{{- $hostPattern := ( tpl .Values.ingress.hostPattern $ ) -}}
+{{- if and (eq .Values.ingress.type "istio") (empty .Values.ingress.gatewayName ) -}}
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: {{ include "execution.fullname" . }}
+  labels:
+{{ include "execution.labels" . | indent 4 }}
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - '{{ regexReplaceAll ".*\\*[^.]*" $hostPattern "*" }}'
+{{- if .Values.ingress.tls.enabled }}    
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    hosts:
+    - '{{ regexReplaceAll ".*\\*[^.]*" $hostPattern "*" }}'
+    tls:
+    {{- if .Values.ingress.tls.secretName }}
+      credentialName: {{ .Values.ingress.tls.secretName }}
+    {{- end }}
+      mode: SIMPLE
+      privateKey: {{ .Values.ingress.tls.privateKey }}
+      serverCertificate: {{ .Values.ingress.tls.serverCertificate }}
+      minProtocolVersion: TLSV1_2
+{{- end -}}
+{{- end -}}

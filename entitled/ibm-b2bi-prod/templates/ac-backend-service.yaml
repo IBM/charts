@@ -1,0 +1,54 @@
+# (C) Copyright 2019-2020 Syncsort Incorporated. All rights reserved.
+
+{{ include "sch.config.init" (list . "b2bi.sch.chart.config.values") }}
+{{- if gt (.Values.ac.replicaCount|int) 0 }}
+{{- $serviceType := .Values.ac.backendService.type }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.acBackendService.name) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.acBackendService.name) | indent 4 }}
+  annotations:
+{{- if .Values.ac.backendService.annotations }}
+{{ toYaml .Values.ac.backendService.annotations | indent 4 }}
+{{- end }}
+spec:
+  type: {{ .Values.ac.backendService.type }}
+  ports:
+    {{- if .Values.ac.backendService.ports }}
+    {{- range $i, $port := .Values.ac.backendService.ports }}
+    - port: {{ $port.port }}
+      targetPort: {{ $port.targetPort }}
+      protocol: {{ $port.protocol }}
+      name: {{ $port.name }}
+      {{- if eq $serviceType "NodePort" }}
+      nodePort: {{ $port.port }}
+      {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- if .Values.ac.backendService.portRanges }}
+    {{- range $i, $portRange := .Values.ac.backendService.portRanges }}
+    {{ $portRangeNumbers := split "-" $portRange.portRange }}
+    {{ $nodePortRangeNumbers := split "-" $portRange.nodePortRange }}
+    {{ $nodePort := $nodePortRangeNumbers._0 }}
+    {{ $count := 0 }}
+    {{- range untilStep ($portRangeNumbers._0|int) ((add ($portRangeNumbers._1|int) 1)|int) 1 }}
+    - port: {{ . }}
+      {{ $count = add $count 1 }}
+      targetPort: {{ $portRange.name }}-{{ $count }}
+      protocol: {{ $portRange.protocol }}
+      name: {{ $portRange.name }}-{{ $count }}
+      {{- if eq $serviceType "NodePort" }}
+      nodePort: {{ $nodePort }}
+      {{ $nodePort = add $nodePort 1 }}
+      {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+  selector:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.acServer.name) | indent 4 }}  
+   {{- if and (eq $serviceType "LoadBalancer") (.Values.ac.backendService.loadBalancerIP) }}
+  loadBalancerIP: {{ .Values.ac.backendService.loadBalancerIP }}  
+   {{ end }}
+{{ end }}

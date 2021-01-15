@@ -30,11 +30,11 @@ if [ "X$CRD" == "X" ]; then
 fi
 
 case $CRD in
-  minio|etcd|elastic|appentitlements|offering|rabbitmq)
+  minio|etcd|elasticsearch|appentitlements|offering|rabbitmq|connector)
     ;;
   *)
   echo "Invalid CRD: $CRD"
-  echo "Valid values are: minio|etcd|elastic|appentitlements|offering|rabbitmq"
+  echo "Valid values are: minio|etcd|elasticsearch|appentitlements|offering|rabbitmq"
   exit 1
 esac
 
@@ -49,5 +49,5 @@ if [ "X$res" == "X" ]; then
   exit 1
 fi
 
-kubectl patch $res --type merge --patch '{"spec":{"uuid":"'$(date +%s)'"}}'
+kubectl annotate $res --overwrite=true restarted-by=serviceability restarted-at="$(date)"
 echo "Updated $res"

@@ -1,0 +1,59 @@
+# Licensed Materials - Property of IBM
+# IBM Order Management Software (5725-D10)
+# (C) Copyright IBM Corp. 2019 All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+{{- if and .Values.global.license  .Values.global.license_store_call_center }}
+{{- include "sch.config.init" (list . "om-chart.sch.chart.config.values") }}
+{{- $type := "test-pv" }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-{{ $type }}"
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 4 }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "" (dict "type" $type)) | indent 4 }}
+spec:
+  affinity:
+{{- include "om-chart.nodeaffinity.onlyArch" . | indent 4 }}
+  serviceAccountName: {{ .Values.global.serviceAccountName | default "default" }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: {{ .Values.global.persistence.securityContext.fsGroup | default 0 }}
+    supplementalGroups: [{{ .Values.global.persistence.securityContext.supplementalGroup | default 0 }}]
+  containers:
+  - name: {{ template "om-chart.fullname" . }}-{{ $type }}
+    image: "{{ .Values.global.image.repository }}/{{ .Values.omserver.image.name }}:{{ .Values.omserver.image.tag }}"
+    imagePullPolicy: {{ .Values.omserver.image.pullPolicy }}
+    resources:
+{{ toYaml .Values.omserver.common.resources | indent 6 }}
+    securityContext:
+      privileged: false
+      runAsUser: 1000
+      readOnlyRootFilesystem: false
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+    command: ["/bin/bash", "-c"]
+    args:
+    - "while [ ! -f /shared/test-write-permission ]; do echo 'Testing write into Persistent Volume' | tee /shared/test-write-permission; sleep 10; done"
+    workingDir: "/opt/ssfs/runtime/"
+    volumeMounts:
+    - name: {{ .Values.global.persistence.claims.name }}
+      mountPath: "/shared"
+    livenessProbe:
+      exec:
+        command: ["/bin/sh", "-c", "[[ -f /shared/test-write-permission ]]"]
+  volumes:
+  - name: {{ .Values.global.persistence.claims.name }}
+    persistentVolumeClaim:
+      claimName: {{ template "om-chart.fullname" . }}-{{ .Values.global.persistence.claims.name | lower }}
+  restartPolicy: Never
+{{- end }}
