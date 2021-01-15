@@ -1,0 +1,45 @@
+# (C) Copyright 2019-2020 Syncsort Incorporated. All rights reserved.
+
+# helm test - verify b2bi server is running (can download index.html)
+{{- include "sch.config.init" (list . "b2bi.sch.chart.config.values") -}}
+{{- $testName := "test-url" }}
+{{- $resourcesPVCName := .Values.appResourcesPVC.name }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-test-config"
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $testName) | indent 4 }}
+spec:
+{{- if .Values.serviceAccount.create }} 
+  serviceAccountName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.podServiceAccount.name) | quote }}
+{{- else }}
+  serviceAccountName: {{ .Values.serviceAccount.name  | default "default" }}
+{{- end }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | indent 4 }}
+  volumes:
+    - name: {{ .Values.appResourcesPVC.name }}
+      persistentVolumeClaim:
+        claimName: {{ include "sch.names.fullCompName" (list . $resourcesPVCName) | quote }}
+  containers:
+  - name: "test-url"
+    resources:
+{{- toYaml .Values.asi.resources | nindent 6 }}
+    image: "{{ .Values.test.image.repository }}/{{ .Values.test.image.name }}:{{ .Values.test.image.tag }}"
+    imagePullPolicy: "{{ .Values.test.image.pullPolicy }}"
+    command: ["/bin/sh", "-c", "echo 'Check configuration file available in Persistent Volume' | [ -f /ibm/resources/setup.cfg ] && echo 'configuration file available'"]
+    volumeMounts:
+    - name: {{ .Values.appResourcesPVC.name }}
+      mountPath: "/ibm/resources"
+    securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.containerSecurityContext) | indent 6 }}
+  restartPolicy: Never
+  affinity:
+{{- include "b2bi.architectureAffinity" . | indent 4 }}
+  

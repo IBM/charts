@@ -1,25 +1,27 @@
 Thank you for installing: {{ .Chart.Name }}.   Your release is named: {{ .Release.Name }}
+{{- with include "ibm-object-storage-plugin.clientcli" . }}
 
 1. Verify that the storage classes are created successfully:
 
-   $ kubectl get storageclass | grep 'ibmc-s3fs'
+   $ {{ . }} get storageclass | grep 'ibmc-s3fs'
 
 2. Verify that plugin pods are in "Running" state:
 
-   $ kubectl get pods -n {{ template "ibm-object-storage-plugin.namespace" . }} -o wide | grep object
+   $ {{ . }} get pods -n {{ template "ibm-object-storage-plugin.namespace" $ }} -o wide | grep object
 
    The installation is successful when you see one `ibmcloud-object-storage-plugin` pod and one or more `ibmcloud-object-storage-driver` pods.
    The number of `ibmcloud-object-storage-driver` pods equals the number of worker nodes in your cluster. All pods must be in a `Running` state
-   for the plug-in to function properly. If the pods fail, run `kubectl describe pod -n {{ template "ibm-object-storage-plugin.namespace" . }} <pod_name>`
+   for the plug-in to function properly. If the pods fail, run `{{ . }} describe pod -n {{ template "ibm-object-storage-plugin.namespace" $ }} <pod_name>`
    to find the root cause for the failure.
 
+{{- if contains "IBMC" ($.Values.provider | quote | upper) }}
 ######################################################
 Additional steps for IBM Kubernetes Service(IKS) only:
 ######################################################
 
   1. If the plugin pods show an "ErrImagePull" or "ImagePullBackOff" error, verify that the image pull secrets to access IBM Cloud Container Registry exist in the "kube-system" namespace of your cluster.
 
-     $ kubectl get secrets -n kube-system | grep icr-io
+     $ {{ . }} get secrets -n kube-system | grep icr-io
 
      Example output if the secrets exist:
      ----o/p----
@@ -33,16 +35,16 @@ Additional steps for IBM Kubernetes Service(IKS) only:
 
   2. If the secrets do not exist in the "kube-system" namespace, check if the secrets are available in the "default" namespace of your cluster.
 
-     $ kubectl get secrets -n default | grep icr-io
+     $ {{ . }} get secrets -n default | grep icr-io
 
   3. If the secrets are available in the "default" namespace, copy the secrets to the "kube-system" namespace of your cluster. If the secrets are not available, continue with the next step.
 
-     $ kubectl get secret -n default default-icr-io -o yaml | sed 's/default/kube-system/g' | kubectl -n kube-system create -f -
-     $ kubectl get secret -n default default-us-icr-io -o yaml | sed 's/default/kube-system/g' | kubectl -n kube-system create -f -
-     $ kubectl get secret -n default default-uk-icr-io -o yaml | sed 's/default/kube-system/g' | kubectl -n kube-system create -f -
-     $ kubectl get secret -n default default-de-icr-io -o yaml | sed 's/default/kube-system/g' | kubectl -n kube-system create -f -
-     $ kubectl get secret -n default default-au-icr-io -o yaml | sed 's/default/kube-system/g' | kubectl -n kube-system create -f -
-     $ kubectl get secret -n default default-jp-icr-io -o yaml | sed 's/default/kube-system/g' | kubectl -n kube-system create -f -
+     $ {{ . }} get secret -n default default-icr-io -o yaml | sed 's/default/kube-system/g' | {{ . }} -n kube-system create -f -
+     $ {{ . }} get secret -n default default-us-icr-io -o yaml | sed 's/default/kube-system/g' | {{ . }} -n kube-system create -f -
+     $ {{ . }} get secret -n default default-uk-icr-io -o yaml | sed 's/default/kube-system/g' | {{ . }} -n kube-system create -f -
+     $ {{ . }} get secret -n default default-de-icr-io -o yaml | sed 's/default/kube-system/g' | {{ . }} -n kube-system create -f -
+     $ {{ . }} get secret -n default default-au-icr-io -o yaml | sed 's/default/kube-system/g' | {{ . }} -n kube-system create -f -
+     $ {{ . }} get secret -n default default-jp-icr-io -o yaml | sed 's/default/kube-system/g' | {{ . }} -n kube-system create -f -
 
   4. If the secrets are not available in the "default" namespace, you might have an older cluster and must generate the secrets in the "default" namespace.
 
@@ -52,14 +54,16 @@ Additional steps for IBM Kubernetes Service(IKS) only:
 
      ii. Verify that the secrets are created in the "default" namespace. The creation of the secrets might take a few minutes to complete.
 
-         $ kubectl get secrets -n default | grep icr-io
+         $ {{ . }} get secrets -n default | grep icr-io
 
      iii. Run the commands in step 3 to copy the secrets from the "default" namespace to the "kube-system" namespace.
 
   5. Verify that the image pull secrets are available in the "kube-system" namespace.
 
-     $ kubectl get secrets -n kube-system | grep icr-io
+     $ {{ . }} get secrets -n kube-system | grep icr-io
 
   6. Verify that the state of the plugin pods changes to "Running".
 
-     $ kubectl get pods -n kube-system | grep object
+     $ {{ . }} get pods -n kube-system | grep object
+{{- end }}
+{{- end }}

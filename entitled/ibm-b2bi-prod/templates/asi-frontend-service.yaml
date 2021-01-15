@@ -1,0 +1,76 @@
+# (C) Copyright 2019-2020 Syncsort Incorporated. All rights reserved.
+
+{{ include "sch.config.init" (list . "b2bi.sch.chart.config.values") }}
+{{- $ingressEnabled := .Values.ingress.enabled | default false }}
+{{- if gt (.Values.asi.replicaCount|int) 0 }}
+{{- $serviceType := .Values.asi.frontendService.type }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.asiFrontendService.name) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.asiFrontendService.name) | indent 4 }}
+  annotations:
+{{- if .Values.asi.frontendService.annotations }}
+{{ toYaml .Values.asi.frontendService.annotations | indent 4 }}
+{{- end }}
+spec:
+  {{- if eq $ingressEnabled false }}
+  type: {{ .Values.asi.frontendService.type }}
+  {{- else }}
+  type: ClusterIP
+  {{- end }}
+  ports:
+    - port: {{ .Values.asi.frontendService.ports.http.port }}
+      targetPort: {{ .Values.asi.frontendService.ports.http.targetPort }}
+      protocol: {{ .Values.asi.frontendService.ports.http.protocol }}
+      name: {{ .Values.asi.frontendService.ports.http.name }}
+      {{- if eq $ingressEnabled false }}
+      nodePort: {{ .Values.asi.frontendService.ports.http.nodePort }}
+      {{- end }}
+    - port: {{ .Values.asi.frontendService.ports.soa.port }}
+      targetPort: {{ .Values.asi.frontendService.ports.soa.targetPort }}
+      protocol: {{ .Values.asi.frontendService.ports.soa.protocol }}
+      name: {{ .Values.asi.frontendService.ports.soa.name }}
+      {{- if eq $ingressEnabled false }}
+      nodePort: {{ .Values.asi.frontendService.ports.soa.nodePort }}
+      {{- end }}
+    - port: {{ .Values.asi.frontendService.ports.soassl.port }}
+      targetPort: {{ .Values.asi.frontendService.ports.soassl.targetPort }}
+      protocol: {{ .Values.asi.frontendService.ports.soassl.protocol }}
+      name: {{ .Values.asi.frontendService.ports.soassl.name }}
+      {{- if eq $ingressEnabled false }}
+      nodePort: {{ .Values.asi.frontendService.ports.soassl.nodePort }}
+      {{- end }}
+    - port: {{ .Values.asi.frontendService.ports.restHttpAdapter.port }}
+      targetPort: {{ .Values.asi.frontendService.ports.restHttpAdapter.targetPort }}
+      protocol: {{ .Values.asi.frontendService.ports.restHttpAdapter.protocol }}
+      name: {{ .Values.asi.frontendService.ports.restHttpAdapter.name }}
+      {{- if eq $ingressEnabled false }}
+      nodePort: {{ .Values.asi.frontendService.ports.restHttpAdapter.nodePort }}
+      {{- end }}      
+    {{- if .Values.asi.internalAccess.enableHttps }}
+    - port: {{ .Values.asi.frontendService.ports.https.port }}
+      targetPort: {{ .Values.asi.frontendService.ports.https.targetPort }}
+      protocol: {{ .Values.asi.frontendService.ports.https.protocol }}
+      name: {{ .Values.asi.frontendService.ports.https.name }}
+      {{- if eq $ingressEnabled false }}
+      nodePort: {{ .Values.asi.frontendService.ports.https.nodePort }}
+      {{- end }}
+    {{- end }}
+    {{- range $i, $port := .Values.asi.frontendService.extraPorts }}
+    - port: {{ $port.port }}
+      targetPort: {{ $port.targetPort }}
+      protocol: {{ $port.protocol }}
+      name: {{ $port.name }}
+      {{- if eq $ingressEnabled false }}
+      nodePort: {{ $port.nodePort }}
+      {{- end }}
+    {{- end }}
+  sessionAffinity: ClientIP
+  selector:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.asiServer.name) | indent 4 }}
+   {{- if and (eq $serviceType "LoadBalancer") (.Values.asi.frontendService.loadBalancerIP) }}
+  loadBalancerIP: {{ .Values.asi.frontendService.loadBalancerIP }}  
+   {{ end }}
+{{ end }}
