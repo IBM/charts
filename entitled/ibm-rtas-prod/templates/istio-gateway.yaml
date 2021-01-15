@@ -1,0 +1,29 @@
+{{- $ingress := .Values.ingress -}}
+{{- if and $ingress.enabled (eq $ingress.type "istio") -}}
+{{- if empty $ingress.gatewayName  -}}
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: {{ include "gateway.fullname" . }}
+  labels:
+{{ include "gateway.labels" . | indent 4 }}
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    hosts:
+    - '{{ .Values.global.ibmRtasIngressDomain }}'
+    tls:
+    {{- if $ingress.tls.secretName }}
+      credentialName: {{ $ingress.tls.secretName }}
+    {{- end }}
+      mode: SIMPLE
+      privateKey: {{ $ingress.tls.privateKey }}
+      serverCertificate: {{ $ingress.tls.serverCertificate }}
+      minProtocolVersion: TLSV1_2
+{{- end -}}
+{{- end -}}

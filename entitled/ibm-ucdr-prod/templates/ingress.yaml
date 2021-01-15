@@ -1,0 +1,54 @@
+{{- if not (.Capabilities.APIVersions.Has "route.openshift.io/v1") }}
+{{- include "sch.config.init" (list . "ibm-ucdr-prod.sch.chart.config.values") -}}
+{{- $fullName := include "sch.names.fullName" (list .) -}}
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "ing") | indent 4 }}
+  annotations: 
+    kubernetes.io/ingress.class: "nginx"
+    # The NGINX ingress annotations contains a new prefix nginx.ingress.kubernetes.io.
+    # To avoid breaking a running NGINX ingress controller, specify both new and old prefixes.
+    ingress.kubernetes.io/ssl-passthrough: "true"
+    nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+    ingress.kubernetes.io/secure-backends: "true"
+    nginx.ingress.kubernetes.io/secure-backends: "true" 
+spec: 
+  rules:
+{{- if .Values.ingress.httpproxyhost }}
+  - host: {{ .Values.ingress.httpproxyhost }}
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: {{ $fullName }}
+          servicePort: 20080
+{{- else }}
+  - http:
+      paths:
+      - path: /
+        backend:
+          serviceName: {{ $fullName }}
+          servicePort: 20080
+{{- end }}
+{{- if .Values.ingress.jmshost }}
+  - host: {{ .Values.ingress.jmshost }}
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: {{ $fullName }}
+          servicePort: 7916
+{{- end }}
+{{- if .Values.ingress.codestationhost }}
+  - host: {{ .Values.ingress.codestationhost }}
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: {{ $fullName }}
+          servicePort: 20081
+{{- end }}
+{{- end }}

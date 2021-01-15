@@ -18,10 +18,13 @@
 #
 
 checkScale() {
-  repl=$(kubectl get iscinventory iscplatform -o jsonpath="{.spec.definitions.replicas}")
-  if [ "X$repl" == "X" ]; then
-    echo "ERROR: no iscinventory found"
-    return
+  repl=$(kubectl get isccomponent authsvc -o jsonpath="{.spec.action.replicas}")
+  if [ -z "$repl" ]; then
+    repl=$(kubectl get iscinventory iscplatform -o jsonpath="{.spec.definitions.replicas}")
+    if [ "X$repl" == "X" ]; then
+      echo "ERROR: no iscinventory found"
+      return
+    fi
   fi
   ar=$(kubectl get deploy authsvc -o jsonpath="{.spec.replicas}")
   case X${ar} in
@@ -146,6 +149,34 @@ checkCR() {
     return
 }
 
+checkCRMultiState() {
+    crd="$1"
+    rm -rf /tmp/report.$$.tsv | true
+    touch /tmp/report.$$.tsv
+    for cr in $(kubectl get $crd -n $NAMESPACE -o name 2>/dev/null)
+    do
+       kubectl get -n $NAMESPACE $cr -o json > /tmp/checkcr.$$.json
+       cat /tmp/checkcr.$$.json | jq ".status.conditions" | jq --arg cr $cr -r '(.[] | [$cr, .type, .lastTransitionTime, .status, .message]) | @tsv' >> /tmp/report.$$.tsv
+    done
+
+    if [ $ALL -eq 0 ]; then
+       cat /tmp/report.$$.tsv | grep -v "Completed" > /tmp/report_filtered.$$.tsv
+       rm /tmp/report.$$.tsv
+       mv /tmp/report_filtered.$$.tsv /tmp/report.$$.tsv
+    fi
+
+    report_len=$(cat /tmp/report.$$.tsv | wc -l | tr -d ' ')
+    if [ "X$report_len" != "X0" ]; then
+       echo "-------------------------------------------------------- ------------------ -------------------- -------------- ----------------------------" >> /tmp/report_text.$$.tsv
+       echo "cr deployment/cronjob last_transition_time status message" >> /tmp/report_text.$$.tsv
+       echo "-------------------------------------------------------- ------------------ -------------------- -------------- ----------------------------" >> /tmp/report_text.$$.tsv
+       cat /tmp/report.$$.tsv >> /tmp/report_text.$$.tsv
+       echo "-------------------------------------------------------- ------------------ -------------------- -------------- ----------------------------" >> /tmp/report_text.$$.tsv
+       cat /tmp/report_text.$$.tsv | column -t
+    fi
+    return
+}
+
 checkKubeSystem() {
   csn=$(kubectl get namespace ibm-common-services -o name 2>/dev/null)
   if [ "X$csn" == "X" ]; then
@@ -162,7 +193,7 @@ checkKubeSystem() {
   fi
 
   # check if necessary components are installed
-  for app in auth-idp auth-pap auth-idp helm  \
+  for app in auth-idp auth-pap auth-idp \
              platform-api $xtra \
              oidcclient-watcher secret-watcher
   do
@@ -228,6 +259,7 @@ checkOIDC
 
 checkSeq
 
+checkCRMultiState connector.connector.isc.ibm.com
 checkGoCR isctrusts.isc.ibm.com
 for crd in etcds.isc.ibm.com minios.isc.ibm.com elastics.isc.ibm.com appentitlements cases.isc.ibm.com postgresqloperator.isc.ibm.com rabbitmq.isc.ibm.com
 do 

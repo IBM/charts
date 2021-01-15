@@ -29,7 +29,7 @@
 THIS_SCRIPT=${0##*/}
 THIS_SCRIPT_OPTIONS="$@"
 
-BAAS_RELEASE_NAME="baas" 
+BAAS_RELEASE_NAME="ibm-spectrum-protect-plus-prod" 
 PRODUCT_NAMESPACE="baas"
 SPP_IP_ADDRESSES=""
 SPP_PORT=""
