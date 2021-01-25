@@ -80,7 +80,7 @@ spec:
   capacity:
     storage: 1Gi
   accessModes:
-    - ReadOnlyMany
+    - ReadWriteOnce
   nfs:
     server: 192.168.1.17
     path: /volume1/k8/ucd-ext-lib
@@ -92,7 +92,7 @@ metadata:
 spec:
   storageClassName: ""
   accessModes:
-    - "ReadOnlyMany"
+    - "ReadWriteOnce"
   resources:
     requests:
       storage: 1Gi
