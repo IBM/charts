@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ibm-mongodb-enterprise-helm.fullname" . }}-deployment
+  labels:
+    {{- include "ibm-mongodb-enterprise-helm.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "ibm-mongodb-enterprise-helm.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "ibm-mongodb-enterprise-helm.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "ibm-mongodb-enterprise-helm.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/data/db/mongo_init.sh"]
+          env:
+          - name: "MONGODB_USER_ADMIN_PASSWORD"
+            valueFrom:
+              secretKeyRef:
+                key: MONGODB_USER_ADMIN_PASSWORD
+                name: {{ .Release.Name }}-auth
+          - name: "MONGODB_DATABASE"
+            valueFrom:
+              secretKeyRef:
+                key: MONGODB_DATABASE
+                name: {{ .Release.Name }}-auth
+          - name: "MONGODB_USER_ADMIN"
+            valueFrom:
+              secretKeyRef:
+                key: MONGODB_USER_ADMIN
+                name: {{ .Release.Name }}-auth
+          volumeMounts:
+          - name: {{ .Values.global.persistence.claims.name }}
+            mountPath: "/data/db/"
+            #name: {{ .Values.global.persistence.claims.name }}
+          ports:
+            - name: http
+              containerPort: 27017
+              protocol: TCP
+              #livenessProbe:
+              #httpGet:
+              #path: /
+              #port: http
+              #readinessProbe:
+              #httpGet:
+              #path: /
+              #port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+      - name: {{ .Values.global.persistence.claims.name }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.global.persistence.claims.name | lower }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
