@@ -18,4 +18,4 @@
 | Chart | Date        | OpenShift version Required | Image(s) Supported         | Details                              |
 | ----- | ----------- | -------------------------- | -------------------------- | -------------------------------------| 
 | 1.0.0 | Aug 30, 2020 | >= 4.2                    | 14.10.4                    | First certified Cloud Pak Release    |
-
+| 3.5.0 | Dec 10, 2020 | >= 4.2                    | 14.10.5                    | Second certified Cloud Pak Release    |
