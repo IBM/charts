@@ -24,6 +24,7 @@
 
 | Chart | Date | Kubernetes Version Required | Breaking Changes | Details |
 | ----- | ---- | --------------------------- | ---------------- | ------- |
+| 3.5.1 | Jan 29, 2021  | >= 1.11 | None | Added import export feature|
 | 3.5.0 | Nov 20, 2020  | >= 1.11 | None | Added support for Openshift 4.5|
 | 1.2 | May 5, 2020  | >= 1.11 | None | Added support for Openshift 4.3|
 | 1.1 | Nov 22, 2019 | >= 1.9 | None | Initial release of this chart.|
