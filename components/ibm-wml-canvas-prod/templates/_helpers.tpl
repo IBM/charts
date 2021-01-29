@@ -36,5 +36,6 @@ hook.activate.cpd.ibm.com/command: "[]"
 {{/* Pod Labels */}}
 {{- define "spss-modeler.addOnPodLabels" }}
 icpdsupport/addOnId: {{ .Values.global.addOnPodLabels.addOnId }}
-icpdsupport/app: {{ .Values.global.addOnPodLabels.app }}
+icpdsupport/app: {{ .Values.global.addOnPodLabels.icpApp }}
+app: {{ .Values.global.addOnPodLabels.spssApp }}
 {{- end }}
