@@ -1,23 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ template "flow-api.fullname" . }}
+  name: {{ template "modeler-flow-api.fullname" . }}
   annotations:
     build: {{ .Values.global.buildVersion | quote }}
     {{- include "spss-modeler.cloudpak_annotations" . | indent 4 }}
   labels:
-    app.kubernetes.io/name: {{ template "flow-api.name" . }}
+    app.kubernetes.io/name: {{ template "modeler-flow-api.name" . }}
     app.kubernetes.io/managed-by: {{.Release.Service | quote }}
-    helm.sh/chart: {{ template "flow-api.chart" . }}
+    helm.sh/chart: {{ template "modeler-flow-api.chart" . }}
     app.kubernetes.io/instance: {{ .Release.Name }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
-    {{- include "spss-modeler.addOnPodLabels" . | indent 4 }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ template "flow-api.name" . }}
+      app.kubernetes.io/name: {{ template "modeler-flow-api.name" . }}
       app.kubernetes.io/instance: {{ .Release.Name }}
       release: {{ .Release.Name }}
   strategy:
@@ -31,12 +30,11 @@ spec:
         build: {{ .Values.global.buildVersion | quote }}
         {{- include "spss-modeler.cloudpak_annotations" . | indent 8 }}
       labels:
-        app.kubernetes.io/name: {{ template "flow-api.name" . }}
+        app.kubernetes.io/name: {{ template "modeler-flow-api.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{.Release.Service | quote }}
-        helm.sh/chart: {{ template "flow-api.chart" . }}
+        helm.sh/chart: {{ template "modeler-flow-api.chart" . }}
         release: {{ .Release.Name }}
-        {{- include "spss-modeler.addOnPodLabels" . | indent 8 }}
     spec:
       hostNetwork: false
       hostPID: false
@@ -95,7 +93,7 @@ spec:
             memory: {{ .Values.resources.memRequests }}
         livenessProbe:
           httpGet:
-            path: /monitor
+            path: /v1/modeler_flows/monitor
             port: {{ .Values.container.port }}
             scheme: HTTPS
           initialDelaySeconds: 90
@@ -103,7 +101,7 @@ spec:
           timeoutSeconds: 10
         readinessProbe:
           httpGet:
-            path: /monitor
+            path: /v1/modeler_flows/monitor
             port: {{ .Values.container.port }}
             scheme: HTTPS
           initialDelaySeconds: 30
@@ -118,50 +116,16 @@ spec:
 
 
         env:
-        # Control the node runtime
-        - name: NODE_ENV
-          value: {{ .Values.node.env }}
-        - name: NODE_MODULES_CACHE
-          value: "{{ .Values.node.modules.cache }}"
-
-        # Which environment are we deploying into.
-        - name: DSX_OPERATING_ENVIRONMENT
-          value: {{ .Values.global.watsonStudio.operatingEnvironment }}
-
         # The deployment target, could be icp, ip4d, cloud.
         - name: DEPLOYMENT_TARGET
           value: {{ .Values.global.watsonStudio.deploymentTarget}}
-
-        # Other watson studio components
-        - name: PROJECTS_API_URL
-          value: {{ .Values.global.watsonStudio.url }}
-
-        # Modeler Flow API url
-        - name: MODELER_FLOW_API_URL
-          value: {{ .Values.global.modelerFlowApi.url }}
-
         # Authentication
-
         {{- if .Values.global.auth.icp4d.enabled }}
-        # icp4d auth.
-        - name: auth__icp4d__publicKeyUrl
-          value: {{ .Values.global.auth.icp4d.publicKeyUrl }}
-        - name: auth__icp4d__serviceIdAuth
+        - name: ICP4D_AUTH_SERVICE_ID
           valueFrom:
             secretKeyRef:
-                name: wdp-service-id
-                key: service-id-credentials
-        {{- end }}
-
-        {{- if .Values.global.watsonStudio.trustSelfSignedCertificates }}
-        # TLS - trust all self signed certs
-        - name: NODE_TLS_REJECT_UNAUTHORIZED
-          value: "0"
-        {{- end }}
-
-        {{ if .Values.global.nginx.importSSLCertificate.enabled }}
-        - name: NODE_EXTRA_CA_CERTS
-          value: {{ .Values.global.nginx.internalSSLCertificate.mountFolder }}/{{ .Values.global.nginx.internalSSLCertificate.fileName }}
+              name: wdp-service-id
+              key: service-id-credentials
         {{- end }}
 
       {{ if .Values.global.docker.useImagePullSecret }}
