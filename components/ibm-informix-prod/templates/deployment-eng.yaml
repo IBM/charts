@@ -23,7 +23,9 @@ spec:
       annotations:
         {{- include "informix.annotations" . | indent 8 }}
     spec:
+    {{- if ( ne .Values.runtime "standalone" ) }} 
       serviceAccount: informix
+    {{- end }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -84,6 +86,12 @@ spec:
           configMap:
             name: {{ include "informix-ibm.fullname" . }}-onconfig
             defaultMode: 0755
+        {{- if ( eq .Values.runtime "standalone" ) }} 
+        - name: edition-installer 
+          configMap:
+            name: {{ include "informix-ibm.fullname" . }}-edition-installer
+            defaultMode: 0755
+        {{- end }}
         {{- if .Values.service.enabled.rest }}
         - name: rest-listener
           configMap:
@@ -104,7 +112,11 @@ spec:
         {{- end }}
       containers:
         - name: {{ .Chart.Name }}
+          {{- if (eq "standalone" .Values.runtime ) }}
+          image: "quay.io/informix/informix-developer-database:latest"
+          {{- else }}
           image: {{ include "informix-ibm.eng-repo-image" . }}
+          {{- end }}
           imagePullPolicy: {{ .Values.images.pullPolicy }}
           {{- include "securityContext.containers.ifx" . | indent 10 }}
           ports:
@@ -142,6 +154,14 @@ spec:
             {{- if .Values.debug }}
             - name: DEBUG 
               value: "ON"
+            {{- end }}
+            {{- if .Values.tls }}
+            - name: TLS_CONNECTIONS 
+              value: "ON"
+            {{- end }}
+            {{- if ( eq .Values.runtime "ICP4Data" ) }}
+            - name: EDITION_INSTALLER 
+              value: "edition.jar"
             {{- end }}
             {{- if .Values.systemSetup.ear }}
             - name: DISK_ENCRYPTION 
