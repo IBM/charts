@@ -1,7 +1,7 @@
 {{- define "product-metering" }}
 productID: "eb9998dcc5d24e3eb5b6fb488f750fe2"
 productName: "IBM Watson Knowledge Catalog for IBM Cloud Pak for Data"
-productVersion: "3.5.1"
+productVersion: "3.5.2"
 productMetric: "VIRTUAL_PROCESSOR_CORE"
 productChargedContainers: "All"
 cloudpakName: "IBM Cloud Pak for Data"
