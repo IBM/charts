@@ -238,16 +238,29 @@ spec:
           {{- else }}
           - name: "LS_DATABASE_USER"
             value: "{{ .Values.environment.LS_DATABASE_USER }}"
+          {{- if .Values.global.useDB2u }}
+          - name: "LS_DATABASE_PASSWORD"
+            valueFrom:
+              secretKeyRef:
+                name: c-db2oltp-lineage-instancepassword
+                key: password
+          {{- else }}
           - name: "LS_DATABASE_PASSWORD"
             valueFrom:
               secretKeyRef:
                 name: {{ .Values.environment.lsDbPassword.secret }}
                 key: {{ .Values.environment.lsDbPassword.key }}
           {{- end }}
+          {{- end }}
           - name: "LS_DATABASE_PORT_NUMBER"
             value: "{{ .Values.environment.LS_DATABASE_PORT_NUMBER }}"
+          {{- if .Values.global.useDB2u }}
+          - name: "LS_DATABASE_SERVER_NAME"
+            value: c-db2oltp-lineage-db2u
+          {{- else }}
           - name: "LS_DATABASE_SERVER_NAME"
             value: {{ .Values.environment.LS_DATABASE_SERVER_NAME }}
+          {{- end }}
           - name: "LS_ISF_BASE_URL"
             valueFrom:
               configMapKeyRef:
@@ -324,12 +337,21 @@ spec:
                 - key: certificate.pem
                   path: internal-nginx.cert.pem
                 optional: true
+            {{- if .Values.global.useDB2u }}
+            - secret:
+                name: internal-tls
+                items:
+                - key: tls.crt
+                  path: tls.crt.pem
+                optional: true
+            {{- else }}
             - secret:
                 name: wdp-db2-cert
                 items:
                 - key: wdp-db2-ca.crt
                   path: wdp-db2-ca.pem
                 optional: true
+            {{- end }}
         {{- end }}
 {{- if .Values.imagePullSecrets.name }}
       imagePullSecrets:
