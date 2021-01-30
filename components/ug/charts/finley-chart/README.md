@@ -17,7 +17,7 @@ This chart will do the following
 
 ## Installing the Chart
 
-## SecurityContextConstraints Requirements
+## Red Hat OpenShift SecurityContextConstraints Requirements
 [`ibm-restricted-scc`](https://ibm.biz/cpkspec-scc)
 
 Custom SecurityContextConstraints definition:
