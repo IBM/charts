@@ -1,23 +1,28 @@
+# Default/production values for the workflow service.
+
 global:
-  installCerts:
-  deploymentTarget: ""
+  installCerts: true
+  deploymentTarget: "icp4data"
   dockerRegistryPrefix: ""
   podLabels:
     icpdsupport/app: "api"
   podAnnotations:
     productName: "IBM Watson Knowledge Catalog for IBM Cloud Pak for Data"
-    productID: 37fee7ff6f7c45fcac254d413693017f
+    productID: "37fee7ff6f7c45fcac254d413693017f"
     productVersion: "3.5.0"
     productMetric: "VIRTUAL_PROCESSOR_CORE"
-minReplicas: 1
-maxReplicas: 1
 appName: wkc-workflow-service
+microservice:
+  app_name: wkc-workflow-service
 image:
-  repository: ubi/wkc-workflow-service
+  repository: ${DOCKER_REGISTRY}/ubi/wkc-workflow-service
   tag: ${BM_APP_VERSION}
+  pullPolicy: IfNotPresent
 repository:
   secret:
     name: ""
+minReplicas: 1
+maxReplicas: 1
 resources:
   limits:
     cpu: 400m
@@ -40,7 +45,10 @@ readinessProbe:
   periodSeconds: 30
   successThreshold: 1
   failureThreshold: 90
+securityContext:
+  runAsUser: ""
 environment:
+  DEPLOYMENT_TARGET: icp
   appVersion: ${BM_APP_VERSION}
   appVersionEndpoint: v3/workflows/readiness
   gatewayUrl: "https://$(CUSTOM_DOMAIN)"
@@ -71,15 +79,16 @@ environment:
     name: icp4d_usermgmt_syscall_password
     secret: wdp-user-auth
     key: password
-  authServiceImpl:
-    name: auth_service_impl
-    value: com.ibm.iis.workflow.service.auth.ICP4DAuthService
   consoleLogAppender:
     name: console_log_appender
     value: ConsoleJson
   fileLogAppender:
     name: file_log_appender
     value: RollingFileText
+  dbName:
+    name: WF_DB2_DATABASE_NAME
+    config: wkc-bg-db-config
+    key: WF_DB2_DATABASE_NAME
   dbUrl:
     name: db_url
     value: jdbc:db2://wdp-db2:50001/$(WF_DB2_DATABASE_NAME):sslConnection=true;clientProgramName=workflow;
@@ -90,9 +99,3 @@ environment:
     name: db_password
     secret: wdp-db2
     key: password
-  dbName:
-    name: WF_DB2_DATABASE_NAME
-    config: wkc-bg-db-config
-    key: WF_DB2_DATABASE_NAME
-securityContext:
-  runAsUser: ""
