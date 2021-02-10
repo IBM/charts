@@ -1,19 +1,19 @@
-# IBM Sterling Configure Price Quote Software v10.0.0.12
+# IBM Sterling Configure Price Quote Software v10.0.0.15
 
 ## What's New
-* Added support to turn on/off Swagger UI and API docs through Omni Configurator deployment chart.
-* Added support to execute VisualModeler Database SQL migration script using existing datasetup job.
-* The Applications Pods run with a arbitrary user id, inside the containers.
-* The Pod logs are externalized in the repository.
-* Incorporates FixPack12 of CPQ Application.
+* Featuring Helm Form in the Developer Catalog of Web Console of OCP(4.6). Making it easier to populate values yaml.
+* Introduced timeZone property in CPQ applications, to set the timezone of the environment in which the Applications are running.
+* Added support to execute custom script after Omni Configurator Server startup.
+* Added support to disable the deployment of Configurator UI
+* Qualified on OCP 4.4,4.5,4.6.
 
 ## Introduction
-* The v10.0.0.12 release of IBM Sterling Configure Price Quote is built and deployed on OpenShift 4.4.
+* The v10.0.0.15 release of IBM Sterling Configure Price Quote is built and deployed on OpenShift 4.4.
 * Red Hat OpenShift Container Platform 4.4 has a feature of catalog experience for installation of helm  charts.
 Helm charts which are onboarded to the Red Hat Helm Repo will appear in the OpenShift Developer Catalog out-of-the-box.
 This will facilitate the user to deploy Helm Charts from the Web UI , rather than CLI.
 This feature is available in  Developer Catalog -> Add -> From Catalog -> Check Helm Chart Filter.
-* This document describes how to deploy IBM Sterling Configure Price Quote Software v10.0.0.12. This helm chart does not install database server. Database need to be setup and configured separately for IBM Sterling Configure Price Quote Software.
+* This document describes how to deploy IBM Sterling Configure Price Quote Software v10.0.0.15. This helm chart does not install database server. Database need to be setup and configured separately for IBM Sterling Configure Price Quote Software.
 
 Note: This helm chart supports deployment of IBM Sterling Configure Price Quote Software with DB2 or Oracle database.
 
@@ -29,6 +29,10 @@ Note: This helm chart supports deployment of IBM Sterling Configure Price Quote 
   For more information refer 'Fixpack Installation for IFS' and 'Fixpack Installation for VM and OC'
 * Liberty Trustore is Upgraded to use PKCS12 standard.
 * Liberty image is upgraded to 19.0.0.6.  
+* Added support to turn on/off Swagger UI and API docs through Omni Configurator deployment chart.
+* Added support to execute VisualModeler Database SQL migration script using existing datasetup job.
+* The Applications Pods run with a arbitrary user id, inside the containers.
+* The Pod logs are externalized in the repository.
 
 ## Chart Details
 
@@ -45,7 +49,7 @@ This chart will do the following:
 
 ## Prerequisites for CPQ
 
-1. Kubernetes version >= 1.11.3
+1. Kubernetes version >= 1.17.0
 
 2. Ensure that DB2/Oracle database server is installed and the database is accessible from inside the cluster. For database timezone considerations refer section "Timezone considerations".
 
@@ -109,9 +113,9 @@ If you have a image downloaded , please follow below steps if you plan to use th
    create a route. This is required to create a route URL to the image registry to faciliate
    to pushing ofimages so the application can pull it from while deploying. This would be in the field global.image.repository
    of the helm chart.
-   Go to link https://docs.openshift.com/container-platform/4.4/registry/securing-exposing-registry.html
+   Go to link https://docs.openshift.com/container-platform/4.6/registry/securing-exposing-registry.html
    and expose the svc to route for image registry.
-   Please note above link is for version 4.4, please choose the appropriate version as per your installation.
+   Please note above link is for version 4.6, please choose the appropriate version as per your installation.
 3. Route URL will be created.
    For you this URL will be different and depends on the Openshift installation.
    We will refer to this as [image-registry-routeURL].
@@ -129,24 +133,24 @@ If you have a image downloaded , please follow below steps if you plan to use th
    `podman login [image-registry-routeURL]` - you will need admin user credentials.
    * Once you login to the registry, you will need to tag it appropriately.
      For eg to push the image to 'default' namespace eg tag cmd for VisualModeler image would be -
-     `podman tag [ImageId] [image-registry-routeURL]/default/cpq-vm-app:10.0.0.12-x86_64`
+     `podman tag [ImageId] [image-registry-routeURL]/default/cpq-vm-app:10.0.0.15-x86_64`
       Then push the image to this registry using 
-     `podman push [image-registry-routeURL]/default/cpq-vm-app:10.0.0.12-x86_64`
+     `podman push [image-registry-routeURL]/default/cpq-vm-app:10.0.0.15-x86_64`
 7. Since you are now pointing to OPenshift Repo you don't need the set the field pullsecret
    You can set the filed as  `global.image.pullsecret="'`.
    This will skip the imagepullsecret in the Pods.
 
 ### Helm Install 
 * Install helm client
-1. Install helm v3.1.3 from https://helm.sh/
+1. Install helm v3.4.1 from https://helm.sh/
    Install it on Linux client by running the command
-   curl -s https://get.helm.sh/helm-v3.1.3-linux-386.tar.gz | tar xz
+   curl -s https://get.helm.sh/helm-v3.4.1-linux-amd64.tar.gz | tar xz
    Locate helm executable and put it in $PATH
    You may want to update PATH variable in your linux login profile script.
 2. `oc login to cluster` to login to OpenShift cluster
 3. `helm version` (you will need to put helm in $PATH) to verify that the Helm client of correct version is installed.
   The above should show something like -
- * version.BuildInfo{Version:"v3.1.3", GitCommit:"ac925eb7279f4a6955df663a0128044a8a6b7593", GitTreeState:"clean", GoVersion:"go1.13.6"}
+ * version.BuildInfo{Version:"v3.4.1", GitCommit:"c4e74854886b2efe3321e185578e6db9be0a6e29", GitTreeState:"clean", GoVersion:"go1.14.11"}
 
 ### Install repository (Below content explains how to install the repository on a NFS server.)
 1. Repository is the OmniConfigurator file structure where it stores models as xml files.
@@ -329,17 +333,26 @@ For **production environments** it is strongly recommended to obtain a CA certif
         e.g. global.image.repository: "cp.icr.io/ibm-cpq" 
     2. Set the image names -
         e.g. vmappserver.image.name: cpq-vm-app 
-        e.g. vmappserver.image.tag: 10.0.0.12-x86_64
+        e.g. vmappserver.image.tag: 10.0.0.15-x86_64
         e.g. ocappserver.image.name: cpq-oc-app
-        e.g. ocappserver.image.tag: 10.0.0.12-x86_64
+        e.g. ocappserver.image.tag: 10.0.0.15-x86_64
     3. Set the ingress host
         * Note: The ingress host should end in same subdomain as the cluster node.
     4. Follow above steps for ocappserver.
     5. Check global.persistence.claims.name “nfs-cpq-vmoc-claim” matches with name given in pvc.yaml.
     6. Check the ingress tls secret name is set correctly as per cert created above, in place of vmappserver.ingress.ssl.secretname
 
+### To install chart using a Helm form on the UI in Web-Console (OCP4.6):
+With release of OCP 4.6 , a new feature is available called Helm Form which is available in the Developer Catalog
+in the Web Console. This allows application deployment by filling UI a form on the UI. Do do that follow below steps -
+1. Login to the web-console.
+2. Select 'Developer' context in the menu.
+3. Click on 'Add' and select a Project to deploy CPQ.
+4. Select 'Helm Chart' tile and then select CPQ tile (Chart v4.0.1).
+5. Click on 'Install Helm Chart' button.
+6. You can select 'Form View' to fill in the values.
 
-### To install the chart with the release name `my-release`:
+### To install the chart with the release name `my-release` via cmd line:
 1. Ensure that the chart is downloaded locally by following the instructions given.
 2. Set up which application you need to install.
 Decide which application you need to install and set the 'enabled' flag to true for it, in the values.yaml file.
@@ -573,6 +586,11 @@ spec:
 In order to deploy CPQ Software, the timezone of the database, application servers, and agents should be same. Additionally, this timezone must be compatible with the locale code specified in CPQ Software.
 By default, the containers are deployed in UTC, also the locale code in CPQ is set as en_US_UTC. Hence ensure that the database is also deployed in UTC.
 
+The timezone of the applications is configurable through Helm Chart.
+Example : global.timeZone="America/Chicago"
+For Supported Timezone Id's please check 
+https://www.ibm.com/support/knowledgecenter/SSEQTP_8.5.5/com.ibm.websphere.base.iseries.doc/ae/rrun_svr_timezones.html
+
 ## Configuration
 ### Ingress
 * For Visual Modeler Ingress can be enabled by setting the parameter `vmappserver.ingress.enabled` as true. If ingress is enabled, then the application is exposed as a `ClusterIP` service, otherwise the application is exposed as `NodePort` service. It is recommended to enable and use ingress for accessing the application from outside the cluster. For production workloads, the only recommended approach is Ingress with cluster ip. Do not use NodePort.
@@ -722,30 +740,29 @@ Then run helm install command to install database.
    helm install my-release [chartpath] --timeout 3600 
   ```
 
-
 ### The following table lists the configurable parameters for the VM and OC charts.
 
 Parameter                                        | Description                                                          | Default 
 -------------------------------------------------|----------------------------------------------------------------------| -------------
 `vmappserver.replicaCount`                       | Number of vmappserver instances                                      | `1`
-`vmappserver.image`                              | Docker image details of vmappserver                                  |   
-`vmappserver.runAsUser`                          | Needed for non OCP cluster                                           |1001
+`vmappserver.image`                              | Docker image details of vmappserver                                  | `cpq-vm-app`
+`vmappserver.runAsUser`                          | Needed for non OCP cluster                                           | `1001`
 `vmappserver.config.vendor`                      | OMS Vendor                                                           | `websphere`
 `vmappserver.config.vendorFile`                  | OMS Vendor file                                                      | `servers.properties`
 `vmappserver.config.serverName`                  | App server name                                                      | `DefaultAppServer`
 `vmappserver.config.jvm`                         | Server min/max heap size and jvm parameters                          | `1024m` min, `2048m` max, no parameters
-`vmappserver.livenessCheckBeginAfterSeconds`     | Approx wait time(secs) to begin the liveness check                   | `900`
+`vmappserver.livenessCheckBeginAfterSeconds`     | Approx wait time(secs) to begin the liveness check                   | `600`
 `vmappserver.livenessFailRestartAfterMinutes`    | Approx time period (mins) after which server is restarted if liveness check keeps failing for this period | `10`
 `vmappserver.service.type`                       | Service type                                                         | `NodePort`
 `vmappserver.service.http.port`                  | HTTP container port                                                  | `9080`
-`vmappserver.service.http.nodePort`              | HTTP external port                                                   | `30080`
+`vmappserver.service.http.nodePort`              | HTTP external port                                                   | `30083`
 `vmappserver.service.https.port`                 | HTTPS container port                                                 | `9443`
-`vmappserver.service.https.nodePort`             | HTTPS external port                                                  | `30443`
+`vmappserver.service.https.nodePort`             | HTTPS external port                                                  | `30446`
 `vmappserver.resources`                          | CPU/Memory resource requests/limits                                  | Memory: `2560Mi`, CPU: `1`
 `vmappserver.ingress.enabled`                    | Whether Ingress settings enabled                                     | true
 `vmappserver.ingress.host`                       | Ingress host                                                         |
 `vmappserver.ingress.controller`                 | Controller class for ingress controller                              | nginx
-`vmappserver.ingress.contextRoots`               | Context roots which are allowed to be accessed through ingress       | ["VisualModeler"]
+`vmappserver.ingress.contextRoots`               | Context roots which are allowed to be accessed through ingress       | ["VisualModeler","adminCenter","/"]
 `vmappserver.ingress.annotations`                | Annotations for the ingress resource                                 |
 `vmappserver.ingress.ssl.enabled`                | Whether SSL enabled for ingress                                      | true
 `vmappserver.ingress.routeTimeout`               | Set the route timeout, default is 1 hour
@@ -754,9 +771,10 @@ Parameter                                        | Description                  
 `vmappserver.custom.functionHandler`             | Specify the path of the FunctionHandlers property file               | WEB-INF/properties/custom_functionHandlers.properties
 `vmappserver.custom.uiControl`                   | Specify the path of the Custom Control property file                 | WEB-INF/properties/custom_controls_v2.properties
 `importcert.secretname`                          | Secret name consisting of certificate to be imported into VM.
+`ocappserver.deployConfiguratorUI`               | Whether Configurator UI should be deployed                           | true
 `ocappserver.replicaCount`                       | Number of ocappserver instances                                      | `1`
 `ocappserver.image`                              | Docker image details of ocappserver                                  |   
-`ocappserver.runAsUser`                          | Needed for non OCP cluster                                           |1001
+`ocappserver.runAsUser`                          | Needed for non OCP cluster                                           | `1001`
 `ocappserver.config.vendor`                      | OMS Vendor                                                           | `websphere`
 `ocappserver.config.vendorFile`                  | OMS Vendor file                                                      | `servers.properties`
 `ocappserver.config.serverName`                  | App server name                                                      | `DefaultAppServer`
@@ -764,15 +782,15 @@ Parameter                                        | Description                  
 `ocappserver.livenessCheckBeginAfterSeconds`     | Approx wait time(secs) to begin the liveness check                   | `900`
 `ocappserver.livenessFailRestartAfterMinutes`    | Approx time period (mins) after which server is restarted if liveness check keeps failing for this period | `10`
 `ocappserver.service.type`                       | Service type                                                         | `NodePort`
-`ocappserver.service.http.port`                  | HTTP container port                                                  | `9080`
-`ocappserver.service.http.nodePort`              | HTTP external port                                                   | `30080`
-`ocappserver.service.https.port`                 | HTTPS container port                                                 | `9443`
-`ocappserver.service.https.nodePort`             | HTTPS external port                                                  | `30443`
+`ocappserver.service.http.port`                  | HTTP container port                                                  | `9081`
+`ocappserver.service.http.nodePort`              | HTTP external port                                                   | `30084`
+`ocappserver.service.https.port`                 | HTTPS container port                                                 | `9444`
+`ocappserver.service.https.nodePort`             | HTTPS external port                                                  | `30447`
 `ocappserver.resources`                          | CPU/Memory resource requests/limits                                  | Memory: `2560Mi`, CPU: `1`
 `ocappserver.ingress.enabled`                    | Whether Ingress settings enabled                                     | true
 `ocappserver.ingress.host`                       | Ingress host                                                         |
 `ocappserver.ingress.controller`                 | Controller class for ingress controller                              | nginx
-`ocappserver.ingress.contextRoots`               | Context roots which are allowed to be accessed through ingress       | ["ConfiguratorUI","configurator"]
+`ocappserver.ingress.contextRoots`               | Context roots which are allowed to be accessed through ingress       | [""ConfiguratorUI","configurator","adminCenter","/"]
 `ocappserver.ingress.annotations`                | Annotations for the ingress resource                                 |
 `ocappserver.ingress.ssl.enabled`                | Whether SSL enabled for ingress                                      | true
 `ocappserver.podLabels`                          | Custom labels for the ocappserver pod                                |
@@ -799,9 +817,9 @@ section "Affinity and Tolerations". |
 `global.license`                                  | Set the value to true in order to accept the application license | false
 `global.image.repository`                      | Registry for CPQ images                               |Entitled Repo- cp.icr.io/ibm-cpq, OCP Internal Repo for default namespace - image-registry.openshift-image-registry.svc:5000/default
 `global.image.pullsecret`                      | Used in imagePullSecrets of Pods, please see above - Pre-requisite steps .. Option 1 and 2 |
-`global.appSecret`                             | CPQ secret name                                         |
-`global.tlskeystoresecret`                     | CPQ/IFS TLS Keystore Secret for Liberty keystore password pkcs12     | 
-`global.persistence.claims.name`               | Persistent volume name                                               | pq-vmoc-claim
+`global.appSecret`                             | CPQ secret name                                                      | `vmoc-secrets`
+`global.tlskeystoresecret`                     | CPQ/IFS TLS Keystore Secret for Liberty keystore password pkcs12     | `tls-store-secret`
+`global.persistence.claims.name`               | Persistent volume name                                               | `cpq-vmoc-claim`
 `global.persistence.securityContext.fsGroup`   | File system group id to access the persistent volume                 | 0
 `global.persistence.securityContext.supplementalGroup`| Supplemental group id to access the persistent volume          | 0
 `global.database.dbvendor`                     | DB Vendor DB2/Oracle                                                 | DB2
@@ -811,7 +829,8 @@ section "Affinity and Tolerations". |
 `global.install.visualmodeler.enabled`         | Install VisualModeler                                                |
 `global.install.ifs.enabled`                   | Install IFS                                                          |
 `global.install.runtime.enabled`               | Install Base Pod (Required for factory data loading)                 |
-`vmdatasetup.dbType`                           | Type of Database used by CPQ Application                             | 
+`global.timeZone`                              | Set the timezone in which the Application would be running           |
+`vmdatasetup.dbType`                           | Type of Database used by CPQ Application                             | `DB2`
 `vmdatasetup.createDB`                         | Specifying this flag as true will create Database Schema             | true
 `vmdatasetup.loadDB`                           | Specifying this flag as true will load configuration data            | true
 `vmdatasetup.loadMatrixDB`                     | Specifying this flag as true will load reference configuration data  | false
@@ -821,8 +840,8 @@ section "Affinity and Tolerations". |
 `vmdatasetup.skipCreateWAR`                    | Specifying this flag as true will prevent the creatio of application war | true
 `vmdatasetup.generateImage`                    | Specifying this flag as true will prevent the creation of CPQ image  | false
 `vmdatasetup.loadFactoryData`                  | Load factory data of VM Application                                  |
-`runtime.image.name`                           | The Base image used for generating customized images of VM and OC.   |cpq-vmoc-base
-`runtime.runAsUser`                            | Needed for non OCP cluster                                           |1001
+`runtime.image.name`                           | The Base image used for generating customized images of VM and OC.   | `cpq-vmoc-base`
+`runtime.runAsUser`                            | Needed for non OCP cluster                                           | `1001`
 
 
 ## Affinity and Tolerations
@@ -857,7 +876,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 
 1. Ensure that the chart is downloaded locally by following the instructions given [here.](https://www.ibm.com/support/knowledgecenter/SS4QMC_10.0.0/installation/cpqRHOC_downloadHelmchart.html)
 
-2. Ensure that the `datasetup.loadFactoryData` parameter is set to `donotinstall` or blank. Run the following command to upgrade your deployments. 
+2. Ensure that the `ifsdatasetup.loadFactoryData` parameter is set to `donotinstall` or blank. Run the following command to upgrade your deployments. 
 
 ```
 helm upgrade my-release -f values.yaml [chartpath] --timeout 3600 --tls
@@ -870,13 +889,9 @@ To uninstall/delete the `my-release` deployment run the command:
 ```
  helm delete my-release  --tls
 ```
-Note:If you need to clean the installation you may also consider deleting the secrets and peristent volume created as part of prerequisites.
+Note: If you need to clean the installation you may also consider deleting the secrets and peristent volume created as part of prerequisites.
 
-## Dashboard Experience
-Openshift comes with Out of the box Dashboard displaying objects deployed. 
-Please check the OPenshift documentation for the usage of Dashboard.
-https://docs.openshift.com/container-platform/4.4/welcome/index.html
-(Please confirm the version once you visit the above page.)
+*Note: With OCP4.5 you get menu 'Helm' in the Developer Catalog to execute helm cmds.
 
 ## Limitations
 * The database must be installed in UTC timezone.
@@ -986,6 +1001,10 @@ There are 2 files provided server_vm.xml and server_oc.xml , which will be deplo
 2. The default value of Custom Control properties can be found at vmappserver.custom.functionHandler.
    The default value is "WEB-INF\\/properties\\/custom_controls_v2.properties" ("\\" is required to escape path).
 
+### Deployment of Configurator UI
+By default Configurtaor UI is deployed. But for example in production environment if customer 
+wishes not to deploy Configurator UI then set deployConfiguratorUI as false.
+
 **Note** : 
    The default value can be modified to provide environment specific value
    (remember to give "\\" while specifying the path function handler properties file or custom control properties file) 
@@ -1036,13 +1055,15 @@ log4j.logger.net.sf.ehcache.statistics=ALL, file
 logger content and re-install OC.
 -------------------------------------------------------------------------------------------
 
+### Invoking Custom code on Omni Configurator startup
+In order to invoke custom code on Omni Configurator server startup one can use ocpostappready.sh present in /charts/ibm-cpq-prod/scripts folder.
 
-# IBM Sterling Field Sales Edition v10.0.0.7
+# IBM Sterling Field Sales Edition v10.0.0.12
 =======================================================================
 
 ## Introduction
 
-The below content describes how to deploy IBM Sterling Field Sales v10.0.0.7. This helm chart does not install database server or messaging server. Both these middlewares need to be setup and configured separately for IBM Sterling Field Sales.
+The below content describes how to deploy IBM Sterling Field Sales v10.0.0.12. This helm chart does not install database server or messaging server. Both these middlewares need to be setup and configured separately for IBM Sterling Field Sales.
 
 Note: This helm chart supports deployment of IBM Sterling Field Sales with DB2 database and MQ messaging.
 
@@ -1063,7 +1084,7 @@ This chart will do the following:
 
 ## Prerequisites for IFS.
 
-1. Kubernetes version >= 1.11.3
+1. Kubernetes version >= 1.17.0
 
 2. Ensure that DB2 database server is installed and the database is accessible from inside the cluster. For database timezone considerations refer section "Timezone considerations".
 
@@ -1371,8 +1392,8 @@ When installing the chart against a database which already has the Sterling Fiel
 Parameter                                    | Description                                                          | Default 
 -----------------------------------------------| ---------------------------------------------------------------------| -------------
 `ifsappserver.replicaCount`                    | Number of appserver instances                                        | `1`
-`ifsappserver.image`                           | Docker image details of appserver                                    |   
-`ifsappserver.runAsUser`                       | Needed for non OCP cluster                                           |1001
+`ifsappserver.image`                           | Docker image details of appserver                                    | `cpq-ifs-app`
+`ifsappserver.runAsUser`                       | Needed for non OCP cluster                                           | `1001`
 `ifsappserver.config.vendor`                   | OMS Vendor                                                           | `websphere`
 `ifsappserver.config.vendorFile`               | OMS Vendor file                                                      | `servers.properties`
 `ifsappserver.config.serverName`               | App server name                                                      | `DefaultAppServer`
@@ -1385,10 +1406,10 @@ Parameter                                    | Description                      
 `ifsappserver.livenessCheckBeginAfterSeconds`  | Approx wait time(secs) to begin the liveness check                   | `900`
 `ifsappserver.livenessFailRestartAfterMinutes` | Approx time period (mins) after which server is restarted if liveness check keeps failing for this period     | `10`
 `ifsappserver.service.type`                    | Service type                                                         | `NodePort`
-`ifsappserver.service.http.port`               | HTTP container port                                                  | `9080`
-`ifsappserver.service.http.nodePort`           | HTTP external port                                                   | `30080`
-`ifsappserver.service.https.port`              | HTTPS container port                                                 | `9443`
-`ifsappserver.service.https.nodePort`          | HTTPS external port                                                  | `30443`
+`ifsappserver.service.http.port`               | HTTP container port                                                  | `9082`
+`ifsappserver.service.http.nodePort`           | HTTP external port                                                   | `30086`
+`ifsappserver.service.https.port`              | HTTPS container port                                                 | `9445`
+`ifsappserver.service.https.nodePort`          | HTTPS external port                                                  | `30449`
 `ifsappserver.resources`                       | CPU/Memory resource requests/limits                                  | Memory: `2560Mi`, CPU: `1`
 `ifsappserver.ingress.enabled`                 | Whether Ingress settings enabled                                     | true
 `ifsappserver.ingress.host`                    | Ingress host                                                         |
@@ -1408,10 +1429,10 @@ Parameter                                    | Description                      
 `ifsappserver.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution`  | k8s PodSpec.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity and Tolerations". | 
 `ifsappserver.podAntiAffinity.replicaNotOnSameNode` | Directive to prevent scheduling of replica pod on the same node. valid values: `prefer`, `require`, blank. Refer section "Affinity and Tolerations". | `prefer`
 `ifsappserver.podAntiAffinity.weightForPreference`  | Preference weighting 1-100. Used if 'prefer' is specified for `ifsappserver.podAntiAffinity.replicaNotOnSameNode`. Refer section "Affinity and Tolerations". | 100 
-`ifsagentserver.image`                               | Docker image details of agent server                                 |  
-`ifsagentserver.runAsUser`                           | Needed for non OCP cluster                                           |1000
+`ifsagentserver.image`                               | Docker image details of agent server                                 | `cpq-ifs-agent`
+`ifsagentserver.runAsUser`                           | Needed for non OCP cluster                                           | `1000`
 `ifsagentserver.deployHealthMonitor`                 | Deploy health monitor agent                                          | `true`
-`ifsagentserver.common.jvmArgs`                      | Default JVM args that will be passed to the list of agent servers    | 
+`ifsagentserver.common.jvmArgs`                      | Default JVM args that will be passed to the list of agent servers    | `"-Xms512m\ -Xmx1024m"`
 `ifsagentserver.common.replicaCount`                 | Default number of instances of agent servers that will be deployed   |  
 `ifsagentserver.common.resources`                    | Default CPU/Memory resource requests/limits                          | Memory: `1024Mi`, CPU: `0,5`
 `ifsagentserver.common.readinessFailRestartAfterMinutes` | Approx time period (mins) after which agent is restarted if readiness check keeps failing for this period | 10
@@ -1425,23 +1446,23 @@ Parameter                                    | Description                      
 `ifsagentserver.common.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution`  | k8s PodSpec.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity and Tolerations". | 
 `ifsagentserver.common.podAntiAffinity.replicaNotOnSameNode` | Directive to prevent scheduling of replica pod on the same node. valid values: `prefer`, `require`, blank. Refer section "Affinity and Tolerations". | `prefer`
 `ifsagentserver.common.podAntiAffinity.weightForPreference`  | Preference weighting 1-100. Used if 'prefer' is specified for `ifsappserver.podAntiAffinity.replicaNotOnSameNode`. Refer section "Affinity and Tolerations". | 100 
-`ifsagentserver.servers.group`                       | Agent server group name                                              | `Default Servers`
+`ifsagentserver.servers.group`                       | Agent server group name                                              | `Default Server`
 `ifsagentserver.servers.name`                        | List of agent server names                                           | 
 `ifsagentserver.servers.jvmArgs`                     | JVM args that will be passed to the list of agent servers            | 
 `ifsagentserver.servers.replicaCount`                | Number of instances of agent servers that will be deployed           |  
 `ifsagentserver.servers.resources`                   | CPU/Memory resource requests/limits                                  | Memory: `1024Mi`, CPU: `0,5`
-`datasetup.loadFactoryData`                    | Load factory data                                                    | 
-`datasetup.mode`                               | Run factory data load in create                                      | `create`
+`ifsdatasetup.loadFactoryData`                    | Load factory data                                                    | 
+`ifsdatasetup.mode`                               | Run factory data load in create                                      | `create`
 `ifs.mq.bindingConfigName`                  | Name of the mq binding file config map                               | 
 `ifs.mq.bindingMountPath`                   | Path where the binding file will be mounted                          | `/opt/ssfs/.bindings`
-`ifs.persistence.claims.name`               | Persistent volume name                                               | oms-common
+`ifs.persistence.claims.name`               | Persistent volume name                                               | `nfs-cpq-ifs-claim`
 `ifs.persistence.claims.accessMode`         | Access Mode                                                          | ReadWriteMany
 `ifs.persistence.claims.capacity`           | Capacity                                                             | 10
 `ifs.persistence.claims.capacityUnit`       | CapacityUnit                                                         | Gi
 `ifs.persistence.securityContext.fsGroup`   | File system group id to access the persistent volume                 | 0
 `ifs.persistence.securityContext.supplementalGroup`| Supplemental group id to access the persistent volume          | 0
 `ifs.image.repository`                      | Repository for Order management images                               |
-`ifs.appSecret`                             | Order management secret name                                         |
+`ifs.appSecret`                             | Order management secret name                                         | `ifs-secret`
 `ifs.database.dbvendor`                     | DB Vendor DB2/Oracle                                                 | DB2
 `ifs.database.serverName`                   | DB server IP/host                                                    |
 `ifs.database.port`                         | DB server port                                                       |
@@ -1481,9 +1502,9 @@ If the optional parameter `ifsappserver.ingress.ssl.secretname` is left as blank
         e.g. global.image.repository: "cp.icr.io/ibm-cpq" 
     2. Set the image names -
         e.g. ifsappserver.image.name: cpq-ifs-app 
-        e.g. ifsappserver.image.tag: 10.0.0.7-x86_64
+        e.g. ifsappserver.image.tag: 10.0.0.12-x86_64
         e.g. ifsagentserver.image.name: cpq-ifs-agent
-        e.g. ifsagentserver.image.tag: 10.0.0.7-x86_64
+        e.g. ifsagentserver.image.tag: 10.0.0.12-x86_64
     3. Set the ingress host
     4. Check ifs.persistence.claims.name “ifs-common” matches with name given in    pvc.yaml.
     5. Check the ingress tls secret name is set correctly as per cert created above,
@@ -1630,7 +1651,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 
 1. Ensure that the chart is downloaded locally by following the instructions given [here.](https://www.ibm.com/support/knowledgecenter/SS4QMC_10.0.0/installation/cpqRHOC_downloadHelmchart.html)
 
-2. Ensure that the `datasetup.loadFactoryData` parameter is set to `donotinstall` or blank. Run the following command to upgrade your deployments. 
+2. Ensure that the `ifsdatasetup.loadFactoryData` parameter is set to `donotinstall` or blank. Run the following command to upgrade your deployments. 
 
 ```sh
 helm upgrade my-release -f values.yaml [chartpath] --timeout 3600 --tls
@@ -1722,7 +1743,7 @@ For example, the compressed file name for fix pack 9 is 10.0.0.0-Sterling-VM-All
 
 3. Extract the contents of the fix pack compressed file to the temp location on the installation node.
 
-4. Create base container using base image cpq-vmoc-base.Need to add command
+4. Create base container using base image cpq-vmoc-base.Need to add command TODO
 
 5. If the base container exists, go to the base container shell. 
 For more information, see link https://www.ibm.com/support/knowledgecenter/SS4QMC_10.0.0/installation/c_cpqRHOC_customizing_runtime.html
@@ -1803,6 +1824,12 @@ by the import certificate feature of the chart. For e.g. integration with SFDC(S
   `oc exec [podname] -- keytool -v -list -keystore /home/default/trustStore.p12 -storetype pkcs12 -storepass [tlskeystore password]`
    Where podname is the name of the pod got by `oc get pods`
    The password of the trustStore is `password`.
+
+## Dashboard Experience
+Openshift comes with Out of the box Dashboard displaying objects deployed. 
+Please check the OPenshift documentation for the usage of Dashboard.
+https://docs.openshift.com/container-platform/4.6/welcome/index.html
+(Please confirm the version once you visit the above page.)
 
 ## Troubleshooting
 The health of the applications can be checked by executing 
@@ -1949,3 +1976,10 @@ helm rollback - Roll back a release to a previous revision
 To see revision numbers, run 
  - `helm history my-release`
  - `helm rollback my-release 0`
+
+## docker.io
+Due to docker pull rate limits put by docker.io you might face error  like below during generateImage.sh
+"You have reached your pull rate limit.."
+To overcome , you will need to use a authenticated user to login to docker.io.
+For this purpose you would need to provide env variables - DOCKER_HUB_USER and DOCKER_HUB_PASSWD having the
+credentials to docker.io. You need to do this when you execute generateImage.sh in the base container of VM and OC.
