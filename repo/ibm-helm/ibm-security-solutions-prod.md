@@ -2,7 +2,7 @@
 ## ibm-security-solutions-prod
 
 ## Introduction
-IBM Cloud Pak&reg; for Security Shared Platform Services, `ibm-security-solutions-prod`, provides a shared platform that integrates your disconnected security systems for a complete view of all your security data, without moving the data. It turns individual apps, services, and capabilities into unified solutions to empower your teams to act faster, and improves your security posture with collective intelligence from a global community. Reduce complexity, expand your visibility and maximize your existing investments with a powerful, open, cloud security platform that connects your teams, tools and data. For further details see the [IBM Cloud Pak for Security Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.5.0/platform/docs/scp-core/overview.html).
+IBM Cloud Pak&reg; for Security Shared Platform Services, `ibm-security-solutions-prod`, provides a shared platform that integrates your disconnected security systems for a complete view of all your security data, without moving the data. It turns individual apps, services, and capabilities into unified solutions to empower your teams to act faster, and improves your security posture with collective intelligence from a global community. Reduce complexity, expand your visibility and maximize your existing investments with a powerful, open, cloud security platform that connects your teams, tools and data. For further details see the [IBM Cloud Pak for Security Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/scp-core/overview.html).
 
 ## Chart Details
 
@@ -12,21 +12,13 @@ The Cases and Postgres operators deployed as part of this chart are Namespace-sc
 
 ## Prerequisites
 
-- The `ibm-security-foundations-prod` chart must be installed prior to this chart
-- This chart must be installed into the same namespace as the `ibm-security-foundations-prod` chart
-- Red Hat OpenShift Container Platform 4.5 or 4.6
-- Helm 3.2.4
-- Kubernetes 1.16.2 or later
-- Common Services 3.5.6
-- Cluster Admin privileges
-- Persistent storage is configured
-
+Please refer to the `Preparing to install IBM Cloud Pak® for Security` section in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/install_prep.html).
 
 ## PodDisruptionBudget
 Pod disruption budget is used to maintain high availability during Node maintenance. Administrator role or higher is required to enable pod disruption budget on clusters with role based access control. The default is false. See `global.poddisruptionbudget` in the [configuration](#configuration) section.
 
 
-## SecurityContextConstraints Requirements
+## Custom SecurityContextConstraints Requirements
 
 This chart requires a SecurityContextConstraints object to be bound to the target namespace prior to installation.
 
@@ -47,15 +39,16 @@ By default, `ibm-security-solutions-prod` has the following resource requests re
 | TII | 900Mi | 600M |
 | TIS | 1536Mi | 600M |
 | CSA Adapter| 256Mi | 200M |
-| Backup and Restore | 128Mi | 50m |
-| Risk Manager | 1012Mi | 700M |
+| Backup and Restore | 128Mi | 50M |
+| Risk Manager | 2212Mi | 750M |
+| Threat Investigator | 843Mi | 260M |
 
 ## Storage
 IBM Cloud Pak for Security requires specific persistent volumes and persistent volume claims. To provide the required storage, persistent volume claims are created automatically during the installation of IBM Cloud Pak for Security.
 
 Persistent storage separates the management of storage from the management and lifecycle of compute. For example, persistent storage, allows data to persist across Kubernetes container and worker restarts.
 
-For more details on the size of the persistent volume please refer to [persistent storage requirements](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.5.0/platform/docs/scp-core/persistent_storage.html)
+For more details on the size of the persistent volume please refer to [persistent storage requirements](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/scp-core/persistent_storage.html)
 
 The persistent volume claim must have an access mode of ReadWriteOnce (RWO).
 
@@ -64,26 +57,23 @@ For volumes that support ownership management, specify the group ID of the group
 
 ## Installing the Chart
 
-To install the chart including its prerequisites, please refer to the `Installing IBM Cloud Pak® for Security` section in the README available within the [CASE bundle](https://github.com/IBM/cloud-pak/blob/master/repo/case/ibm-cp-security-1.0.12.tgz) for IBM Cloud Pak&reg; for Security.
+Please refer to the `Installation` section in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/installation.html).
 
 ### Verifying the Chart
 
-The verification of the installation of the chart can be performed by following the procedure described in the `Verifying the Installation` section in the README available within the [CASE bundle](https://github.com/IBM/cloud-pak/blob/master/repo/case/ibm-cp-security-1.0.12.tgz) for IBM Cloud Pak&reg; for Security.
-
+Please refer to the `Verifying Cloud Pak for Security installation` section in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/verification.html).
 
 ### Upgrade or update the installation
 
-To upgrade or update your installation, please refer to the `Upgrading IBM Cloud Pak® for Security` section in the README available within the [CASE bundle](https://github.com/IBM/cloud-pak/blob/master/repo/case/ibm-cp-security-1.0.12.tgz) for IBM Cloud Pak&reg; for Security.
+Please refer to the `Upgrading Cloud Pak for Security` section in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/upgrading.html).
 
 ### Uninstalling the chart
 
-To uninstall the chart, please refer to the `Uninstalling IBM Cloud Pak® for Security` section in the README available within the [CASE bundle](https://github.com/IBM/cloud-pak/blob/master/repo/case/ibm-cp-security-1.0.12.tgz) for IBM Cloud Pak&reg; for Security.
-
+Please refer to the `Uninstalling IBM Cloud Pak for Security` section in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/uninstalling_cp4s.html).
 
 ## Configuration
 
-The table in the `Configuration` section in the README available within the [CASE bundle](https://github.com/IBM/cloud-pak/blob/master/repo/case/ibm-cp-security-1.0.12.tgz) for IBM Cloud Pak&reg; for Security consists the list of configurable parameters for IBM Cloud Pak&reg; for Security.
-
+Please refer to the `Configuration parameters` table for each type of install in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/installation.html).
 
 ## Limitations
 
@@ -93,4 +83,4 @@ This chart sets `global.useDynamicProvisioning` to `true`. Dynamic provisioning 
 
 
 ## Documentation
-Further guidance can be found in the [Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.5.0/platform/docs/scp-core/overview.html).
+Further guidance can be found in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/scp-core/overview.html).
