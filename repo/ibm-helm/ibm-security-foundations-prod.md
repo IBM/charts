@@ -25,20 +25,13 @@ The ibm-security-foundations-prod chart installs foundation elements of IBM Clou
 The Middleware and Sequence operator deployed as part of this chart are Namespace-scoped. They watch and manage resources within the namespace that IBM Cloud Pak for Security is installed.
 
 ## Prerequisites
-
-- Red Hat OpenShift Container Platform >=4.5.14 or >=4.6
-- Helm 3.2.4
-- Kubernetes 1.16.2 or later
-- Common Services 3.5.6
-- Cluster admin privileges
-
+Please refer to the `Preparing to install IBM Cloud Pak® for Security` section in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/install_prep.html).
 
 ## PodDisruptionBudget
 
 Pod disruption budget is used to maintain high availability during Node maintenance. Administrator role or higher is required to enable pod disruption budget on clusters with role based access control. The default is false. See `global.poddisruptionbudget` in the [configuration](#configuration) section.
 
-
-## SecurityContextConstraints Requirements
+## Custom SecurityContextConstraints Requirements
 
 The predefined SecurityContextConstraints name: [`ibm-privileged-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart.
 
@@ -119,29 +112,27 @@ By default, `ibm-security-foundations` has the following resource request requir
 
 ## Installing the Chart
 
-To install the chart including its prerequisites, please refer to the `Installing IBM Cloud Pak® for Security` section in the README available within the [CASE bundle](https://github.com/IBM/cloud-pak/blob/master/repo/case/ibm-cp-security-1.0.12.tgz) for IBM Cloud Pak&reg; for Security.
+Please refer to the `Installation` section in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/installation.html).
 
 ### Verifying the Chart
 
-The verification of the installation of the chart can be performed by following the procedure described in the `Verifying the Installation` section in the README available within the [CASE bundle](https://github.com/IBM/cloud-pak/blob/master/repo/case/ibm-cp-security-1.0.12.tgz) for IBM Cloud Pak&reg; for Security.
-
+Please refer to the `Verifying Cloud Pak for Security installation` section in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/verification.html).
 
 ### Upgrade or update the installation
 
-To upgrade or update your installation, please refer to the `Upgrading IBM Cloud Pak® for Security` section in the README available within the [CASE bundle](https://github.com/IBM/cloud-pak/blob/master/repo/case/ibm-cp-security-1.0.12.tgz) for IBM Cloud Pak&reg; for Security.
+Please refer to the `Upgrading Cloud Pak for Security` section in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/upgrading.html).
 
 ### Uninstalling the chart
 
-To uninstall the chart, please refer to the `Uninstalling IBM Cloud Pak® for Security` section in the README available within the [CASE bundle](https://github.com/IBM/cloud-pak/blob/master/repo/case/ibm-cp-security-1.0.12.tgz) for IBM Cloud Pak&reg; for Security.
-
+Please refer to the `Uninstalling IBM Cloud Pak for Security` section in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/uninstalling_cp4s.html).
 
 ## Configuration
 
-The table in the `Configuration` section in the README available within the [CASE bundle](https://github.com/IBM/cloud-pak/blob/master/repo/case/ibm-cp-security-1.0.12.tgz) for IBM Cloud Pak&reg; for Security consists the list of configurable parameters for IBM Cloud Pak&reg; for Security.
+Please refer to the `Configuration parameters` table for each type of install in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/installation.html).
 
 ## Limitations
 
 This chart can only run on amd64 architecture type.
 
 ## Documentation
-Further guidance can be found in the [Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.5.0/platform/docs/scp-core/overview.html).
+Further guidance can be found in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/scp-core/overview.html).
