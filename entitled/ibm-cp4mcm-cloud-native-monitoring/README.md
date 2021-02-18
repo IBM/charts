@@ -11,7 +11,7 @@
   - Import a managed cluster. 
 
 #### Red Hat OpenShift
-  - Red Hat OpenShift Container Platform 4.2 or 4.3
+  - Red Hat OpenShift Container Platform 4.2 or later
 
 #### IBM® Cloud Private (ICP)
   - IBM® Cloud Private (ICP) >=3.1.1
@@ -147,7 +147,6 @@ The following tables lists the global configurable parameters of the icam-cloudd
 |-----------|-------------|---------|
 | `agent` | Configure the Agent Operator for auto configuration |  |
 | `agent.clusterSize` | Number of pod replicas | 1 |
-| `agent.fullnameOverride` | The helm release name for the MCM klusterlet on the ICP system |  |
 | `agent.klusterlet` | Multicloud Manager Klusterlet Configuration Configuration |  |
 | `agent.klusterlet.cloud` | Cloud provider on which Kubernetes cluster is deployed | IBM |
 | `agent.klusterlet.datacenter` | The datacenter name in which the managed cluster runs. | toronto |
@@ -163,10 +162,6 @@ The following tables lists the global configurable parameters of the icam-cloudd
 | `global.imageNamePrefix` | Prefix for docker images; applies after the image repository value and before the image names |  |
 | `global.license` | Accepting the product license is required to deploy this chart |  |
 | `global.namespace` | The namespace that MCM has created for the ICP cluster that is being configured |  |
-| `k8sdc` | Configuration for the K8DC |  |
-| `k8sdc.collectEvents` | Enable Event Data Collection | on |
-| `k8sdc.collectMetrics` | Enable Metric Data Collection | off |
-| `k8sdc.collectResources` | Enable Resource Data Collection | off |
 
 _NOTE:_
 
