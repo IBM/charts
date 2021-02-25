@@ -356,7 +356,7 @@ This table lists the configurable properties of the ibm-guardium-insights-prod c
 | `global.storageClass` |  Mandatory | Storage class of type block storage, for example `rook-ceph-block-internal`. |
 | `ibm-db2u.storage.storageLocation.dataStorage.pvc.claim.storageClassName` |  Mandatory | Storage class of type block storage, for example `rook-ceph-block-internal`. |
 | `ibm-db2u.storage.storageLocation.metaStorage.pvc.claim.storageClassName` |  Mandatory | Storage class of type file storage, for example `rook-ceph-cephfs-internal`. |
-| `ticketing.persistentVolumesClaims.ticketing-keystore.storageClassName` |  Mandatory | Storage class of type block storage, for example `rook-ceph-cephfs-internal`. |
+| `ticketing.persistentVolumesClaims.ticketing-keystore.storageClassName` |  Mandatory | Storage class of type file storage, for example `rook-ceph-cephfs-internal`. |
 | `global.insights.ingress.hostName` |  Mandatory <br> Set by the installer| Must be set to the reachable hostname, for example `<your namespace>.apps.<openshift host>` |
 | `global.licenseAccept=true` |  Mandatory <br> Set by the installer | Review the license files (LICENSE_en, LICENSE_notices and LICENSE_non_ibm_license) in the licenses/Licenses/L-TESX-XXXXXX folder. |
 | `global.license`| Mandatory <br> Set by the installer | Set to true to confirm that you have read and agreed to the license agreements : http://ibm.biz/oms-license & http://ibm.biz/oms-apps-license |
