@@ -1,10 +1,10 @@
-# What's new in IBM Watson Discovery Operator v1.0.2
+# What's new in IBM Watson Discovery Operator v1.0.3
 
-- Initial release
+- Release contains the latest stability improvements and bug fixes
 
 # Breaking Changes
 
-- Initial release
+- There are no breaking changes in this release
 
 # Limitations
 
@@ -15,7 +15,7 @@
 
 # Fixes
 
-- Initial release
+- Various bug fixes and stability improvements
 
 # Prerequisites
 
@@ -24,11 +24,12 @@
 
 # Documentation
 
-For detailed installation instructions go to the [documentation](https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_latest/svc-discovery/discovery-install-overview.html)
+For detailed installation instructions go to the [documentation](https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/svc/services.html)
 
 
 # Version History
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.0.3 | 26 February, 2021 | >=1.11.0 | This chart consists of a number of versioned images. The combination of images in use must not be changed from those shipped by the release. | | |
 | 1.0.2 | 8 December, 2020 | >=1.11.0 | This chart consists of a number of versioned images. The combination of images in use must not be changed from those shipped by the release. | | |
