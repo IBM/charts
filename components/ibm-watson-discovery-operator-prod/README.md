@@ -14,7 +14,7 @@ Watson Discovery brings together a functionally rich set of integrated and autom
 ## Installing the service
 
 Information on installing the service is provided in the product documentation:
-https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_latest/svc-discovery/discovery-install-overview.html
+https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/svc/services.html
 
 ## Documentation
 
