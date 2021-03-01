@@ -63,17 +63,20 @@ data:
     sed -i "s/handlers=java.util.logging.FileHandler/#handlers=java.util.logging.FileHandler/g" ${ASBNODE_HOME}/conf/asbagent-logging.properties;
     sed -i "s/#java/java/g" ${ASBNODE_HOME}/conf/asbagent-logging.properties;
     sed -i "s/java.util.logging.ConsoleHandler.level=INFO/java.util.logging.ConsoleHandler.level=ALL/g" ${ASBNODE_HOME}/conf/asbagent-logging.properties;
-    
+
 
     set +x #echo off
     su - ${IAUSER} -c "echo -e \"isadmin\n${IAUSER_PSW}\n${IAUSER_PSW}\" | /usr/bin/passwd"
     echo -e "isadmin\n${DSADM_PSW}\n${DSADM_PSW}" | /usr/bin/passwd
-   
+
     set -x #echo on
     ${IIS_HOME}/initScripts/startcontainer.sh;
 
-    #Adding below sed command to fix issue 1006
-    sed -i 's@^set +u@set +u\nAPT_USE_REMOTE_APP=1\nexport APT_USE_REMOTE_APP@' --follow-symlinks ${IIS_HOME}/Server/DSEngine/dsenv
+    #Adding below sed command to fix issue 1006, adding check to resolve 2839
+    REMOTE_APP_POPULATED="$(grep APT_USE_REMOTE_APP ${IIS_HOME}/Server/DSEngine/dsenv)"
+    if test -z "${REMOTE_APP_POPULATED}"; then
+       sed -i 's@^set +u@set +u\nAPT_USE_REMOTE_APP=1\nexport APT_USE_REMOTE_APP@' --follow-symlinks ${IIS_HOME}/Server/DSEngine/dsenv
+    fi
 
     # create tablespaces in IADB
     set +x #echo off
@@ -230,7 +233,12 @@ data:
     if [ $? -eq 1 ]; then
        sed -i "\$acom.ibm.iis.odf.datastage.max.concurrent.requests=4" ${ASBNODE_HOME}/conf/odf.properties
     fi
-    
+
+    grep -q "com.ibm.iis.odf.ignore.annotation.types=" ${ASBNODE_HOME}/conf/odf.properties
+    if [ $? -eq 1 ]; then
+       sed -i "\$acom.ibm.iis.odf.ignore.annotation.types=PKFKResults,CAResults" ${ASBNODE_HOME}/conf/odf.properties
+    fi
+
     service ODFEngine start
 
 
@@ -302,7 +310,7 @@ data:
     echo "${ASBSERVER_HOME}/bin/RepositoryAdmin.sh -updateRepositoryConnection -connectionName dsodb -reposName dsodb -connectionPassword *****"
 
     ADMIN_UID=1000330999
-    
+
     #Prerequisite UG config
     ${ASBSERVER_HOME}/bin/iisAdmin.sh -load ${scriptDir}/services-config.properties;
     ${ASBSERVER_HOME}/bin/iisAdmin.sh -set -key com.ibm.iis.isf.security.directory.icp4d.AdminUid -value ${ADMIN_UID};
