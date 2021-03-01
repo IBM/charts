@@ -299,11 +299,25 @@ spec:
             periodSeconds: 60
             failureThreshold: 3
          readinessProbe:
-            tcpSocket:
-              port: 50000
-            initialDelaySeconds: 120
+            exec:
+              command:
+              - sh
+              - -c
+              - |
+                #!/bin/bash
+                function errorExit () {
+                  echo "$1" 1>&2
+                  exit 1
+                }
+
+                su - db2inst1 -c '/home/db2inst1/sqllib/bin/db2gcf -s' || errorExit "db2instance is not active"
+                su - db2inst1 -c 'db2 activate db XMETA' > /dev/null 2>&1
+                dbs=$(su - db2inst1 -c 'db2  LIST ACTIVE DATABASES')
+                echo $dbs | grep "XMETA" || errorExit "XMETA is not active"
+            initialDelaySeconds: 360
             periodSeconds: 60
             failureThreshold: 10
+            timeoutSeconds: 60
          volumeMounts:
          - mountPath: "/mnt/dedicated_vol/Repository"
            name: xmeta-pv-volume
