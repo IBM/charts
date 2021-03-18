@@ -1,4 +1,4 @@
-# IBM Sterling B2B Integrator Enterprise Edition v6.1.0.1
+# IBM Sterling B2B Integrator Enterprise Edition v6.1.0.2
 ## Introduction
 
 IBM Sterling B2B Integrator helps companies integrate complex B2B EDI processes with their partner communities. Organizations get a single, flexible B2B platform that supports most communication protocols, helps secure your B2B network and data, and achieves high-availability operations. The offering enables companies to reduce costs by consolidating EDI and non-EDI any-to-any transmissions on a single B2B platform and helps automate B2B processes across enterprises, while providing governance and visibility over those processes.
@@ -270,6 +270,29 @@ This chart optionally defines a custom SecurityContextConstraints (on Red Hat Op
   As team admin the namespace scoped pre-install script is located at:
   - pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh
 
+## Network Policy
+
+  * Kubernetes Network Policy is a specification of how groups of pods are allowed to communicate with each other and other network endpoints.
+
+  * The Kubernetes Network Policy resource provides firewall capabilities to pods, similar to AWS Security groups, and it programs the software defined networking infrastructure (OpenShift Default, Flannel, etc...). You can implement sophisticated network access policies to control ingress access to your workload pods.
+
+  * The default Network Policy <Release-name>-network-policy is provided that allows all ingress traffic. For e.g.
+
+   ```  
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-all-ingress
+spec:
+  podSelector: {}
+  ingress:
+  - {}
+  policyTypes:
+  - Ingress
+
+   ```
+  * To implement your own Network Policy, you can follow the steps documented here [Network Policy](https://kubernetes.io/docs/concepts/services-networking/network-policies)
+
 ## Resources Required
 
 The following table describes the default usage and limits per pod
@@ -305,7 +328,7 @@ Depending on the capacity of the kubernetes worker node and database network con
 Parameter                                      | Description                                                          | Default 
 -----------------------------------------------| ---------------------------------------------------------------------| -------------
 `global.image.repository`                      | Repository for B2B docker images                                     | 
-`global.image.tag          `                   | Docker image tag                                                     | `6.1.0.1`
+`global.image.tag          `                   | Docker image tag                                                     | `6.1.0.2`
 `global.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `global.image.pullSecret `         			   | Pull secret for repository access                                    | 
 `arch`                                         | Compatible platform architecture                                     | `x86_64`
@@ -333,6 +356,7 @@ Parameter                                      | Description                    
 `appDocumentsPVC.selector.value`               | Documents persistent volume selector value                           | `documents`
 `appDocumentsPVC.accessMode`                   | Documents persistent volume access mode                              | `ReadWriteMany`
 `appDocumentsPVC.size`                         | Documents persistent volume storage size                             | 1Gi
+`extraPVCs`                                    | Extra volume claims shared across all deployments                    | 
 `security.supplementalGroups`                  | Supplemental group id to access the persistent volume                | 5555
 `security.fsGroup`                             | File system group id to access the persistent volume                 | 1010
 `security.runAsUser`                           | The User ID that needs to be run as by all containers                | 1010
@@ -453,7 +477,6 @@ Parameter                                      | Description                    
 `asi.ingress.external.tls.secretName`          | TLS secret name                                                      |
 `asi.ingress.external.extraPaths`              | Extra paths for ingress resource                                     |    
 `asi.extraPVCs`                                | Extra volume claims                                                  | 
-`asi.extraVolumeMounts`                        | Extra volume mounts                                                  | 
 `asi.extraInitContainers`                      | Extra init containers                                                | 
 `asi.resources`                                | CPU/Memory resource requests/limits                                  | 
 `asi.autoscaling.enabled`                      | Enable autoscaling                                                   | false
@@ -506,7 +529,6 @@ Parameter                                      | Description                    
 `ac.ingress.external.tls.secretName`          | TLS secret name                                                      |
 `ac.ingress.external.extraPaths`              | Extra paths for ingress resource                                     |    
 `ac.extraPVCs`                                | Extra volume claims                                                  | 
-`ac.extraVolumeMounts`                        | Extra volume mounts                                                  | 
 `ac.extraInitContainers`                      | Extra init containers                                                | 
 `ac.resources`                                | CPU/Memory resource requests/limits                                  | 
 `ac.autoscaling.enabled`                      | Enable autoscaling                                                   | false
@@ -558,7 +580,6 @@ Parameter                                      | Description                    
 `api.ingress.internal.tls.enabled`             | Enable TLS for ingress                                               | false
 `api.ingress.internal.tls.secretName`          | TLS secret name                                                      |
 `api.extraPVCs`                                | Extra volume claims                                                  | 
-`api.extraVolumeMounts`                        | Extra volume mounts                                                  | 
 `api.extraInitContainers`                      | Extra init containers                                                | 
 `api.resources`                                | CPU/Memory resource requests/limits                                  | 
 `api.defaultPodDisruptionBudget.enabled`       | Enable default pod disruption budget                                 | false
@@ -583,7 +604,7 @@ Parameter                                      | Description                    
 `test.image.pullPolicy`                        | Pull policy for helm test image repository                           | `IfNotPresent`
 `purge.enabled`                                | Enable external purge job                                            | 'false'
 `purge.image.repository          `             | External purge docker image repository                               | `purge`
-`purge.image.tag          `                    | External purge image tag                                             | `6.1.0.1`
+`purge.image.tag          `                    | External purge image tag                                             | `6.1.0.2`
 `purge.image.pullPolicy`                       | Pull policy for external purge docker image                          | `IfNotPresent`
 `purge.image.pullSecret`                       | Pull secret for repository access                                    | 
 `purge.schedule`                               | External purge job creation and execution schedule. Its a Cron format string such as 1 * * * * or 
@@ -622,14 +643,32 @@ helm upgrade my-release -f values.yaml ./ibm-b2bi-prod --timeout 3600s --recreat
 ```
 For product release version upgrade, please refer product documentation.
 
+
+## Rollback the Chart
+If the upgraded environment is not working as expected or you made an error while upgrading, you can easily rollback the chart to a previous revision. 
+Procedure
+To rollback a chart with release name <my-release> to a previous revision invoke the following command:
+
+
+```sh
+helm rollback my-release <previous revision number>
+```
+
+To get the revision number execute the following command:
+
+```sh 
+helm history my-release
+```
+Note : If the revision isn't specified then by default rolls back to the last revision.
+
 ## Uninstalling the Chart
 
 To uninstall/delete the `my-release` deployment run the command:
 
+
 ```sh
  helm delete my-release  --purge
 ```
-
 Since there are certain kubernetes resources created using the `pre-install` hook, helm delete command will try to delete them as a post delete activity. In case it fails to do so, you need to manually delete the following resources created by the chart:
 * ConfigMap - <release name>-b2bi-config
 * PersistentVolumeClaim if persistence is enabled - <release name>-b2bi-resources-pvc
