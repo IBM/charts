@@ -168,6 +168,10 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 {{- printf "%s-%s" .Release.Name "odm-baiemitterconfig-secret-volume" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "odm-meteringconfig-secret-volume.fullname" -}}
+{{- printf "%s-%s" .Release.Name "odm-meteringconfig-secret-volume" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "odm-auth-secret-volume.fullname" -}}
 {{- printf "%s-%s" .Release.Name "odm-auth-secret-volume" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
@@ -279,7 +283,32 @@ annotations:
   {{- else }}
   productCloudpakRatio: "2:5"
   {{- end }}
-  cloudpakName: "IBM Cloud Pak for Automation"
+  cloudpakName: "IBM Cloud Pak for Business Automation"
+  cloudpakId: {{ .Values.customization.cloudpakID}}
+  cloudpakVersion: {{ .Values.customization.cloudpakVersion}}
+  {{- else }}
+  productMetric: "PROCESSOR_VALUE_UNIT"
+  {{- end -}}
+{{- end -}}
+
+{{/* Decision Runner is deployed as non-prod only so the productCloudpakRatio is set to 2:5 */}}
+{{- define "odm-annotations.decisionrunner" -}}
+{{- $productName := default .Chart.Description .Values.customization.productName -}}
+{{- $productNameNonProd := printf "%s - %s" $productName "Non Prod" -}}
+{{- $productIDNonProd := default "e32af5770e06427faae142993c691048" .Values.customization.productID -}}
+{{- $productVersion := default .Chart.AppVersion .Values.customization.productVersion -}}
+annotations:
+  {{- if .Values.customization.deployForProduction }}
+  productName: {{ $productName | quote }}
+  {{- else }}
+  productName: {{ $productNameNonProd | quote }}
+  {{- end }}
+  productID: {{ $productIDNonProd | quote }}
+  productVersion: {{ $productVersion | quote }}
+  {{- if and (not (empty (.Values.customization.cloudpakID))) (not (empty .Values.customization.cloudpakVersion)) }}
+  productMetric: "VIRTUAL_PROCESSOR_CORE"
+  productCloudpakRatio: "2:5"
+  cloudpakName: "IBM Cloud Pak for Business Automation"
   cloudpakId: {{ .Values.customization.cloudpakID}}
   cloudpakVersion: {{ .Values.customization.cloudpakVersion}}
   {{- else }}
@@ -313,6 +342,10 @@ annotations:
 
 {{- define "odm-baiemitterconfig-dir" -}}
 "/config/baiemitterconfig/"
+{{- end -}}
+
+{{- define "odm-meteringconfig-dir" -}}
+"/config/pluginconfig/"
 {{- end -}}
 
 {{- define "odm-keystore-password-key" -}}
@@ -430,9 +463,17 @@ securityContext:
 Define Metering variable for Deployment
 */}}
 {{- define "odm-metering-config" -}}
-{{- if not (empty .Values.customization.usageMeteringSecretRef ) }}
+{{- if or (not (empty .Values.customization.usageMeteringSecretRef )) (not (empty .Values.customization.meteringServerUrl )) }}
 - name: COM_IBM_RULES_METERING_ENABLE
   value: "true"
+{{- if not (empty .Values.customization.meteringServerUrl ) }}
+- name: METERING_SERVER_URL
+  value: "{{ .Values.customization.meteringServerUrl }}"
+{{- end }}
+{{- if not (empty .Values.customization.meteringSendPeriod ) }}
+- name: METERING_SEND_PERIOD
+  value: "{{ .Values.customization.meteringSendPeriod }}"
+{{- end }}
 {{- end }}
 {{- end }}
 {{/*
@@ -503,10 +544,22 @@ Define database configuration for deployment
 {{- end -}}
 
 {{- define "odm-additional-labels" -}}
-app.kubernetes.io/instance: {{ .Release.Name }}
-app.kubernetes.io/managed-by: {{ .Release.Service }}
-app.kubernetes.io/name: {{ template "name" . }}
-helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+{{- $componentName := index . "componentName" -}}
+{{- $root := index . "root" -}}
+{{- $productVersion := default $root.Chart.AppVersion $root.Values.customization.productVersion -}}
+app.kubernetes.io/instance: {{ $root.Release.Name }}
+app.kubernetes.io/name: {{ template "name" $root }}
+app.kubernetes.io/version: {{ $productVersion | quote }}
+{{- if and (not (empty ($root.Values.customization.cloudpakID))) (not (empty $root.Values.customization.cloudpakVersion)) }}
+app.kubernetes.io/component: odm
+app.kubernetes.io/part-of: icp4a
+app.kubernetes.io/managed-by: Operator
+{{- else }}
+app.kubernetes.io/component: {{ $componentName }}
+app.kubernetes.io/part-of: odm
+app.kubernetes.io/managed-by: helm
+{{- end }}
+helm.sh/chart: {{ $root.Chart.Name }}-{{ $root.Chart.Version | replace "+" "_" }}
 {{- end -}}
 
 {{- define "odm-oidc-context" -}}
@@ -572,7 +625,7 @@ helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
 {{- end}}
 {{- if not (empty .Values.dba.ldapSslSecretRef) }}
 - name: ldap-trust-store
-  mountPath: /config/security/ldap.jks
+  mountPath: /config/ldap/ldap.jks
   subPath: truststore/jks/trusts.jks
 {{- end}}
 {{- end -}}
@@ -726,6 +779,22 @@ serviceAccountName: {{ template "fullname" . }}-service-account
 {{- end}}
 {{- end}}
 
+{{- define "odm-metering-volumes-context" -}}
+{{- if not (empty (.Values.customization.usageMetering)) }}
+- name: {{ template "odm-meteringconfig-secret-volume.fullname" . }}
+  secret:
+    secretName: {{ .Values.customization.usageMetering }}
+{{- end}}
+{{- end}}
+
+{{- define "odm-metering-volumemounts-context" -}}
+{{- if not (empty (.Values.customization.usageMetering)) }}
+- name: {{ template "odm-meteringconfig-secret-volume.fullname" . }}
+  readOnly: true
+  mountPath: {{ template "odm-meteringconfig-dir" . }}
+{{- end}}
+{{- end}}
+
 {{/*
 Image tag or digest.
 
@@ -750,4 +819,29 @@ annotations:
 {{ end -}}
   {{ end -}}
   {{ end -}}
+{{- end -}}
+
+{{- define "odm-service-type" -}}
+{{- if .Values.service.enableRoute -}}
+type: ClusterIP
+{{- else -}}
+type: {{ .Values.service.type }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Trusted certificate list.
+*/}}
+{{- define "odm-trusted-cert-volume" -}}
+  {{- range .Values.customization.trustedCertificateList }}
+- name: {{ .  | printf "%s-trusted-cert-volume" }}
+  secret:
+    secretName: {{ . }}
+  {{ end }}
+{{- end -}}
+{{- define "odm-trusted-cert-volume-mount" -}}
+{{- range .Values.customization.trustedCertificateList }}
+- name: {{ .  | printf "%s-trusted-cert-volume" }}
+  mountPath:  /config/security/trusted-cert-volume/{{ . -}}
+{{ end }}
 {{- end -}}
