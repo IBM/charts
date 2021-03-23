@@ -74,7 +74,6 @@ This chart requires a PodSecurityPolicy to be bound to the target namespace prio
 
 The predefined PodSecurityPolicy name [`ibm-restricted-psp`](https://ibm.biz/cpkspec-psp) has been verifed for this chart. If your target namespace is bound to this PodSecurityPolicy, you can proceed to install the chart.
 
-
 This chart also defines a custom PodSecurityPolicy which can be used to finely control the permissions/capabilities needed to deploy this chart.
 
 A cluster administrator can create the custom PodSecurityPolicy and the ClusterRole by applying the following descriptors files in the appropriate namespace:
@@ -138,14 +137,6 @@ This chart requires a SecurityContextConstraints to be granted to the serviceAcc
 A cluster administrator can either bind the SecurityContextConstraints to the target namespace or add the scc specifically to the serviceAccount.
 
 The predefined SecurityContextConstraints name: [`restricted`](https://ibm.biz/cpkspec-scc) has been verified for this chart. In Openshift, `restricted` is used by default for authenticated users.
-
-To use the `restricted` scc, you must define the `customization.runAsUser` parameter as empty since the restricted scc requires to used an arbitrary UID.
-
-```console
-$ helm install my-odm-dev-release \
-  --set customization.runAsUser='' \
-  /path/to/ibm-odm-dev-<version>.tgz
-```
 
 This chart also defines a custom SecurityContextConstraints which can be used to finely control the permissions/capabilities needed to deploy this chart.
 
@@ -251,6 +242,12 @@ $ helm install --set license=accept my-odm-dev-release -f values.yaml ibm-charts
 > **Tip**: The default values are in the `values.yaml` file of the `ibm-odm-dev` chart.
 
 The release is an instance of the `ibm-odm-dev` chart: all the ODM components are now running in a  Kubernetes cluster.
+
+> **Note**: If you plan on using `helm template` command for ODM installation, add the `--validate` flag to validate your manifests against your Kubernetes cluster:
+> ```console
+> $ helm template my-odm-dev-release --set license=accept ibm-charts/ibm-odm-dev > my-values.yaml
+> $ kubectl apply -f my-values.yaml
+> ```
 
 ### Verifying the Chart
 
