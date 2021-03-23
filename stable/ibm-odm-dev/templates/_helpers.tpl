@@ -97,14 +97,14 @@ hostPID: false
 hostIPC: false
 securityContext:
   runAsNonRoot: true
-  {{- if .Values.customization.runAsUser }}
+  {{- if and (.Values.customization.runAsUser) (not (.Capabilities.APIVersions.Has "route.openshift.io/v1/Route")) }}
   runAsUser: {{ .Values.customization.runAsUser }}
   {{- end }}
 {{- end -}}
 
 {{- define "odm-security-context" -}}
 securityContext:
-  {{- if .Values.customization.runAsUser }}
+  {{- if and (.Values.customization.runAsUser) (not (.Capabilities.APIVersions.Has "route.openshift.io/v1/Route")) }}
   runAsUser: {{ .Values.customization.runAsUser }}
   {{- end }}
   runAsNonRoot: true
@@ -145,3 +145,11 @@ image: {{ template "odm.repository.name" .root }}/{{ .containerName }}@{{ .root.
 image: {{ template "odm.repository.name" .root }}/{{ .containerName }}:{{ .root.Values.image.tag }}_{{ .root.Chart.Version }}{{ template "platform" .root }}
 {{- end -}}
 {{- end }}
+
+{{- define "odm-service-type" -}}
+{{- if or (.Values.service.enableRoute) (.Capabilities.APIVersions.Has "route.openshift.io/v1/Route") -}}
+type: ClusterIP
+{{- else -}}
+type: {{ .Values.service.type }}
+{{- end }}
+{{- end -}}
