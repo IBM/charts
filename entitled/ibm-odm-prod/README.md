@@ -146,7 +146,7 @@ A cluster administrator can either bind the SecurityContextConstraints to the ta
 
 The predefined SecurityContextConstraints name: [`restricted`](https://ibm.biz/cpkspec-scc) has been verified for this chart. In Openshift, `restricted` is used by default for authenticated users.
 
-To use the `restricted` scc, you must define the `customization.runAsUser` parameter as empty since the restricted scc requires to used an arbitrary UID.
+To use the `restricted` scc, you must define the `customization.runAsUser` parameter as empty since the restricted scc requires to use an arbitrary UID.
 
 ```console
 $ helm install my-odm-prod-release \
