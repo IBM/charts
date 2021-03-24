@@ -48,15 +48,11 @@
       ENDPOINT_ALIAS=minio;
       mc --insecure config host add ${ENDPOINT_ALIAS} ${MINIO_URL} ${ACCESKEY} ${SECRETKEY} --api S3v4;
       until mc --insecure ls ${ENDPOINT_ALIAS}/${CATALOG_DIR}/catalog.json; do sleep 2; done;
-      FILES=`mc --insecure cat ${ENDPOINT_ALIAS}/${CATALOG_DIR}/catalog.json | sed -ne "s/^.*\(pool\/.*tar.pzstd\).*$/\1/p"`;
-      for file in ${FILES}; do echo $file; done;
       AMODELS=${MODELS//,/ };
       FILTERED_FILES=;
-      for file in $FILES; do
-          for model in `echo $MODELS | sed -e "s/,/ /g"`; do
-              echo $file | grep "^pool\/${model}.*$";
-              if [ $? -eq 0 ]; then FILTERED_FILES="${FILTERED_FILES} $file"; fi;
-          done;
+      for model in `echo $MODELS | sed -e "s/,/ /g"`; do
+          images=$(mc --insecure cat ${ENDPOINT_ALIAS}/${CATALOG_DIR}/catalog.json | sed -e '1h;2,$H;$!d;g' -ne "s/^.*\"name\". \"\($model\)\".*\"requires\". \[\t*\(.*\)\]\,.*$model.*$/\2/p" | tr -d '[:space:]' | sed -e "s/,/ /g" -e "s/\"//g")
+          FILTERED_FILES="${FILTERED_FILES} $images";
       done;
       echo "Mandatory files are - ${FILTERED_FILES}";
       mc --insecure ls ${ENDPOINT_ALIAS}/${MODELS_DIR};
