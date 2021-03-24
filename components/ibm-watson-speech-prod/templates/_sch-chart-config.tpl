@@ -15,6 +15,10 @@ sch:
   chart:
     appName: "speech-to-text"
     components:
+      stt_customization:
+        name: "stt-customization"
+      stt_async:
+        name: "stt-async"
       rabbitmq:
         name: "rabbitmq"
         headless: "rabbitmq-ibm-rabbitmq-headless-svc"
@@ -86,8 +90,15 @@ sch:
   chart:
     appName: "text-to-speech"
     components:
+      tts_customization:
+        name: "tts-customization"
       tts:
         name: "tts"
+      postgres:
+        name: "postgres"
+        proxyService: "postgres-proxy-service"
+
+
     metering:
       cloudpakName: IBM Watson API Kit for IBM Cloud Pak for Data
       cloudpakId: df0b9c8451114e2d86d27ecb96afb37a

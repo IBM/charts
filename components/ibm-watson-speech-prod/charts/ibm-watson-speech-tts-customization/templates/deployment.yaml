@@ -1,4 +1,4 @@
-{{- include "sch.config.init" (list . "sch.chart.tts_customization.config.values") -}}
+{{- include "sch.config.init" (list . "sch.chart.tts.config.values") -}}
 {{- $compName :=  .sch.chart.components.tts_customization.name -}}
 
 apiVersion: apps/v1
@@ -19,7 +19,7 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      appName: tts-customization
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
   template:
     metadata:
       annotations:
@@ -57,13 +57,13 @@ spec:
           - name: PGCONNECT_TIMEOUT
             value: "3"
           command: ['sh', '-c']
+          {{ $compNamePostgres :=  .sch.chart.components.postgres.proxyService -}}
           args:
-            #- until pg_isready -h {{ .Release.Name }}-postgresql-proxy-svc.{{- .Release.Namespace }} -p 5432 -d postgres;
-            - until psql -h {{ .Release.Name }}-speech-to-text-postgres-proxy-service.{{- .Release.Namespace }} -p 5432 -d postgres -U enterprisedb;
+            - until psql -h {{ .Release.Name }}-speech-to-text-{{ $compNamePostgres }}.{{- .Release.Namespace }} -p 5432 -d postgres -U enterprisedb;
               do echo waiting for database;
               sleep 2;
               done;
-              psql -h {{ .Release.Name }}-speech-to-text-postgres-proxy-service.{{- .Release.Namespace }} -d postgres -U enterprisedb -f /tmp/tts-customization.sql;
+              psql -h {{ .Release.Name }}-speech-to-text-{{ $compNamePostgres }}.{{- .Release.Namespace }} -d postgres -U enterprisedb -f /tmp/tts-customization.sql;
           volumeMounts:
           - name: sql-volume
             mountPath: /tmp/
