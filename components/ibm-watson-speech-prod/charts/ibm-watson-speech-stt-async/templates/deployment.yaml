@@ -1,4 +1,4 @@
-{{- include "sch.config.init" (list . "sch.chart.stt_async.config.values") -}}
+{{- include "sch.config.init" (list . "sch.chart.stt.config.values") -}}
 {{- $compName :=  .sch.chart.components.stt_async.name -}}
 
 apiVersion: apps/v1
@@ -8,7 +8,6 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
 {{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
-    appName: stt-async
     wdc.ibm.com/network-access: public-egress
 spec:
   replicas: 1
@@ -19,6 +18,7 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
       appName: stt-async
   template:
     metadata:
@@ -57,20 +57,21 @@ spec:
            - name: PGCONNECT_TIMEOUT
              value: "3"
            command: ['sh', '-c']
+           {{ $compNamePostgres :=  .sch.chart.components.postgres.proxyService -}}
            args:
-             #- until pg_isready -h {{ .Release.Name }}-ibm-postgresql-proxy-svc.{{- .Release.Namespace }} -p 5432 -d postgres;
-             - until psql -h {{ .Release.Name }}-speech-to-text-postgres-proxy-service.{{- .Release.Namespace }} -p 5432 -d postgres -U enterprisedb;
-               do echo waiting for database;
-               sleep 2;
-               done;
+             - until psql -h {{ include "sch.names.fullCompName" (list $ $compNamePostgres) }}.{{.Release.Namespace}} -p 5432 -d postgres -U enterprisedb;
+              do echo waiting for database;
+              sleep 2;
+              done;
          - name: wait4rabbit
            image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.global.images.utils.image }}:{{ .Values.global.images.utils.tag }}"
 {{ include "ibm-watson-speech-prod.initContainerResources" . | indent 11}}
 {{ include "java-services.containerSecurityContext" . | indent 11 }}
            command: ['sh', '-c']
+           {{ $compNameRabbit :=  .sch.chart.components.rabbitmq.service -}}
            args:
-             - echo trying to access rabbitmq at https://{{ .Release.Name }}-speech-to-text-rabbitmq-ibm-rabbitmq-svc:15671;
-               until curl https://{{ .Release.Name }}-speech-to-text-rabbitmq-ibm-rabbitmq-svc:15671 -k --connect-timeout 2;
+             - echo trying to access rabbitmq at https://{{ include "sch.names.fullCompName" (list $ $compNameRabbit) }}:15671;
+               until curl https://{{ include "sch.names.fullCompName" (list $ $compNameRabbit) }}:15671 -k --connect-timeout 2;
                do echo waiting for rabbitmq;
                date;
                sleep 2;
