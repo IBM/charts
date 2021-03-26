@@ -2,36 +2,35 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app.kubernetes.io/name: paw
+    app.kubernetes.io/name: {{ .Values.common.appName }}
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    name: bss
-    release: 3.5.1
+    name: bss{{ .Values.instanceIdWithinNamespace }}
+    release: {{ .Release.Name }}
     paw_instance_name: {{ .Values.paw_instance_name }}
-    
-  name: bss
+  name: bss{{ .Values.instanceIdWithinNamespace }}
   namespace: {{ .Release.Namespace }}
 spec:
-  replicas: 2
+  replicas: {{ .Values.bss.replicas }}
   selector:
     matchLabels:
-      name: bss
+      name: bss{{ .Values.instanceIdWithinNamespace }}
   template:
     metadata:
       annotations:
         hook.activate.cpd.ibm.com/command: '[]'
         hook.deactivate.cpd.ibm.com/command: '[]'
-        cloudpakName: "IBM Planning Analytics Extension for IBM Cloud Pak for Data"
-        cloudpakId: "27646a3a52bb43408a3156180def3775"
-        productCloudpakRatio: "1:1"
-        productID: "27646a3a52bb43408a3156180def3775"
-        productName: "IBM Planning Analytics Workspace"
+        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
+        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
+        productCloudpakRatio: {{ .Values.cloudpakAnnotations.productCloudpakRatio }}
+        productName: {{ .Values.productName.PAWorkSpace }}
+        productID:  {{ .Values.cloudpakAnnotations.productID }}
         productMetric: "VIRTUAL_PROCESSOR_CORE"
-        productVersion: 3.5.1
+        productVersion: 3.5.2
         productChargedContainers: "All"
       labels:
-        app.kubernetes.io/name: paw
+        app.kubernetes.io/name: {{ .Values.common.appName }}
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         icpdsupport/addOnId: pa
@@ -42,9 +41,11 @@ spec:
         icpdsupport/createdBy: {{ .Values.createdBy | quote }}
         {{- end }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        name: bss
-        release: 3.5.1
-        version: "1.0.1181-ubi7-3"
+        name: bss{{ .Values.instanceIdWithinNamespace }}
+        release: {{ .Release.Name }}
+        version: "1.0.1199-ubi7"
+        pa-cacerts-secret: {{ .Values.secrets.cacertVersion }}
+        paw_instance_name: {{ .Values.paw_instance_name }}
     spec:
       affinity:
         nodeAffinity:
@@ -58,24 +59,65 @@ spec:
       volumes:
         - name: pa-cacerts
           secret:
-            secretName: pa-cacerts                
+            secretName: pa-cacerts{{ .Values.instanceIdWithinNamespace }}             
+      initContainers:
+        - args:
+          - -c
+          - /tools/wait-for-mysql-server.sh            
+          command:
+          - /bin/bash
+          env:
+          - name: DATASOURCE_HOST
+            value: "mysql-server{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
+          - name: DATASOURCE_USER
+            value: pauser
+          - name: ENABLE_SSL
+            value: "true"
+          - name: TRUST_STORE_FILE
+            value: /run/config/cacerts.pem
+          image: {{ .Values.docker_registry_prefix }}/pa-mysql-cluster:1.0.107-ubi7
+          imagePullPolicy: IfNotPresent
+          name: wait-for-mysql-server
+          resources:
+            limits:
+              cpu: "{{ .Values.common.cpuLimit }}"
+              memory: "{{ .Values.common.memoryLimit }}"
+            requests:
+              cpu: "{{ .Values.common.cpuRequestLimit }}"
+              memory: "{{ .Values.common.memoryRequestLimit }}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+            runAsUser: 2000
+{{- end }} 
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+          - mountPath: /run/config
+            name: pa-cacerts
       containers:
         - name: bss
-          image: {{ .Values.docker_registry_prefix }}/pa-bss:1.0.1181-ubi7-3
+          image: {{ .Values.docker_registry_prefix }}/pa-bss:1.0.1199-ubi7
           ports:
             - containerPort: 8082
               protocol: TCP
           env:
             - name: SERVER_DATASOURCE
-              value: "server-datasource-mysql.xml"
+              value: "server-datasource-mysql-tls.xml"
             - name: DATASOURCE_HOSTS
-              value: "mysql-server:3306"
+              value: "mysql-server{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}:3306"
             - name: DATASOURCE_USER
               value: "pauser"
             - name: DBDICTIONARY
               value: "mysql(TableType=ndb)"
-            - name: MYSQL_DOMAIN
-              value: "{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
+            - name: PAW_INSTANCE
+              value: "{{ .Values.instanceIdWithinNamespace }}"
             - name: TRUST_STORE_FILE
               value: "/run/config/cacerts"              
           resources:
@@ -127,4 +169,3 @@ spec:
     rollingUpdate:
       maxUnavailable: 1
       maxSurge: 1
-

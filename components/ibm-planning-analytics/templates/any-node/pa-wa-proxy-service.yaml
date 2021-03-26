@@ -2,37 +2,35 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app.kubernetes.io/name: paw
+    app.kubernetes.io/name: {{ .Values.common.appName }}
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    name: wa-proxy
-    release: 3.5.1
+    name: wa-proxy{{ .Values.instanceIdWithinNamespace }}
+    release: {{ .Release.Name }}
     paw_instance_name: {{ .Values.paw_instance_name }}
-    
-  name: wa-proxy
+  name: wa-proxy{{ .Values.instanceIdWithinNamespace }}
   namespace: {{ .Release.Namespace }}
 spec:
-  replicas: 2
+  replicas: {{ .Values.waProxy.replicas }}
   selector:
     matchLabels:
-      name: wa-proxy
+      name: wa-proxy{{ .Values.instanceIdWithinNamespace }}
   template:
     metadata:
       annotations:
         hook.activate.cpd.ibm.com/command: '[]'
-        hook.deactivate.cpd.ibm.com/command: '[]'
-        cloudpakName: "IBM Planning Analytics Extension for IBM Cloud Pak for Data"
-        cloudpakId: "27646a3a52bb43408a3156180def3775"
-        productCloudpakRatio: "1:1"
-        productID: "27646a3a52bb43408a3156180def3775"
-        productName: "IBM Planning Analytics Workspace"
+        hook.deactivate.cpd.ibm.com/command: '[]'        
+        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
+        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
+        productCloudpakRatio: {{ .Values.cloudpakAnnotations.productCloudpakRatio }}
+        productName: {{ .Values.productName.PAWorkSpace }}
+        productID:  {{ .Values.cloudpakAnnotations.productID }}
         productMetric: "VIRTUAL_PROCESSOR_CORE"
-        productVersion: 3.5.1
+        productVersion: 3.5.2
         productChargedContainers: "All"
-        
       labels:
-        app.kubernetes.io/name: paw
+        app.kubernetes.io/name: {{ .Values.common.appName }}
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         icpdsupport/addOnId: pa
@@ -43,11 +41,12 @@ spec:
         icpdsupport/createdBy: {{ .Values.createdBy | quote }}
         {{- end }} 
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        name: wa-proxy
-        pa-cacerts-secret: {{ .Values.secrets.cacertVersion }}
+        name: wa-proxy{{ .Values.instanceIdWithinNamespace }}
         pa-paw-secret: {{ .Values.secrets.pawSecretVersion }}
-        release: 3.5.1
-        version: "1.0.594-ubi7-3"
+        release: {{ .Release.Name }}
+        version: "1.0.633-ubi7"
+        pa-cacerts-secret: {{ .Values.secrets.cacertVersion }}
+        paw_instance_name: {{ .Values.paw_instance_name }}
     spec:
       affinity:
         nodeAffinity:
@@ -61,23 +60,23 @@ spec:
       volumes:
         - name: pa-cookie-key
           secret:
-            secretName: pa-cookie-key
+            secretName: pa-cookie-key{{ .Values.instanceIdWithinNamespace }}
         - name: pa-credential-store-key
           secret:
-            secretName: pa-credential-store-key
+            secretName: pa-credential-store-key{{ .Values.instanceIdWithinNamespace }}
         - name: pa-cacerts
           secret:
-            secretName: pa-cacerts
+            secretName: pa-cacerts{{ .Values.instanceIdWithinNamespace }}
         - name: jwt-cert
           emptyDir:
             medium: "{{ .Values.waProxy.emptyDirMedium }}"
             sizeLimit: "{{ .Values.waProxy.emptyDirSizeLimit }}"
         - name: jwt-key
           secret:
-            secretName: pa-internal-tls-cert
+            secretName: pa-internal-tls-cert{{ .Values.instanceIdWithinNamespace }}
       initContainers:
         - name: wa-proxy-jwt-init
-          image:  {{ .Values.docker_registry_prefix }}/pa-wa-proxy:1.0.594-ubi7-3
+          image:  {{ .Values.docker_registry_prefix }}/pa-wa-proxy:1.0.633-ubi7
           command: ["/bin/sh"]
           args: ["-c", "curl -k https://ibm-nginx-svc/auth/jwtcert > /jwt/jwtcert"]
           resources:
@@ -98,12 +97,13 @@ spec:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
+          env:
           volumeMounts:
             - name: jwt-cert
               mountPath: /jwt
       containers:
         - name: wa-proxy
-          image: {{ .Values.docker_registry_prefix }}/pa-wa-proxy:1.0.594-ubi7-1
+          image: {{ .Values.docker_registry_prefix }}/pa-wa-proxy:1.0.633-ubi7
           ports:
             - containerPort: 1331
               protocol: TCP
@@ -141,9 +141,7 @@ spec:
             - name: SESSION_COOKIE_SECURE
               value: "{{ .Values.common.secureSessionCookie }}"
             - name: REDIS_SENTINEL
-              value: "{ \"name\": \"redis-cluster\", \"sentinels\": [{ \"host\": \"sentinel1\", \"port\": 26379 }, { \"host\": \"sentinel2\", \"port\": 26379 }, { \"host\": \"sentinel3\", \"port\": 26379 }]}"
-            - name: REDIS_DOMAIN
-              value: "{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
+              value: "{ \"name\": \"redis-cluster{{ .Values.instanceIdWithinNamespace }}\", \"sentinels\": [{ \"host\": \"sentinel1{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}\", \"port\": 26379 }, { \"host\": \"sentinel2{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}\", \"port\": 26379 }, { \"host\": \"sentinel3{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}\", \"port\": 26379 }], \"tls\": true }"
             - name: ENABLE_VIEW_EXCHANGE
               value: "{{ .Values.waProxy.enableViewExchange }}"
             - name: CSP_FRAME_ANCESTORS
@@ -154,6 +152,8 @@ spec:
               value: "{{ .Values.waProxy.apiAllowOrigins }}"
             - name: SSL_CA_BUNDLE_FILE
               value: "/run/config/cacerts.pem"
+            - name: PAW_INSTANCE
+              value: "{{ .Values.instanceIdWithinNamespace }}"              
             - name: JWT_CERT_FILE
               value: "/jwt/jwtcert"
             - name: "JWT_LOGIN_REDIRECT_URL"
@@ -164,9 +164,15 @@ spec:
               value: "paw-cp4d"
               # Websheets should be enabled when TM1 is external, OR when PASS /is/ running internally
               # I.e. if TM1 is internal, but PASS wasn't deployed, then it should be disabled.
-            {{- if or (not .Values.common.tm1InternalType) (.Values.common.webappsEnabled) }}
+            {{- if and (.Values.common.tm1InternalType) (.Values.common.webappsEnabled) }}
             - name: PROFILE_OVERRIDES
-              value: "{\"welcome\": {\"enableWebsheets\": true},\"gemini\": {\"tm1Websheet\": \"enabled\",\"allowSaveWebsheets\": \"enabled\"}}"
+              value: "{ \"deployment\":{\"name\":\"cp4d\"},\"welcome\": {\"enableWebsheets\": true},\"gemini\": {\"tm1Websheet\": \"enabled\",\"allowSaveWebsheets\": \"enabled\"}}"
+            {{- else if and (.Values.common.tm1InternalType) (not .Values.common.webappsEnabled) }}
+            - name: PROFILE_OVERRIDES
+              value: "{ \"deployment\":{\"name\":\"cp4d\"}}"
+            {{- else }}
+            - name: PROFILE_OVERRIDES
+              value: "{ \"welcome\": {\"enableWebsheets\": true},\"gemini\": {\"tm1Websheet\": \"enabled\",\"allowSaveWebsheets\": \"enabled\"}}"
             {{- end }}
           resources:
             limits:
@@ -204,8 +210,19 @@ spec:
             failureThreshold: 1
             initialDelaySeconds: 300
             tcpSocket:
+              port: 1331
+            periodSeconds: 2
+          livenessProbe:
+            failureThreshold: 1
+            initialDelaySeconds: 300
+            tcpSocket:
               port: 1338
             periodSeconds: 2
+          readinessProbe:
+            failureThreshold: 1
+            periodSeconds: 2
+            tcpSocket:
+              port: 1331
           readinessProbe:
             failureThreshold: 1
             periodSeconds: 2
