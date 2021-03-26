@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     name: tm1web
-    release: 3.5.1
+    release: {{ .Release.Name }}
   name: tm1web
   namespace: {{ .Release.Namespace }}
 spec:
@@ -21,13 +21,13 @@ spec:
       annotations:
         hook.activate.cpd.ibm.com/command: '[]'
         hook.deactivate.cpd.ibm.com/command: '[]'
-        cloudpakName: "IBM Planning Analytics Extension for IBM Cloud Pak for Data"
-        cloudpakId: "27646a3a52bb43408a3156180def3775"
-        productCloudpakRatio: "1:1"
-        productID: "27646a3a52bb43408a3156180def3775"
-        productName: "IBM Planning Analytics Spreadsheet Service"
+        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
+        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
+        productCloudpakRatio: {{ .Values.cloudpakAnnotations.productCloudpakRatio }}
+        productID: {{ .Values.cloudpakAnnotations.productID }}
+        productName: "{{ .Values.productName.PASpreadsheet }}"
         productMetric: "VIRTUAL_PROCESSOR_CORE"
-        productVersion: 3.5.1
+        productVersion: 3.5.2
         productChargedContainers: "All"
       labels:
         app.kubernetes.io/name: pa-tm1web
@@ -42,8 +42,8 @@ spec:
         {{- end }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         name: tm1web
-        release: 3.5.1
-        version: "11.0.57-20110317-3"
+        release: {{ .Release.Name }}
+        version: {{ .Values.tm1web.imageversion }}
     spec:
       affinity:
         nodeAffinity:
@@ -56,7 +56,7 @@ spec:
                 - {{ .Values.arch }}
       containers:
         - name: tm1web
-          image: {{.Values.docker_registry_prefix}}/pa-tm1web:11.0.57-20110317-3
+          image: {{.Values.docker_registry_prefix}}/pa-tm1web:11.0.61-21020515
           ports:
             - containerPort: 9510
               protocol: TCP
@@ -70,6 +70,10 @@ spec:
           env:
           - name: MEMORY
             value: "{{ .Values.tm1web.memoryRequest }}"
+          - name: ENABLE_SSL
+            value: "false"
+          - name: ENABLE_MUTUAL_SSL
+            value: "false"
           securityContext:
             runAsNonRoot: true
 {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
@@ -104,6 +108,8 @@ spec:
             mountPath: /etc/websheetsconfig
           - name: pa-cacerts
             mountPath: /run/config
+          - name: pa-internal-tls-cert
+            mountPath: /run/secrets/paw/internal-tls-cert
       volumes:
         - name: pa-tm1web-volume
           configMap:
@@ -111,6 +117,9 @@ spec:
         - name: pa-cacerts
           secret:
             secretName: pa-cacerts
+        - name: pa-internal-tls-cert
+          secret:
+            secretName: pa-internal-tls-cert
       hostNetwork: false
       hostIPC: false
       hostPID: false

@@ -2,37 +2,36 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app.kubernetes.io/name: paw
+    app.kubernetes.io/name: {{ .Values.common.appName }}
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    name: share-app
-    release: 3.5.1
+    name: share-app{{ .Values.instanceIdWithinNamespace }}
+    release: {{ .Release.Name }}
     paw_instance_name: {{ .Values.paw_instance_name }}
-    
-  name: share-app
+  name: share-app{{ .Values.instanceIdWithinNamespace }}
   namespace: {{ .Release.Namespace }}
 spec:
-  replicas: 2
+  replicas: {{ .Values.shareApp.replicas }}
   selector:
     matchLabels:
-      name: share-app
+      name: share-app{{ .Values.instanceIdWithinNamespace }}
   template:
     metadata:
       annotations:
         hook.activate.cpd.ibm.com/command: '[]'
-        hook.deactivate.cpd.ibm.com/command: '[]'
-        cloudpakName: "IBM Planning Analytics Extension for IBM Cloud Pak for Data"
-        cloudpakId: "27646a3a52bb43408a3156180def3775"
-        productCloudpakRatio: "1:1"
-        productID: "27646a3a52bb43408a3156180def3775"
-        productName: "IBM Planning Analytics Workspace"
+        hook.deactivate.cpd.ibm.com/command: '[]'          
+
+        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
+        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
+        productCloudpakRatio: {{ .Values.cloudpakAnnotations.productCloudpakRatio }}
+        productName: {{ .Values.productName.PAWorkSpace }}
+        productID:  {{ .Values.cloudpakAnnotations.productID }}
         productMetric: "VIRTUAL_PROCESSOR_CORE"
-        productVersion: 3.5.1
+        productVersion: 3.5.2
         productChargedContainers: "All"
-        
       labels:
-        app.kubernetes.io/name: paw
+        app.kubernetes.io/name: {{ .Values.common.appName }}
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         icpdsupport/addOnId: pa
@@ -43,9 +42,10 @@ spec:
         icpdsupport/createdBy: {{ .Values.createdBy | quote }}
         {{- end }} 
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        name: share-app
-        release: 3.5.1
-        version: "1.0.388-ubi7-3"
+        name: share-app{{ .Values.instanceIdWithinNamespace }}
+        release: {{ .Release.Name }}
+        version: "1.0.409-ubi7"
+        paw_instance_name: {{ .Values.paw_instance_name }}
     spec:
       affinity:
         nodeAffinity:
@@ -58,10 +58,11 @@ spec:
                 - {{ .Values.arch }}
       containers:
         - name: share-app
-          image: {{ .Values.docker_registry_prefix }}/pa-share-app:1.0.388-ubi7-3
+          image: {{ .Values.docker_registry_prefix }}/pa-share-app:1.0.409-ubi7
           ports:
             - containerPort: 9700
               protocol: TCP
+          env:
           resources:
             limits:
               cpu: "{{ .Values.shareApp.cpuLimit }}"

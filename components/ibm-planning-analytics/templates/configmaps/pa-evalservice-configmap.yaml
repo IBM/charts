@@ -23,8 +23,8 @@ data:
                 <feature>jaxrs-1.1</feature>
             </featureManager>
 
-            <httpEndpoint id="defaultHttpEndpoint" httpPort="9510" httpsPort="9513" host="*" removeServerHeader="true" >
-            </httpEndpoint>
+            <include location="server-${http.select-config}.xml" optional="false"/>
+
             <httpSession cookieHttpOnly="true"/>
             <httpDispatcher appOrContextRootMissingMessage=" " enableWelcomePage="false"/>
             <application id="evalservice" location="${wlp.user.dir}/../../webapps/evalservice/" name="evalservice" type="war" context-root="evalservice"/>
@@ -37,6 +37,19 @@ data:
     evalservice.log.file.path=${server.config.dir}/logs
     com.ibm.ws.logging.console.log.level=INFO
     com.ibm.ws.logging.trace.file.name=stdout
+    # bind addresses and port
+    http.host = *
+    http.port = 9510
+    # server http config fragment to use (http, http-ssl, http-mutual-ssl)
+    http.select-config = http
+    # For http-ssl or http-mutual-ssl configuration we must set service identity props
+    # javax.net.ssl.keyStore           = /etc/ssl/certs/server.p12
+    # javax.net.ssl.keyStoreType       = pkcs12
+    # javax.net.ssl.keyStorePassword   = changeit
+    # For http-mutual-ssl configuration the client authentication store must be provided
+    # http.ssl.authStore               = /etc/ssl/trusted-clients.jks
+    # http.ssl.authStoreType           = jks
+    # http.ssl.authStorePassword       = changeit
 
   jvm.options: |-
     -Dfile.encoding=UTF-8
@@ -82,7 +95,38 @@ data:
       <appSettings>
       </appSettings>
       <servers>
-              <server requestHost = "http://tm1:4000" requestServer = "{{ .Values.paw_instance_name }}" targetHost="http://tm1:8080" targetServer="{{ .Values.paw_instance_name }}" />
+              <server requestHost = "http://tm1:4000" requestServer = "{{ .Values.tm1.name }}" targetHost="http://tm1:8080" targetServer="{{ .Values.tm1.name }}" />
       </servers>
     </evalservice_config>
+
+  server-http.xml: |-
+    <server description="http configuration fragment">
+      <httpEndpoint host="${http.host}" httpPort="${http.port}" httpsPort="-1" id="defaultHttpEndpoint" removeServerHeader="true" />
+    </server>
+
+  server-http-ssl.xml: |-
+    <server description="http+ssl configuration fragment">
+      <featureManager>
+        <feature>ssl-1.0</feature>
+      </featureManager>
+      <httpEndpoint host="${http.host}" httpPort="-1" httpsPort="${http.port}" id="defaultHttpEndpoint" removeServerHeader="true" />
+      <keyStore id="defaultKeyStore" location="${javax.net.ssl.keyStore}"
+        password="${javax.net.ssl.keyStorePassword}" type="${javax.net.ssl.keyStoreType}"/>
+      <ssl id="defaultSSLConfig" keyStoreRef="defaultKeyStore" sslProtocol="TLSv1.2"/>
+    </server>
+
+  server-http-mutual-ssl.xml: |-
+    <server description="http+mutual-ssl configuration fragment">
+      <featureManager>
+        <feature>ssl-1.0</feature>
+      </featureManager>
+      <httpEndpoint host="${http.host}" httpPort="-1" httpsPort="${http.port}" id="defaultHttpEndpoint" removeServerHeader="true" />
+      <keyStore id="defaultKeyStore" location="${javax.net.ssl.keyStore}"
+        password="${javax.net.ssl.keyStorePassword}" type="${javax.net.ssl.keyStoreType}"/>
+      <keyStore id="clientTrustStore" location="${http.ssl.authStore}"
+        password="${http.ssl.authStorePassword}" type="${http.ssl.authStoreType}"/>
+      <ssl id="defaultSSLConfig" keyStoreRef="defaultKeyStore" trustStoreRef="clientTrustStore"
+        clientAuthentication="true" sslProtocol="TLSv1.2"/>
+    </server>
+
 {{- end}}

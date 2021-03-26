@@ -2,39 +2,37 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app.kubernetes.io/name: paw
+    app.kubernetes.io/name: {{ .Values.common.appName }}
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    lb: mysql-server
-    name: mysql-server
-    release: 3.5.1
+    lb: mysql-server{{ .Values.instanceIdWithinNamespace }}
+    name: mysql-server{{ .Values.instanceIdWithinNamespace }}
+    release: {{ .Release.Name }}
     paw_instance_name: {{ .Values.paw_instance_name }}
-    
-  name: mysql-server
+  name: mysql-server{{ .Values.instanceIdWithinNamespace }}
   namespace: {{ .Release.Namespace }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      lb: mysql-server
-      name: mysql-server
+      lb: mysql-server{{ .Values.instanceIdWithinNamespace }}
+      name: mysql-server{{ .Values.instanceIdWithinNamespace }}
   template:
     metadata:
       annotations:
         hook.activate.cpd.ibm.com/command: '[]'
-        hook.deactivate.cpd.ibm.com/command: '[]'
-        cloudpakName: "IBM Planning Analytics Extension for IBM Cloud Pak for Data"
-        cloudpakId: "27646a3a52bb43408a3156180def3775"
-        productCloudpakRatio: "1:1"
-        productID: "27646a3a52bb43408a3156180def3775"
-        productName: "IBM Planning Analytics Workspace"
+        hook.deactivate.cpd.ibm.com/command: '[]'       
+        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
+        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
+        productCloudpakRatio: {{ .Values.cloudpakAnnotations.productCloudpakRatio }}
+        productName: {{ .Values.productName.PAWorkSpace }}
+        productID:  {{ .Values.cloudpakAnnotations.productID }}
         productMetric: "VIRTUAL_PROCESSOR_CORE"
-        productVersion: 3.5.1
+        productVersion: 3.5.2
         productChargedContainers: "All"
-        
       labels:
-        app.kubernetes.io/name: paw
+        app.kubernetes.io/name: {{ .Values.common.appName }}
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         icpdsupport/addOnId: pa
@@ -45,10 +43,12 @@ spec:
         icpdsupport/createdBy: {{ .Values.createdBy | quote }}
         {{- end }} 
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        lb: mysql-server
-        name: mysql-server
-        release: 3.5.1
-        version: "1.0.97-ubi7-3"
+        lb: mysql-server{{ .Values.instanceIdWithinNamespace }}
+        name: mysql-server{{ .Values.instanceIdWithinNamespace }}
+        release: {{ .Release.Name }}
+        version: "1.0.107-ubi7"
+        pa-cacerts-secret: {{ .Values.secrets.cacertVersion }}
+        paw_instance_name: {{ .Values.paw_instance_name }}
     spec:
       affinity:
         nodeAffinity:
@@ -62,13 +62,104 @@ spec:
       volumes:
         - name: pa-cacerts
           secret:
-            secretName: pa-cacerts          
+            secretName: pa-cacerts{{ .Values.instanceIdWithinNamespace }}     
         - name: pa-internal-tls-cert
           secret:
-            secretName: pa-internal-tls-cert                
+            secretName: pa-internal-tls-cert{{ .Values.instanceIdWithinNamespace }}
+        - name: pa-temp
+          emptyDir:
+            medium: "{{ .Values.mysqlCluster.emptyDirMedium }}"
+            sizeLimit: "{{ .Values.mysqlCluster.emptyDirSizeLimit }}"
+      initContainers:
+        - name: wait-for-pods
+          image: {{ .Values.docker_registry_prefix }}/pa-mysql-cluster:1.0.107-ubi7
+          command: ["/bin/bash", "-c", "/tools/wait-for-pods.sh nosleep" ]
+          ports:
+            - containerPort: 31001
+              protocol: TCP
+          resources:
+            limits:
+              cpu: "{{ .Values.common.cpuLimit }}"
+              memory: "{{ .Values.common.memoryLimit }}"
+            requests:
+              cpu: "{{ .Values.common.cpuRequestLimit }}"
+              memory: "{{ .Values.common.memoryRequestLimit }}"
+          env:
+            - name: SERVICENAMES
+              value: "mysql-data1{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }} mysql-data2{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }} mysql-mgmt{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
+            - name: READINESS_PORT
+              value: "31001"
+          securityContext:
+            runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+            runAsUser: 2000
+{{- end }}
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: pa-temp
+              mountPath: /run/readiness
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: IfNotPresent
       containers:
+        - name: mysql-server-stunnel
+          image: {{ .Values.docker_registry_prefix }}/pa-mysql-cluster:1.0.107-ubi7
+          command: [ "/mysql-stunnel.sh", "mysql-server" ]
+          ports:
+            - containerPort: 11186
+              protocol: TCP
+          resources:
+            limits:
+              cpu: "{{ .Values.mysqlServerStunnel.cpuLimit }}"
+              memory: "{{ .Values.mysqlServerStunnel.memoryLimit }}"
+            requests:
+              cpu: "{{ .Values.mysqlServerStunnel.cpuRequestLimit }}"
+              memory: "{{ .Values.mysqlServerStunnel.memoryRequestLimit }}"
+          env:
+            - name: MYSQL_INSTANCE
+              value: "{{ .Values.instanceIdWithinNamespace }}"
+            - name: MYSQL_DOMAIN
+              value: "{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
+          securityContext:
+            runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+            runAsUser: 2000
+{{- end }} 
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: pa-cacerts
+              mountPath: /run/config              
+            - name: pa-internal-tls-cert
+              mountPath: /run/secrets/paw/internal-tls-cert
+            - name: pa-temp
+              mountPath: /run/readiness
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            exec:
+              command:
+                - date
+            initialDelaySeconds: 0
+            periodSeconds: 60
+          readinessProbe:
+            exec:
+              command:
+                - date
+            initialDelaySeconds: 0
+            periodSeconds: 60          
         - name: mysql-server
-          image: {{ .Values.docker_registry_prefix }}/pa-mysql-cluster:1.0.97-ubi7-3
+          image: {{ .Values.docker_registry_prefix }}/pa-mysql-cluster:1.0.107-ubi7
           args: ["mysqld", "--log-error=/var/lib/mysql/log.err", "--ssl-fips-mode=ON", "--character-set-server=latin1"]
           ports:
             - containerPort: 3306
@@ -82,9 +173,9 @@ spec:
               memory: "{{ .Values.mysqlServer.memoryRequestLimit }}"
           env:
             - name: ENABLE_SSL
-              value: "false"
-            - name: MYSQL_DOMAIN
-              value: "{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
+              value: "true"
+            - name: MYSQL_SERVER
+              value: "mysql-server{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
             - name: SSL_CERTIFICATE_KEY_FILE
               value: "/run/secrets/paw/internal-tls-cert/tls.key"
             - name: SSL_CERTIFICATE_CHAIN_FILE
@@ -107,6 +198,8 @@ spec:
               mountPath: /run/config              
             - name: pa-internal-tls-cert
               mountPath: /run/secrets/paw/internal-tls-cert
+            - name: pa-temp
+              mountPath: /run/readiness
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
