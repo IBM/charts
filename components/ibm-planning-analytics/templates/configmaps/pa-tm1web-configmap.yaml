@@ -22,9 +22,9 @@ data:
                 <feature>json-1.0</feature>
                 <feature>jaxrs-1.1</feature> 
             </featureManager>  
+
+            <include location="server-${http.select-config}.xml" optional="false"/>
     
-            <httpEndpoint id="defaultHttpEndpoint" httpPort="9510" httpsPort="9513" host="*" removeServerHeader="true" >
-            </httpEndpoint>
             <httpSession cookieHttpOnly="true"/>
             <httpDispatcher appOrContextRootMissingMessage=" " enableWelcomePage="false"/>
             <application id="tm1web" location="${wlp.user.dir}/../../webapps/tm1web/" name="tm1web" type="war" context-root="tm1web"/>
@@ -75,7 +75,7 @@ data:
         <add key="UseExternalAuthn" value="true" />
         <!-- TM1 direct connection parameters.  if UseExternalAutn is set to true, the confirgured params here will be use for direct connection
          e.g value='{"planning sample":{"ip": ["9.30.97.138",null], "port": 12345, "compression": 1, "useSsl": "true", "protocolVer": 0}}' -->
-        <add key="Tm1DirectConnection" value='{"{{ .Values.paw_instance_name }}":{"ip": ["tm1",null], "port": 4000, "compression": 1, "useSsl": "false", "protocolVer": 0}}' />
+        <add key="Tm1DirectConnection" value='{"{{ .Values.tm1.name }}":{"ip": ["tm1",null], "port": 4000, "compression": 1, "useSsl": "false", "protocolVer": 0}}' />
         <!-- If set, users will not be asked to enter Admin Host during login. -->
         <add key="AdminHostName" value="" />
         <!-- If set, the client will try to use this port instead of the default Admin Host port. -->
@@ -173,6 +173,19 @@ data:
     evalservice.log.file.path=${server.config.dir}/logs
     com.ibm.ws.logging.console.log.level=INFO
     com.ibm.ws.logging.trace.file.name=stdout
+    # bind addresses and port
+    http.host = *
+    http.port = 9510
+    # server http config fragment to use (http, http-ssl, http-mutual-ssl)
+    http.select-config = http
+    # For http-ssl or http-mutual-ssl configuration we must set service identity props
+    # javax.net.ssl.keyStore           = /etc/ssl/certs/server.p12
+    # javax.net.ssl.keyStoreType       = pkcs12
+    # javax.net.ssl.keyStorePassword   = changeit
+    # For http-mutual-ssl configuration the client authentication store must be provided
+    # http.ssl.authStore               = /etc/ssl/trusted-clients.jks
+    # http.ssl.authStoreType           = jks
+    # http.ssl.authStorePassword       = changeit
     
   jvm.options: |-
     -Dfile.encoding=UTF-8
@@ -214,4 +227,35 @@ data:
     log4j.appender.XMLFile.File=logs/tm1web_log.xml
     log4j.appender.XMLFile.DatePattern=.yyyy-MM-dd
     log4j.appender.XMLFile.layout=org.apache.log4j.xml.XMLLayout
+
+  server-http.xml: |-
+    <server description="http configuration fragment">
+      <httpEndpoint host="${http.host}" httpPort="${http.port}" httpsPort="-1" id="defaultHttpEndpoint" removeServerHeader="true" />
+    </server>
+
+  server-http-ssl.xml: |-
+    <server description="http+ssl configuration fragment">
+      <featureManager>
+        <feature>ssl-1.0</feature>
+      </featureManager>
+      <httpEndpoint host="${http.host}" httpPort="-1" httpsPort="${http.port}" id="defaultHttpEndpoint" removeServerHeader="true" />
+      <keyStore id="defaultKeyStore" location="${javax.net.ssl.keyStore}"
+        password="${javax.net.ssl.keyStorePassword}" type="${javax.net.ssl.keyStoreType}"/>
+      <ssl id="defaultSSLConfig" keyStoreRef="defaultKeyStore" sslProtocol="TLSv1.2"/>
+    </server>
+
+  server-http-mutual-ssl.xml: |-
+    <server description="http+mutual-ssl configuration fragment">
+      <featureManager>
+        <feature>ssl-1.0</feature>
+      </featureManager>
+      <httpEndpoint host="${http.host}" httpPort="-1" httpsPort="${http.port}" id="defaultHttpEndpoint" removeServerHeader="true" />
+      <keyStore id="defaultKeyStore" location="${javax.net.ssl.keyStore}"
+        password="${javax.net.ssl.keyStorePassword}" type="${javax.net.ssl.keyStoreType}"/>
+      <keyStore id="clientTrustStore" location="${http.ssl.authStore}"
+        password="${http.ssl.authStorePassword}" type="${http.ssl.authStoreType}"/>
+      <ssl id="defaultSSLConfig" keyStoreRef="defaultKeyStore" trustStoreRef="clientTrustStore"
+        clientAuthentication="true" sslProtocol="TLSv1.2"/>
+    </server>
+
 {{- end}}
