@@ -2,37 +2,35 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app.kubernetes.io/name: paw
+    app.kubernetes.io/name: {{ .Values.common.appName }}
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    name: monitor
-    release: 3.5.1
+    name: monitor{{ .Values.instanceIdWithinNamespace }}
+    release: {{ .Release.Name }}
     paw_instance_name: {{ .Values.paw_instance_name }}
-    
-  name: monitor
+  name: monitor{{ .Values.instanceIdWithinNamespace }}
   namespace: {{ .Release.Namespace }}
 spec:
-  replicas: 2
+  replicas: {{ .Values.monitor.replicas }}
   selector:
     matchLabels:
-      name: monitor
+      name: monitor{{ .Values.instanceIdWithinNamespace }}
   template:
     metadata:
       annotations:
         hook.activate.cpd.ibm.com/command: '[]'
-        hook.deactivate.cpd.ibm.com/command: '[]'
-        cloudpakName: "IBM Planning Analytics Extension for IBM Cloud Pak for Data"
-        cloudpakId: "27646a3a52bb43408a3156180def3775"
-        productCloudpakRatio: "1:1"
-        productID: "27646a3a52bb43408a3156180def3775"
-        productName: "IBM Planning Analytics Workspace"
+        hook.deactivate.cpd.ibm.com/command: '[]'         
+        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
+        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
+        productCloudpakRatio: {{ .Values.cloudpakAnnotations.productCloudpakRatio }}
+        productName: {{ .Values.productName.PAWorkSpace }}
+        productID:  {{ .Values.cloudpakAnnotations.productID }}
         productMetric: "VIRTUAL_PROCESSOR_CORE"
-        productVersion: 3.5.1
+        productVersion: 3.5.2
         productChargedContainers: "All"
-         
       labels:
-        app.kubernetes.io/name: paw
+        app.kubernetes.io/name: {{ .Values.common.appName }}
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         icpdsupport/addOnId: pa
@@ -43,11 +41,12 @@ spec:
         icpdsupport/createdBy: {{ .Values.createdBy | quote }}
         {{- end }} 
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        name: monitor
-        pa-cacerts-secret: {{ .Values.secrets.cacertVersion }}
+        name: monitor{{ .Values.instanceIdWithinNamespace }}
         pa-paw-secret: {{ .Values.secrets.pawSecretVersion }}
-        release: 3.5.1
-        version: "2.0.56.2022-ubi7-3"
+        release: {{ .Release.Name }}
+        version: "2.0.61.2185-ubi7"
+        pa-cacerts-secret: {{ .Values.secrets.cacertVersion }}
+        paw_instance_name: {{ .Values.paw_instance_name }}
     spec:
       affinity:
         nodeAffinity:
@@ -61,21 +60,57 @@ spec:
       volumes:
         - name: pa-credential-store-key
           secret:
-            secretName: pa-credential-store-key
+            secretName: pa-credential-store-key{{ .Values.instanceIdWithinNamespace }}
         - name: pa-cacerts
           secret:
-            secretName: pa-cacerts
+            secretName: pa-cacerts{{ .Values.instanceIdWithinNamespace }}
+      initContainers:            
+        - name: wait-for-couchdb
+          image: {{ .Values.docker_registry_prefix }}/pa-k8s-config:1.0.56-ubi7
+          command: ["/bin/bash"]
+          args: ["-c", "/opt/harmony/start.sh wait-for-couchdb"]
+          env:
+            - name: COUCHDB_URL
+              value: "https://couchdb{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}:6984"          
+          resources:
+            limits:
+              cpu: "{{ .Values.common.cpuLimit }}"
+              memory: "{{ .Values.common.memoryLimit }}"
+            requests:
+              cpu: "{{ .Values.common.cpuRequestLimit }}"
+              memory: "{{ .Values.common.memoryRequestLimit }}"
+          securityContext:
+            runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+            runAsUser: 2000
+{{- end }}
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: pa-cacerts
+              mountPath: /run/config
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: IfNotPresent            
       containers:
         - name: monitor
-          image: {{ .Values.docker_registry_prefix }}/pa-monitor:2.0.55.2025-ubi7-3
+          image: {{ .Values.docker_registry_prefix }}/pa-monitor:2.0.61.2185-ubi7
           ports:
             - containerPort: 9082
               protocol: TCP
           env:
+            - name: COUCHDB_URL
+              value: "https://couchdb{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}:6984"
             - name: CREDENTIAL_STORE_KEY_FILE
               value: "/run/secrets/paw/tls.key"
             - name: SecureSessionCookie
               value: "{{ .Values.common.secureSessionCookie }}"
+            - name: AGENT_API_KEY
+              value: "{{ .Values.monitor.adminAgentAPIKey }}"
             {{- if .Values.common.tm1InternalType }}
             - name: DEPLOYMENT_MODE
               value: "cp4d"

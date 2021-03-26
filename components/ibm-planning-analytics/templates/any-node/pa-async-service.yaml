@@ -1,31 +1,33 @@
-apiVersion: batch/v1
-kind: Job
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   labels:
     app.kubernetes.io/name: {{ .Values.common.appName }}
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    name: bss-init{{ .Values.instanceIdWithinNamespace }}
+    name: async-service{{ .Values.instanceIdWithinNamespace }}
     release: {{ .Release.Name }}
     paw_instance_name: {{ .Values.paw_instance_name }}
-  name: bss-init{{ .Values.instanceIdWithinNamespace }}
+  name: async-service{{ .Values.instanceIdWithinNamespace }}
   namespace: {{ .Release.Namespace }}
 spec:
-  completions: 1
-  parallelism: 1
+  replicas: {{ .Values.asyncService.replicas }}
+  selector:
+    matchLabels:
+      name: async-service{{ .Values.instanceIdWithinNamespace }}
   template:
     metadata:
       annotations:
         hook.activate.cpd.ibm.com/command: '[]'
-        hook.deactivate.cpd.ibm.com/command: '[]'
+        hook.deactivate.cpd.ibm.com/command: '[]'          
         cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
         cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
         productCloudpakRatio: {{ .Values.cloudpakAnnotations.productCloudpakRatio }}
         productName: {{ .Values.productName.PAWorkSpace }}
         productID:  {{ .Values.cloudpakAnnotations.productID }}
-        productMetric: "VIRTUAL_PROCESSOR_CORE"
         productVersion: 3.5.2
+        productMetric: "VIRTUAL_PROCESSOR_CORE"
         productChargedContainers: "All"
       labels:
         app.kubernetes.io/name: {{ .Values.common.appName }}
@@ -39,9 +41,9 @@ spec:
         icpdsupport/createdBy: {{ .Values.createdBy | quote }}
         {{- end }} 
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        name: bss-init{{ .Values.instanceIdWithinNamespace }}
+        name: async-service{{ .Values.instanceIdWithinNamespace }}
         release: {{ .Release.Name }}
-        version: "1.0.242-ubi7"
+        version: "0.0.147-ubi7"
         paw_instance_name: {{ .Values.paw_instance_name }}
     spec:
       affinity:
@@ -53,37 +55,28 @@ spec:
                 operator: In
                 values:
                 - {{ .Values.arch }}
+      volumes:
+        - name: pa-cacerts
+          secret:
+            secretName: pa-cacerts{{ .Values.instanceIdWithinNamespace }}      
       containers:
-        - name: bss-init
-          image: {{ .Values.docker_registry_prefix }}/pa-bss-init:1.0.242-ubi7
+        - name: async-service
+          image: {{ .Values.docker_registry_prefix }}/pa-async-service:0.0.147-ubi7
+          ports:
+            - containerPort: 9666
+              protocol: TCP
           env:
-            - name: TM1Location
-              value: "{{ .Values.common.tm1Location }}"
-            - name: TM1ApplicationsLocation
-              value: "{{ .Values.common.tm1ApplicationsLocation }}"
-            - name: IBMCognosServlet
-              value: "{{ .Values.common.ibmCognosServlet }}"
-            - name: TM1APIPort
-              value: "{{ .Values.common.tm1APIPort }}"
-            - name: ENABLE_USER_IMPORT
-              value: "{{ .Values.waProxy.enableUserImport }}"
-            - name: ENABLE_PASTE_SPECIAL
-              value: "{{ .Values.bssInit.enablePasteSpecial }}"
-            - name: ENABLE_PAA
-              value: "{{ .Values.bssInit.enablePAA }}"
-            - name: ENABLE_EDIT_MDX_VIEW
-              value: "{{ .Values.bssInit.enableEditMdxView }}"
-            - name: ENABLE_INTENT_BAR
-              value: "{{ .Values.bssInit.enableIntentBar }}"
-            - name: WAProxyLocation
-              value: "http://wa-proxy{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}:1331"
+            - name: REDIS_SENTINEL
+              value: "{ \"name\": \"redis-cluster{{ .Values.instanceIdWithinNamespace }}\", \"sentinels\": [{ \"host\": \"sentinel1{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}\", \"port\": 26379 }, { \"host\": \"sentinel2{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}\", \"port\": 26379 }, { \"host\": \"sentinel3{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}\", \"port\": 26379 }], \"tls\": true }"
+            - name: SSL_CA_BUNDLE_FILE
+              value: "/run/config/cacerts.pem"              
           resources:
             limits:
-              cpu: "{{ .Values.bssInit.cpuLimit }}"
-              memory: "{{ .Values.bssInit.memoryLimit }}"
+              cpu: "{{ .Values.asyncService.cpuLimit }}"
+              memory: "{{ .Values.asyncService.memoryLimit }}"
             requests:
-              cpu: "{{ .Values.bssInit.cpuRequestLimit }}"
-              memory: "{{ .Values.bssInit.memoryRequestLimit }}"
+              cpu: "{{ .Values.asyncService.cpuRequestLimit }}"
+              memory: "{{ .Values.asyncService.memoryRequestLimit }}"
           securityContext:
             runAsNonRoot: true
 {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
@@ -95,27 +88,34 @@ spec:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: pa-cacerts
+              mountPath: /run/config
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
           livenessProbe:
-            exec:
-              command:
-                - date
-            initialDelaySeconds: 5
-            periodSeconds: 60
+            initialDelaySeconds: 300
+            failureThreshold: 1
+            tcpSocket:
+              port: 9666
+            periodSeconds: 2
           readinessProbe:
-            exec:
-              command:
-                - date
-            initialDelaySeconds: 0
-            periodSeconds: 60
+            failureThreshold: 1
+            periodSeconds: 2
+            tcpSocket:
+              port: 9666
       hostNetwork: false
       hostIPC: false
       hostPID: false
-      restartPolicy: OnFailure
+      restartPolicy: Always
       serviceAccountName: default
       terminationGracePeriodSeconds: 30
       dnsPolicy: ClusterFirst
       schedulerName: default-scheduler
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
 

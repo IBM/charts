@@ -2,37 +2,35 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app.kubernetes.io/name: paw
+    app.kubernetes.io/name: {{ .Values.common.appName }}
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    name: welcome
-    release: 3.5.1
+    name: pa-predict{{ .Values.instanceIdWithinNamespace }}
+    release: {{ .Release.Name }}
     paw_instance_name: {{ .Values.paw_instance_name }}
-    
-  name: welcome
+  name: pa-predict{{ .Values.instanceIdWithinNamespace }}
   namespace: {{ .Release.Namespace }}
 spec:
-  replicas: 2
+  replicas: {{ .Values.paPredict.replicas }}
   selector:
     matchLabels:
-      name: welcome
+      name: pa-predict{{ .Values.instanceIdWithinNamespace }}
   template:
     metadata:
       annotations:
         hook.activate.cpd.ibm.com/command: '[]'
-        hook.deactivate.cpd.ibm.com/command: '[]'
-        cloudpakName: "IBM Planning Analytics Extension for IBM Cloud Pak for Data"
-        cloudpakId: "27646a3a52bb43408a3156180def3775"
-        productCloudpakRatio: "1:1"
-        productID: "27646a3a52bb43408a3156180def3775"
-        productName: "IBM Planning Analytics Workspace"
+        hook.deactivate.cpd.ibm.com/command: '[]'          
+        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
+        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
+        productCloudpakRatio: {{ .Values.cloudpakAnnotations.productCloudpakRatio }}
+        productName: {{ .Values.productName.PAWorkSpace }}
+        productID:  {{ .Values.cloudpakAnnotations.productID }}
         productMetric: "VIRTUAL_PROCESSOR_CORE"
-        productVersion: 3.5.1
+        productVersion: 3.5.2
         productChargedContainers: "All"
-        
       labels:
-        app.kubernetes.io/name: paw
+        app.kubernetes.io/name: {{ .Values.common.appName }}
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         icpdsupport/addOnId: pa
@@ -41,11 +39,13 @@ spec:
         {{- include "planning-analytics.serviceid" . | indent 8 }}
         {{- if ( .Values.createdBy )  }}
         icpdsupport/createdBy: {{ .Values.createdBy | quote }}
-        {{- end }} 
+        {{- end }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        name: welcome
-        release: 3.5.1
-        version: "1.0.709-ubi7-3"
+        name: pa-predict{{ .Values.instanceIdWithinNamespace }}
+        release: {{ .Release.Name }}
+        version: "1.0.509-ubi7"
+        pa-cacerts-secret: {{ .Values.secrets.cacertVersion }}
+        paw_instance_name: {{ .Values.paw_instance_name }}
     spec:
       affinity:
         nodeAffinity:
@@ -56,24 +56,28 @@ spec:
                 operator: In
                 values:
                 - {{ .Values.arch }}
+      volumes:
+        - name: pa-cacerts
+          secret:
+            secretName: pa-cacerts{{ .Values.instanceIdWithinNamespace }}
       containers:
-        - name: welcome
-          image: {{ .Values.docker_registry_prefix }}/pa-welcome:1.0.704-ubi7-3
+        - name: pa-predict
+          image: {{ .Values.docker_registry_prefix }}/pa-predict-svc:1.0.509-ubi7
           ports:
-            - containerPort: 1330
+            - containerPort: 9610
               protocol: TCP
           env:
-            - name: SAVE_CLIENT_URL
-              value: "/wa-save/1.0.280"
-            - name: CARBON_STYLE_LINK
-              value: "/cdn/common/cp4d-carbon/carbon-overrides.css"
+            - name: ProxyTimeoutSeconds
+              value: "{{ .Values.common.proxyTimeoutSeconds }}"
+            - name: TRUST_STORE_FILE
+              value: "/run/config/cacerts"
           resources:
             limits:
-              cpu: "{{ .Values.welcome.cpuLimit }}"
-              memory: "{{ .Values.welcome.memoryLimit }}"
+              cpu: "{{ .Values.paPredict.cpuLimit }}"
+              memory: "{{ .Values.paPredict.memoryLimit }}"
             requests:
-              cpu: "{{ .Values.welcome.cpuRequestLimit }}"
-              memory: "{{ .Values.welcome.memoryRequestLimit }}"
+              cpu: "{{ .Values.paPredict.cpuRequestLimit }}"
+              memory: "{{ .Values.paPredict.memoryRequestLimit }}"
           securityContext:
             runAsNonRoot: true
 {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
@@ -85,6 +89,9 @@ spec:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: pa-cacerts
+              mountPath: /run/config
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
@@ -92,13 +99,13 @@ spec:
             initialDelaySeconds: 300
             failureThreshold: 1
             tcpSocket:
-              port: 1330
+              port: 9610
             periodSeconds: 2
           readinessProbe:
             failureThreshold: 1
             periodSeconds: 2
             tcpSocket:
-              port: 1330
+              port: 9610
       hostNetwork: false
       hostIPC: false
       hostPID: false
