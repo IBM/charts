@@ -6,21 +6,21 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    name: sentinel-data2{{ .Values.instanceIdWithinNamespace }}
+    name: plan-service{{ .Values.instanceIdWithinNamespace }}
     release: {{ .Release.Name }}
     paw_instance_name: {{ .Values.paw_instance_name }}
-  name: sentinel-data2{{ .Values.instanceIdWithinNamespace }}
+  name: plan-service{{ .Values.instanceIdWithinNamespace }}
   namespace: {{ .Release.Namespace }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.planService.replicas }}
   selector:
     matchLabels:
-      name: sentinel-data2{{ .Values.instanceIdWithinNamespace }}
+      name: plan-service{{ .Values.instanceIdWithinNamespace }}
   template:
     metadata:
       annotations:
         hook.activate.cpd.ibm.com/command: '[]'
-        hook.deactivate.cpd.ibm.com/command: '[]'         
+        hook.deactivate.cpd.ibm.com/command: '[]'
         cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
         cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
         productCloudpakRatio: {{ .Values.cloudpakAnnotations.productCloudpakRatio }}
@@ -41,10 +41,9 @@ spec:
         icpdsupport/createdBy: {{ .Values.createdBy | quote }}
         {{- end }} 
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        name: sentinel-data2{{ .Values.instanceIdWithinNamespace }}
+        name: plan-service{{ .Values.instanceIdWithinNamespace }}
         release: {{ .Release.Name }}
-        version: "1.0.130-ubi7"
-        pa-cacerts-secret: {{ .Values.secrets.cacertVersion }}
+        version: "1.0.2021021001-ubi7"
         paw_instance_name: {{ .Values.paw_instance_name }}
     spec:
       affinity:
@@ -56,40 +55,18 @@ spec:
                 operator: In
                 values:
                 - {{ .Values.arch }}
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: name
-                  operator: In
-                  values:
-                  - sentinel-data1
-                  - sentinel-data3
-              topologyKey: kubernetes.io/hostname
       volumes:
         - name: pa-cacerts
           secret:
-            secretName: pa-cacerts{{ .Values.instanceIdWithinNamespace }}         
-        - name: pa-internal-tls-cert
-          secret:
-            secretName: pa-internal-tls-cert{{ .Values.instanceIdWithinNamespace }}         
-        - name: sentinel-data2-storage
-          persistentVolumeClaim:
-            claimName: shared-storage{{ .Values.instanceIdWithinNamespace }}
+            secretName: pa-cacerts{{ .Values.instanceIdWithinNamespace }}
       initContainers:
-        - name: sentinel-data2-reset
+        - name: wait-for-pods
           image: {{ .Values.docker_registry_prefix }}/pa-k8s-config:1.0.56-ubi7
           command: ["/bin/bash"]
-          args: ["-c", "/opt/harmony/start.sh sentinel"]
-          env:
-            - name: CLUSTER
-              value: "redis-clusterPAW_INSTANCE_ID%"
-            - name: SERVICE
-              value: "sentinel2{{ .Values.instanceIdWithinNamespace }}"
-            - name: ENABLE_SSL
-              value: "true"
+          args: ["-c", "/opt/harmony/start.sh wait-for-pods"]
+          ports:
+            - containerPort: 31000
+              protocol: TCP
           resources:
             limits:
               cpu: "{{ .Values.common.cpuLimit }}"
@@ -97,6 +74,11 @@ spec:
             requests:
               cpu: "{{ .Values.common.cpuRequestLimit }}"
               memory: "{{ .Values.common.memoryRequestLimit }}"
+          env:       
+            - name: READINESS_PORT
+              value: "31000"
+            - name: SERVICENAMES
+              value: "mongo1{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }} mongo2{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }} mongo3{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
           securityContext:
             runAsNonRoot: true
 {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
@@ -108,43 +90,29 @@ spec:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
-          volumeMounts:
-            - name: sentinel-data2-storage
-              mountPath: /data
-              subPath: sentinel-data2            
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
       containers:
-        - name: sentinel-data2
-          image: {{ .Values.docker_registry_prefix }}/pa-redis:1.0.130-ubi7
+        - name: plan-service
+          image: {{ .Values.docker_registry_prefix }}/pa-plan-service:1.0.2021021001-ubi7
           ports:
-            - containerPort: 26379
+            - containerPort: 9080
               protocol: TCP
+          env:
+            - name: MONGO_NODES
+              value: "mongo1{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}:27017 mongo2{{ .Values.instanceIdWithinNamespace }},{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}:27017 mongo3{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}:27017"
+            - name: MONGO_SSL
+              value: "true"
+            - name: TRUST_STORE_FILE
+              value: "/run/config/cacerts"
           resources:
             limits:
-              cpu: "{{ .Values.sentinel.cpuLimit }}"
-              memory: "{{ .Values.sentinel.memoryLimit }}"
+              cpu: "{{ .Values.planService.cpuLimit }}"
+              memory: "{{ .Values.planService.memoryLimit }}"
             requests:
-              cpu: "{{ .Values.sentinel.cpuRequestLimit }}"
-              memory: "{{ .Values.sentinel.memoryRequestLimit }}"
-          env:             
-            - name: REDIS_TYPE
-              value: "sentinel"
-            - name: REDIS_1
-              value: "redis1{{ .Values.instanceIdWithinNamespace }}"
-            - name: REDIS_CLUSTER
-              value: "redis-cluster{{ .Values.instanceIdWithinNamespace }}"
-            - name: ANNOUNCE_IP
-              value: "sentinel2{{ .Values.instanceIdWithinNamespace }}"
-            - name: ENABLE_SSL
-              value: "true"
-            - name: SSL_CERTIFICATE_KEY_FILE
-              value: "/run/secrets/paw/internal-tls-cert/tls.key"
-            - name: SSL_CERTIFICATE_CHAIN_FILE
-              value: "/run/secrets/paw/internal-tls-cert/tls.crt"
-            - name: SSL_CA_BUNDLE_FILE
-              value: "/run/config/cacerts.pem"                           
+              cpu: "{{ .Values.planService.cpuRequestLimit }}"
+              memory: "{{ .Values.planService.memoryRequestLimit }}"
           securityContext:
             runAsNonRoot: true
 {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
@@ -157,29 +125,22 @@ spec:
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
           volumeMounts:
-            - name: sentinel-data2-storage
-              mountPath: /data
-              subPath: sentinel-data2
             - name: pa-cacerts
-              mountPath: /run/config              
-            - name: pa-internal-tls-cert
-              mountPath: /run/secrets/paw/internal-tls-cert              
+              mountPath: /run/config
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
           livenessProbe:
-            exec:
-              command:
-                - /tools/ping.sh
-            failureThreshold: 1
             initialDelaySeconds: 300
+            failureThreshold: 1
+            tcpSocket:
+              port: 9080
             periodSeconds: 2
           readinessProbe:
-            exec:
-              command:
-                - /tools/ping.sh
             failureThreshold: 1
             periodSeconds: 2
+            tcpSocket:
+              port: 9080
       hostNetwork: false
       hostIPC: false
       hostPID: false
@@ -187,7 +148,7 @@ spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 30
       dnsPolicy: ClusterFirst
-      schedulerName: {{ .Values.persistence.podScheduler }}
+      schedulerName: default-scheduler
   strategy:
     type: RollingUpdate
     rollingUpdate:

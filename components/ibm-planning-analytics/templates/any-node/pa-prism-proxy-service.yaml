@@ -2,37 +2,35 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app.kubernetes.io/name: paw
+    app.kubernetes.io/name: {{ .Values.common.appName }}
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    name: prism-proxy
-    release: 3.5.1
+    name: prism-proxy{{ .Values.instanceIdWithinNamespace }}
+    release: {{ .Release.Name }}
     paw_instance_name: {{ .Values.paw_instance_name }}
-    
-  name: prism-proxy
+  name: prism-proxy{{ .Values.instanceIdWithinNamespace }}
   namespace: {{ .Release.Namespace }}
 spec:
-  replicas: 2
+  replicas: {{ .Values.prismProxy.replicas }}
   selector:
     matchLabels:
-      name: prism-proxy
+      name: prism-proxy{{ .Values.instanceIdWithinNamespace }}
   template:
     metadata:
       annotations:
         hook.activate.cpd.ibm.com/command: '[]'
-        hook.deactivate.cpd.ibm.com/command: '[]'
-        cloudpakName: "IBM Planning Analytics Extension for IBM Cloud Pak for Data"
-        cloudpakId: "27646a3a52bb43408a3156180def3775"
-        productCloudpakRatio: "1:1"
-        productID: "27646a3a52bb43408a3156180def3775"
-        productName: "IBM Planning Analytics Workspace"
+        hook.deactivate.cpd.ibm.com/command: '[]'      
+        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
+        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
+        productCloudpakRatio: {{ .Values.cloudpakAnnotations.productCloudpakRatio }}
+        productName: {{ .Values.productName.PAWorkSpace }}
+        productID:  {{ .Values.cloudpakAnnotations.productID }}
         productMetric: "VIRTUAL_PROCESSOR_CORE"
-        productVersion: 3.5.1
+        productVersion: 3.5.2
         productChargedContainers: "All"
-        
       labels:
-        app.kubernetes.io/name: paw
+        app.kubernetes.io/name: {{ .Values.common.appName }}
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         icpdsupport/addOnId: pa
@@ -43,9 +41,10 @@ spec:
         icpdsupport/createdBy: {{ .Values.createdBy | quote }}
         {{- end }} 
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        name: prism-proxy
-        release: 3.5.1
-        version: "1.0.9151-ubi7-3"
+        name: prism-proxy{{ .Values.instanceIdWithinNamespace }}
+        release: {{ .Release.Name }}
+        version: "3.0.9349-ubi7"
+        paw_instance_name: {{ .Values.paw_instance_name }}
     spec:
       affinity:
         nodeAffinity:
@@ -58,13 +57,21 @@ spec:
                 - {{ .Values.arch }}
       containers:
         - name: prism-proxy
-          image: {{ .Values.docker_registry_prefix }}/pa-prism-proxy:1.0.9144-ubi7-3
+          image: {{ .Values.docker_registry_prefix }}/pa-prism-proxy:3.0.9349-ubi7
           ports:
             - containerPort: 9090
               protocol: TCP
             - containerPort: 9100
               protocol: TCP
           env:
+            - name: PrismAdminServerLocation
+              value: "http://prism-platform{{ .Values.instanceIdWithinNamespace }}:9080"
+            - name: PrismAppServerLocation
+              value: "http://prism-app{{ .Values.instanceIdWithinNamespace }}:9600"
+            - name: PrismGridServiceLocation
+              value: "http://prism-platform{{ .Values.instanceIdWithinNamespace }}:9080"
+            - name: PrismPlatformLocation
+              value: "http://prism-platform{{ .Values.instanceIdWithinNamespace }}:9080"
             - name: ProxyTimeoutSeconds
               value: "{{ .Values.common.proxyTimeoutSeconds }}"
           resources:

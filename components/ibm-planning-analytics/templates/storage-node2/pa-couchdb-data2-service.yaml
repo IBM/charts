@@ -2,39 +2,37 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app.kubernetes.io/name: paw
+    app.kubernetes.io/name: {{ .Values.common.appName }}
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    name: couchdb-data2
-    lb: couchdb
-    release: 3.5.1
+    name: couchdb-data2{{ .Values.instanceIdWithinNamespace }}
+    lb: couchdb{{ .Values.instanceIdWithinNamespace }}
+    release: {{ .Release.Name }}
     paw_instance_name: {{ .Values.paw_instance_name }}
-    
-  name: couchdb-data2
+  name: couchdb-data2{{ .Values.instanceIdWithinNamespace }}
   namespace: {{ .Release.Namespace }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      name: couchdb-data2
-      lb: couchdb
+      name: couchdb-data2{{ .Values.instanceIdWithinNamespace }}
+      lb: couchdb{{ .Values.instanceIdWithinNamespace }}
   template:
     metadata:
       annotations:
         hook.activate.cpd.ibm.com/command: '[]'
-        hook.deactivate.cpd.ibm.com/command: '[]'
-        cloudpakName: "IBM Planning Analytics Extension for IBM Cloud Pak for Data"
-        cloudpakId: "27646a3a52bb43408a3156180def3775"
-        productCloudpakRatio: "1:1"
-        productID: "27646a3a52bb43408a3156180def3775"
-        productName: "IBM Planning Analytics Workspace"
+        hook.deactivate.cpd.ibm.com/command: '[]'      
+        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
+        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
+        productCloudpakRatio: {{ .Values.cloudpakAnnotations.productCloudpakRatio }}
+        productName: {{ .Values.productName.PAWorkSpace }}
+        productID:  {{ .Values.cloudpakAnnotations.productID }}
         productMetric: "VIRTUAL_PROCESSOR_CORE"
-        productVersion: 3.5.1
+        productVersion: 3.5.2
         productChargedContainers: "All"
-        
       labels:
-        app.kubernetes.io/name: paw
+        app.kubernetes.io/name: {{ .Values.common.appName }}
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         icpdsupport/addOnId: pa
@@ -45,10 +43,12 @@ spec:
         icpdsupport/createdBy: {{ .Values.createdBy | quote }}
         {{- end }} 
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        name: couchdb-data2
-        release: 3.5.1
-        version: "114-ubi7-3"
-        lb: couchdb
+        name: couchdb-data2{{ .Values.instanceIdWithinNamespace }}
+        release: {{ .Release.Name }}
+        version: "125-ubi7"
+        lb: couchdb{{ .Values.instanceIdWithinNamespace }}
+        pa-cacerts-secret: {{ .Values.secrets.cacertVersion }}
+        paw_instance_name: {{ .Values.paw_instance_name }}
     spec:
       affinity:
         nodeAffinity:
@@ -68,31 +68,29 @@ spec:
                 - key: name
                   operator: In
                   values:
-                  - couchdb-data1
+                  - couchdb-data1{{ .Values.instanceIdWithinNamespace }}
               topologyKey: kubernetes.io/hostname
       volumes:
         - name: pa-cacerts
           secret:
-            secretName: pa-cacerts          
+            secretName: pa-cacerts{{ .Values.instanceIdWithinNamespace }}     
         - name: pa-internal-tls-cert
           secret:
-            secretName: pa-internal-tls-cert          
+            secretName: pa-internal-tls-cert{{ .Values.instanceIdWithinNamespace }}      
         - name: couchdb-data2-storage
           persistentVolumeClaim:
-            claimName: shared-storage
+            claimName: shared-storage{{ .Values.instanceIdWithinNamespace }}
       containers:
-        - name: couchdb2
-          image: {{ .Values.docker_registry_prefix }}/pa-couchdb:114-ubi7-3
+        - name: couchdb-data2
+          image: {{ .Values.docker_registry_prefix }}/pa-couchdb:125-ubi7
           ports:
-            - containerPort: 5984
+            - containerPort: 6984
               protocol: TCP
           env:
             - name: COUCHDB_LOCAL_SERVER
-              value: "couchdb2"
-            - name: COUCHDB_DOMAIN
-              value: "{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
+              value: "couchdb2{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
             - name: ENABLE_SSL
-              value: "false"
+              value: "true"
             - name: SSL_CERTIFICATE_KEY_FILE
               value: "/run/secrets/paw/internal-tls-cert/tls.key"
             - name: SSL_CERTIFICATE_CHAIN_FILE
@@ -135,13 +133,13 @@ spec:
             failureThreshold: 1
             initialDelaySeconds: 300
             tcpSocket:
-              port: 5984
+              port: 6984
             periodSeconds: 2
           readinessProbe:
             failureThreshold: 1
             periodSeconds: 2
             tcpSocket:
-              port: 5984
+              port: 6984
       hostNetwork: false
       hostIPC: false
       hostPID: false

@@ -2,37 +2,35 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app.kubernetes.io/name: paw
+    app.kubernetes.io/name: {{ .Values.common.appName }}
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    name: tm1proxy
-    release: 3.5.1
+    name: tm1proxy{{ .Values.instanceIdWithinNamespace }}
+    release: {{ .Release.Name }}
     paw_instance_name: {{ .Values.paw_instance_name }}
-    
-  name: tm1proxy
+  name: tm1proxy{{ .Values.instanceIdWithinNamespace }}
   namespace: {{ .Release.Namespace }}
 spec:
-  replicas: 2
+  replicas: {{ .Values.tm1proxy.replicas }}
   selector:
     matchLabels:
-      name: tm1proxy
+      name: tm1proxy{{ .Values.instanceIdWithinNamespace }}
   template:
     metadata:
       annotations:
         hook.activate.cpd.ibm.com/command: '[]'
-        hook.deactivate.cpd.ibm.com/command: '[]'
-        cloudpakName: "IBM Planning Analytics Extension for IBM Cloud Pak for Data"
-        cloudpakId: "27646a3a52bb43408a3156180def3775"
-        productCloudpakRatio: "1:1"
-        productID: "27646a3a52bb43408a3156180def3775"
-        productName: "IBM Planning Analytics Workspace"
+        hook.deactivate.cpd.ibm.com/command: '[]'          
+        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
+        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
+        productCloudpakRatio: {{ .Values.cloudpakAnnotations.productCloudpakRatio }}
+        productName: {{ .Values.productName.PAWorkSpace }}
+        productID:  {{ .Values.cloudpakAnnotations.productID }}
         productMetric: "VIRTUAL_PROCESSOR_CORE"
-        productVersion: 3.5.1
+        productVersion: 3.5.2
         productChargedContainers: "All"
-        
       labels:
-        app.kubernetes.io/name: paw
+        app.kubernetes.io/name: {{ .Values.common.appName }}
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         icpdsupport/addOnId: pa
@@ -43,10 +41,11 @@ spec:
         icpdsupport/createdBy: {{ .Values.createdBy | quote }}
         {{- end }} 
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        name: tm1proxy
+        name: tm1proxy{{ .Values.instanceIdWithinNamespace }}
+        release: {{ .Release.Name }}
+        version: "1.0.271-ubi7"
         pa-cacerts-secret: {{ .Values.secrets.cacertVersion }}
-        release: 3.5.1
-        version: "1.0.260-ubi7-3"
+        paw_instance_name: {{ .Values.paw_instance_name }}
     spec:
       affinity:
         nodeAffinity:
@@ -60,22 +59,20 @@ spec:
       volumes:
         - name: pa-cacerts
           secret:
-            secretName: pa-cacerts        
+            secretName: pa-cacerts{{ .Values.instanceIdWithinNamespace }}   
       containers:
         - name: tm1proxy
-          image: {{ .Values.docker_registry_prefix }}/pa-tm1proxy:1.0.256-ubi7-3
+          image: {{ .Values.docker_registry_prefix }}/pa-tm1proxy:1.0.271-ubi7
           ports:
             - containerPort: 1339
               protocol: TCP
           env:          
             - name: TM1PROXY_VERSION
-              value: "{{ .Values.docker_registry_prefix }}/pa-tm1proxy:1.0.256-ubi7-3"
+              value: "{{ .Values.docker_registry_prefix }}/pa-tm1proxy:1.0.271-ubi7"
             - name: TM1PROXY_PORT
               value: "1339"
             - name: TM1PROXY_REDIS_SENTINEL
-              value: "{ \"name\": \"redis-cluster\", \"sentinels\": [{ \"host\": \"sentinel1\", \"port\": 26379 }, { \"host\": \"sentinel2\", \"port\": 26379 }, { \"host\": \"sentinel3\", \"port\": 26379 }]}"
-            - name: TM1PROXY_REDIS_DOMAIN
-              value: "{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}"
+              value: "{ \"name\": \"redis-cluster{{ .Values.instanceIdWithinNamespace }}\", \"sentinels\": [{ \"host\": \"sentinel1{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}\", \"port\": 26379 }, { \"host\": \"sentinel2{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}\", \"port\": 26379 }, { \"host\": \"sentinel3{{ .Values.instanceIdWithinNamespace }}.{{ .Release.Namespace }}.{{ .Values.common.internalDomainName }}\", \"port\": 26379 }], \"tls\": true }"
             - name: TM1PROXY_SSL_CA_BUNDLE_FILE
               value: "/run/config/cacerts.pem"
           resources:

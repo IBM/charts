@@ -2,37 +2,35 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app.kubernetes.io/name: paw
+    app.kubernetes.io/name: {{ .Values.common.appName }}
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    name: redis-data2
-    release: 3.5.1
+    name: redis-data2{{ .Values.instanceIdWithinNamespace }}
+    release: {{ .Release.Name }}
     paw_instance_name: {{ .Values.paw_instance_name }}
-    
-  name: redis-data2
+  name: redis-data2{{ .Values.instanceIdWithinNamespace }}
   namespace: {{ .Release.Namespace }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      name: redis-data2
+      name: redis-data2{{ .Values.instanceIdWithinNamespace }}
   template:
     metadata:
       annotations:
         hook.activate.cpd.ibm.com/command: '[]'
-        hook.deactivate.cpd.ibm.com/command: '[]'
-        cloudpakName: "IBM Planning Analytics Extension for IBM Cloud Pak for Data"
-        cloudpakId: "27646a3a52bb43408a3156180def3775"
-        productCloudpakRatio: "1:1"
-        productID: "27646a3a52bb43408a3156180def3775"
-        productName: "IBM Planning Analytics Workspace"
+        hook.deactivate.cpd.ibm.com/command: '[]'       
+        cloudpakName: {{ .Values.cloudpakAnnotations.cloudpakName }}
+        cloudpakId: {{ .Values.cloudpakAnnotations.cloudpakId }}
+        productCloudpakRatio: {{ .Values.cloudpakAnnotations.productCloudpakRatio }}
+        productName: {{ .Values.productName.PAWorkSpace }}
+        productID:  {{ .Values.cloudpakAnnotations.productID }}
         productMetric: "VIRTUAL_PROCESSOR_CORE"
-        productVersion: 3.5.1
+        productVersion: 3.5.2
         productChargedContainers: "All"
-        
       labels:
-        app.kubernetes.io/name: paw
+        app.kubernetes.io/name: {{ .Values.common.appName }}
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         icpdsupport/addOnId: pa
@@ -43,9 +41,11 @@ spec:
         icpdsupport/createdBy: {{ .Values.createdBy | quote }}
         {{- end }} 
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        name: redis-data2
-        release: 3.5.1
-        version: "1.0.122-ubi7-3"
+        name: redis-data2{{ .Values.instanceIdWithinNamespace }}
+        release: {{ .Release.Name }}
+        version: "1.0.130-ubi7"
+        pa-cacerts-secret: {{ .Values.secrets.cacertVersion }}
+        paw_instance_name: {{ .Values.paw_instance_name }}
     spec:
       affinity:
         nodeAffinity:
@@ -71,28 +71,30 @@ spec:
       volumes:
         - name: pa-cacerts
           secret:
-            secretName: pa-cacerts          
+            secretName: pa-cacerts{{ .Values.instanceIdWithinNamespace }}      
         - name: pa-internal-tls-cert
           secret:
-            secretName: pa-internal-tls-cert
+            secretName: pa-internal-tls-cert{{ .Values.instanceIdWithinNamespace }}
         - name: redis-data2-storage
           persistentVolumeClaim:
-            claimName: shared-storage
+            claimName: shared-storage{{ .Values.instanceIdWithinNamespace }}
       initContainers:
-        - name: redis2-reset
-          image: {{ .Values.docker_registry_prefix }}/pa-k8s-config:1.0.40-ubi7-3
+        - name: redis-data2-reset
+          image: {{ .Values.docker_registry_prefix }}/pa-k8s-config:1.0.56-ubi7
           command: ["/bin/bash"]
           args: ["-c", "/opt/harmony/start.sh redis"]
           env:
             - name: SERVICE
-              value: redis2
+              value: "redis2{{ .Values.instanceIdWithinNamespace }}"
+            - name: ENABLE_SSL
+              value: "true"
           resources:
             limits:
-              cpu: "100m"
-              memory: "100M"
+              cpu: "{{ .Values.common.cpuLimit }}"
+              memory: "{{ .Values.common.memoryLimit }}"
             requests:
-              cpu: "100m"
-              memory: "50M"
+              cpu: "{{ .Values.common.cpuRequestLimit }}"
+              memory: "{{ .Values.common.memoryRequestLimit }}"
           securityContext:
             runAsNonRoot: true
 {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
@@ -112,8 +114,8 @@ spec:
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
       containers:
-        - name: redis2
-          image: {{ .Values.docker_registry_prefix }}/pa-redis:1.0.122-ubi7-3
+        - name: redis-data2
+          image: {{ .Values.docker_registry_prefix }}/pa-redis:1.0.130-ubi7
           ports:
             - containerPort: 6379
               protocol: TCP
@@ -127,10 +129,14 @@ spec:
           env:
             - name: REDIS_TYPE
               value: "slave"
+            - name: REDIS_1
+              value: "redis1{{ .Values.instanceIdWithinNamespace }}"
+            - name: REDIS_CLUSTER
+              value: "redis-cluster{{ .Values.instanceIdWithinNamespace }}"
             - name: ANNOUNCE_IP
-              value: "redis2"
+              value: "redis2{{ .Values.instanceIdWithinNamespace }}"
             - name: ENABLE_SSL
-              value: "false"
+              value: "true"
             - name: SSL_CERTIFICATE_KEY_FILE
               value: "/run/secrets/paw/internal-tls-cert/tls.key"
             - name: SSL_CERTIFICATE_CHAIN_FILE
@@ -160,16 +166,18 @@ spec:
           terminationMessagePolicy: File
           imagePullPolicy: IfNotPresent
           livenessProbe:
-            failureThreshold: 1
+            exec:
+              command:
+                - /tools/ping.sh
             initialDelaySeconds: 300
-            tcpSocket:
-              port: 6379
+            failureThreshold: 1
             periodSeconds: 2
           readinessProbe:
+            exec:
+              command:
+                - /tools/ping.sh
             failureThreshold: 1
             periodSeconds: 2
-            tcpSocket:
-              port: 6379
       hostNetwork: false
       hostIPC: false
       hostPID: false
