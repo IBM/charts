@@ -1,80 +1,78 @@
 # ibm-oms-ent-prod
 
-IBM Sterling Order Management Software Enterprise Edition v10
+Readme for IBM Sterling Order Management Software Enterprise Edition, version 10.0.
 
 ## Introduction
 
-This document describes how to deploy Sterling Order Management Software Enterprise Edition v10. The Helm chart does not install the database or messaging server. You must set up and configure these middlewares separately.
+This document contains supplementary information about deploying the Sterling Order Management Software Enterprise Edition, version 10.0. For a comprehensive product documentation, visit [IBM Knowledge Center.](https://www.ibm.com/support/knowledgecenter/SS6PEW_10.0.0/om_welcome.html)
 
-**Note:** By default, the Helm chart supports deployment of Sterling Order Management Software Enterprise Edition with DB2 database and MQ messaging. If you choose a different provider, see the topic customizing certified containers in IBM Knowledge Center.
+## Before you begin
 
-## Chart details
+Ensure that you set up and configure the database and messaging server because the Helm chart does not automatically install these middleware applications.
 
-The Helm chart creates the following resources:
+**Note:** You can by default deploy Sterling Order Management Software with Db2 database and MQ messaging by using the Helm chart. If you want to deploy Sterling Order Management Software with a different database and JMS provider, ensure that you customize the certified containers. For more information about customizing the certified containers, see [Customizing certified containers](https://www.ibm.com/support/knowledgecenter/SS6PEW_10.0.0/installation/c_OMRHOC_customizing_OMS_runtime.html).
 
-- ConfigMap with the following names:
-  - `<release name>-ibm-oms-ent-prod-config` to provide Sterling Order Management Software and Liberty configuration.
-  - `<release name>-ibm-oms-ent-prod-def-server-xml-conf` to provide the default server.xml for Liberty. This resource will
-     not be created if a custom server.xml is used.
-- Service with name, `<release name>-ibm-oms-ent-prod` to access the application server using a consistent IP address.
-- Deployment with the following names:
-  - `<release name>-ibm-oms-ent-prod-appserver` for the application server with one replica, by default.
-  - `<release name>-ibm-oms-ent-prod-<server name>` for each agent and integration servers that are configured.
-  - If the health monitor is enabled, a deployment with the name,`<release name>-ibm-oms-ent-prod-healthmonitor` is created
-    for the HealthMonitor agent.
-- Job with the following names:
-  - `<release name>-ibm-oms-ent-prod-datasetup` to perform data setup that is required for deploying and running the
-    applications. If the data setup is disabled during installation or upgrade, this job will not be created.
-  - `<release name>-ibm-oms-ent-prod-preinstall` to perform the pre-installation activities such as generating ingress tls
-    secret.
+## Deployment prerequisites
 
-Here, `<release name>` refers to the name of the helm release and `<server name>` refers to the name of agent or integration server.
+Before deploying Sterling Order Management Software, review and complete the following prerequisites:
 
-## Prerequisites
+- Install Kubernetes version 1.16.0-0 or later.
+- Install the Helm version 3.0.0 or later.
+- Install Db2 or Oracle database. Ensure that the database is accessible from within the cluster. For more
+  information about the database time zone considerations, see [Time zone considerations.](#time-zone-considerations)
+- Install MQ or any other JMS server. Ensure that the MQ server is accessible from within the cluster.
+- Load the container images to the appropriate container registry. The default images are available in the IBM Cloud 
+  Registry. When you are installing the Helm chart, if you want to automatically pull the images, use image pull secret. 
+  Alternatively, you can use customized images.
+- Configure container registry and container image to pull them to all Kubernetes worker nodes.
+- Create a Persistent Volume with access mode as 'Read write many' and having a minimum of 10 GB hard disk space.
+- [Create a Secret](#creating-a-secret) with the datasource connectivity details.
+- [Create a Role Based Access Control (RBAC).](#creating-a-role-based-access-control-RBAC)
+- Configure the agent or integration servers in the Helm chart. For more information about configuring the agent or integration servers, see [Configuring agent and integration server.](#configuring-agent-and-integration-servers)
+- Install PodDisruptionBudget.
 
-- Ensure to install Kubernetes version 1.16.0-0 or later.
+  The PodDisruptionBudget ensures that a certain number or percentage of pods with an assigned label are not voluntarily 
+  evicted at any point in time. For more information about PodDisruptionBudget, see [Disruptions](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/) and [Specifying a disruption budget for your application](https://kubernetes.io/docs/tasks/run-application/configure-pdb/).
 
-- Ensure to install Helm version 3.0.0 or later.
+## Creating a Secret
 
-- Ensure that the DB2 (or Oracle) database server is installed and the database is accessible from inside the cluster. For
-  the database timezone considerations, see section "Timezone considerations".
+To create a Secret, complete the following steps:
 
-- Ensure that the MQ (or other JMS) server is installed and accessible from inside the cluster.
+1. Configure the values as illustrated in the following <sample_secret_file>.yaml file:
 
-- Ensure that the container images are loaded to the appropriate container registry. The default images are available through IBM Cloud Registry. Use an image pull secret to automatically pull all the images as part of chart installation. Alternatively, you can use the customized images.
+    ```yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+       name: '<Release-name>-oms-secret'
+    type: Opaque
+    stringData:
+      consoleadminpassword: '<liberty console admin password>'
+      consolenonadminpassword: '<liberty console non admin password>'
+      dbpassword: '<password for database user>'
+      tlskeystorepassword: '<Liberty TLS KeyStore password. Required if SSL is enabled and using OpenShift cluster.>'
+      trustStorePassword: '<password for custom TrustStore>'
+      keyStorePassword: '<password for custom KeyStore>'
+    ```
+  
+  2. Pass the name of the Secret as a value to the `global.appSecret` parameter. 
+`
+     **Note:** For the Secret name, it is recommended that you prefix release name.
+     
+  3. Run the following command:
 
-- Ensure to configure the container registry and the container image can be pulled to all the Kubernetes worker nodes.
+     ```sh
+       kubectl create -f <sample_secret_file>.yaml  -n <namespace>
 
-- Create a persistent volume with the access mode as 'Read write many' and a minimum of 10 GB space.
+     ```
+     A Secret based on the values entered in the <sample_secret_file>.yaml is created and encoded.
+     
+## Creating a Role Based Access Control (RBAC)
 
-- Create a Secret with the datasource connectivity details as illustrated in the sample oms_details_temp.yaml file. Pass the name of the Secret as a value to the `global.appSecret` parameter. It is recommended that you prefix the release name to the Secret name.
-
-  - Create the oms_details_temp.yaml file as follows:
-
-  ```yaml
-  apiVersion: v1
-  kind: Secret
-  metadata:
-    name: '<Release-name>-oms-secret'
-  type: Opaque
-  stringData:
-    consoleadminpassword: '<liberty console admin password>'
-    consolenonadminpassword: '<liberty console non admin password>'
-    dbpassword: '<password for database user>'
-    tlskeystorepassword: '<Liberty TLS keystore password. Required if SSL is enabled and using OpenShift cluster.>'
-  ```
-
-  - Run the following command. The Secret is created with the values provided in oms_details_temp.yaml that is encoded.
-
-  ```sh
-  kubectl create -f oms_details_temp.yaml -n <namespace>
-
-  ```
-
-- If you are deploying the product on a namespace other than the default namespace, and if you have
-  not created a Role Based Access Control (RBAC), create RBAC with the cluster admin role.
-
-  Here is an example of RBAC for the default service account with the target namespace as `<namespace>`.
+If you are deploying the application on a namespace other than the default namespace, and if you have not created Role Based 
+  Access Control (RBAC), create RBAC with the cluster admin role.
+  
+The following sample file illustrates RBAC for the default service account with the target namespace as `<namespace>`.
 
   ```yaml
   kind: Role
@@ -102,152 +100,265 @@ Here, `<release name>` refers to the name of the helm release and `<server name>
     name: oms-role-<namespace>
     apiGroup: rbac.authorization.k8s.io
   ```
+  
+## The Helm chart details
 
-- Before configuring any agent or integration server in the Helm chart, read the instructions provided in the [Configuring Agent or Integration Servers](#configuring-agent-or-integration-servers) section.
+The Helm chart creates following resources:
 
-- Ensure to install PodDisruptionBudget.
-  - A PodDisruptionBudget ensures a certain number or percentage of pods with an assigned label will not Voluntarily be
-    evicted at any one point in time.
-  - More infomation about PodDisruptionBudget can be found here [Disruptions](https://kubernetes.io/docs/concepts/workloads/pods/disruptions) and [Specifying a Disruption Budget for your Application](https://kubernetes.io/docs/tasks/run-application/configure-pdb/).
+- ConfigMap with the following resource names:
+  - `<deployment name>-config` - Provides Sterling Order Management Software and Liberty configuration.
+  - `<deployment name>-def-server-xml-conf` - Provides the default server.xml for Liberty. However, if you are using a custom server.xml file, the Helm chart does not create this resource name.
+  
+- Service with the name, `<deployment name>`, to access the application server by using a consistent IP address.
 
-## Timezone considerations
+- Deployment with the following names:
+  - `<deployment name>-appserver` - Sterling Order Management Software application server.
+  - `<deployment name>-<server name>` - Sterling Order Management Software agent and integration servers that are configured.
+  - `<deployment name>-healthmonitor`- Sterling Order Management Software HealthMonitor agent if you enable health monitor.
+  
+- Jobs with the following names:
+  - `<deployment name>-datasetup` - Set up data for deploying and running the applications, if you enable data setup.
+  - `<deployment name>-preinstall` - Complete the pre-installation activities such as generating ingress, tls, and secret.
 
-To deploy Sterling Order Management Software, the timezone of the database, application servers, and agents must be the same. Additionally, the timezone must be compatible with the locale code that is specified in the product.
+  Here, 
+    - `<deployment name>` refers to `<release name>-ibm-oms-ent-prod`, which can be overridden with `global.fullNameOverride`.
+    - `<release name>` refers to the Helm release name.
+    - `<server name>` refers to the name of agent or integration server.
 
-By default, the containers are deployed in UTC and the locale code is set as en_US_UTC. Therefore, ensure that the database is also deployed in UTC.
+## Time zone considerations
 
-## Resources required
+Before deploying the application, ensure that the database, application server, and agent server are all in the same time zone. Also, ensure that the time zone is compatible with locale code as specified in the application.
 
-By default, the chart uses the following resources:
+The containers are by default deployed in UTC time zone and the locale code is set to en_US_UTC. Therefore, ensure that you deploy the database in UTC time zone.
 
-- 2560Mi memory for the application server.
+## Resources
+
+### Minimum requirements
+
+The Helm chart by default uses the following resources:
+
+- 2560Mi memory for application server.
 - 1024Mi memory for each agent or integration server and health monitor.
-- 1 CPU core for the application server.
+- 1 CPU core for application server.
 - 0.5 CPU core for each agent or integration server and health monitor.
 
-## Configuration
+### Recommended requirements
 
-### Installing the chart on a new database
+To achieve an approximate throughput of:
 
-When installing the chart for a new database, which does not contain tables and factory data, complete the following steps:
+- 350 thousand order lines per hour with corresponding inventory calls
+- 3 million inventory item updates or lookups per hour
+- 200 concurrent call center users
+- 1000 concurrent store users
 
-- Ensure that the `datasetup.loadFactoryData` parameter is set to `install` and the `datasetup.mode` parameter is set to `create`. The required database tables and factory data in the database are created before installing the chart.
-- Ensure that the `datasetup.fixPack.loadFPFactoryData` parameter is set to `install` and the `datasetup.fixPack.installedFPNo` parameter is set to `0` since this is a fresh setup. The fix pack factory setup is applied to all the earlier fix packs from the currently installed fix pack number, `installedFPNo` and upto the fix packs that are bundled with the image.
-- Do not specify any agent or integration servers with the parameters, `omserver.servers.name`. When installing for a fresh database, the agent and integration names are not configured. Therefore, you have to deploy the application server and configure the agent and integration servers first. For more information about deploying agents and integration servers, see [Configuring Agent or Integration Servers](#configuring-agent-or-integration-servers).
+use the following resources:
 
-### Installing the chart on a pre-loaded database
+- Master node (total resources spread across 3 Power9 machines):
+  - 4 CPU cores
+  - 24 GB memory
 
-When installing the chart for a database that contains tables and factory data, ensure that the `datasetup.loadFactoryData` parameter is set to `donotinstall` or blank. This prevents you from re-creating tables and overwriting the factory data.
+- Worker nodes (3 worker nodes on 3 separate Power9 machines):
+  - 16 CPU cores each
+  - 32 GB memory each
+    
+## Installing the Helm chart
 
-If the fix pack factory setup needs to be applied, ensure that the `datasetup.fixPack.loadFPFactoryData` parameter is set to `install` and `datasetup.fixPack.installedFPNo` parameter to the currently installed fix pack number. The fix pack factory setup gets applied to all the earlier fix packs from the currently installed fix pack number, `installedFPNo` and upto the fix packs that are bundled with the image.
+You can install the Helm chart on a new or preloaded database by appropriately configuring the parameters of values.yaml.
 
-### The following table describes the configurable parameters for the chart
+### Installing the Helm chart on a new database
+
+To install the Helm chart on a new database that does not contain tables and factory data, configure the following parameters. 
+
+- Set the value of `datasetup.loadFactoryData` to `install` and `datasetup.mode` to `create`. 
+  
+- Set the value of `datasetup.fixPack.loadFPFactoryData` to `install` and `datasetup.fixPack.installedFPNo`
+  to `0`. 
+  
+  The application takes appropriate action based on the configured values.
+
+**Note:** Do not specify any agent or integration server in `omserver.servers.name`. When you are installing Helm
+  chart on a new database, deploy the application server and configure both agent and integration servers. For more
+  information about deploying the agent and integration servers, see [Configuring agent and integration server.](#configuring-agent-and-integration-servers)
+
+### Installing the Helm chart on a preloaded database
+
+To install the Helm chart on a database that contains tables and factory data, configure the following parameters:
+
+- Set the value of `datasetup.loadFactoryData` to `donotinstall` or blank.
+
+- If you want to apply the fix pack factory setup, set the value of `datasetup.fixPack.loadFPFactoryData` to `install` and `datasetup.fixPack.installedFPNo` to the most recently installed fix pack number. 
+
+## Configuration parameters in values.yaml
+
+The following table describes the configurable parameters that are applicable for the Helm chart.
 
 | Parameter                                                                         | Description                                                                                                                                                                                               | Default                                                  |
 | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `global.license`                                                                  | Set the value to `True` in order to accept the application license                                                                                                                                        |
-| `global.license_store_call_center`                                                | Set the value to `True` in order to accept the Store and Call Center application license                                                                                                                  |
-| `appserver.replicaCount`                                                          | Number of appserver instances                                                                                                                                                                             | `1`                                                      |
-| `appserver.deploymentStrategy`                                                                 | Deployment Strategy for Application servers                                                                                                                                                                      |
-| `appserver.image`                                                                 | Container image details of appserver                                                                                                                                                                      |
-| `appserver.exposeRestService`                                                     | This flag is applicable only when route API (`route.openshift.io/v1`) exists. When enabled a new deployment of `om-app` image is created exposing `/smcfs` with a new route having the prefix `xapirest`. |
-| `appserver.config.vendor`                                                         | OMS Vendor                                                                                                                                                                                                | `websphere`                                              |
-| `appserver.config.vendorFile`                                                     | OMS Vendor file                                                                                                                                                                                           | `servers.properties`                                     |
-| `appserver.config.serverName`                                                     | App server name                                                                                                                                                                                           | `DefaultAppServer`                                       |
-| `appserver.config.jvm`                                                            | Server min/max heap size and jvm parameters                                                                                                                                                               | `1024m` min, `2048m` max, no parameters                  |
-| `appserver.config.database.maxPoolSize`                                           | DB max pool size                                                                                                                                                                                          | `50`                                                     |
-| `appserver.config.database.minPoolSize`                                           | DB min pool size                                                                                                                                                                                          | `10`                                                     |
-| `appserver.config.corethreads`                                                    | Core threads for Liberty                                                                                                                                                                                  | `20`                                                     |
-| `appserver.config.maxthreads`                                                     | Maximum threads for Liberty                                                                                                                                                                               | `100`                                                    |
-| `appserver.config.libertyServerXml`                                               | Custom server.xml for Liberty. Refer section "Customizing server.xml for Liberty"                                                                                                                         |
-| `appserver.livenessCheckBeginAfterSeconds`                                        | Approx wait time(secs) to begin the liveness check                                                                                                                                                        | `900`                                                    |
-| `appserver.livenessFailRestartAfterMinutes`                                       | Approx time period (mins) after which server is restarted if liveness check keeps failing for this period                                                                                                 | `10`                                                     |
-| `appserver.service.http.port`                                                     | HTTP container port                                                                                                                                                                                       | `9080`                                                   |
-| `appserver.service.https.port`                                                    | HTTPS container port                                                                                                                                                                                      | `9443`                                                   |
-| `appserver.service.annotations`                                                   | Additional annotations for service resource                                                                                                                                                               |
-| `appserver.service.labels`                                                        | Additional labels for service resource                                                                                                                                                                    |
-| `appserver.resources`                                                             | CPU/Memory resource requests/limits                                                                                                                                                                       | Memory: `2560Mi`, CPU: `1`                               |
-| `appserver.ingress.host`                                                          | Ingress host                                                                                                                                                                                              |
-| `appserver.ingress.controller`                                                    | Controller class for ingress controller                                                                                                                                                                   | nginx                                                    |
-| `appserver.ingress.contextRoots`                                                  | Context roots which are allowed to be accessed through ingress                                                                                                                                            | ["smcfs", "sbc", "sma", "isccs", "wsc", "adminCenter"]   |
-| `appserver.ingress.annotations`                                                   | Additional annotations for ingress/routes resource                                                                                                                                                        |
-| `appserver.ingress.labels`                                                        | Additional labels for ingress/routes resource                                                                                                                                                             |
-| `appserver.ingress.ssl.enabled`                                                   | Whether SSL enabled for ingress                                                                                                                                                                           | true                                                     |
-| `appserver.podLabels`                                                             | Custom labels for the appserver pod                                                                                                                                                                       |
-| `appserver.tolerations`                                                           | Tolerations for appserver pod. Specify in accordance with k8s PodSpec.tolerations. Refer section "Affinity and Tolerations".                                                                              |
-| `appserver.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`           | k8s PodSpec.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity and Tolerations".                                                                                        |
-| `appserver.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`          | k8s PodSpec.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity and Tolerations".                                                                                       |
-| `appserver.podAffinity.requiredDuringSchedulingIgnoredDuringExecution`            | k8s PodSpec.podAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity and Tolerations".                                                                                         |
-| `appserver.podAffinity.preferredDuringSchedulingIgnoredDuringExecution`           | k8s PodSpec.podAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity and Tolerations".                                                                                        |
-| `appserver.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`        | k8s PodSpec.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity and Tolerations".                                                                                     |
-| `appserver.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution`       | k8s PodSpec.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity and Tolerations".                                                                                    |
-| `appserver.podAntiAffinity.replicaNotOnSameNode`                                  | Directive to prevent scheduling of replica pod on the same node. valid values: `prefer`, `require`, blank. Refer section "Affinity and Tolerations".                                                      | `prefer`                                                 |
-| `appserver.podAntiAffinity.weightForPreference`                                   | Preference weighting 1-100. Used if 'prefer' is specified for `appserver.podAntiAffinity.replicaNotOnSameNode`. Refer section "Affinity and Tolerations".                                                 | 100                                                      |
-| `omserver.deploymentStrategy`                                                                  | Deployment Strategy for Agent/Integration servers                                                                                                                                                                   |
-| `omserver.image`                                                                  | Container image details of agent server                                                                                                                                                                   |
-| `omserver.deployHealthMonitor`                                                    | Deploy health monitor agent                                                                                                                                                                               | `true`                                                   |
-| `omserver.common.jvmArgs`                                                         | Default JVM args that will be passed to the list of agent servers                                                                                                                                         |
-| `omserver.common.replicaCount`                                                    | Default number of instances of agent servers that will be deployed                                                                                                                                        |
-| `omserver.common.resources`                                                       | Default CPU/Memory resource requests/limits                                                                                                                                                               | Memory: `1024Mi`, CPU: `0,5`                             |
-| `omserver.common.readinessFailRestartAfterMinutes`                                | Approx time period (mins) after which agent is restarted if readiness check keeps failing for this period                                                                                                 | 10                                                       |
-| `omserver.common.podLabels`                                                       | Custom labels for the agent pod                                                                                                                                                                           |
-| `omserver.common.tolerations`                                                     | Tolerations for agent pod. Specify in accordance with k8s PodSpec.tolerations. Refer section "Affinity and Tolerations".                                                                                  |
-| `omserver.common.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`     | k8s PodSpec.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity and Tolerations".                                                                                        |
-| `omserver.common.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`    | k8s PodSpec.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity and Tolerations".                                                                                       |
-| `omserver.common.podAffinity.requiredDuringSchedulingIgnoredDuringExecution`      | k8s PodSpec.podAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity and Tolerations".                                                                                         |
-| `omserver.common.podAffinity.preferredDuringSchedulingIgnoredDuringExecution`     | k8s PodSpec.podAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity and Tolerations".                                                                                        |
-| `omserver.common.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`  | k8s PodSpec.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity and Tolerations".                                                                                     |
-| `omserver.common.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution` | k8s PodSpec.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity and Tolerations".                                                                                    |
-| `omserver.common.podAntiAffinity.replicaNotOnSameNode`                            | Directive to prevent scheduling of replica pod on the same node. valid values: `prefer`, `require`, blank. Refer section "Affinity and Tolerations".                                                      | `prefer`                                                 |
-| `omserver.common.podAntiAffinity.weightForPreference`                             | Preference weighting 1-100. Used if 'prefer' is specified for `appserver.podAntiAffinity.replicaNotOnSameNode`. Refer section "Affinity and Tolerations".                                                 | 100                                                      |
-| `omserver.servers.group`                                                          | Agent server group name                                                                                                                                                                                   | `Default Servers`                                        |
-| `omserver.servers.name`                                                           | List of agent server names                                                                                                                                                                                |
-| `omserver.servers.jvmArgs`                                                        | JVM args that will be passed to the list of agent servers                                                                                                                                                 |
-| `omserver.servers.replicaCount`                                                   | Number of instances of agent servers that will be deployed                                                                                                                                                |
-| `omserver.servers.resources`                                                      | CPU/Memory resource requests/limits                                                                                                                                                                       | Memory: `1024Mi`, CPU: `0,5`                             |
-| `datasetup.loadFactoryData`                                                       | Load factory data                                                                                                                                                                                         |
-| `datasetup.mode`                                                                  | Run factory data load in create                                                                                                                                                                           | `create`                                                 |
-| `datasetup.fixPack.loadFPFactoryData`                                             | Load fix pack factory data                                                                                                                                                                                |
-| `datasetup.fixPack.installedFPNo`                                                 | Currently installed fix pack number beyond which fix pack factory setup needs to be applied                                                                                                               |
-| `global.mq.bindingConfigName`                                                     | Name of the mq binding file config map                                                                                                                                                                    |
-| `global.mq.bindingMountPath`                                                      | Path where the binding file will be mounted                                                                                                                                                               | `/opt/ssfs/.bindings`                                    |
-| `global.persistence.claims.name`                                                  | Persistent volume name                                                                                                                                                                                    | oms-common                                               |
-| `global.persistence.claims.accessMode`                                            | Access Mode                                                                                                                                                                                               | ReadWriteMany                                            |
-| `global.persistence.claims.capacity`                                              | Capacity                                                                                                                                                                                                  | 10                                                       |
-| `global.persistence.claims.capacityUnit`                                          | CapacityUnit                                                                                                                                                                                              | Gi                                                       |
-| `global.persistence.claims.storageClassName`                                      | Storage class for persistent volume claim                                                                                                                                                                 |                                                          |
-| `global.persistence.securityContext.fsGroup`                                      | File system group id to access the persistent volume                                                                                                                                                      | 0                                                        |
-| `global.persistence.securityContext.supplementalGroup`                            | Supplemental group id to access the persistent volume                                                                                                                                                     | 0                                                        |
-| `global.image.repository`                                                         | Repository for images                                                                                                                                                                                     |
-| `global.appSecret`                                                                | Secret name                                                                                                                                                                                               |
-| `global.database.dbvendor`                                                        | DB Vendor DB2/Oracle                                                                                                                                                                                      | DB2                                                      |
-| `global.database.serverName`                                                      | DB server IP/host                                                                                                                                                                                         |
-| `global.database.port`                                                            | DB server port                                                                                                                                                                                            |
-| `global.database.dbname`                                                          | DB name or catalog name                                                                                                                                                                                   |
-| `global.database.user`                                                            | DB user                                                                                                                                                                                                   |
-| `global.database.datasourceName`                                                  | external datasource name                                                                                                                                                                                  | jdbc/OMDS                                                |
-| `global.database.systemPool`                                                      | is DB system pool                                                                                                                                                                                         | true                                                     |
-| `global.database.schema`                                                          | Database schema name.For Db2 it is defaulted as `global.database.dbname` and for Oracle it is defaulted as `global.database.user`                                                                         |
-| `global.serviceAccountName`                                                       | Service account name                                                                                                                                                                                      |
-| `global.customerOverrides`                                                        | array of customer overrides properties as `key=value`                                                                                                                                                     |
-| `global.envs`                                                                     | environment variables as array of kubernetes `EnvVars` objects                                                                                                                                            |
-| `global.arch`                                                                     | Architecture affinity while scheduling pods                                                                                                                                                               | amd64: `2 - No preference`, ppc64le: `2 - No preference` |
-| `global.customConfigMaps`                                                        | array of custom config maps                                                                                                                                                     |
-| `global.customSecrets`                                                        | array of custom secrets                                                                                                                                                     |
+| `global.license`                                                                  | Set the value to `True` to accept the application license.                                                                                                                                       |
+| `global.licenseStoreCallCenter`                                                | Set the value to `True` to accept the Sterling Store and Commerce Call Center application licenses.                                                                                                                  |
+| `appserver.replicaCount`                                                          | Specify the number of application server instances to be deployed.                                                                                                                                                                             | `1`                                                      |
+| `appserver.deploymentStrategy`                                                    | Specify the deployment strategy for application servers. For more information about deployment strategy, see [Deployment strategy.](#deployment-strategy)                                                                                                                                                                    |
+| `appserver.image`                                                                 | Provide the container image details for application servers                                                                                                                                                                      |
+| `appserver.exposeRestService`                                                     | This flag is applicable only if the  route API (`route.openshift.io/v1`) exists. If enabled, a new deployment of `om-app` image is created that exposes `/smcfs` with a new route prefixed with `xapirest`. |
+| `appserver.config.vendor`                                                         | Specify the vendor type.                                                                                                                                                                                              | `websphere`                                              |
+| `appserver.config.vendorFile`                                                     | Specify the vendor file.                                                                                                                                                                                          | `servers.properties`                                     |
+| `appserver.config.serverName`                                                     | Specify the application server name.                                                                                                                                                                                          | `DefaultAppServer`                                       |
+| `appserver.config.jvm`                                                            | Specify minimum and maximum heap size and JVM parameters for the application server.                                                                                                                                                              | `1024m` min, `2048m` max, no parameters                  |
+| `appserver.config.database.maxPoolSize`                                           | Specify the database max pool size.                                                                                                                                                                                         | `50`                                                     |
+| `appserver.config.database.minPoolSize`                                           | Specify the database min pool size.                                                                                                                                                                                        | `10`                                                     |
+| `appserver.config.corethreads`                                                    | Specify the core threads for Liberty.                                                                                                                                                                                | `20`                                                     |
+| `appserver.config.maxthreads`                                                     | Specify the maximum threads for Liberty.                                                                                                                                                                               | `100`                                                    |
+| `appserver.config.libertyServerXml`                                               | Provide the custom server.xml for Liberty. For more information about the custom server.xml, see [Customizing server.xml for Liberty](customizing-server.xml-for-Liberty).                                                                                                                        |
+| `appserver.livenessCheckBeginAfterSeconds`                                        | Specify the approximate wait time in seconds to begin the liveness check.                                                                                                                                                      | `900`                                                    |
+| `appserver.livenessFailRestartAfterMinutes`                                       | Specify the approximate time period in minutes after which the server restarts, if liveness check keeps failing for this period.                                                                                                | `10`                                                     |
+| `appserver.service.http.port`                                                     | Specify to the HTTP container port.                                                                                                                                                                                      | `9080`                                                   |
+| `appserver.service.https.port`                                                    | Specify to the HTTPS container port.                                                                                                                                                                                     | `9443`                                                   |
+| `appserver.service.annotations`                                                   | Specify the additional annotations for service resource.                                                                                                                                                              |
+| `appserver.service.labels`                                                        | Specify the additional labels for service resource.                                                                                                                                                               |
+| `appserver.resources`                                                             | Specify the CPU and memory resource requests and limits.                                                                                                                                                                    | Memory: `2560Mi`, CPU: `1`                               |
+| `appserver.ingress.host`                                                          | Specify the Ingress host.                                                                                                                                                                                          |
+| `appserver.ingress.controller`                                                    | Specify the controller class for ingress controller.                                                                                                                                                                | nginx                                                    |
+| `appserver.ingress.contextRoots`                                                  | Specify the context roots that can be accessed through ingress.                                                                                                                                          | ["smcfs", "sbc", "sma", "isccs", "wsc", "adminCenter"]   |
+| `appserver.ingress.annotations`                                                   | Specify any additional annotations for ingress or routes resource.                                                                                                                                                       |
+| `appserver.ingress.labels`                                                        | Specify any additional labels for ingress or routes resource.                                                                                                                                                            |
+| `appserver.ingress.ssl.enabled`                                                   | Specify whether SSL is enabled for Ingress.                                                                                                                                                                        | true                                                     |
+| `appserver.podLabels`                                                             | Specify custom labels for the application servers pods.                                                                                                                                                                    |
+| `appserver.tolerations`                                                           | Specify tolerations for the application server pods in accordance with Kubernetes **PodSpec.tolerations**. For more information about affinity and tolerations, see [Configuring affinity and tolerations.](#configuring-affinity-and-tolerations)                                                  |
+| `appserver.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`           | Configure node affinity for the application server pods in accordance with Kubernetes **PodSpec.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution**. For more information about affinity and tolerations, see [Configuring affinity and tolerations.](#configuring-affinity-and-tolerations)                                                                             |
+| `appserver.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`          | Configure node affinity for the application server pods in accordance with Kubernetes **PodSpec.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution**. For more information about affinity and tolerations, see [Configuring affinity and tolerations.](#configuring-affinity-and-tolerations)                                                                                     |
+| `appserver.podAffinity.requiredDuringSchedulingIgnoredDuringExecution`            | Configure pod affinity for the application server pods in accordance with Kubernetes **PodSpec.podAffinity.requiredDuringSchedulingIgnoredDuringExecution**. For more information about affinity and tolerations, see [Configuring affinity and tolerations.](#configuring-affinity-and-tolerations)                                                                                         |
+| `appserver.podAffinity.preferredDuringSchedulingIgnoredDuringExecution`           | Configure pod affinity for the application server pods in accordance with Kubernetes **PodSpec.podAffinity.preferredDuringSchedulingIgnoredDuringExecution**. For more information about affinity and tolerations, see [Configuring affinity and tolerations.](#configuring-affinity-and-tolerations)                                                                                        |
+| `appserver.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`        | Configure pod anti-affinity for the application server pods in accordance with Kubernetes **PodSpec.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution**. For more information about affinity and tolerations, see [Configuring affinity and tolerations.](#configuring-affinity-and-tolerations)                                                                                     |
+| `appserver.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution`       | Configure pod anti-affinity for the application server pods in accordance with Kubernetes **PodSpec.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution**. For more information about affinity and tolerations, see [Configuring affinity and tolerations.](#configuring-affinity-and-tolerations)                                                           |
+| `appserver.podAntiAffinity.replicaNotOnSameNode`                                  | Specify the directive to prevent scheduling of replicas in the same node. The valid values are `prefer`, `require`, or blank.                                  | `prefer`                                                 |
+| `appserver.podAntiAffinity.weightForPreference`                                   | Specify the preference weight in the range of 1-100. Use only if `prefer` is specified for `appserver.podAntiAffinity.replicaNotOnSameNode`.                              | 100                                                      |
+| `omserver.deploymentStrategy`                                                     | Specify the deployment strategy for both agent and integration servers. For more information about deployment strategy, see [Deployment strategy.](#deployment-strategy)                                                                                                                                                               |
+| `omserver.image`                                                                  | Specify the container image details of agent server.                                                                                                                                                                 |
+| `omserver.healthMonitor.deploy`                                                   | Specify `true` to deploy the health monitor agent.                                                                                                                                                                               | `true`                                                   |
+| `omserver.healthMonitor.jvmArgs`                                                  | Specify the JVM arguments for the health monitor agent.                                                                                                                                                                              | `true`                                                   |
+| `omserver.healthMonitor.replicaCount`                                             | Specify the number of health monitor agent instances to be deployed.                                                                                                                                                                             | `true`                                                   |
+| `omserver.healthMonitor.resources`                                                | Specify the CPU and memory resource requests and limits.                                                                                                                                                                               | `true`                                                   |
+| `omserver.common.jvmArgs`                                                         | Specify the JVM arguments for the list of agent servers in common.                                                                                                                                        |
+| `omserver.common.replicaCount`                                                    | Specify the number of agent server instances to be deployed in common.                                                                                                                                       |
+| `omserver.common.resources`                                                       | Specify the CPU and memory resource requests and limits in common.                                                                                                                                                              | Memory: `1024Mi`, CPU: `0,5`                             |
+| `omserver.common.readinessFailRestartAfterMinutes`                                | Specify the approximate time period in minutes after which the agent restarts if readiness check keeps failing for this period.                                                                                                 | 10                                                       |
+| `omserver.common.podLabels`                                                       | Specify the custom labels for agent pods.                                                                                                                                                                          |
+| `omserver.common.tolerations`                                                     | Specify tolerations for agent server pods in accordance with Kubernetes **PodSpec.tolerations**.                                                       |
+| `omserver.common.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`     | Configure node affinity for the agent server pods in accordance with Kubernetes **PodSpec.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution**. For more information about affinity and tolerations, see [Configuring affinity and tolerations.](#configuring-affinity-and-tolerations)                                                                        |
+| `omserver.common.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`    | Configure node affinity for the agent server pods in accordance with Kubernetes **PodSpec.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution**. For more information about affinity and tolerations, see [Configuring affinity and tolerations.](#configuring-affinity-and-tolerations)                                                              |
+| `omserver.common.podAffinity.requiredDuringSchedulingIgnoredDuringExecution`      | Configure pod affinity for the agent server pods in accordance with Kubernetes **PodSpec.podAffinity.requiredDuringSchedulingIgnoredDuringExecution**. For more information about affinity and tolerations, see [Configuring affinity and tolerations.](#configuring-affinity-and-tolerations)                                                                    |
+| `omserver.common.podAffinity.preferredDuringSchedulingIgnoredDuringExecution`     | Configure pod affinity for the agent server pods in accordance with Kubernetes **PodSpec.podAffinity.preferredDuringSchedulingIgnoredDuringExecution**. For more information about affinity and tolerations, see [Configuring affinity and tolerations.](#configuring-affinity-and-tolerations)                                                                  |
+| `omserver.common.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`  | Configure pod anti-affinity for the agent server pods in accordance with Kubernetes **PodSpec.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution**. For more information about affinity and tolerations, see [Configuring affinity and tolerations.](#configuring-affinity-and-tolerations)                                                                |
+| `omserver.common.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution` | Configure pod anti-affinity for the agent server pods in accordance with Kubernetes **PodSpec.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution**. For more information about affinity and tolerations, see [Configuring affinity and tolerations.](#configuring-affinity-and-tolerations)                                                              |
+| `omserver.common.podAntiAffinity.replicaNotOnSameNode`                            | Specify the directive to prevent scheduling of replicas in the same node. The valid values are `prefer`, `require`, or blank.                           | `prefer`                                                 |
+| `omserver.common.podAntiAffinity.weightForPreference`                             | Specify the preference weight in the range of 1-100. Use only if `prefer` is specified for `omserver.common.podAntiAffinity.replicaNotOnSameNode`.                                    | 100                                                      |
+| `omserver.servers.group`                                                          | Specify the name for the agent server group.                                                                                                                                                                                    | `Default Servers`                                        |
+| `omserver.servers.name`                                                           | Specify the list of agent server names as configured in Sterling Order Management Software                                                                                                                                                                               |
+| `omserver.servers.jvmArgs`                                                        | Provide the JVM arguments for the list of agent servers in the group.                                                                                                                                                 |
+| `omserver.servers.replicaCount`                                                   | Provide the number of instances to be deployed for the list of agent servers in the group.                                                                                                                                                |
+| `omserver.servers.resources`                                                      | Provide the CPU and memory resource requests and limits for the list of agent servers in the group.                                                                                                                                                                      | Memory: `1024Mi`, CPU: `0,5`                             |
+| `datasetup.loadFactoryData`                                                       | Specify `true` to load the factory data.                                                                                                                                                                                         |
+| `datasetup.mode`                                                                  | Specify `create` as the mode for loading the factory data.                                                                                                                                                                            | `create`                                                 |
+| `datasetup.fixPack.loadFPFactoryData`                                             | Specify `true` to load the fix pack factory data.                                                                                                                                                                                |
+| `datasetup.fixPack.installedFPNo`                                                 | Specify the currently installed fix pack number beyond which the fix pack factory setup needs to be applied.                                                                                                               |
+| `global.mq.bindingConfigName`                                                     | Specify the name of the ConfigMap that contains MQ bindings.                                                                                                                                                                    |
+| `global.mq.bindingMountPath`                                                      | Specify the path where the bindings file needs to be mounted.                                                                                                                                                               | `/opt/ssfs/.bindings`                                    |
+| `global.persistence.claims.name`                                                  | Specify the name of the Persistent Volume claim.                                                                                                                                                                                    | oms-common                                               |
+| `global.persistence.claims.accessMode`                                            | Specify the access mode for the Persistent Volume.                                                                                                                                                                                              | ReadWriteMany                                            |
+| `global.persistence.claims.capacity`                                              | Specify the capacity for the Persistent Volume.                                                                                                                                                                                                 | 10                                                       |
+| `global.persistence.claims.capacityUnit`                                          | Specify the capacity unit of the Persistent Volume.                                                                                                                                                                                              | Gi                                                       |
+| `global.persistence.claims.storageClassName`                                      | Specify the storage class for the Persistent Volume claim.                                                                                                                                                                |                                                          |
+| `global.persistence.securityContext.fsGroup`                                      | Specify the file system group ID to access the Persistent Volume.                                                                                                                                                      | 0                                                        |
+| `global.persistence.securityContext.supplementalGroup`                            | Specify the supplemental group ID to access the Persistent Volume.                                                                                                                                                     | 0                                                        |
+| `global.image.repository`                                                         | Specify the repository for container images.                                                                                                                                                                                     |
+| `global.image.agentName`                                                         | Specify the name of the agent image that is used for data setup jobs, preinstall, postinstall, and agent servers. If `omserver.image.name` is provided, it takes precedence for deploying agent servers.                                                                                                                                                                                    |
+| `global.image.tag`                                                         | Specify the tag of the agent image that is used for data setup jobs, preinstall, postinstall, and agents severs. If `omserver.image.tag` is provided, it takes precedence for deploying agent servers.                                                                                                                                                                                    |
+| `global.image.pullPolicy`                                                         | Specify the image pull policy for the  agent image that is used for data setup jobs, preinstall, postinstall, and agents severs. If `omserver.image.pullPolicy` is provided, it takes precedence for deploying agent servers.                                                                                                    |
+| `global.appSecret`                                                                | Specify the name of the secret that is created as part of [prerequisites.](#creating-a-secret)                                                                                                                                                                                               |
+| `global.database.dbvendor`                                                        | Specify the database vendor as `Db2` or `Oracle`.                                                                                                                                                                                      | DB2                                                      |
+| `global.database.serverName`                                                      | Specify the IP address or hostname of database server.                                                                                                                                                                                          |
+| `global.database.port`                                                            | Specify the port of the database server.                                                                                                                                                                                            |
+| `global.database.dbname`                                                          | Specify the database name or catalog name.                                                                                                                                                                                   |
+| `global.database.user`                                                            | Specify the username of the database.                                                                                                                                                                                                  |
+| `global.database.datasourceName`                                                  | Specify the name for the external datasource.                                                                                                                                                                                  | jdbc or OMDS                                                |
+| `global.database.systemPool`                                                      | Specify whether the database is used as system pool.                                                                                                                                                                                         | true                                                     |
+| `global.database.schema`                                                          | Specify the database schema name. For `Db2` it is defaulted as `global.database.dbname` and for `Oracle` it is defaulted as `global.database.user`.                                                                         |
+| `global.serviceAccountName`                                                       | Specify the name of the service account that is used for deployment.                                                                                                                                                                                      |
+| `global.customerOverrides`                                                        | Provide an array of customer override properties as `key=value`.                                                                                                                                                     |
+| `global.envs`                                                                     | Provide an array of environment variables as Kubernetes `EnvVars` objects.                                                                                                                                            |
+| `global.arch`                                                                     | Specify the CPU architecture affinity while scheduling pods.                                                                                                                                                               | amd64: `2 - No preference`, ppc64le: `2 - No preference` |
+| `global.customConfigMaps`                                                         | Specify an array of custom config maps to be mounted in each pod.                                                                                                                                                    |
+| `global.customSecrets`                                                            | Specify an array of custom secrets to be mounted in each pod.                                                                                                                                                    |
+| `global.fullnameOverride`                                                        | If you specify `fullnameOverride`, the provided value is used as the prefix for all the generated resources. The default prefix is `<release-name>-<chart-name>`.                                                              |
+| `global.nameOverride`                                                        | If you specify `nameOverride`, the generated resources uses `<release-name>-<nameOverride>` as the prefix. The default prefix is `<release-name>-<chart-name>`.                                                                                                                            |
+| `global.resources`                                                        | Specify the CPU and memory resource requests and limits.                                                                                                                                                     |
+| `global.security.ssl.trustStore.storeLocation`                                        | Specify the path to TrustStore that is used by the application and agent servers to trust the external secure connections in PKCS12 format.                                                                                                                                                 |
+| `global.security.ssl.trustStore.trustedCertDir`                                   | Specify the directory in shared volume, which contains the external server certificates that application and agent servers needs to trust. This value is overridden if you specify the `global.security.ssl.trustStore.storeLocation` parameter.                                                                                                                                               |
+| `global.security.ssl.trustStore.trustJavaCACerts`                                 | Set the value to `true` if you want the application and agent servers to trust the default Java CA certificates.                                                                                                                                                     |  true |
+| `global.security.ssl.keyStore.storeLocation`                                          | Specify the path to KeyStore that is used by the application and agent servers as identity certificate store in PKCS12 format.                                                                                                                                                     |
 
-### Deploying Multiple Application Images
+## SSL configurations for securing external connections
 
-The chart provides ability to deploy multiple application images as part of the a single helm release. This can be done using the new structure of appserver.images,
+As part of your solution, you might come across situations where your application or agent servers need to communicate with an external or a third-party service for leveraging certain capabilities. Most of the times, these services are exposed over secure protocols such as HTTPS. At times, some services require mutual authentication (mTLS) to securely exchange data. For this, you need to configure SSL certificates in application and agent servers to enable trust with the external services and establish a successful secure connection. The Helm chart provides all the configurations required to configure the SSL certificates for your application and agent servers.  
+
+- Trusting external server certificates
+
+  To trust an external service from your application or agent servers, the Helm chart provides these options.
+
+  - Using a custom TrustStore
+
+    This approach provides you the flexibility to trust the specific services with which your application must establish SSL connection. You can create your own TrustStore by using the `keytool` command of JDK in p12 format. Copy the newly created TrustStore to the Persistent Volume and provide the complete path to the TrustStore with respect to the volume mounted within the pod in the Helm values by using `global.security.ssl.trustStore.storeLocation`. Also, add the password for this TrustStore in the secret created as a prerequisite provided in [Create a Secret](#creating-a-secret) section with the key `trustStorePassword`. For example, if the TrustStore is present in the Persistent Volume at `certs/truststore.p12` provide the value of `global.security.ssl.trustStore.storeLocation` as `/shared/certs/truststore.p12`. 
+
+  - Using specific server certificates
+
+    This approach provides you the ability to pass trusted server certificates as PEM files in the Persistent Volume. Provide the path to the directory that contains the trusted certificates in the Helm values by using `global.security.ssl.trustStore.trustedCertDir`. The application and agent servers already uses the default Java TrustStore. Use this option only if the certificates you want to trust are not already present in the default Java TrustStore. In case you do not want your servers to trust the certificates in default Java TrustStore, set the value of `global.security.ssl.trustStore.trustJavaCACerts` parameter to `False`.
+
+- Providing identity certificates for mutual or client authentication
+
+  You can provide your identity certificates for mutual or client authentication. You can create your own KeyStore by using the `keytool` command of JDK in p12 format. Ensure that this KeyStore includes all your identity certificates and keys that are required for mutual authentication between application and agent servers and external services. Copy the newly created KeyStore to the Persistent Volume and provide the complete path to the KeyStore with respect to the volume mounted within the pod in the Helm values by using `global.security.ssl.keyStore.storeLocation`. Also, add the password for this KeyStore in the secret created as a prerequisite provided in [Create a Secret](#creating-a-secret) section with the key `keyStorePassword`. For example, if the KeyStore is present in the Persistent Volume at `certs/keystore.p12` provide the value of `global.security.ssl.keyStore.storeLocation` as `/shared/certs/keystore.p12`. 
+
+**Note:** If you add a new certificate to the TrustStore or KeyStore, ensure that you perform a rolling update of application and agent servers so that the new certificates are considered.
+
+## Deploying multiple application images
+
+By using the Helm chart, you can deploy multiple application images as part of a single Helm release. 
+
+To deploy multiple application images, use the following `appserver.images` structure in values.yaml:
+
+```yaml
+appserver:
+  replicaCount:
+  image:
+    tag: 
+    pullPolicy:
+    names:
+      - name:
+        probePath:
+        tag:
+        replicaCount:
+        applications:
+        - path:
+          routePrefix:
+```
+To pass an array of image names, use `appserver.image.names` with optional configuration for specifying:
+
+- paths to expose
+- context root to expose
+- route prefixes
+- tag name
+- replica count
+
+For example:
 
 ```yaml
 appserver:
   replicaCount: 1
   image:
-    tag: 10.0.0.17
+    tag: 10.0.0.21
     pullPolicy: IfNotPresent
     names:
       - name: om-app
-        tag: 10.0.0.17
+        tag: 10.0.0.21
       - name: om-app-isccs_sbc
       - name: om-app-sma_wsc
         applications:
@@ -262,78 +373,77 @@ appserver:
             routePrefix: 'smcfsdocs'
 ```
 
-The `appserver.image.names` can be used to pass an array of image names with additional optional configuration for specifying paths to be exposed, route prefixes to be used, tag names and replicaCounts.
+In this example, 4 deployments are created for 4 images that are listed (`om-app`, `om-app-isccs_sbc`, `om-app-sma_wsc`, and `om-app-docs`). 
 
-In the above example, 4 deployments will be made for the 4 images listed (`om-app`, `om-app-isccs_sbc`, `om-app-sma_wsc` and `om-app-docs`). The routes and paths exposed will follow the below convention,
+The routes and paths that are exposed adheres to the following conventions:
 
-- If image name is `om-app` and no paths are defined, all the contexts defined in `appserver.ingress.contextRoots` will be exposed. The `routePrefix` will be defaulted to `<context>-default`. For example, `smcfs-default`, `sbc-default` etc.
-- If image name is `om-app-<modules>`, the module names are broken using hyphen (`-`) and underscore (`_`) characters to form a list of modules. The `routePrefix` will be defaulted to `<context>-app-default`. For example, for the image named `om-app-isccs_sbc`, the paths exposed are `isccs` and `sbc` with `routePrefix`es `isccs-app-default` and `sbc-app-default` respectively.
-- If image name is provided along with `path` information only, `routePrefix` will be defaulted to `<path>-path-default`. For example, if only `- path: "/sma"` is provided with no `routePrefix`, the `routePrefix` will be computed to `sma-path-default`.
-- In all the cases, if `routePrefix` is provided, the routes will be exposed with the provided prefix. Also, when paths are explicitly listed under `applications`, only the listed paths will be exposed through the routes. For example, if `om-app` image is provided with `path: "/smcfs"`, only smcfs context root will be exposed in the route.
-- The API Javadoc image `om-app-docs` can be generated and deployed through Helm. Please refer to KC on how you can generate API Javadoc image.
-  - The probePath for `om-app-docs` should be `/smcfsdocs/yfscommon/api_javadocs`
-  - After the `om-app-docs` image is deployed:
-    - The API Javadocs can be accessed at `<routePrefix>.<appserver.ingress.host>/smcfsdocs/yfscommon/api_javadocs/index.html`
-    - The Core Javadocs can be accessed at `<routePrefix>.<appserver.ingress.host>/smcfsdocs/yfscommon/core_javadocs/index.html`
-    - The ERD can be accessed at `<routePrefix>.<appserver.ingress.host>/smcfsdocs/yfscommon/ERD/HTML/erd.html`
+- If the image name is `om-app` and if you do not define the paths, the application exposes contexts that are defined in
+  `appserver.ingress.contextRoots` property and defaults the `routePrefix` to `<context>-default`. For example, `smcfs-default`, `sbc-default`, and so on.
+- If the image name is `om-app-<modules>`, the module names are broken by using a hyphen (`-`) and underscore (`_`) characters to form a list of modules. Also, the `routePrefix` is defaulted to `<context>-app-default`. For example, for the `om-app-isccs_sbc` image, the paths exposed are `isccs` and `sbc` with routePrefixes `isccs-app-default` and `sbc-app-default`, respectively.
+- If the image name is provided only with the `path`information, `routePrefix` is defaulted to `<path>-path-default`. For example, if only `- path: "/sma"` is provided with no `routePrefix`, the `routePrefix` is computed to `sma-path-default`.
+- In all of these cases, if you define `routePrefix`, routes are exposed with the provided prefix. Also, when you explicitly list the paths under `applications`, the application exposes only the listed paths through the routes. For example, if you specify `om-app` image with `path: "/smcfs"`, the application exposes only `smcfs` context root in the route.
+- You can generate the API Javadoc image with the name `om-app-docs` by following the instructions provided in the [Generating Javadoc](https://www.ibm.com/support/knowledgecenter/en/SS6PEW_10.0.0/installation/c_OMRHOC_customizing_OMS_runtime.html) section. To deploy this image by using the Helm chart,
+  - Pass `om-app-docs` under `appserver.image.names`.
+  - Define probePath under `om-app-docs` as `/smcfsdocs/yfscommon/api_javadocs`
+  - After deploying the `om-app-docs` image, you can access:
+    - The API Javadoc from `<routePrefix>.<appserver.ingress.host>/smcfsdocs/yfscommon/api_javadocs/index.html`
+    - The Core Javadoc from `<routePrefix>.<appserver.ingress.host>/smcfsdocs/yfscommon/core_javadocs/index.html`
+    - The ERD from `<routePrefix>.<appserver.ingress.host>/smcfsdocs/yfscommon/ERD/HTML/erd.html`
 
-### Deploying REST API Service
+## Deploying the REST API service
 
-If route API (`route.openshift.io/v1`) exists in the cluster, `appserver.exposeRestService` can be used to create a deployment dedicated for REST API. When set to true, a new deployment with image `om-app` and tag as provided in `appserver.image.tag` will be created with a dedicated service and an associated route. The route will be prefixed with `xapirest`.
+If a route API (`route.openshift.io/v1`) exists in cluster, you can use `appserver.exposeRestService` to create and dedicate the deployment to REST API. If you set the value of `appserver.exposeRestService` to true, the application creates a new deployment by using the `om-app` image and the tag provided in `appserver.image.tag` with a dedicated service and associated route. the Helm chart also prefixes the route with `xapirest`.
 
-### Accessing Deployed Applications
+## Exposing the deployed applications
 
-#### Kubernetes Ingress Configuration
+The following configurations are provided for exposing the applications based on your deployment platform:
 
-- Ingress is enabled by default. The application is exposed as a `ClusterIP` service.
+### Configuring Kubernetes Ingress
 
-- `appserver.ingress.host` - the fully-qualified domain name that resolves to the IP address of your cluster’s proxy node. Based on your network settings it may be possible that multiple virtual domain names resolve to the same IP address of the proxy node. Any of those domain names can be used. For example "example.com" or "test.example.com" etc.
+**Note:** Ingress is enabled by default and the application is exposed as a `ClusterIP` service.
 
-- `appserver.ingress.ssl.enabled` - It is strongly recommended to enable SSL. If SSL is enabled by setting this parameter to true, a secret is needed to hold the TLS certificate.
-  If the optional parameter `appserver.ingress.ssl.secretname` is left as blank, a secret containing a self signed certificate is automatically generated.
+Configure the following parameters of values.yaml:
 
-  However, for **production environments** it is strongly recommended to obtain a CA certified TLS certificate and create a secret manually as below.
+- `appserver.ingress.host` - The fully qualified domain name that resolves to the IP address of your cluster’s proxy node. Based on your network settings, it is possible that multiple virtual domain names resolve to the same IP address of the proxy node. You can use any of the domain names, for example "example.com" or "test.example.com".
 
-  1. Obtain a CA certified TLS certificate for the given `appserver.ingress.host` in the form of key and certificate files.
-  2. Create a secret from the above key and certificate files by running below command
+- `appserver.ingress.ssl.enabled` - Set to `true` by default as SSL is recommended for production environments.
+
+- `appserver.ingress.ssl.secretname` - The secret name that contains TLS certificate, which is used for SSL. If this parameter is blank, the Helm chart automatically generates a secret with a self-signed certificate.
+
+  **Note:** You can use the self-signed certificates only for development purposes.
+
+  For production environments, it is recommended that you obtain a CA certified TLS certificate and manually create a secret by completing the following steps:
+
+  1. Obtain a CA certified TLS certificate for the given `appserver.ingress.host` in the form of a key and certificate files.
+  2. Run the following command to create a secret with the name `<Release-name>-ingress-secret` by using the key and certificate files:
 
      ```sh
      kubectl create secret tls <Release-name>-ingress-secret --key <file containing key> --cert <file containing certificate> -n <namespace>
      ```
 
-  3. Use the above created secret as the value of the parameter `appserver.ingress.ssl.secretname`.
+  3. Set the secret name as the value under `appserver.ingress.ssl.secretname`.
+  
+- `appserver.ingress.contextRoots` - Ingress by default exposes `smcfs`, `sbc`, `sma`, `isccs`, `wsc`, and `adminCenter`context roots. If you want to allow any additional context roots, add them to the list.
 
-- `appserver.ingress.contextRoots` - The context roots which are allowed to be accessed through ingress. By default the following context roots are allowed.
-  `smcfs`, `sbc`, `sma`, `isccs`, `wsc`, `adminCenter`. If any additional context root needs to be allowed through ingress then the same needs to be added to this list.
+### Configuring Red Hat OpenShift route
 
-#### Red Hat OpenShift Route Configuration
+**Note:** If you are using the Red Hat OpenShift cluster, routes are enabled by default and the application is exposed as a `ClusterIP` service.
 
-- If using Red Hat OpenShift cluster, routes are enabled by default. If routes are enabled, then the application is exposed as a `ClusterIP` service.
-- `appserver.ingress.host` - the fully-qualified domain name of the cluster through which applications are exposed.
-- `appserver.ingress.ssl.enabled` - It is strongly recommended to enable SSL. If SSL is enabled by setting this parameter to true, routes are created with https egress URL. Also, the routes will be exposed with the cluster's default certificate.
+Configure the following parameters of values.yaml:
 
-However, for **production environments** it is strongly recommended to obtain a CA certified TLS certificate and update the routes manually as below.
+- `appserver.ingress.host` - The fully qualified domain name of the cluster through which the applications are exposed. 
 
-1. Obtain a CA certified TLS certificate for the given `appserver.ingress.host` in the form of key and certificate files.
-2. The below script will allow patching all the routes created through the helm install with the certificate information based on the `<Release_name>`.
+- `appserver.ingress.ssl.enabled` - Set to `true` by default as SSL is recommended for production environments.
 
-```sh
-CRT_FN=<Path to Certificate>
-KEY_FN=<Path to Private Key>
-CABUNDLE_FN=<Path to CA Bundle File>
+**Note:** When SSL is enabled, routes are automatically created with TLS certificates. Also, the intracluster traffic is encrypted by using re-encrypt termination policy. During deployment, the routes are updated with the automatically generated service certificates. For more information about re-encrypt termination policy, see [Red Hat OpenShift documentation.](#https://docs.openshift.com/container-platform/latest/networking/routes/secured-routes.html)
 
-CERTIFICATE="$(awk '{printf "%s\\n", $0}' ${CRT_FN})"
-KEY="$(awk '{printf "%s\\n", $0}' ${KEY_FN})"
-CABUNDLE=$(awk '{printf "%s\\n", $0}' ${CABUNDLE_FN})
+## Network policy
 
-oc patch route $(oc get routes -l release=<Release_name> -o jsonpath="{.items[*].metadata.name}") -p '{"spec":{"tls":{"certificate":"'"${CERTIFICATE}"'", "key":"'"${KEY}"'" ,"caCertificate":"'"${CABUNDLE}"'"}}}'
-```
+A network policy specifies how groups of pods are allowed to communicate with each other and other network endpoints.
 
-### Network Policy
+The Kubernetes Network Policy resource provides firewall capabilities to pods that are similar to the AWS security groups and programs and the software defined networking infrastructure (OpenShift Default, Flannel, and so on). You can implement the sophisticated network access policies to control the Ingress access to your workload pods.
 
-- Kubernetes Network Policy is a specification of how groups of pods are allowed to communicate with each other and other network endpoints.
-- The Kubernetes Network Policy resource provides firewall capabilities to pods, similar to AWS Security groups, and it programs the software defined networking infrastructure (OpenShift Default, Flannel, etc...). You can implement sophisticated network access policies to control ingress access to your workload pods.
-- The default Network Policy `<Release-name>-network-policy` is provided that allows communications of pods that have role as `appserver`. For e.g.
+`<Release-name>-network-policy` network policy is by default provided that establishes the pod communications with the role as `appserver`. For example,
 
   ```yaml
   ---
@@ -347,15 +457,31 @@ oc patch route $(oc get routes -l release=<Release_name> -o jsonpath="{.items[*]
         role: appserver
   ```
 
-- To implement your own Network Policy, you can follow the steps documented here [Network Policy](https://kubernetes.io/docs/concepts/services-networking/network-policies/)
+You can implement your own network policy. For more information about implementing a network policy, see [Kubernetes documentation.](https://kubernetes.io/docs/concepts/services-networking/network-policies/)
 
-### Configuring Agent or Integration Servers
+## Configuring IBM MQ for agent and integration servers
 
-Once you have a deployment ready with application server running, you can configure the agents and integration servers by logging into the Applications Manager. After completing the changes as described below, the release needs to be upgraded. Refer below for more details.
+To configure IBM MQ, complete the following steps:
 
-### Sterling Order Management Software Enterprise Edition related configuration
+1. Ensure that the JMS resources that are required for agent and integration servers are configured in IBM MQ and the corresponding `.bindings` file is generated.
 
-Define the agent and integration servers in the Applications Manager and deploy (start) the same by providing the names of agent or integration servers as a list to `omserver.servers.name` parameter in the Helm chart values.yaml. For example:
+2. Create a ConfigMap to store the IBM MQ bindings. For example, run the following command to create a ConfigMap for the  `.bindings` file.
+
+```sh
+kubectl create configmap <config map name> --from-file=<path_to_.bindings_file> -n <namespace>
+```
+
+3. Specify the ConfigMap in `global.mq.bindingConfigName`.
+
+After saving your changes in the values.yaml, run the `helm upgrade` command. For more information about upgrading the Helm chart, see [Upgrading the Helm chart](#upgrading-the-helm-chart).
+
+## Configuring the agent and integration servers
+
+**Note:** Ensure that you have [configured IBM MQ.](#configuring-ibm-mq-for-agent-and-integration-servers)
+
+After you have a deployment ready with the application server running, you can configure the agents and integration servers by logging in to **Applications Manager**. After completing the configurations, upgrade the release as follows:
+
+To start the agent and integration servers, in values.yaml of the Helm chart, specify the names of agent or integration servers for `omserver.servers` as illustrated in the following example:
 
 ```yaml
 ---
@@ -383,34 +509,63 @@ servers:
         cpu: 0.5
 ```
 
-**Note:** While defining the agent or integration server name, do not use the underscore`(_)` character.
+**Note:** While defining the agent or integration servers, do not use underscore`(_)` in the server name.
 
-- The parameters directly inside `omserver.common`, for example jvmArgs, resources, tolerations and other parameters are applied to each of the `omserver.servers`. These parameters can also be overriden in each of `omserver.servers`. All the agent servers defined under the same group will share the same `omserver.common` parameters, e.g. `resources`. You can define multiple groups in `omserver.servers[]` if there is a requirement for different set of `omserver.common` parameters. For e.g, if you have a requirement to run certain agents with higher cpu and memory requests, or a higher replication count, you can define a new group and update its `resources` object accordingly.
+The common parameters that are defined under `omserver.common`such as jvmArgs, resources, tolerations, and others are applied to agent or integration server that is defined under `omserver.servers`. For the corresponding agent or integration server, the parameters provided under `omserver.servers` override the parameters that are defined under `omserver.common`. The agent servers defined under the same group share the same `omserver.common` parameters, for example `resources`. If there is a need to define a different set of `omserver.common` parameter, you can define multiple groups in `omserver.servers[]`. For example, if you have to run certain agents with higher CPU and memory requests or replication count, define a new group and  appropriately update the `resources` object.
 
-### MQ related configuration
+## Deployment strategy
 
-- Ensure that all the JMS resources configured in agents and integration servers are configured in MQ and corresponding `.bindings` file generated.
-- Create a ConfigMap for storing the MQ bindings. For example, you can use the below command to create the ConfigMap from a given ".bindings" file.
+If you are upgrading to a new Helm chart version, you typically consider how to minimize the application downtime (if any), manage errors with minimal impact on users, address failed deployments in a reliable and effective way, and so on. Depending on your business logic, you might want to choose different strategies for your deployments.
 
-```sh
-kubectl create configmap <config map name> --from-file=<path_to_.bindings_file> -n <namespace>
+Deployment strategy can be used to define how to replace the existing pods with new pods. The supported deployment strategies are `Recreate` or `RollingUpdate`. By default, the `RollingUpdate` deployment strategy is used.
+
+For more information about the deployment strategies, see [Kubernetes documentation.](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy)
+
+### Sample deployment strategies
+
+#### RollingUpdate
+
+The `RollingUpdate` deployment strategy replaces the existing pods with the new pods systematically such that there is minimal or no downtime.
+
+```yaml
+...
+spec:
+  replicas: 2
+  strategy:
+        type: RollingUpdate
+        rollingUpdate:
+           maxSurge: 25%
+           maxUnavailable: 25%  
+  template:
+...
 ```
 
-- Ensure that the above ConfigMap is specified in the parameter `global.mq.bindingConfigName`.
+- `maxUnavailable` is an optional field that specifies the maximum number of pods that are unavailable during the update process.
 
-Once the changes are made in the values.yaml file, you need to run the `helm upgrade` command. Refer section "Upgrading the Chart" for details.
+- `maxSurge` is an optional field that specifies the number of pods that can be created beyond the maximum number of pods defined in `replicas`.
 
-## Limitations
 
-- The database must be installed in UTC timezone.
+#### Recreate
+
+The `Recreate` deployment strategy kills the existing pods at once and replaces with new pods.
+
+```yaml
+...
+spec:
+  replicas: 2
+  strategy:
+        type: Recreate
+  template:
+...
+```
 
 ## PodSecurityPolicy Requirements
 
-Note: This section is applicable to generic (non Red Hat OpenShift) k8s platform.
+**Note:** These instructions are applications only for vanilla Kubernetes platform.
 
-This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you:
+The Helm chart requires a `PodSecurityPolicy` to be bound to the target namespace prior to installation. You can select either a predefined `PodSecurityPolicy` or custom `PodSecurityPolicy` that is shared by your cluster administrator.
 
-- Custom PodSecurityPolicy definition:
+#### Custom PodSecurityPolicy definition:
 
 ```yaml
 apiVersion: extensions/v1beta1
@@ -457,13 +612,13 @@ spec:
     - '*'
 ```
 
-To create a custom PodSecurityPolicy, create a file `oms_psp.yaml` with the above definition and run the below command
+To create a custom `PodSecurityPolicy`, create a yaml file with the custom `PodSecurityPolicy` definition and run the following command:
 
 ```sh
-kubectl create -f oms_psp.yaml
+kubectl create -f <custom_psp.yaml>
 ```
 
-- Custom ClusterRole and RoleBinding definitions:
+#### Sample ClusterRole and RoleBinding definitions
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -497,24 +652,19 @@ subjects:
     name: system:serviceaccounts:<namespace>
 ```
 
-The `<namespace>` in the above definition should be replaced with the namespace of the target environment.
-To create a custom ClusterRole and RoleBinding, create a file `oms_psp_role_and_binding.yaml` with the above definition and run the below command
+Replace the `<namespace>` definition with the namespace of the target environment.
+
+To create a custom `ClusterRole` and `RoleBinding`, create a yaml file with the custom `ClusterRole` and `RoleBinding` definition and run the following command:
 
 ```sh
-kubectl create -f oms_psp_role_and_binding.yaml
+kubectl create -f <custom_psp_role_and_binding.yaml>
 ```
 
 ## Red Hat OpenShift SecurityContextConstraints Requirements
 
-Note: This section is specific to Red Hat® OpenShift.
+The Helm chart is verified with the predefined `SecurityContextConstraints` named [`ibm-anyuid-scc.`](https://ibm.biz/cpkspec-scc) Alternatively, you can use a custom `SecurityContextConstraints.` Ensure that you bind the `SecurityContextConstraints` resource to the target namespace prior to installation.
 
-This chart requires a `SecurityContextConstraints` to be bound to the target namespace prior to installation.
-
-The predefined `SecurityContextConstraints` name: [`ibm-anyuid-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart, if your target namespace is bound to this `SecurityContextConstraints` resource you can proceed to install the chart.
-
-Alternatively, a custom `SecurityContextConstraints` can be created using:
-
-- Custom SecurityContextConstraints definition:
+#### Custom SecurityContextConstraints definition:
 
 ```yaml
 apiVersion: security.openshift.io/v1
@@ -560,136 +710,287 @@ volumes:
 priority: 0
 ```
 
-To create a custom `SecurityContextConstraints`, create a file `ibm-oms-scc.yaml` with the above definition and run the below command:
+To create a custom `SecurityContextConstraints`, create a yaml file with the custom `SecurityContextConstraints` definition and run the following command:
 
 ```sh
-kubectl create -f ibm-oms-scc.yaml
+kubectl create -f <custom-scc.yaml>
 ```
 
-## Installing the Chart
+## Installing the Helm chart
 
-Prepare a custom values.yaml file based on the configuration section. Ensure that application license is accepted by setting the value of `global.license` and `global.license_store_call_center` to `True`.
+In values.yaml, set the values of `global.license` and `global.licenseStoreCallCenter` to `True` along with the required chart parameters.
 
-To install the chart with the release name `my-release`:
+For detailed instructions on how to install the application and agent servers, see [Deploying the application and agent servers.](https://www.ibm.com/support/knowledgecenter/SS6PEW_10.0.0/installation/c_OMRHOC_applicationserver_agents.html)
 
-1. Ensure that the chart is downloaded locally by following the instructions given [here.](http://www.ibm.com/support/knowledgecenter/en/SS6PEW_10.0.0/installation/c_OMRHOC_download_HelmChart.html)
+**Note:** Depending on the capacity of Kubernetes worker node and database connectivity, the complete deployment process can take approximately 2 to 3 minutes on a preloaded database, and 20 to 30 minutes on a fresh database.
 
-2. Run the following command:
+When you check the deployment status, you can see the following values:
+
+- `Running`: Indicates that the container has started.
+- `Init: 0/1`: Indicates that the primary container will start only after the init container starts.
+
+You can also see the following values in readiness state:
+
+- `0/1`: Indicates that the container has started, but the application is not yet ready to use.
+- `1/1`: Indicates that the application is ready to use.
+
+Run the following command to verify that the log file does not contain any errors:
 
 ```sh
-helm install my-release -f values.yaml ./ibm-oms-ent-prod --timeout 3600s --namespace <namespace>
+# Run the following command to retrieve the list of pods in the deployment namespace and identify the application server pod.
+kubectl get pods -n <namespace>
+
+# Run the following command to view the list of application server pod:
+kubectl logs -f -n <namespace> <pod_name>
 ```
 
-Depending on the capacity of the kubernetes worker node and database connectivity, the whole deploy process can take on average:
+## Air gap Installation
 
-- 2-3 minutes for 'installation against a pre-loaded database' and
-- 20-30 minutes for 'installation against a fresh new database'
+You can install certified containers in an air gap environment where your Kubernetes cluster does not have access to the internet. Therefore, it is important to properly configure and install the certified containers in such an environment.
 
-When you check the deployment status, the following values can be seen in the Status column:
+### Downloading Sterling Order Management Software case bundle
 
-- Running: This container is started.
-- Init: 0/1: This container is pending on another container to start.
+You can download the Sterling Order Management Software case bundle and the Helm chart from the remote repositories to your local machine, which will eventually be used for offline installation by running the following command:
 
-You may see the following values in the Ready column:
 
-- 0/1: This container is started but the application is not yet ready.
-- 1/1: This application is ready to use.
+  ```bash
+    cloudctl case save                                \
+      --case <URL containing the CASE file to parse.> \
+      --outputdir </path/to/output/dir> 
+  ```
 
-Run the following command to make sure there are no errors in the log file:
+For additional help on `cloudctl case save`, run `cloudctl case save -h`.
 
-```sh
-kubectl logs <pod_name> -n <namespace> -f
-```
+### Setting credentials to pull or push certified container images
 
-## Affinity and Tolerations
+To set up the credentials for downloading the certified container images from IBM Cloud Registry to your local registry, run the appropriate command.
 
-The chart provides various ways in the form of node affinity, pod affinity, pod anti-affinity and tolerations to configure advance pod scheduling in kubernetes. Refer the kubernetes documentation for details on usage and specifications for the below features.
+- For local registry without authentication
 
-- Tolerations - This can be configured using parameter `appserver.tolerations` for the appserver, and parameter `omserver.common.tolerations` for the agent servers.
+  ```bash
+    # Set the credentials to use for source registry
+    cloudctl case launch              \
+    --case </path/to/downloaded/case> \
+    --inventory ibmOmsEntProd         \
+    --action configure-creds-airgap   \
+    --args "--registry $SOURCE_REGISTRY --user $SOURCE_REGISTRY_USER --pass $SOURCE_REGISTRY_PASS"
+  ```
 
-- Node affinity - This can be configured using parameters `appserver.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`, `appserver.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution` for the appserver, and parameters `omserver.common.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`, `omserver.common.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution` for the agent servers.
-  Depending on the architecture preference selected for the parameter `global.arch`, a suitable value for node affinity is automatically appended in addition to the user provided values.
+- For local registry with authentication
 
-- Pod affinity - This can be configured using parameters `appserver.podAffinity.requiredDuringSchedulingIgnoredDuringExecution`, `appserver.podAffinity.preferredDuringSchedulingIgnoredDuringExecution` for the appserver, and parameters `omserver.common.podAffinity.requiredDuringSchedulingIgnoredDuringExecution`, `omserver.common.podAffinity.preferredDuringSchedulingIgnoredDuringExecution` for the agent servers.
+  ```bash
+    # Set the credentials for the target registry (your local registry)
+    cloudctl case launch              \
+    --case </path/to/downloaded/case> \
+    --inventory ibmOmsEntProd         \
+    --action configure-creds-airgap   \
+    --args "--registry $TARGET_REGISTRY --user $TARGET_REGISTRY_USER --pass $TARGET_REGISTRY_PASS"
+  ```
 
-- Pod anti-affinity - This can be configured using parameters `appserver.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`, `appserver.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution` for the appserver, and parameters `omserver.common.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`, `omserver.common.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution` for the agent servers.
-  Depending on the value of the parameter `podAntiAffinity.replicaNotOnSameNode`, a suitable value for pod anti-affinity is automatically appended in addition to the user provided values. This is to configure whether replicas of a pod should be scheduled on the same node. If the value is `prefer` then `podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution` is automatically appended whereas if the value is `require` then `podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution` is appended. If the value is blank, then no pod anti-affinity value is automatically appended. If the value is `prefer` then the weighting for the preference is set using the parameter `podAntiAffinity.weightForPreference` which should be specified in the range 1-100.
+### Mirroring the certified container images
 
-## Readiness and Liveness
+To mirror the certified container images and configure your cluster by using the provided credentials, run the following command:
 
-Readiness and liveness checks are provided for the agents and application server pods as applicable.
+  ```bash
+    cloudctl case launch              \
+    --case </path/to/downloaded/case> \
+    --inventory ibmOmsEntProd         \ 
+    --action mirror-images            \
+    --args "--registry <your local registry> --inputDir </path/to/directory/that/stores/the/case>"
+  ```
 
-1. Application Server pod
-   The following parameters can be used to tune the readiness and liveness checks for application server pods.
+The certified container images are pulled from the source registry to your local registry that you can use for offline installation.
 
-   - `appserver.livenessCheckBeginAfterSeconds` - This can be used to specify the delay in starting the liveness check for the application server. The default value is 900 seconds (15 minutes).
-   - `appserver.livenessFailRestartAfterMinutes` - This can be used to specify the approximate time period, after which the pod will get restarted if the liveness check keeps on failing continuously for this period of time. The default value is 10 minutes.
+### Installing the Helm chart in an air gap environment
 
-   For E.g. if the values for `appserver.livenessCheckBeginAfterSeconds` `appserver.livenessFailRestartAfterMinutes` are `900` and `10` respectively, and the application server pod is not able to start up successfully after `25` minutes, then it will be restarted.
-   Further, after the application server has started up successfully, if the liveness check keeps failing continuously for a period of `10` minutes, then it will be restarted.
+Before you begin, ensure that you review and complete the [prerequisites.](#deployment-prerequisites)  
 
-2. Agent server pod
-   The following parameter can be used to tune the readiness check for agent server pods.
+To install the Helm chart, run the following command:
 
-- `omserver.common.readinessFailRestartAfterMinutes` - This can be used to specify the approximate time period, after which the pod will get restarted if the readiness check keeps on failing continuously for this period of time. The default value is 10 minutes.
-  For E.g. if the value for `omserver.common.readinessFailRestartAfterMinutes` is `10`, and the agent server pod is not able to start up successfully after `10` minutes, then it will be restarted.
+  ```bash
+    cloudctl case launch                    \
+        --case </path/to/downloaded/case>   \
+        --namespace <NAME_SPACE>            \
+        --inventory ibmOmsEntProd           \
+        --action install                    \
+        --args "--values </path/to/values.yaml> --releaseName <release-name> --chart </path/to/chart>"
+    
+    # --values: refers to the path of values.yaml file.
+    # --releaseName: refers to the name of the release.
+    # --chart: refers to the path of downloaded chart.
+  ```
 
-## Customizing server.xml for Liberty
+### Uninstalling the Helm chart in an air gap environment
 
-A custom server.xml for the liberty application server can be configured as below. Note that if a custom server.xml is not specified then a default server.xml is auto generated.
+To uninstall the Helm chart, run the following command:
 
-1. Create the custom server.xml file with the name `server.xml`.
+  ```bash
+    cloudctl case launch                    \
+        --case </path/to/downloaded/case>   \
+        --namespace <NAME_SPACE>            \
+        --inventory ibmOmsEntProd           \
+        --action uninstall                  \
+        --args "--releaseName <release-name>"
+    
+    # --releaseName: refers to the name of the release.
+  ```
 
-2. Create a ConfigMap containing the custom server.xml with the below command
+## Configuring affinity and tolerations
+
+The Helm chart provides various ways for advanced pod scheduling in Kubernetes such as node affinity, pod affinity, pod anti-affinity, and tolerations. For more information about the usage and specifications of affinity and tolerations, see the [Kubernetes documentation.](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
+
+The following parameters are exposed to configure affinity and tolerations. For more information about these parameters, see [Configuration parameters in values.yaml.](#configuration-parameters-in-values.yaml)
+
+- Tolerations
+  - For application servers, configure tolerations by using `appserver.tolerations`.
+  - For agent servers, configure tolerations by using `omserver.common.tolerations`.
+
+- Node affinity
+
+  - For application servers, configure node affinity by using the following parameters:
+    - `appserver.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+    - `appserver.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`
+  - For agent servers, configure the following parameters:
+    - `omserver.common.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+    - `omserver.common.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`
+
+  Depending on the preferred CPU architecture provided in `global.arch`, a suitable value for node affinity is automatically appended in addition to the custom values.
+
+- Pod affinity
+
+  - For application servers, configure pod affinity by using the following parameters:
+    - `appserver.podAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+    - `appserver.podAffinity.preferredDuringSchedulingIgnoredDuringExecution`
+  - For agent servers, configure pod affinity by using the following parameters:
+    - `omserver.common.podAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+    - `omserver.common.podAffinity.preferredDuringSchedulingIgnoredDuringExecution`
+
+- Pod anti-affinity
+
+  - For application servers, configure pod anti-affinity by using the following parameters:
+    - `appserver.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+    - `appserver.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution` 
+  - For agent servers, configure pod anti-affinity by using the following parameters:
+    - `omserver.common.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+    - `omserver.common.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution`
+
+  Depending on the value of `podAntiAffinity.replicaNotOnSameNode`, a suitable value for pod anti-affinity is automatically appended in addition to the custom values. This ensures that replicas of a pod are scheduled on the same node.
+  - If the value is set to `prefer`, then `podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution` is automatically 
+    appended. The `podAntiAffinity.weightForPreference` parameter is set as the preference for which the value must be
+    specified in the range of 1-100.
+  - If the value is set to `require`, then `podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution` is appended.
+  - If the value is blank, then no pod anti-affinity value is automatically appended.
+
+### For application servers
+
+- `appserver.tolerations` 
+- `appserver.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+- `appserver.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`
+- `appserver.podAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+- `appserver.podAffinity.preferredDuringSchedulingIgnoredDuringExecution`
+- `appserver.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+- `appserver.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution`
+
+### For agent servers
+
+- `omserver.common.tolerations`
+- `omserver.common.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+- `omserver.common.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`
+- `omserver.common.podAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+- `omserver.common.podAffinity.preferredDuringSchedulingIgnoredDuringExecution`
+- `omserver.common.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution` 
+- `omserver.common.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution`
+  
+## Readiness and liveness
+
+Kubernetes uses liveness probes to know when to restart a container. It also uses readiness probes to know when a container is ready to start accepting traffic. Readiness and liveness checks are provided for agents and application server pods as applicable.
+
+You can tune readiness and liveness checks for agent and application server pods by using the following parameters:
+
+### For application servers
+
+- `appserver.livenessCheckBeginAfterSeconds`
+- `appserver.livenessFailRestartAfterMinutes`
+
+For example, if you set the values of `appserver.livenessCheckBeginAfterSeconds` and `appserver.livenessFailRestartAfterMinutes` to `900` and `10` respectively, and the application server pod is not able to start successfully even after `25` minutes, the application server pod restarts. 
+
+Even though the application server pod has successfully started, if the liveness check keeps failing continuously for 10 minutes, the application server pod restarts.
+
+### For agent servers
+
+- `omserver.common.readinessFailRestartAfterMinutes`
+   
+   For example, if you set the value of `omserver.common.readinessFailRestartAfterMinutes` to`10` and the agent server pod is not able to successfully start even after `10` minutes, the agent server pod restarts.
+
+For more information about these parameters, see [Configuration parameters in values.yaml.](#configuration-parameters-in-values.yaml)
+
+## Customizing the server.xml file for Liberty
+
+**Note:** If a custom server.xml is not configured, the Helm chart generates the default server.xml file for deployment.
+
+To customize server.xml for the Liberty application server, complete the following steps:
+
+1. Create a custom server.xml file with the name, `server.xml`.
+
+2. Run the following command to create a ConfigMap with the custom server.xml file:
 
    ```sh
-   kubectl create configmap <config map name> --from-file=<path_to_custom_server.xml> -n <namespace>
+   kubectl create configmap <config map name> --from-file=<path to custom server.xml> -n <namespace>
    ```
 
-3. Specify the above created ConfigMap in the chart parameter `appserver.config.libertyServerXml`.
+3. Specify the name of the ConfigMap in the `appserver.config.libertyServerXml` parameter of values.yaml.
 
-**Important Notes:**
+**Important:**
 
-1. Ensure that the database information specified in the datasource section of server.xml is same as what is specified in the chart through the object `global.database`.
-2. Ensure that the http and https ports in server.xml are same as specified in the chart through the parameters `appserver.service.http.port` and `appserver.service.https.port`.
+- Ensure that the database information present in the datasource section of the Liberty server.xml is same as what is
+  specified in values.yaml for `global.database` object.
+- Ensure that the http and https ports in the Liberty server.xml are same as the ports specified in the
+  `appserver.service.http.port` and `appserver.service.https.port` parameters of values.yaml.
 
-## Upgrading the Chart
+## Upgrading the Helm chart
 
-You would want to upgrade your deployment when you have a new container image for application/agent server or a change in configuration, for e.g. new agent/integration servers to be deployed/started.
+When a new application or agent server image is available, you might want to upgrade your deployment to consume the latest image.
 
-1. Ensure that the chart is downloaded locally by following the instructions given [here.](https://www.ibm.com/support/knowledgecenter/SS6PEW_10.0.0/com.ibm.help.install.omsoftware.doc/installation/c_OMRHOC_download_OMSChart.html)
+To upgrade the Helm chart, complete the following steps:
 
-2. Ensure that the `datasetup.loadFactoryData` parameter is set to `donotinstall` or blank. Run the following command to upgrade your deployments.
+1. Download the Helm chart. For more information about downloading the Helm chart, see [Downloading the Helm charts.](https://www.ibm.com/support/knowledgecenter/SS6PEW_10.0.0/com.ibm.help.install.omsoftware.doc/installation/c_OMRHOC_download_OMSChart.html)
 
-```sh
-helm upgrade my-release -f values.yaml ./ibm-oms-ent-prod --timeout 3600s
-```
+2. Ensure to set the value of `datasetup.loadFactoryData` parameter to `donotinstall` or blank. 
 
-## Rollback
-
-Sometimes, you may want to roll back your deployment when the deployment is not stable, for e.g. crash looping.
-
-To roll back a release, run the following command where `RELEASE` is the name of a release and `REVISION` is a revision(version) number:
+3. Run the following command to upgrade your deployments:
 
 ```sh
-helm rollback [RELEASE] [REVISION]
+helm upgrade <release-name> -f values.yaml ./ibm-oms-ent-prod --timeout 3600s
 ```
 
-More information about Helm Rollback [here.](https://www.ibm.com/support/knowledgecenter/SSURRN/com.ibm.cem.doc/em_icp_rollback.html)
+## Rolling back the Helm chart
 
-## Uninstalling the Chart
+At times you might want to rollback your current Helm release to a previous revision of the release.
 
-To uninstall or delete the `my-release` deployment, run the following command:
+To roll back a Helm release, run the following command:
 
 ```sh
-helm uninstall my-release
+helm rollback <release-name> <revision>
+```
+Here, `<revision>` refers to the revision of the Helm release.
+
+For more information about rolling back a Helm release version, see [Helm documentation.](https://helm.sh/docs/helm/helm_rollback/)
+
+## Uninstalling the Helm chart
+
+To uninstall or delete a Helm deployment, run the following command:
+
+```sh
+ helm uninstall <release-name>
 ```
 
-Since there are certain kubernetes resources that are created by using the `pre-install` hook, the helm delete command will not delete them. You have to manually delete the following resources that are created by the chart.
+There are certain additional resources that are created by the Helm chart by using Helm hook. When you run the Helm delete command, these resources are not deleted. Ensure to manually delete them.
 
-- `<release name>-ibm-oms-ent-prod-config`
-- `<release name>-ibm-oms-ent-prod-def-server-xml-conf`
-- `<release name>-ibm-oms-ent-prod-datasetup`
-- `<release name>-ibm-oms-ent-prod-auto-ingress-secret`
+The following resources are created by the Helm chart by using Helm hook:
 
-**Note:** You may also consider deleting the secrets and persistent volume created as part of prerequisites.
+- `<release-name>-ibm-oms-ent-prod-config`
+- `<release-name>-ibm-oms-ent-prod-def-server-xml-conf`
+- `<release-name>-ibm-oms-ent-prod-datasetup`
+- `<release-name>-ibm-oms-ent-prod-auto-ingress-secret`
+
+**Note:** Additionally, you might want to delete resources that are created as part of [prerequisites.](#deployment-prerequisites)
