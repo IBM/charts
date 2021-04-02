@@ -36,15 +36,21 @@ The `stable` directory contains Helm chart source provided by IBM, while the `re
 helm repo add stable https://raw.githubusercontent.com/IBM/charts/master/repo/stable
 ```
 
+**Note:** [Helm stable and incubator charts have moved locations](https://helm.sh/blog/new-location-stable-incubator-charts) causing older helm clients to fail when adding the IBM stable repo as listed above.  If using a helm client older then v2.17, please run `helm init --client-only --stable-repo-url https://charts.helm.sh/stable` first to establish new location.
+
 The entitled directory contains Helm chart source provided by IBM for commercial use, while the repo/entitled directory contains the packaged Helm chart binaries.  Installation of a chart from the entitled helm repo requires a docker-registry secret containing an entitlement key from [MyIBM Container Software Library](https://myibm.ibm.com/products-services/containerlibrary).  See [installing entitled IBM Software onto IBM Cloud Private](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.2.0/installing/install_entitled_workloads.html) for step by step instructions on obtaining an entitlement key and creating the required secrets.  To add the entitled repo to local repository list run the following command :
 ```
 helm repo add entitled https://raw.githubusercontent.com/IBM/charts/master/repo/entitled
 ```
+**Note:** [Helm stable and incubator charts have moved locations](https://helm.sh/blog/new-location-stable-incubator-charts) causing older helm clients to fail when adding the IBM entitled repo as listed above.  If using a helm client older then v2.17, please run `helm init --client-only --stable-repo-url https://charts.helm.sh/stable` first to establish new location.
+
 
 The `community` directory contains Helm chart source provided by the wider community, while the `repo/community` directory contains the packaged Helm chart binaries.  To add the community repo to local repository list run the following command : 
 ```
 helm repo add community https://raw.githubusercontent.com/IBM/charts/master/repo/community
 ```
+**Note:** [Helm stable and incubator charts have moved locations](https://helm.sh/blog/new-location-stable-incubator-charts) causing older helm clients to fail when adding the IBM community repo as listed above.  If using a helm client older then v2.17, please run `helm init --client-only --stable-repo-url https://charts.helm.sh/stable` first to establish new location.
+
 
 The repo/stable, repo/entitled, and repo/community directories are Helm repositories, and their index.yaml file is built automatically based on the MASTER branch. As of IBM Cloud Private version 3.2,  all three repositories are part of the default configuration of IBM Cloud Private, and as such, all charts in those repository will be displayed by default in the IBM Cloud Private catalog.
 
