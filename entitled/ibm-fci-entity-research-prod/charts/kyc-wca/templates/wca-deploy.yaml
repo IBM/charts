@@ -1,0 +1,189 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "common.fullname" . }}
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "kyc-wca") (include "common.name" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "common.name" .) "kyc-wca") .Release.Name ) | indent 6 }}
+  replicas: {{ ternary .Values.kycWca.replicas 0 ( ne .Values.global.nlpMode "ML_ONLY" ) }}
+  revisionHistoryLimit: {{required "A valid .Values.revision_history_limit entry required!" .Values.revision_history_limit}}
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "kyc-wca") (include "common.name" .) .Release.Name .Release.Service ) | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8}}
+    spec:
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . |indent 8}}
+      serviceAccountName: {{ template "common.core-release-name" . }}-common
+      volumes:
+      - name: file-secrets
+        secret:
+          secretName: {{ template "common.core-release-name" . }}-platform-secret-files
+      - name: shared-data
+        emptyDir: {}
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.global.imagePullSecrets | indent 6 }}
+      {{- end }}
+      containers:
+      - name: kyc-wca
+        image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.kycWca.image.repository }}:{{ .Values.kycWca.image.tag }}
+        imagePullPolicy: {{ .Values.kycWca.image.pullPolicy }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        volumeMounts:
+        - name: shared-data
+          mountPath: /hc
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - "if [ -e /opt/IBM/es/scripts/healthcheck.sh ]; then /opt/IBM/es/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+          initialDelaySeconds: {{ default 150 .Values.kycWca.livenessProbe.initialDelaySeconds }}
+          failureThreshold: 3
+          periodSeconds: 10
+          timeoutSeconds: {{ default 5 .Values.kycWca.livenessProbe.timeoutSeconds }}
+        readinessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - "if [ -e /opt/IBM/es/scripts/healthcheck.sh ]; then /opt/IBM/es/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+          initialDelaySeconds: {{ default 120 .Values.kycWca.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ default 5 .Values.kycWca.readinessProbe.timeoutSeconds }}
+        envFrom:
+        - configMapRef:
+            name: {{ template "common.fullname" . }}
+        env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common.core-release-name" . }}-db2-secrets-env
+              key: DB2INST1_PASSWORD
+        ports:
+        - containerPort: {{ required "A valid .Values.kycWca.uiPort required!" .Values.kycWca.uiPort }}
+          name: ui-port
+        - containerPort: {{ required "A valid .Values.kycWca.apiPort required!" .Values.kycWca.apiPort }}
+          name: api-port
+        {{- if .Values.kycWca.resources }}
+        resources:
+          {{- if .Values.kycWca.resources.requests }}
+          requests:
+            {{- if .Values.kycWca.resources.requests.memory }}
+            memory: {{ .Values.kycWca.resources.requests.memory }}
+            {{- end}}
+            {{- if .Values.kycWca.resources.requests.cpu }}
+            cpu: {{ .Values.kycWca.resources.requests.cpu }}
+            {{- end}}
+          {{- end}}
+          {{- if .Values.kycWca.resources.limits }}
+          limits:
+            {{- if .Values.kycWca.resources.limits.memory }}
+            memory: {{ .Values.kycWca.resources.limits.memory }}
+            {{- end}}
+            {{- if .Values.kycWca.resources.limits.cpu }}
+            cpu: {{ .Values.kycWca.resources.limits.cpu }}
+            {{- end}}
+          {{- end}}
+        {{- end }}
+      - name: kyc-wca-kafka-consumer
+        image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.kycWcaKafkaConsumer.image.repository }}:{{ .Values.kycWcaKafkaConsumer.image.tag }}
+        imagePullPolicy: {{ .Values.kycWcaKafkaConsumer.image.pullPolicy }}
+        {{- if .Values.kycWcaKafkaConsumer.resources }}
+        resources:
+          {{- if .Values.kycWcaKafkaConsumer.resources.requests }}
+          requests:
+            {{- if .Values.kycWcaKafkaConsumer.resources.requests.memory }}
+            memory: {{ .Values.kycWcaKafkaConsumer.resources.requests.memory }}
+            {{- end}}
+            {{- if .Values.kycWcaKafkaConsumer.resources.requests.cpu }}
+            cpu: {{ .Values.kycWcaKafkaConsumer.resources.requests.cpu }}
+            {{- end}}
+          {{- end}}
+          {{- if .Values.kycWcaKafkaConsumer.resources.limits }}
+          limits:
+            {{- if .Values.kycWcaKafkaConsumer.resources.limits.memory }}
+            memory: {{ .Values.kycWcaKafkaConsumer.resources.limits.memory }}
+            {{- end}}
+            {{- if .Values.kycWcaKafkaConsumer.resources.limits.cpu }}
+            cpu: {{ .Values.kycWcaKafkaConsumer.resources.limits.cpu }}
+            {{- end}}
+          {{- end}}
+        {{- end }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - "if [ -e /kyc-wca-kafka-consumer/healthcheck.sh ]; then /kyc-wca-kafka-consumer/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+          initialDelaySeconds: {{ default 150 .Values.kycWcaKafkaConsumer.livenessProbe.initialDelaySeconds }}
+          failureThreshold: 3
+          periodSeconds: 10
+          timeoutSeconds: {{ default 5 .Values.kycWcaKafkaConsumer.livenessProbe.timeoutSeconds }}
+        readinessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - "if [ -e /kyc-wca-kafka-consumer/healthcheck.sh ]; then /kyc-wca-kafka-consumer/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+          initialDelaySeconds: {{ default 120 .Values.kycWcaKafkaConsumer.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ default 5 .Values.kycWcaKafkaConsumer.readinessProbe.timeoutSeconds }}
+        envFrom:
+        - configMapRef:
+            name: {{ template "common.fullname" . }}
+        env:
+        - name: FCI_KAFKA_MSG_KS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common.core-release-name" . }}-platform-secrets-env
+              key: FCI_KAFKA_MSG_JKS_PASSWORD
+        - name: KAFKA_SSL_TRUSTSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common.core-release-name" . }}-platform-secrets-env
+              key: FCI_JKS_PASSWORD
+        - name: KAFKA_SSL_KEYSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common.core-release-name" . }}-platform-secrets-env
+              key: FCI_JKS_PASSWORD
+        - name: FCI_KAFKA_MSG_KS_ALIASNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common.core-release-name" . }}-platform-secrets-env
+              key: FCI_KAFKA_MSG_JKS_ALIASNAME
+        - name: DB2_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common.core-release-name" . }}-db2-secrets-env
+              key: DB2INST1_PASSWORD
+        volumeMounts:
+          - name: file-secrets
+            mountPath: /kyc-wca-kafka-consumer/security/kafka.client.keystore.jks
+            subPath: fci_universal_ks.jks
+          - name: file-secrets
+            mountPath: /kyc-wca-kafka-consumer/security/kafka.client.truststore.jks
+            subPath: fci_universal_ks.jks
+          - name: file-secrets
+            mountPath: /kyc-wca-kafka-consumer/security/fci_kafka_msg.p12
+            subPath: fci_kafka_msg.p12
+          - name: shared-data
+            mountPath: /hc
+      restartPolicy: Always
+      hostAliases:
+      - ip: 127.0.0.1
+        hostnames:
+        - 'kyc-wca-host'
+      tolerations:
+      {{ toYaml .Values.internetRequired.tolerations | indent 8 }}

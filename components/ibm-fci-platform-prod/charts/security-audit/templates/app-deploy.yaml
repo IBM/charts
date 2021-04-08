@@ -5,6 +5,7 @@ metadata:
   labels:
 {{- include "common.label.metadata" (list . (printf "%s-%s" (include "security-audit.name" .) "app") (include "security-audit.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
+  progressDeadlineSeconds: 1800
 {{ include "common.scaleDownIfDisabled" . | indent 2 }}
   selector:
     matchLabels:
@@ -28,12 +29,6 @@ spec:
       - name: file-secrets
         secret:
           secretName: {{ .Release.Name }}-platform-secret-files
-      - name: db2-cert
-        secret:
-          defaultMode: 420
-          secretName: {{ .Release.Name }}-db2-secrets-env
-      - name: fcicert
-        emptyDir: {}
       - name: logs
         emptyDir: {}
       - name: varlog
@@ -58,29 +53,6 @@ spec:
 {{ toYaml .Values.sideCarContainers.resources | indent 12 }}
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
-{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
-        - name: import-db2-cert
-          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.cryptoUtils.image.repository }}:{{ .Values.global.cryptoUtils.image.tag }}"
-          command:
-            - bash
-            - -c
-            - cp /fci_universal_ks.jks /etc/tls/fci_universal_ks.jks && /opt/ibm/java-x86_64-80/jre/bin/keytool -import -noprompt -deststorepass $SSL_KEYSTORE_PASSWORD_CONFIG -file /db2cert -storetype JKS -keystore /etc/tls/fci_universal_ks.jks
-          resources:
-{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
-          env:
-{{- include "common.import-secret" (list . "SSL_KEYSTORE_PASSWORD_CONFIG" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
-          volumeMounts:
-          - name: fcicert
-            mountPath: /etc/tls
-          - name: db2-cert
-            mountPath: /db2cert
-            subPath: db2_cert
-          - name: file-secrets
-            mountPath: /fci_universal_ks.jks
-            subPath: fci_universal_ks.jks
-          securityContext:
-{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
-{{ end }}
         - name: security-audit-data-store
           image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.db2.image.repository }}:{{ .Values.db2.image.tag }}"
           imagePullPolicy: {{ .Values.db2.image.pullPolicy }}
@@ -119,13 +91,11 @@ spec:
 {{ end }}
           - name: FLYWAY_URL
 {{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
-            value: "{{ printf "jdbc:db2://$(DB2_HOST):50001/FCIDB:sslConnection=true;sslTrustStoreLocation=/etc/tls/fci_universal_ks.jks;sslTrustStorePassword=$(SSL_KEYSTORE_PASSWORD_CONFIG);" }}"
+            value: "{{ printf "jdbc:db2://$(DB2_HOST):50001/FCIDB:sslConnection=true;sslTrustStoreLocation=/fci_universal_ks.jks;sslTrustStorePassword=$(SSL_KEYSTORE_PASSWORD_CONFIG);" }}"
 {{ else }}
             value: "{{ printf "jdbc:db2://%s-db2-datastore-0:56000/fcidb:sslConnection=true;sslTrustStoreLocation=/fci_universal_ks.jks;sslTrustStorePassword=$(SSL_KEYSTORE_PASSWORD_CONFIG);" .Release.Name }}"
 {{ end }}
           volumeMounts:
-            - name: fcicert
-              mountPath: /etc/tls
             - name: file-secrets
               mountPath: /fci_universal_ks.jks
               subPath: fci_universal_ks.jks
@@ -141,12 +111,6 @@ spec:
 {{ toYaml .Values.liberty.livenessProbe | indent 12 }}
           readinessProbe:
 {{ toYaml .Values.liberty.readinessProbe | indent 12 }}
-{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
-          command:
-            - bash
-            - -c
-            - cp /etc/tls/fci_universal_ks.jks /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.jks && /opt/ibm/fci/scripts/start.sh
-{{ end }}
           envFrom:
           - configMapRef:
               name: {{ template "security-audit.fullname" . }}
@@ -210,11 +174,9 @@ spec:
           - name: file-secrets
             mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/kafka.client.truststore.jks
             subPath: fci_universal_ks.jks
-{{ if eq .Values.global.DB2_PROVISIONER "FCI" }}
           - name: file-secrets
             mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.jks
             subPath: fci_universal_ks.jks
-{{ end }}
           - name: file-secrets
             mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/kafka.client.keystore.jks
             subPath: fci_universal_ks.jks
@@ -223,8 +185,6 @@ spec:
             subPath: fci_kafka_msg.p12
           - name: logs
             mountPath: /opt/ibm/wlp/usr/servers/fciServer/logs
-          - name: fcicert
-            mountPath: /etc/tls
           - name: varlog
             mountPath: /var/log
         - name: sidecar

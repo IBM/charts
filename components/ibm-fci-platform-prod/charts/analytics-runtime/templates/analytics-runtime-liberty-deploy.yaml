@@ -34,6 +34,9 @@ spec:
         - name: fcii-app-volume-mount
           persistentVolumeClaim:
             claimName: volumes-{{ .Values.global.FCII_APP_VOLUME_NAME }}-pvc
+        - name: ar-liberty-data
+          persistentVolumeClaim:
+            claimName: {{ template "analytics-runtime.fullname" . }}-liberty
         - name: zen-service-broker-secret
           secret:
             defaultMode: 420
@@ -42,9 +45,14 @@ spec:
           emptyDir: {}
         - name: shared-data
           emptyDir: {}
+        - name: graph-shared-data
+          emptyDir: {}
         - name: keytab-file
           secret:
             secretName: {{ .Release.Name }}-cedm-keytab
+        - name: graph-keytab-file
+          secret:
+            secretName: {{ .Release.Name }}-graph-keytab
       initContainers:
         - name: init-job-depend
           image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
@@ -64,13 +72,15 @@ spec:
           securityContext:
 {{ include "common.RootFownerContainerSecurityContext" . | indent 12 }}
           args:
-          - chmod -R g+w /mount;
+          - chmod -R g+w /mount /mount1;
           command:
           - /bin/sh
           - -c
           volumeMounts:
           - mountPath: /mount
             name: fcii-app-volume-mount
+          - mountPath: /mount1
+            name: ar-liberty-data
         {{- end }}
       containers:
         - name: ar-liberty
@@ -115,6 +125,11 @@ spec:
               secretKeyRef:
                 name: {{ .Release.Name }}-platform-secrets-env
                 key: ELASTIC_ADMIN_PASSWORD
+          - name: ODM_RESADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-odm-secrets-env
+                key: odm_resadmin_password
           - name: JWT_KEY
             valueFrom:
               secretKeyRef:
@@ -122,19 +137,50 @@ spec:
                 key: JWT_KEY
           - name: HDP_SHARED_DIR
             value: /home/wlpadmin
+          - name: GRAPH_KEYTAB
+            valueFrom:
+              configMapKeyRef:
+                key: KEYTAB_FILE
+                name: {{ .Release.Name }}-graph-writer-gremlin-krb
+          - name: GRAPH_KERBEROS_PRINCIPAL
+            valueFrom:
+              configMapKeyRef:
+                key: KERBEROS_CLIENT_PRINCIPAL
+                name: {{ .Release.Name }}-graph-writer-gremlin-krb
+          - name: FCI_DB2_DATABASE
+            value: FCIDB
+          - name: FCII_DB2_SCHEMA
+            value: CFFACT
 {{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
-          - name: fci_db2_server
+          - name: FCI_DB2_HOST_NAME
             valueFrom:
               configMapKeyRef:
                 name: {{ .Release.Name }}-db2
                 key: db_host  
-          - name: fci_db2_ssl_port
+          - name: FCI_DB2_PORT
             value: "50001"
+          - name: FCI_DB2_USERNAME
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-db2
+                key: db_userid
+          - name: FCI_DB2_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-db2-secrets-env
+                key: db2_password
 {{ else }}
-          - name: fci_db2_server
+          - name: FCI_DB2_HOST_NAME
             value: "fci-db2-datastore-0"
-          - name: fci_db2_ssl_port
+          - name: FCI_DB2_PORT
             value: "56000"
+          - name: FCI_DB2_USERNAME
+            value: "fciauthid"
+          - name: FCI_DB2_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-db2-secrets-env
+                key: FCIAUTHID_PASSWORD
 {{ end }}
           envFrom:
           - configMapRef:
@@ -145,6 +191,8 @@ spec:
           - containerPort: 9080
           - containerPort: 9443
           volumeMounts:
+          - mountPath: /fci-art-shared
+            name: ar-liberty-data
           - name: file-secrets
             mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.jks
             subPath: fci_universal_ks.jks
@@ -165,8 +213,14 @@ spec:
             mountPath: /var/run/sharedsecrets
           - name: shared-data
             mountPath: /home/wlpadmin
-          - mountPath: /etc/security/keytabs
-            name: keytab-file
+          - name: graph-shared-data
+            mountPath: /home/fcigraph
+          - name: keytab-file
+            mountPath: /etc/security/keytabs/bigmatch.headless.keytab
+            subPath: bigmatch.headless.keytab
+          - name: graph-keytab-file
+            mountPath: /etc/security/keytabs/fcigraph.headless.keytab
+            subPath: fcigraph.headless.keytab
           resources:
 {{ toYaml .Values.arLiberty.resources | indent 12 }}
 {{- with .Values.arLiberty.nodeSelector }}
@@ -211,6 +265,39 @@ spec:
             name: keytab-file
           - name: shared-data
             mountPath: /home/wlpadmin
+        - envFrom:
+          - configMapRef:
+              name: {{ .Release.Name }}-ibm-fci-platform-prod-krb
+          - configMapRef:
+              name: {{ .Release.Name }}-graph-writer-gremlin-krb
+          env:
+          - name: HBASE_TOKEN
+            value: 'true'
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.kerberosClient.image.repository }}:{{ .Values.kerberosClient.image.tag }}"
+          imagePullPolicy: {{ .Values.kerberosClient.image.pullPolicy }}
+          livenessProbe:
+{{ toYaml .Values.kerberosClient.livenessProbe | indent 12 }}
+          readinessProbe:
+{{ toYaml .Values.kerberosClient.readinessProbe | indent 12 }}
+          name: graph-hdp-client
+          resources:
+{{ toYaml .Values.global.kerberos.resources | indent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            {{- if .Values.global.pvRequiresPermissionsFix }}
+            runAsUser: {{ .Values.global.kerberos.runAsUser }}
+            {{- end }}
+          volumeMounts:
+          - name: graph-keytab-file
+            mountPath: /etc/security/keytabs
+          - name: graph-shared-data
+            mountPath: /home/fcigraph
         - name: message-log
           image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           args: [/bin/sh, -c, 'tail -n+1 -F /logs/messages.log']

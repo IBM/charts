@@ -1,0 +1,233 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "common.fullname" . }}
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "kyc-api") (include "common.name" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "common.name" .) "kyc-api") .Release.Name ) | indent 6 }}
+  replicas: {{ .Values.kycApi.replicas }}
+  revisionHistoryLimit: {{required "A valid .Values.revision_history_limit entry required!" .Values.revision_history_limit}}
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "kyc-api") (include "common.name" .) .Release.Name .Release.Service ) | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8}}
+    spec:
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . |indent 8}}
+      serviceAccountName: {{ template "common.core-release-name" . }}-common
+      volumes:
+      - name: kyc-api-instance
+        persistentVolumeClaim:
+          claimName: {{ include "fci-entity-research.call-nested" (list . "kyc-application" "common.fullname") }}
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+      - name: file-secrets
+        secret:
+          secretName: {{ template "common.core-release-name" . }}-platform-secret-files
+      - name: db2-cert
+        secret:
+          defaultMode: 420
+          secretName: {{ template "common.core-release-name" . }}-db2-secrets-env
+{{ end }}
+{{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.global.imagePullSecrets | indent 6 }}
+{{- end }}
+      initContainers:
+        - name: init-db
+          image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.kycApiInit.image.repository }}:{{ .Values.kycApiInit.image.tag }}
+          imagePullPolicy: {{ .Values.kycApiInit.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          {{- if .Values.kycApiInit.resources }}
+          resources:
+            {{- if .Values.kycApiInit.resources.requests }}
+            requests:
+              {{- if .Values.kycApiInit.resources.requests.memory }}
+              memory: {{ .Values.kycApiInit.resources.requests.memory }}
+              {{- end}}
+              {{- if .Values.kycApiInit.resources.requests.cpu }}
+              cpu: {{ .Values.kycApiInit.resources.requests.cpu }}
+              {{- end}}
+            {{- end}}
+            {{- if .Values.kycApiInit.resources.limits }}
+            limits:
+              {{- if .Values.kycApiInit.resources.limits.memory }}
+              memory: {{ .Values.kycApiInit.resources.limits.memory }}
+              {{- end}}
+              {{- if .Values.kycApiInit.resources.limits.cpu }}
+              cpu: {{ .Values.kycApiInit.resources.limits.cpu }}
+              {{- end}}
+            {{- end}}
+          {{- end }}
+          args: ["migrate"]
+          env:
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+{{- include "common.import-secret" (list . "SSL_KEYSTORE_PASSWORD_CONFIG" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
+{{- include "common.import-secret" (list . "FLYWAY_PASSWORD" "db2" "db2_password") | indent 10 }}
+          - name: FLYWAY_USER
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "common.core-release-name" . }}-db2
+                key: db_userid
+          - name: DB2_HOST
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "common.core-release-name" . }}-db2
+                key: db_host
+          - name: FLYWAY_URL
+            value: "{{ printf "jdbc:db2://$(DB2_HOST):50001/FCIDB:sslConnection=true;sslTrustStoreLocation=/fci_universal_ks.jks;sslTrustStorePassword=$(SSL_KEYSTORE_PASSWORD_CONFIG);" }}"
+          volumeMounts:
+          - name: file-secrets
+            mountPath: /fci_universal_ks.jks
+            subPath: fci_universal_ks.jks
+{{ else }}
+{{- include "common.import-secret" (list . "FLYWAY_PASSWORD" "db2" "DB2INST1_PASSWORD") | indent 10 }}
+          - name: FLYWAY_USER
+            value: {{ .Values.kycDbConfig.FLYWAY_USER }}
+          - name: FLYWAY_URL
+            value: {{ .Values.kycDbConfig.DB_URL }}
+{{ end }}
+      containers:
+      - name: kyc-api
+        image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.kycApi.image.repository}}:{{ .Values.kycApi.image.tag }}
+        imagePullPolicy: {{ .Values.kycApi.image.pullPolicy }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        livenessProbe:
+          httpGet:
+            scheme: HTTP
+            path: /health
+            port: 3010
+            httpHeaders:
+            - name: fcdd-statistics-access
+              value: {{ .Values.kycApiConfig.FCDD_KEY }}
+          initialDelaySeconds: {{ default 30 .Values.kycApi.livenessProbe.initialDelaySeconds }}
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            scheme: HTTP
+            path: /health
+            port: 3010
+            httpHeaders:
+            - name: fcdd-statistics-access
+              value: {{ .Values.kycApiConfig.FCDD_KEY }}
+          initialDelaySeconds: {{ default 30 .Values.kycApi.readinessProbe.initialDelaySeconds }}
+          periodSeconds: 20
+        envFrom:
+        - configMapRef:
+            name: {{ template "common.fullname" . }}
+        env:
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+{{- include "common.import-secret" (list . "DB2_PWD" "db2" "db2_password") | indent 8 }}
+        - name: DB2_UID
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "common.core-release-name" . }}-db2
+              key: db_userid
+        - name: DB2_HOSTNAME
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "common.core-release-name" . }}-db2
+              key: db_host
+        - name: DB2_SSL_PORT
+          value: "{{ .Values.kycDbConfig.DB_SSL_PORT }}"
+{{ else }}
+{{- include "common.import-secret" (list . "DB2_PWD" "db2" "DB2INST1_PASSWORD") | indent 8 }}
+        - name: DB2_UID
+          value: "{{ .Values.kycDbConfig.DB_USER }}"
+        - name: DB2_HOSTNAME
+          value: "{{ .Values.kycDbConfig.DB_HOST }}"
+        - name: DB2_PORT
+          value: "{{ .Values.kycDbConfig.DB_PORT }}"
+{{ end }}
+        - name: JWT_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common.core-release-name" . }}-platform-secrets-env
+              key: JWT_KEY
+        - name: DNB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common.secrets-name" . }}
+              key: DNB_PASSWORD
+        - name: KYCKR_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common.secrets-name" . }}
+              key: KYCKR_PASSWORD
+        - name: DOWJONES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common.secrets-name" . }}
+              key: DOWJONES_PASSWORD
+        - name: BVD_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common.secrets-name" . }}
+              key: BVD_TOKEN
+        - name: FACTIVA_EID
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common.secrets-name" . }}
+              key: FACTIVA_EID
+        - name: MONGO_FCI_PWD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common.core-release-name" . }}-mongo-secrets-env
+              key: mongodb-fcdd-password
+        - name: BING_WEB_TOKEN_VALUE
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common.secrets-name" . }}
+              key: BING_WEB_SUBSCRIPTION_KEY_V7
+        - name: BING_NEWS_TOKEN_VALUE
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common.secrets-name" . }}
+              key: BING_NEWS_SUBSCRIPTION_KEY_V7
+        ports:
+        - containerPort: 3010
+        {{- if .Values.kycApi.resources }}
+        resources:
+          {{- if .Values.kycApi.resources.requests }}
+          requests:
+            {{- if .Values.kycApi.resources.requests.memory }}
+            memory: {{ .Values.kycApi.resources.requests.memory }}
+            {{- end}}
+            {{- if .Values.kycApi.resources.requests.cpu }}
+            cpu: {{ .Values.kycApi.resources.requests.cpu }}
+            {{- end}}
+          {{- end}}
+          {{- if .Values.kycApi.resources.limits }}
+          limits:
+            {{- if .Values.kycApi.resources.limits.memory }}
+            memory: {{ .Values.kycApi.resources.limits.memory }}
+            {{- end}}
+            {{- if .Values.kycApi.resources.limits.cpu }}
+            cpu: {{ .Values.kycApi.resources.limits.cpu }}
+            {{- end}}
+          {{- end}}
+        {{- end }}
+        volumeMounts:
+        - name: kyc-api-instance
+          mountPath: /data
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+        - name: db2-cert
+          mountPath: /db2cert.arm
+          subPath: db2_cert
+{{ end }}
+      restartPolicy: Always
+    {{- if .Values.internetRequired.affinity }}
+      affinity:
+{{ toYaml .Values.internetRequired.affinity | indent 8 }}
+    {{- end }}
+      tolerations:
+{{ toYaml .Values.internetRequired.tolerations | indent 8 }}

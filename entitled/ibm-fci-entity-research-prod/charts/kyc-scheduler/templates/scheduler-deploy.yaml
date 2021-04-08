@@ -1,0 +1,196 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "common.fullname" . }}
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "kyc-scheduler") (include "common.name" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "common.name" .) "kyc-scheduler") .Release.Name ) | indent 6 }}
+  replicas: {{ .Values.kycScheduler.replicas }}
+  revisionHistoryLimit: {{required "A valid .Values.revision_history_limit entry required!" .Values.revision_history_limit}}
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "kyc-scheduler") (include "common.name" .) .Release.Name .Release.Service ) | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8}}
+    spec:
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . |indent 8}}
+      serviceAccountName: {{ template "common.core-release-name". }}-common
+      volumes:
+      - name: kyc-scheduler-instance
+        persistentVolumeClaim:
+            claimName: {{ include "fci-entity-research.call-nested" (list . "kyc-application" "common.fullname") }}
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+      - name: file-secrets
+        secret:
+          secretName: {{ template "common.core-release-name" . }}-platform-secret-files
+      - name: db2-cert
+        secret:
+          defaultMode: 420
+          secretName: {{ template "common.core-release-name" . }}-db2-secrets-env
+{{ end }}
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.global.imagePullSecrets | indent 6 }}
+      {{- end }}
+      initContainers:
+        - name: init-db
+          image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.kycSchedulerInit.image.repository }}:{{ .Values.kycSchedulerInit.image.tag }}
+          imagePullPolicy: {{ .Values.kycSchedulerInit.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          {{- if .Values.kycSchedulerInit.resources }}
+          resources:
+            {{- if .Values.kycSchedulerInit.resources.requests }}
+            requests:
+              {{- if .Values.kycSchedulerInit.resources.requests.memory }}
+              memory: {{ .Values.kycSchedulerInit.resources.requests.memory }}
+              {{- end}}
+              {{- if .Values.kycSchedulerInit.resources.requests.cpu }}
+              cpu: {{ .Values.kycSchedulerInit.resources.requests.cpu }}
+              {{- end}}
+            {{- end}}
+            {{- if .Values.kycSchedulerInit.resources.limits }}
+            limits:
+              {{- if .Values.kycSchedulerInit.resources.limits.memory }}
+              memory: {{ .Values.kycSchedulerInit.resources.limits.memory }}
+              {{- end}}
+              {{- if .Values.kycSchedulerInit.resources.limits.cpu }}
+              cpu: {{ .Values.kycSchedulerInit.resources.limits.cpu }}
+              {{- end}}
+            {{- end}}
+          {{- end }}
+          args: ["migrate"]
+          env:
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+{{- include "common.import-secret" (list . "SSL_KEYSTORE_PASSWORD_CONFIG" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
+{{- include "common.import-secret" (list . "FLYWAY_PASSWORD" "db2" "db2_password") | indent 10 }}
+          - name: FLYWAY_USER
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "common.core-release-name" . }}-db2
+                key: db_userid
+          - name: DB2_HOST
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "common.core-release-name" . }}-db2
+                key: db_host
+          - name: FLYWAY_URL
+            value: "{{ printf "jdbc:db2://$(DB2_HOST):50001/FCIDB:sslConnection=true;sslTrustStoreLocation=/fci_universal_ks.jks;sslTrustStorePassword=$(SSL_KEYSTORE_PASSWORD_CONFIG);" }}"
+          volumeMounts:
+          - name: file-secrets
+            mountPath: /fci_universal_ks.jks
+            subPath: fci_universal_ks.jks
+{{ else }}
+{{- include "common.import-secret" (list . "FLYWAY_PASSWORD" "db2" "DB2INST1_PASSWORD") | indent 10 }}
+          - name: FLYWAY_USER
+            value: {{ .Values.kycDbConfig.FLYWAY_USER }}
+          - name: FLYWAY_URL
+            value: {{ .Values.kycDbConfig.DB_URL }}
+{{ end }}
+      containers:
+      - name: kyc-scheduler
+        image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.kycScheduler.image.repository }}:{{ .Values.kycScheduler.image.tag }}
+        imagePullPolicy: {{ .Values.kycScheduler.image.pullPolicy }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        livenessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /kyc/health
+            port: 3007
+          initialDelaySeconds: {{ default 30 .Values.kycScheduler.livenessProbe.initialDelaySeconds }}
+          failureThreshold: 3
+          periodSeconds: 10
+          timeoutSeconds: 1
+        readinessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /kyc/health
+            port: 3007
+          initialDelaySeconds: {{ default 30 .Values.kycScheduler.readinessProbe.initialDelaySeconds }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "fci-entity-research.call-nested" (list . "kyc-application" "common.fullname") }}
+        {{- if .Values.kycScheduler.resources }}
+        resources:
+          {{- if .Values.kycScheduler.resources.requests }}
+          requests:
+            {{- if .Values.kycScheduler.resources.requests.memory }}
+            memory: {{ .Values.kycScheduler.resources.requests.memory }}
+            {{- end}}
+            {{- if .Values.kycScheduler.resources.requests.cpu }}
+            cpu: {{ .Values.kycScheduler.resources.requests.cpu }}
+            {{- end}}
+          {{- end}}
+          {{- if .Values.kycScheduler.resources.limits }}
+          limits:
+            {{- if .Values.kycScheduler.resources.limits.memory }}
+            memory: {{ .Values.kycScheduler.resources.limits.memory }}
+            {{- end}}
+            {{- if .Values.kycScheduler.resources.limits.cpu }}
+            cpu: {{ .Values.kycScheduler.resources.limits.cpu }}
+            {{- end}}
+          {{- end}}
+        {{- end }}
+        env:
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+{{- include "common.import-secret" (list . "DB2_PWD" "db2" "db2_password") | indent 8 }}
+        - name: DB2_UID
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "common.core-release-name" . }}-db2
+              key: db_userid
+        - name: DB2_HOSTNAME
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "common.core-release-name" . }}-db2
+              key: db_host
+        - name: DB2_SSL_PORT
+          value: "50001"
+{{ else }}
+{{- include "common.import-secret" (list . "DB2_PWD" "db2" "DB2INST1_PASSWORD") | indent 8 }}
+        - name: DB2_UID
+          value: {{ .Values.kycDbConfig.FLYWAY_USER }}
+        - name: DB2_HOSTNAME
+          value: "fci-db2-datastore-0"
+        - name: DB2_PORT
+          value: 50000
+{{ end }}
+        - name: JWT_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common.core-release-name" . }}-platform-secrets-env
+              key: JWT_KEY
+        - name: KYC_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common.secrets-name" . }}
+              key: KYC_SECRET_KEY
+        - name: MONGO_FCI_PWD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common.core-release-name" . }}-mongo-secrets-env
+              key: mongodb-fcdd-password
+        ports:
+        - containerPort: 3007
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+        volumeMounts:
+        - name: db2-cert
+          mountPath: /db2cert.arm
+          subPath: db2_cert
+{{ end }}
+      restartPolicy: Always
+    {{- if .Values.internetRequired.affinity }}
+      affinity:
+{{ toYaml .Values.internetRequired.affinity | indent 8 }}
+    {{- end }}
+      tolerations:
+{{ toYaml .Values.internetRequired.tolerations | indent 8 }}

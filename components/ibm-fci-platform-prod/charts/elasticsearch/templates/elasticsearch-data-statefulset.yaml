@@ -1,0 +1,227 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  annotations:
+    esMajorVersion: "6"
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "elasticsearch.name" .) "data") (include "elasticsearch.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+  name: {{ template "elasticsearch.fullname" . }}-data
+spec:
+  replicas: {{ .Values.data.numReplicas }}
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "elasticsearch.name" .) "data") .Release.Name ) | indent 6 }}
+  serviceName: {{ template "elasticsearch.name" . }}-data-headless
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "elasticsearch.name" .) "data") (include "elasticsearch.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+      name: {{ template "elasticsearch.fullname" . }}-data
+    spec:
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      initContainers:
+      - name: permissionsfix
+        securityContext:
+          allowPrivilegeEscalation: true
+          capabilities:
+            add:
+            - CHOWN
+            drop:
+            - ALL
+          privileged: true
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+          runAsUser: 0
+        args:
+        - |
+          #!/usr/bin/env bash -e
+          # Apply OS tunings and set permissions on data and backups folders
+
+          tune_os(){
+            echo "Tuning OS"
+            sysctl -w vm.max_map_count=262144
+            sysctl -w vm.swappiness=1
+            ulimit -n 65536
+            ulimit -a
+          }
+
+          set_pv_permissions(){
+            if [ -d /mount ]; then
+              echo "Setting permissions on mount path";
+              chown 1000:1000 /mount 
+            else
+              echo "/mount path not found!";
+            fi
+
+            if [ -d /mount_backup ]; then
+              echo "Setting permissions on mount_backup path";
+              chown 1000:1000 /mount_backup;
+            else
+              echo "/mount_backup path not found!";
+            fi
+          }
+
+          tune_os
+          set_pv_permissions
+          echo "Done"
+        command:
+        - /bin/sh
+        - -c
+        volumeMounts:
+        - mountPath: /mount
+          name: {{ template "elasticsearch.fullname" . }}-data
+        image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 10 }}
+      containers:
+      - env:
+        - name: node.name
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: discovery.zen.ping.unicast.hosts
+          value: {{ template "elasticsearch.fullname" . }}-master-headless
+        - name: cluster.name
+          value: {{ .Values.global.clusterName }}
+        - name: network.host
+          value: 0.0.0.0
+        - name: node.data
+          value: "true"
+        - name: node.ingest
+          value: "true"
+        - name: node.master
+          value: "false"
+        - name: MEM_PERC
+          value: "80"
+        image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.data.image.repository }}:{{ .Values.data.image.tag }}
+        imagePullPolicy: {{ .Values.data.image.pullPolicy }}
+        name: elasticsearch
+        ports:
+        - containerPort: 9200
+          name: http
+          protocol: TCP
+        - containerPort: 9300
+          name: transport
+          protocol: TCP
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - /usr/local/bin/healthcheck.sh
+          failureThreshold: 3
+          initialDelaySeconds: 90
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - /usr/local/bin/healthcheck.sh
+          failureThreshold: 3
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          successThreshold: 3
+          timeoutSeconds: 5
+        resources:
+{{ toYaml .Values.data.resources | indent 10 }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        volumeMounts:
+        - mountPath: /usr/share/elasticsearch/data
+          name: {{ template "elasticsearch.fullname" . }}-data
+        - mountPath: /usr/share/elasticsearch/config/fci_universal_ks.pvtk.pem
+          name: file-secrets
+          subPath: fci_universal_ks.pvtk.pem
+        - mountPath: /usr/share/elasticsearch/config/fci_universal_ks.crt.pem
+          name: file-secrets
+          subPath: fci_universal_ks.crt.pem
+      - env:
+        - name: HTTP_AUTH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: ELASTIC_ADMIN_PASSWORD
+              name: {{ .Release.Name }}-elastic-secrets-env
+        - name: SERVICE_HOST_ENV_NAME
+          value: localhost
+        - name: SERVICE_PORT_ENV_NAME
+          value: "9200,9300"
+        - name: HTTP_PROXY
+          value: "true"
+        - name: HTTP_AUTH
+          value: "true"
+        - name: HTTP_AUTH_USERID
+          value: fci_admin
+        - name: PROXY_READ_TIMEOUT
+          value: "360"
+        image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.global.nginxSslProxy.image.repository }}:{{ .Values.global.nginxSslProxy.image.tag }}
+        imagePullPolicy: {{ .Values.global.nginxSslProxy.image.pullPolicy }}
+        livenessProbe:
+          exec:
+            command:
+            - echo
+          failureThreshold: 3
+          initialDelaySeconds: 120
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: elasticsearch-proxy
+        readinessProbe:
+          exec:
+            command:
+            - echo
+          failureThreshold: 3
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+{{ toYaml .Values.global.nginxSslProxy.resources | indent 10 }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        volumeMounts:
+        - mountPath: /etc/secrets/proxykey
+          name: file-secrets
+          subPath: fci_universal_ks.pvtk.pem
+        - mountPath: /etc/secrets/proxycert
+          name: file-secrets
+          subPath: fci_universal_ks.crt.pem
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      serviceAccount: {{ .Release.Name }}-elasticsearch
+      serviceAccountName: {{ .Release.Name }}-elasticsearch
+      volumes:
+      - name: file-secrets
+        secret:
+          defaultMode: 420
+          secretName: {{ .Release.Name }}-platform-secret-files
+  updateStrategy:
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ template "elasticsearch.fullname" . }}-data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: {{ .Values.data.pvcSpec.size }}
+{{- if .Values.global.persistence.useDynamicProvisioning }}
+{{-   if not .Values.data.pvcSpec.storageClassName }}
+      storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{-   else }}
+      storageClassName: {{ .Values.data.pvcSpec.storageClassName | quote }}
+{{-   end }}
+{{- else }}
+      storageClassName: {{ default "" .Values.data.pvcSpec.storageClassName | quote }}
+{{- end }}
+{{- if not .Values.global.persistence.useDynamicProvisioning }}
+      selector:
+        matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "elasticsearch.name" .) "data") .Release.Name ) | indent 4 }}
+{{ end }}        
