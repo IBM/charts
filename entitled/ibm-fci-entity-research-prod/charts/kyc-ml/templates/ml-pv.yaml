@@ -1,0 +1,26 @@
+{{- if .Values.global.createPv }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ template "common.fullname" . }}
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "kyc-ml") (include "common.name" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  nfs:
+    path: {{ .Values.mlDataPvNfsPath }}
+    server: {{ required "When global.createPv is set to true, global.nfsServer must specify the NFS server that holds the persistent volume." .Values.global.nfsServer }}
+    readOnly: false
+{{-   if .Values.mlDataPvcSpec.resources.requests.storage }}
+  capacity:
+    storage: {{ .Values.mlDataPvcSpec.resources.requests.storage }}
+{{-   end }}
+{{-   if .Values.mlDataPvcSpec.storageClassName }}
+  storageClassName: {{ .Values.mlDataPvcSpec.storageClassName }}
+{{-   end }}
+{{-   if .Values.mlDataPvcSpec.accessModes }}
+{{-     with .Values.mlDataPvcSpec.accessModes }}
+  accessModes:
+{{        toYaml . | indent 4 -}}
+{{-     end -}}
+{{-   end }}
+{{- end -}}

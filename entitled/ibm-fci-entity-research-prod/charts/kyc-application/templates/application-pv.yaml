@@ -1,0 +1,26 @@
+{{- if .Values.global.createPv }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ template "common.fullname" . }}
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "kyc-application") (include "common.name" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  nfs:
+    path: {{ .Values.kycApplicationPvNfsPath }}
+    server: {{ required "When global.createPv is set to true, global.nfsServer must specify the NFS server that holds the persistent volume." .Values.global.nfsServer }}
+    readOnly: false
+{{-   if .Values.kycApplicationPvcSpec.resources.requests.storage }}
+  capacity:
+    storage: {{ .Values.kycApplicationPvcSpec.resources.requests.storage }}
+{{-   end }}
+{{-   if .Values.kycApplicationPvcSpec.storageClassName }}
+  storageClassName: {{ .Values.kycApplicationPvcSpec.storageClassName }}
+{{-   end }}
+{{-   if .Values.kycApplicationPvcSpec.accessModes }}
+{{-     with .Values.kycApplicationPvcSpec.accessModes }}
+  accessModes:
+{{        toYaml . | indent 4 -}}
+{{-     end -}}
+{{-   end }}
+{{- end -}}

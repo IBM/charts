@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "common.fullname" . }}
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "kyc-record") (include "common.name" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "common.name" .) "kyc-record") .Release.Name ) | indent 6 }}
+  replicas: {{ .Values.kycRecord.replicas }}
+  revisionHistoryLimit: {{required "A valid .Values.revision_history_limit entry required!" .Values.revision_history_limit}}
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "kyc-record") (include "common.name" .) .Release.Name .Release.Service ) | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8}}
+    spec:
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . |indent 8}}
+      serviceAccountName: {{ template "common.core-release-name" . }}-common
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.global.imagePullSecrets | indent 6 }}
+      {{- end }}
+      containers:
+      - name: kyc-record
+        image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.kycRecord.image.repository }}:{{ .Values.kycRecord.image.tag }}
+        imagePullPolicy: {{ .Values.kycRecord.image.pullPolicy }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        livenessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /health
+            port: 8443
+          initialDelaySeconds: {{ default 30 .Values.kycRecord.livenessProbe.initialDelaySeconds }}
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /health
+            port: 8443
+          initialDelaySeconds: {{ default 30 .Values.kycRecord.readinessProbe.initialDelaySeconds }}
+          periodSeconds: 20
+        envFrom:
+        - configMapRef:
+            name: {{ template "common.fullname" . }}
+        env:
+        - name: JWT_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common.core-release-name" . }}-platform-secrets-env
+              key: JWT_KEY
+        ports:
+        - containerPort: 8443
+        {{- if .Values.kycRecord.resources }}
+        resources:
+          {{- if .Values.kycRecord.resources.requests }}
+          requests:
+            {{- if .Values.kycRecord.resources.requests.memory }}
+            memory: {{ .Values.kycRecord.resources.requests.memory }}
+            {{- end}}
+            {{- if .Values.kycRecord.resources.requests.cpu }}
+            cpu: {{ .Values.kycRecord.resources.requests.cpu }}
+            {{- end}}
+          {{- end}}
+          {{- if .Values.kycRecord.resources.limits }}
+          limits:
+            {{- if .Values.kycRecord.resources.limits.memory }}
+            memory: {{ .Values.kycRecord.resources.limits.memory }}
+            {{- end}}
+            {{- if .Values.kycRecord.resources.limits.cpu }}
+            cpu: {{ .Values.kycRecord.resources.limits.cpu }}
+            {{- end}}
+          {{- end}}
+        {{- end }}
+      restartPolicy: Always

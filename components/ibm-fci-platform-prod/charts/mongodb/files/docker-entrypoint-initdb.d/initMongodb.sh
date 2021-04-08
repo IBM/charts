@@ -51,8 +51,28 @@ mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates
 mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.createUser( { user: '${MONGODB_ERAAS_WORKFLOW_USER}', pwd: '${MONGODB_ERAAS_WORKFLOW_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_OUTCOME_DB}' }]})"
 mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.updateUser('${MONGODB_ERAAS_WORKFLOW_USER}', { pwd: '${MONGODB_ERAAS_WORKFLOW_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_OUTCOME_DB}' }]})"
 
+echo "Creating ERaaS Plan database"
+mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.createUser( { user: '${MONGODB_ERAAS_PLAN_USER}', pwd: '${MONGODB_ERAAS_PLAN_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_PLAN_DB}' }]})"
+mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.updateUser('${MONGODB_ERAAS_PLAN_USER}', { pwd: '${MONGODB_ERAAS_PLAN_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_PLAN_DB}' }]})"
+
+echo "Creating ERaaS Article database"
+mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.createUser( { user: '${MONGODB_ERAAS_ARTICLE_USER}', pwd: '${MONGODB_ERAAS_ARTICLE_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_ARTICLE_DB}' }]})"
+mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.updateUser('${MONGODB_ERAAS_ARTICLE_USER}', { pwd: '${MONGODB_ERAAS_ARTICLE_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_ARTICLE_DB}' }]})"
+
+echo "Creating ERaaS News database"
+mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.createUser( { user: '${MONGODB_ERAAS_NEWS_USER}', pwd: '${MONGODB_ERAAS_NEWS_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_NEWS_DB}' }]})"
+mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.updateUser('${MONGODB_ERAAS_NEWS_USER}', { pwd: '${MONGODB_ERAAS_NEWS_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_NEWS_DB}' }]})"
+
+echo "Creating ERaaS News MCD database"
+mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.createUser( { user: '${MONGODB_ERAAS_NEWS_MCD_USER}', pwd: '${MONGODB_ERAAS_NEWS_MCD_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_NEWS_MCD_DB}' }]})"
+mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.updateUser('${MONGODB_ERAAS_NEWS_MCD_USER}', { pwd: '${MONGODB_ERAAS_NEWS_MCD_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_NEWS_MCD_DB}' }]})"
+
+echo "Creating ERaaS ML database"
+mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.createUser( { user: '${MONGODB_ERAAS_ML_USER}', pwd: '${MONGODB_ERAAS_ML_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_ML_DB}' }]})"
+mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.updateUser('${MONGODB_ERAAS_ML_USER}', { pwd: '${MONGODB_ERAAS_ML_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_ML_DB}' }]})"
+
+mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.createUser( { user: '${MONGODB_ERAAS_ML_API_USER}', pwd: '${MONGODB_ERAAS_ML_API_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_ML_DB}' }]})"
+mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.updateUser('${MONGODB_ERAAS_ML_API_USER}', { pwd: '${MONGODB_ERAAS_ML_API_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_ML_DB}' }]})"
 
 echo "Set feature compatibility"
 mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u root -p ${MONGODB_ROOT_PASSWORD} --eval "db.adminCommand( { setFeatureCompatibilityVersion: '4.0' } )"
-
-

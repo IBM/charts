@@ -29,13 +29,13 @@ Metering Annotations for CP4D
 */}}
 {{- define "common.meteringAnnotations" -}}
 productName: "IBM Cloud Pak for Data Financial Crimes Insight"
-productID: "5737-E41"
-productVersion: "6.5.5"
+productID: "5f0d47196a954c5cb0985241f28ac577"
+productVersion: "6.6.0"
 productMetric: "INSTALL"
 productChargedContainers: "All"
-cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+cloudpakId: "5f0d47196a954c5cb0985241f28ac577"
 cloudpakName: "IBM Cloud Pak for Data"
-cloudpakVersion: "3.0.1"
+cloudpakInstanceId: "{{ .Values.global.cloudpakInstanceId }}"
 {{- end -}}
 
 {{/*
@@ -127,6 +127,8 @@ app.kubernetes.io/name: {{ $app }}
 helm.sh/chart: {{ $chart }}
 app.kubernetes.io/managed-by: {{ $heritage }}
 app.kubernetes.io/instance: {{ $release }}
+icpdsupport/addOnId: {{ $release }}
+icpdsupport/app: {{ $release }}
 {{- end}}
 
 {{/*
@@ -161,46 +163,6 @@ replicas: 0
 {{   end }}
 {{- end -}}
 
-
-{{/*
-Add LDAP information for DB2
-*/}}
-{{- define "common.db2LdapEnv" -}}
-- name: LDAP_IMPL
-  value: {{ .Values.global.IDENTITY_SERVER_TYPE }}
-- name: LDAP_SERVER_URL
-{{ if .Values.global.LDAP_SERVER_SSL }}
-  value: ldaps://{{ .Values.global.LDAP_SERVER_HOST }}:{{ .Values.global.LDAP_SERVER_PORT }}
-{{ else }}
-  value: ldap://{{ .Values.global.LDAP_SERVER_HOST }}:{{ .Values.global.LDAP_SERVER_PORT }}
-{{ end }}
-- name: LDAP_SERVER_BINDDN
-  value: {{ .Values.global.LDAP_SERVER_BINDDN | quote }}
-- name: LDAP_USER_BASEDN
-  value: {{ .Values.global.LDAP_SERVER_SEARCHBASE | quote }}
-- name: LDAP_GROUP_BASEDN
-  value: {{ .Values.global.LDAP_SERVER_SEARCHBASE | quote }}
-- name: LDAP_USERID_ATTRIBUTE
-  value: {{ .Values.global.LDAP_PROFILE_ID | quote }}
-- name: LDAP_AUTHID_ATTRIBUTE
-  value: {{ .Values.global.LDAP_PROFILE_ID | quote }}
-- name: LDAP_GROUP_LOOKUP_ATTRIBUTE
-  value: {{ .Values.global.LDAP_PROFILE_GROUPS | quote }}
-- name: ENABLE_SSL
-  value: {{ lower (.Values.global.LDAP_SERVER_SSL | quote) }}
-- name: LDAP_SSL_PW
-  valueFrom:
-    secretKeyRef:
-      name: {{ .Release.Name }}-platform-secrets-env
-      key: FCI_JKS_PASSWORD
-{{- if and (ne .Values.global.IDENTITY_SERVER_TYPE "none") (ne .Values.global.IDENTITY_SERVER_TYPE "appid") }}
-- name: LDAP_SERVER_BINDPW
-  valueFrom:
-    secretKeyRef:
-      name: {{ .Values.global.externalSecretName }}
-      key: LDAP_SERVER_BINDCREDENTIALS
-{{- end }}
-{{- end -}}
 
 {{/*
 Imports a secret into the pod from the secrets created by the pre-install job.

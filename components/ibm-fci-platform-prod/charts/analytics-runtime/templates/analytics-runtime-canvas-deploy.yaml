@@ -22,27 +22,69 @@ spec:
 {{ include "common.PodSecurityContextConfig" . | indent 8 }}
       affinity:
 {{ include "common.ArchNodeAffinity" . | indent 8 }}
+      {{- if .Values.global.pvRequiresPermissionsFix }}
+      serviceAccountName: fci-kube-api-fowner
+      {{- else }}
       serviceAccountName: fci-common-scripts
+      {{- end }}
       volumes:
         - name: file-secrets
           secret:
             secretName: {{ .Release.Name }}-platform-secret-files
+        - name: app-volume-mount
+          persistentVolumeClaim:
+            claimName: volumes-{{ .Values.global.FCII_APP_VOLUME_NAME }}-pvc
+      initContainers:
+        - name: init-job-depend
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          command:
+            - bash
+            - -c
+            - . /common-scripts/configure && $KUBECTL wait --for=condition=complete job/{{ .Release.Name }}-analytics-runtime-setup-spark --timeout=-1s
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+        {{- if .Values.global.pvRequiresPermissionsFix }}
+        - name: pv-permissions
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          securityContext:
+{{ include "common.RootFownerContainerSecurityContext" . | indent 12 }}
+          args:
+          - chmod -R g+w /mount;
+          command:
+          - /bin/sh
+          - -c
+          volumeMounts:
+          - mountPath: /mount
+            name: app-volume-mount
+        {{- end }}
       containers:
         - name: ar-canvas
           image: "{{ required "When global.createPv is set to true, global.nfsServer must specify the NFS server that holds the persistent volume." .Values.global.dockerRegistryPrefix }}/{{ .Values.arCanvas.image.repository }}:{{ .Values.arCanvas.image.tag }}"
           imagePullPolicy: {{ .Values.arCanvas.image.pullPolicy }}
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+            {{- if .Values.global.pvRequiresPermissionsFix }}
+            runAsUser: {{ .Values.global.runAsUser}}
+            {{- end }}
           livenessProbe:
 {{ toYaml .Values.arCanvas.livenessProbe | indent 12 }}
           readinessProbe:
 {{ toYaml .Values.arCanvas.readinessProbe | indent 12 }}
+          envFrom:
+          - configMapRef:
+              name: {{ template "analytics-runtime.fullname" . }}-liberty
           env:
           - name: NODE_ENV
             value: production 
           ports:
           - containerPort: 3001
           volumeMounts:
+          - name: app-volume-mount
+            mountPath: /zen-volume-home
           - name: file-secrets
             mountPath: /certs/fci-canvas.pem
             subPath: fci_universal_ks.pvtk.pem
