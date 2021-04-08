@@ -1,0 +1,36 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- if .Values.decisionRunner.enabled }}
+kind: NetworkPolicy
+apiVersion: {{ .Values.networkPolicy.apiVersion }}
+metadata:
+  name: {{ template "odm.dr-network-policy.fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+{{ include "odm-additional-labels" . | indent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      run: {{ template "odm.decisionrunner.fullname" . }}
+  ingress:
+  # Allow web access to the UI
+  - ports:
+    {{- if .Values.service.enableTLS }}
+    - port: 9443
+    {{ else }}
+    - port: 9080
+    {{- end }}
+  # Allow inbound connections from DC and DSC pods
+  - from:
+    - podSelector:
+        matchLabels:
+          run: {{ template "odm.decisioncenter.fullname" . }}
+    - podSelector:
+        matchLabels:
+          run: {{ template "odm.decisionserverconsole.fullname" . }}
+  egress:
+  - {}
+{{- end }}
+{{- end }}

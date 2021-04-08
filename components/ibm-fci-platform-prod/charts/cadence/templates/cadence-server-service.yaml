@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cadence.componentname" (list . "frontend") }}
+  labels:
+{{- include "common.label.metadata" (list . (include "cadence.name" .) (include "cadence.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  type: {{ .Values.server.frontend.service.type }}
+  ports:
+    - port: {{ .Values.server.frontend.service.port }}
+      targetPort: rpc
+      protocol: TCP
+      name: rpc
+      {{- if hasKey .Values.server.frontend.service "nodePort" }}
+      nodePort: {{ .Values.server.frontend.service.nodePort }}
+      {{- end }}
+  selector:
+{{- include "common.selector.labels" (list . ("frontend") ($.Release.Name) ) | indent 4 }}
+
+---
+{{ range $service := (list "frontend" "matching" "history" "worker") }}
+{{- $serviceValues := index $.Values.server $service -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cadence.componentname" (list $ (printf "%s-headless" $service)) }}
+  labels:
+{{- include "common.label.metadata" (list $ (include "cadence.name" $) (include "cadence.chart" $) $.Release.Name $.Release.Service ) | indent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - port: {{ $serviceValues.service.port }}
+      targetPort: rpc
+      protocol: TCP
+      name: rpc
+    - port: 9090
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+{{- include "common.selector.labels" (list $ ( $service ) ($.Release.Name) ) | indent 4 }}
+---
+{{ end }}

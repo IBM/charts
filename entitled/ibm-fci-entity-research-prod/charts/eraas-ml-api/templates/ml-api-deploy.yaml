@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "common.fullname" . }}
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "eraas-ml-api") (include "common.name" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "common.name" .) "eraas-ml-api") .Release.Name ) | indent 6 }}
+  replicas: {{ .Values.eraasMlApi.replicas }}
+  revisionHistoryLimit: {{required "A valid .Values.revision_history_limit entry required!" .Values.revision_history_limit}}
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "eraas-ml-api") (include "common.name" .) .Release.Name .Release.Service ) | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8}}
+    spec:
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . |indent 8}}
+      serviceAccountName: {{ template "common.core-release-name" . }}-common
+      volumes:
+        - name: file-secrets
+          secret:
+            secretName: {{ template "common.core-release-name" . }}-platform-secret-files
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.global.imagePullSecrets | indent 6 }}
+      {{- end }}
+      containers:
+        - name: eraas-ml-api
+          image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.eraasMlApi.image.repository }}:{{ .Values.eraasMlApi.image.tag }}
+          imagePullPolicy: {{ .Values.eraasMlApi.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          livenessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /actuator/health
+              port: 8443
+            initialDelaySeconds: {{ default 30 .Values.eraasMlApi.livenessProbe.initialDelaySeconds }}
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /actuator/health
+              port: 8443
+            initialDelaySeconds: {{ default 30 .Values.eraasMlApi.readinessProbe.initialDelaySeconds }}
+            periodSeconds: 30
+          envFrom:
+            - configMapRef:
+                name: {{ template "common.fullname" . }}
+          env:
+            - name: JWT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                  key: JWT_KEY
+            - name: MONGO_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.core-release-name" . }}-mongo-secrets-env
+                  key: mongodb-eraas-ml-api-password
+            - name: SSL_KEY_STORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                  key: FCI_JKS_PASSWORD
+            - name: SSL_TRUST_STORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                  key: FCI_JKS_PASSWORD
+          ports:
+            - containerPort: 8443
+          volumeMounts:
+            - name: file-secrets
+              mountPath: /opt/app-root/fci_universal_ks.jks
+              subPath: fci_universal_ks.jks
+              readOnly: true
+          {{- if .Values.eraasMlApi.resources }}
+          resources:
+            {{- if .Values.eraasMlApi.resources.requests }}
+            requests:
+              {{- if .Values.eraasMlApi.resources.requests.memory }}
+              memory: {{ .Values.eraasMlApi.resources.requests.memory }}
+              {{- end}}
+              {{- if .Values.eraasMlApi.resources.requests.cpu }}
+              cpu: {{ .Values.eraasMlApi.resources.requests.cpu }}
+              {{- end}}
+            {{- end}}
+            {{- if .Values.eraasMlApi.resources.limits }}
+            limits:
+              {{- if .Values.eraasMlApi.resources.limits.memory }}
+              memory: {{ .Values.eraasMlApi.resources.limits.memory }}
+              {{- end}}
+              {{- if .Values.eraasMlApi.resources.limits.cpu }}
+              cpu: {{ .Values.eraasMlApi.resources.limits.cpu }}
+              {{- end}}
+            {{- end}}
+          {{- end }}
+      restartPolicy: Always

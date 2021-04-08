@@ -1,0 +1,143 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "common.fullname" . }}
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "eraas-news") (include "common.name" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "common.name" .) "eraas-news") .Release.Name ) | indent 6 }}
+  replicas: {{ .Values.eraasNews.replicas }}
+  revisionHistoryLimit: {{required "A valid .Values.revision_history_limit entry required!" .Values.revision_history_limit}}
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "eraas-news") (include "common.name" .) .Release.Name .Release.Service ) | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8}}
+    spec:
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . |indent 8}}
+      serviceAccountName: {{ template "common.core-release-name" . }}-common
+      volumes:
+        - name: file-secrets
+          secret:
+            secretName: {{ template "common.core-release-name" . }}-platform-secret-files
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.global.imagePullSecrets | indent 6 }}
+      {{- end }}
+      containers:
+        - name: eraas-news
+          image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.eraasNews.image.repository }}:{{ .Values.eraasNews.image.tag }}
+          imagePullPolicy: {{ .Values.eraasNews.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          livenessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /actuator/health
+              port: 8443
+            initialDelaySeconds: {{ default 30 .Values.eraasNews.livenessProbe.initialDelaySeconds }}
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /actuator/health
+              port: 8443
+            initialDelaySeconds: {{ default 30 .Values.eraasNews.readinessProbe.initialDelaySeconds }}
+            periodSeconds: 30
+          envFrom:
+            - configMapRef:
+                name: {{ template "common.fullname" . }}
+          env:
+            - name: JWT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                  key: JWT_KEY
+            - name: MONGO_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.core-release-name" . }}-mongo-secrets-env
+                  key: mongodb-eraas-news-password
+            - name: SSL_KEY_STORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                  key: FCI_JKS_PASSWORD
+            - name: SSL_TRUST_STORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                  key: FCI_JKS_PASSWORD
+            - name: FCI_KAFKA_MSG_KS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                  key: FCI_KAFKA_MSG_JKS_PASSWORD
+            - name: FCI_KAFKA_MSG_KS_ALIASNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                  key: FCI_KAFKA_MSG_JKS_ALIASNAME
+            - name: KAFKA_SSL_TRUST_STORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: FCI_JKS_PASSWORD
+                  name: fci-platform-secrets-env
+            - name: KAFKA_SSL_KEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: FCI_JKS_PASSWORD
+                  name: fci-platform-secrets-env
+            - name: KAFKA_SSL_KEY_STORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: FCI_JKS_PASSWORD
+                  name: fci-platform-secrets-env
+          ports:
+            - containerPort: 8443
+          volumeMounts:
+            - name: file-secrets
+              mountPath: /opt/app-root/fci_universal_ks.jks
+              subPath: fci_universal_ks.jks
+              readOnly: true
+            - name: file-secrets
+              mountPath: /opt/app-root/fci_kafka_msg.p12
+              subPath: fci_kafka_msg.p12
+              readOnly: true
+            - name: file-secrets
+              mountPath: /opt/app-root/kafka.client.keystore.jks
+              subPath: fci_universal_ks.jks
+              readOnly: true
+            - name: file-secrets
+              mountPath: /opt/app-root/kafka.client.truststore.jks
+              subPath: fci_universal_ks.jks
+              readOnly: true
+          {{- if .Values.eraasNews.resources }}
+          resources:
+            {{- if .Values.eraasNews.resources.requests }}
+            requests:
+              {{- if .Values.eraasNews.resources.requests.memory }}
+              memory: {{ .Values.eraasNews.resources.requests.memory }}
+              {{- end}}
+              {{- if .Values.eraasNews.resources.requests.cpu }}
+              cpu: {{ .Values.eraasNews.resources.requests.cpu }}
+              {{- end}}
+            {{- end}}
+            {{- if .Values.eraasNews.resources.limits }}
+            limits:
+              {{- if .Values.eraasNews.resources.limits.memory }}
+              memory: {{ .Values.eraasNews.resources.limits.memory }}
+              {{- end}}
+              {{- if .Values.eraasNews.resources.limits.cpu }}
+              cpu: {{ .Values.eraasNews.resources.limits.cpu }}
+              {{- end}}
+            {{- end}}
+          {{- end }}
+      restartPolicy: Always

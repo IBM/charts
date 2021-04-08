@@ -1,0 +1,149 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "common.fullname" . }}
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "ee-engine") (include "common.name" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "common.name" .) "ee-engine") .Release.Name ) | indent 6 }}
+  replicas: {{ .Values.eeEngine.replicas }}
+  revisionHistoryLimit: {{required "A valid .Values.revision_history_limit entry required!" .Values.revision_history_limit}}
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "ee-engine") (include "common.name" .) .Release.Name .Release.Service ) | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8}}
+    spec:
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . |indent 8}}
+      serviceAccountName: {{ template "common.core-release-name" . }}-common
+      volumes:
+      - name: file-secrets
+        secret:
+          secretName: {{ template "common.core-release-name" . }}-platform-secret-files
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.global.imagePullSecrets | indent 6 }}
+      {{- end }}
+      initContainers:
+        - name: ee-data
+          image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.eeData.image.repository }}:{{ .Values.eeData.image.tag }}
+          imagePullPolicy: {{ .Values.eeData.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          {{- if .Values.eeData.resources }}
+          resources:
+            {{- if .Values.eeData.resources.requests }}
+            requests:
+              {{- if .Values.eeData.resources.requests.memory }}
+              memory: {{ .Values.eeData.resources.requests.memory }}
+              {{- end}}
+              {{- if .Values.eeData.resources.requests.cpu }}
+              cpu: {{ .Values.eeData.resources.requests.cpu }}
+              {{- end}}
+            {{- end}}
+            {{- if .Values.eeData.resources.limits }}
+            limits:
+              {{- if .Values.eeData.resources.limits.memory }}
+              memory: {{ .Values.eeData.resources.limits.memory }}
+              {{- end}}
+              {{- if .Values.eeData.resources.limits.cpu }}
+              cpu: {{ .Values.eeData.resources.limits.cpu }}
+              {{- end}}
+            {{- end}}
+          {{- end }}
+          env:
+          - name: MONGODB_ERAAS_EES_DB
+            value: {{ .Values.eeDataConfig.MONGODB_ERAAS_EES_DB }}
+          - name: MONGODB_ERAAS_EES_USER
+            value: {{ .Values.eeDataConfig.MONGODB_ERAAS_EES_USER }}
+          - name: MONGODB_HOSTNAME
+            value: {{ .Values.global.coreReleaseName }}-mongodb
+          - name: MONGODB_ERAAS_EES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.core-release-name" . }}-mongo-secrets-env
+                key: mongodb-eraas-ees-password
+      containers:
+        - name: ee-engine
+          image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.eeEngine.image.repository }}:{{ .Values.eeEngine.image.tag }}
+          imagePullPolicy: {{ .Values.eeEngine.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          livenessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /health
+              port: 8443
+            initialDelaySeconds: {{ default 60 .Values.eeEngine.livenessProbe.initialDelaySeconds }}
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /health
+              port: 8443
+            initialDelaySeconds: {{ default 30 .Values.eeEngine.readinessProbe.initialDelaySeconds }}
+            periodSeconds: 30
+          envFrom:
+            - configMapRef:
+                name: {{ template "common.fullname" . }}
+          env:
+            - name: MONGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.core-release-name" . }}-mongo-secrets-env
+                  key: mongodb-eraas-ees-password
+            - name: DSF_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.secrets-name" . }}
+                  key: DSF_AUTH
+            - name: DERS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.secrets-name" . }}
+                  key: DERS_PASSWORD
+            - name: JWT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                  key: JWT_KEY
+          ports:
+            - containerPort: 8443
+          volumeMounts:
+            - name: file-secrets
+              mountPath: /opt/app-root/src/ssl/{{ .Values.eeEngineConfig.APP_ENV }}/fci_universal_ks.pvtk.pem
+              subPath: fci_universal_ks.pvtk.pem
+              readOnly: true
+            - name: file-secrets
+              mountPath: /opt/app-root/src/ssl/{{ .Values.eeEngineConfig.APP_ENV }}/fci_universal_ks.crt.pem
+              subPath: fci_universal_ks.crt.pem
+              readOnly: true
+          {{- if .Values.eeEngine.resources }}
+          resources:
+            {{- if .Values.eeEngine.resources.requests }}
+            requests:
+              {{- if .Values.eeEngine.resources.requests.memory }}
+              memory: {{ .Values.eeEngine.resources.requests.memory }}
+              {{- end}}
+              {{- if .Values.eeEngine.resources.requests.cpu }}
+              cpu: {{ .Values.eeEngine.resources.requests.cpu }}
+              {{- end}}
+            {{- end}}
+            {{- if .Values.eeEngine.resources.limits }}
+            limits:
+              {{- if .Values.eeEngine.resources.limits.memory }}
+              memory: {{ .Values.eeEngine.resources.limits.memory }}
+              {{- end}}
+              {{- if .Values.eeEngine.resources.limits.cpu }}
+              cpu: {{ .Values.eeEngine.resources.limits.cpu }}
+              {{- end}}
+            {{- end}}
+          {{- end }}
+      restartPolicy: Always

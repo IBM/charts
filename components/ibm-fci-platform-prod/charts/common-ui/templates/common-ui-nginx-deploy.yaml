@@ -22,8 +22,18 @@ spec:
 {{ include "common.PodSecurityContextConfig" . | indent 8 }}
       affinity:
 {{ include "common.ArchNodeAffinity" . | indent 8 }}
+{{- if .Values.global.pvRequiresPermissionsFix }}
       serviceAccountName: fci-kube-api-chown
+{{ else }}
+      serviceAccountName: fci-common-scripts
+{{ end }}      
       volumes:
+        - name: internal-tls
+          secret:
+            secretName: internal-tls
+            defaultMode: 420
+        - name: varlog
+          emptyDir: {}
         - name: iui-nginx-data
           persistentVolumeClaim:
             claimName: {{ template "common-ui.fullname" . }}-nginx
@@ -51,6 +61,18 @@ spec:
           securityContext:
 {{ include "common.AnyuidContainerSecurityContext" . | indent 12 }}
           args: [ "{{ .Release.Namespace }}/{{ template "common-ui.fullname" . }}-nodejs" ]
+{{ if eq .Values.global.IDENTITY_SERVER_TYPE "CLOUD_PAK" }}
+        - name: set-cpd-route
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          command: [ "/common-scripts/set-cpd-route.sh" ]
+          envFrom:
+          - configMapRef:
+              name: {{ template "common-ui.fullname" . }}-nginx
+          securityContext:
+{{ include "common.AnyuidContainerSecurityContext" . | indent 12 }}
+{{ end }}
         {{- if .Values.global.pvRequiresPermissionsFix }}
         - name: pv-permissions
           image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
@@ -92,9 +114,17 @@ spec:
         env:
 {{- include "common.import-secret" (list . "SI_ELASTIC_PASSWORD" "elastic" "ELASTIC_ADMIN_PASSWORD") | indent 8 }}
 {{- include "common.import-secret" (list . "JWT_KEY" "platform" "JWT_KEY") | indent 8 }}
+        - name: NAMESPACE
+          value: {{ .Release.Namespace }}
+        - name: NODENAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
         ports:
         - containerPort: 3000
         envFrom:
+        - configMapRef:
+            name: product-configmap
         - configMapRef:
             name: {{ template "common-ui.fullname" . }}-nginx
         volumeMounts:
@@ -118,4 +148,38 @@ spec:
           subPath: fci_universal_ks.crt.pem
         - name: iui-nginx-data
           mountPath: /etc/nginx/conf.d
+        - name: varlog
+          mountPath: /var/log
+      - name: sidecar
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.sidecar.image.repository }}:{{ .Values.sidecar.image.tag }}"
+        imagePullPolicy: {{ .Values.sidecar.image.pullPolicy }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+{{ include "common.sideCarHealthCheck" . | indent 8 }}
+        resources:
+{{ toYaml .Values.sidecar.resources | indent 10 }}
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: NODENAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: PODIPADDRESS
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        envFrom:
+        - configMapRef:
+            name: product-configmap
+        volumeMounts:
+        - name: varlog
+          mountPath: /var/log
+        - name: internal-tls
+          mountPath: /etc/internal-tls
       restartPolicy: Always

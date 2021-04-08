@@ -33,17 +33,15 @@ spec:
       - name: file-secrets
         secret:
           secretName: {{ .Release.Name }}-platform-secret-files
-      - name: fciqm-errors
-        emptyDir: {}    
       initContainers:
       - name: volume-mount-hack
         image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
-        command: ["sh", "-c", "chown -R 1502:1502 /mqmInit/FCIQM "]
+        command: ["sh", "-c", "chown -R 1502:1502 /mount"]
         resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 10 }}
         volumeMounts:
-        - name: fciqm-errors
-          mountPath: /mqmInit/FCIQM/errors
+        - name: fci-messaging-volume
+          mountPath: /mount
         securityContext:
 {{ include "common.RootChownerContainerSecurityContext" . | indent 10 }}
       containers:
@@ -65,7 +63,10 @@ spec:
 {{ toYaml . | indent 10 }}
 {{- end }}
         securityContext:
-{{ include "common.PrivilegedContainerSecurityContext" . | indent 10 }}
+          runAsNonRoot: false
+          privileged: false
+          readOnlyRootFilesystem:  false
+          allowPrivilegeEscalation: true
           capabilities:
             drop:
             - ALL
@@ -102,6 +103,4 @@ spec:
         - name: file-secrets
           mountPath: /var/mqm/fci_universal_ks.sth
           subPath: fci_universal_ks.sth
-        - mountPath: /var/mqm/qmgrs/FCIQM/errors
-          name: fciqm-errors  
       restartPolicy: Always

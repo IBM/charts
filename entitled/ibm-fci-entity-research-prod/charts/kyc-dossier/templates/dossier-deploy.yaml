@@ -1,0 +1,142 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "common.fullname" . }}
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "kyc-dossier") (include "common.name" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "common.name" .) "kyc-dossier") .Release.Name ) | indent 6 }}
+  replicas: {{ .Values.kycDossier.replicas }}
+  revisionHistoryLimit: {{required "A valid .Values.revision_history_limit entry required!" .Values.revision_history_limit}}
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "kyc-dossier") (include "common.name" .) .Release.Name .Release.Service ) | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8}}
+    spec:
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . |indent 8}}
+      serviceAccountName: {{ template "common.core-release-name" . }}-common
+      volumes:
+      - name: kyc-application-instance
+        persistentVolumeClaim:
+          claimName: {{ include "fci-entity-research.call-nested" (list . "kyc-application" "common.fullname") }}
+      - name: kyc-dossier-logs
+        emptyDir: {}
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.global.imagePullSecrets | indent 6 }}
+      {{- end }}
+      containers:
+        - name: kyc-dossier
+          image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.kycDossier.image.repository }}:{{ .Values.kycDossier.image.tag }}
+          imagePullPolicy: {{ .Values.kycDossier.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ default 30 .Values.kycDossier.readinessProbe.initialDelaySeconds }}
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ default 30 .Values.kycDossier.livenessProbe.initialDelaySeconds }}
+            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 1
+          envFrom:
+          - configMapRef:
+              name: {{ template "common.fullname" . }}
+          {{- if .Values.kycDossier.resources }}
+          resources:
+            {{- if .Values.kycDossier.resources.requests }}
+            requests:
+              {{- if .Values.kycDossier.resources.requests.memory }}
+              memory: {{ .Values.kycDossier.resources.requests.memory }}
+              {{- end}}
+              {{- if .Values.kycDossier.resources.requests.cpu }}
+              cpu: {{ .Values.kycDossier.resources.requests.cpu }}
+              {{- end}}
+            {{- end}}
+            {{- if .Values.kycDossier.resources.limits }}
+            limits:
+              {{- if .Values.kycDossier.resources.limits.memory }}
+              memory: {{ .Values.kycDossier.resources.limits.memory }}
+              {{- end}}
+              {{- if .Values.kycDossier.resources.limits.cpu }}
+              cpu: {{ .Values.kycDossier.resources.limits.cpu }}
+              {{- end}}
+            {{- end}}
+          {{- end }}
+          ports:
+          - containerPort: 9083
+          volumeMounts:
+          - name: kyc-application-instance
+            mountPath: /data
+          - name: kyc-dossier-logs
+            mountPath: /opt/ibm/wlp/usr/servers/dossier-server/logs
+        - name: kyc-dossier-logs
+          image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.kycDossierLogs.image.repository }}:{{ .Values.kycDossierLogs.image.tag }}
+          imagePullPolicy: {{ .Values.kycDossierLogs.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          args: [/bin/sh, -c, 'tail -n+1 -F /dossier-logs/messages.log']
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ default 30 .Values.kycDossierLogs.readinessProbe.initialDelaySeconds }}
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ default 30 .Values.kycDossierLogs.livenessProbe.initialDelaySeconds }}
+            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 1
+          {{- if .Values.kycDossierLogs.resources }}
+          resources:
+            {{- if .Values.kycDossierLogs.resources.requests }}
+            requests:
+              {{- if .Values.kycDossierLogs.resources.requests.memory }}
+              memory: {{ .Values.kycDossierLogs.resources.requests.memory }}
+              {{- end}}
+              {{- if .Values.kycDossierLogs.resources.requests.cpu }}
+              cpu: {{ .Values.kycDossierLogs.resources.requests.cpu }}
+              {{- end}}
+            {{- end}}
+            {{- if .Values.kycDossierLogs.resources.limits }}
+            limits:
+              {{- if .Values.kycDossierLogs.resources.limits.memory }}
+              memory: {{ .Values.kycDossierLogs.resources.limits.memory }}
+              {{- end}}
+              {{- if .Values.kycDossierLogs.resources.limits.cpu }}
+              cpu: {{ .Values.kycDossierLogs.resources.limits.cpu }}
+              {{- end}}
+            {{- end}}
+          {{- end }}
+          volumeMounts:
+          - name: kyc-dossier-logs
+            mountPath: /dossier-logs
+    {{- if .Values.internetRequired.affinity }}
+      affinity:
+{{ toYaml .Values.internetRequired.affinity | indent 8 }}
+    {{- end }}
+      tolerations:
+{{ toYaml .Values.internetRequired.tolerations | indent 8 }}

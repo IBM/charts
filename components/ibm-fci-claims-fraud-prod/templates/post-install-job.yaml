@@ -23,12 +23,20 @@ spec:
 {{ include "common.ArchNodeAffinity" . | indent 8 }}
       restartPolicy: Never
       serviceAccountName: fci-common-scripts
+      volumes:
+      - name: zen-service-broker-secret
+        secret:
+          defaultMode: 420
+          secretName: zen-service-broker-secret
       containers:
         - name: {{ template "fci-insurance.fullname" . }}
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
           image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           imagePullPolicy: {{ .Values.global.commonScripts.image.pullPolicy }}
+          envFrom:
+          - configMapRef:
+              name: {{ .Values.global.coreReleaseName }}-analytics-runtime-liberty
           env:
           - name: RELEASE_NAME
             value: {{ .Release.Name }}
@@ -38,5 +46,8 @@ spec:
             - bash
             - -c
             - /common-scripts/fcii-postinstall.sh
+          volumeMounts:
+          - mountPath: /var/run/sharedsecrets
+            name: zen-service-broker-secret
           resources:
 {{ toYaml .Values.global.commonScripts.resources | indent 12 }}

@@ -1,0 +1,395 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "common.fullname" . }}
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "kyc-integration") (include "common.name" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "common.name" .) "kyc-integration") .Release.Name ) | indent 6 }}
+  replicas: {{ .Values.kycIntegration.replicas }}
+  revisionHistoryLimit: {{required "A valid .Values.revision_history_limit entry required!" .Values.revision_history_limit}}
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "kyc-integration") (include "common.name" .) .Release.Name .Release.Service ) | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8}}
+    spec:
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . |indent 8}}
+      serviceAccountName: {{ template "common.core-release-name" . }}-common
+      volumes:
+      - name: file-secrets
+        secret:
+          secretName: {{ template "common.core-release-name" . }}-platform-secret-files
+      - name: kyc-application-instance
+        persistentVolumeClaim:
+          claimName: {{ include "fci-entity-research.call-nested" (list . "kyc-application" "common.fullname") }}
+      - name: kyc-integration-instance
+        emptyDir: {}
+      {{- if .Values.global.swidtag }}
+      - name: swidtags
+        configMap:
+          name: {{ .Release.Name }}-swidtag-files
+      {{- end }}
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+      - name: db2-cert
+        secret:
+          defaultMode: 420
+          secretName: {{ template "common.core-release-name" . }}-db2-secrets-env
+{{ end }}
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.global.imagePullSecrets | indent 6 }}
+      {{- end }}
+      initContainers:
+        - name: init-db
+          image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.kycIntegrationInit.image.repository }}:{{ .Values.kycIntegrationInit.image.tag }}
+          imagePullPolicy: {{ .Values.kycIntegrationInit.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          {{- if .Values.kycIntegrationInit.resources }}
+          resources:
+            {{- if .Values.kycIntegrationInit.resources.requests }}
+            requests:
+              {{- if .Values.kycIntegrationInit.resources.requests.memory }}
+              memory: {{ .Values.kycIntegrationInit.resources.requests.memory }}
+              {{- end}}
+              {{- if .Values.kycIntegrationInit.resources.requests.cpu }}
+              cpu: {{ .Values.kycIntegrationInit.resources.requests.cpu }}
+              {{- end}}
+            {{- end}}
+            {{- if .Values.kycIntegrationInit.resources.limits }}
+            limits:
+              {{- if .Values.kycIntegrationInit.resources.limits.memory }}
+              memory: {{ .Values.kycIntegrationInit.resources.limits.memory }}
+              {{- end}}
+              {{- if .Values.kycIntegrationInit.resources.limits.cpu }}
+              cpu: {{ .Values.kycIntegrationInit.resources.limits.cpu }}
+              {{- end}}
+            {{- end}}
+          {{- end }}
+          args: ["migrate"]
+          env:
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+{{- include "common.import-secret" (list . "SSL_KEYSTORE_PASSWORD_CONFIG" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
+{{- include "common.import-secret" (list . "FLYWAY_PASSWORD" "db2" "db2_password") | indent 10 }}
+          - name: FLYWAY_USER
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "common.core-release-name" . }}-db2
+                key: db_userid
+          - name: DB2_HOST
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "common.core-release-name" . }}-db2
+                key: db_host
+          - name: FLYWAY_URL
+            value: "{{ printf "jdbc:db2://$(DB2_HOST):50001/FCIDB:sslConnection=true;sslTrustStoreLocation=/fci_universal_ks.jks;sslTrustStorePassword=$(SSL_KEYSTORE_PASSWORD_CONFIG);" }}"
+          volumeMounts:
+          - name: file-secrets
+            mountPath: /fci_universal_ks.jks
+            subPath: fci_universal_ks.jks
+{{ else }}
+{{- include "common.import-secret" (list . "FLYWAY_PASSWORD" "db2" "DB2INST1_PASSWORD") | indent 10 }}
+          - name: FLYWAY_USER
+            value: {{ .Values.kycDbConfig.FLYWAY_USER }}
+          - name: FLYWAY_URL
+            value: {{ .Values.kycDbConfig.DB_URL }}
+{{ end }}
+      containers:
+        - name: kyc-integration
+          image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.kycIntegration.image.repository }}:{{ .Values.kycIntegration.image.tag }}
+          imagePullPolicy: {{ .Values.kycIntegration.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ default 30 .Values.kycIntegration.readinessProbe.initialDelaySeconds }}
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ default 30 .Values.kycIntegration.livenessProbe.initialDelaySeconds }}
+            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 3
+          envFrom:
+          - configMapRef:
+              name: {{ template "common.fullname" . }}
+          {{- if .Values.kycIntegration.resources }}
+          resources:
+            {{- if .Values.kycIntegration.resources.requests }}
+            requests:
+              {{- if .Values.kycIntegration.resources.requests.memory }}
+              memory: {{ .Values.kycIntegration.resources.requests.memory }}
+              {{- end}}
+              {{- if .Values.kycIntegration.resources.requests.cpu }}
+              cpu: {{ .Values.kycIntegration.resources.requests.cpu }}
+              {{- end}}
+            {{- end}}
+            {{- if .Values.kycIntegration.resources.limits }}
+            limits:
+              {{- if .Values.kycIntegration.resources.limits.memory }}
+              memory: {{ .Values.kycIntegration.resources.limits.memory }}
+              {{- end}}
+              {{- if .Values.kycIntegration.resources.limits.cpu }}
+              cpu: {{ .Values.kycIntegration.resources.limits.cpu }}
+              {{- end}}
+            {{- end}}
+          {{- end }}
+          env:
+{{- include "common.import-secret" (list . "TRUSTSTORE_PWD" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+{{- include "common.import-secret" (list . "password" "db2" "db2_password") | indent 10 }}
+          - name: user
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "common.core-release-name" . }}-db2
+                key: db_userid
+          - name: DB2_HOST
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "common.core-release-name" . }}-db2
+                key: db_host
+          - name: db_url
+            value: "{{ printf "jdbc:db2://$(DB2_HOST):50001/FCIDB:sslConnection=true;sslTrustStoreLocation=/security/fci_universal_ks.jks;sslTrustStorePassword=$(TRUSTSTORE_PWD);" }}"
+{{ else }}
+{{- include "common.import-secret" (list . "password" "db2" "DB2INST1_PASSWORD") | indent 10 }}
+          - name: user
+            value: {{ .Values.kycDbConfig.FLYWAY_USER }}
+          - name: db_url
+            value: {{ .Values.kycDbConfig.DB_URL }}
+{{ end }}
+          - name: KEYSTORE_PWD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          - name: SSL_KEY_PWD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          - name: FCI_KAFKA_MSG_KS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                key: FCI_KAFKA_MSG_JKS_PASSWORD
+          - name: DBA_RESOLVE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: DBA_RESOLVE_PASSWORD
+          - name: FACTIVA_NEWS_ENCRYTED_TOKEN_VALUE
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: FACTIVA_NEWS_ENCRYTED_TOKEN_VALUE
+          - name: BaFin_RESOLVE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: BaFin_RESOLVE_PASSWORD
+          - name: DBA_VIEW_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: DBA_VIEW_PASSWORD
+          - name: BaFin_VIEW_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: BaFin_VIEW_PASSWORD
+          - name: FCA_RESOLVE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: FCA_RESOLVE_PASSWORD
+          - name: BING_WEB_SUBSCRIPTION_KEY_V7
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: BING_WEB_SUBSCRIPTION_KEY_V7
+          - name: BING_NEWS_SUBSCRIPTION_KEY_V7
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: BING_NEWS_SUBSCRIPTION_KEY_V7
+          - name: DAILY_MAIL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: DAILY_MAIL_PASSWORD
+          - name: BBC_NEWS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: BBC_NEWS_PASSWORD
+          - name: UKCH_INDIVIDUALDATA_RESOLVE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: UKCH_INDIVIDUALDATA_RESOLVE_PASSWORD
+          - name: FCA_NEWS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: FCA_NEWS_PASSWORD
+          - name: OFAC_RESOLVE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: OFAC_RESOLVE_PASSWORD
+          - name: OFAC_VIEW_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: OFAC_VIEW_PASSWORD
+          - name: UKCH_HPI_RESOLVE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: UKCH_HPI_RESOLVE_PASSWORD
+          - name: UKCH_HPI_VIEW_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: UKCH_HPI_VIEW_PASSWORD
+          - name: EU_SANCTIONS_RESOLVE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: EU_SANCTIONS_RESOLVE_PASSWORD
+          - name: EU_SANCTIONS_VIEW_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: EU_SANCTIONS_VIEW_PASSWORD
+          - name: FCA_VIEW_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: FCA_VIEW_PASSWORD
+          - name: UKCH_PSC_RESOLVE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: UKCH_PSC_RESOLVE_PASSWORD
+          - name: UKCH_PSC_VIEW_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: UKCH_PSC_VIEW_PASSWORD
+          - name: UKCH_COMPANY_BETA_RESOLVE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: UKCH_COMPANY_BETA_RESOLVE_PASSWORD
+          - name: FINCEN_RESOLVE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: FINCEN_RESOLVE_PASSWORD
+          - name: KYC_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: KYC_SECRET_KEY
+          ports:
+          - containerPort: 9450
+          volumeMounts:
+            {{- if hasKey .Values "global" }}
+            {{-   if hasKey .Values.global "swidtag" }}
+            {{-     if hasKey .Values.global.swidtag "file" }}
+          - name: swidtags
+            mountPath: /opt/ibm/fci/swidtag/{{ .Values.global.swidtag.file }}
+            subPath: {{ .Values.global.swidtag.file }}
+            {{-     end }}
+            {{-   end }}
+            {{- end }}
+          - name: file-secrets
+            mountPath: /security/kafka.client.keystore.jks
+            subPath: fci_universal_ks.jks
+          - name: file-secrets
+            mountPath: /security/kafka.client.truststore.jks
+            subPath: fci_universal_ks.jks
+          - name: file-secrets
+            mountPath: /security/fci_kafka_msg.p12
+            subPath: fci_kafka_msg.p12
+          - name: file-secrets
+            mountPath: /security/fci_universal_ks.crt.pem
+            subPath: fci_universal_ks.crt.pem
+          - name: kyc-application-instance
+            mountPath: /data
+          - name: kyc-integration-instance
+            mountPath: /opt/ibm/wlp/usr/servers/integration-server/logs
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+          - name: file-secrets
+            mountPath: /security/fci_universal_ks.jks
+            subPath: fci_universal_ks.jks
+{{ end }}
+        - name: integration-logs
+          image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.kycIntegrationLogs.image.repository }}:{{ .Values.kycIntegrationLogs.image.tag }}
+          imagePullPolicy: {{ .Values.kycIntegrationLogs.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          args: [/bin/sh, -c, 'tail -n+1 -F /opt/ibm/wlp/usr/servers/integration-server/logs/messages.log']
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ default 30 .Values.kycIntegrationLogs.readinessProbe.initialDelaySeconds }}
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ default 30 .Values.kycIntegrationLogs.livenessProbe.initialDelaySeconds }}
+            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 1
+          {{- if .Values.kycIntegrationLogs.resources }}
+          resources:
+            {{- if .Values.kycIntegrationLogs.resources.requests }}
+            requests:
+              {{- if .Values.kycIntegrationLogs.resources.requests.memory }}
+              memory: {{ .Values.kycIntegrationLogs.resources.requests.memory }}
+              {{- end}}
+              {{- if .Values.kycIntegrationLogs.resources.requests.cpu }}
+              cpu: {{ .Values.kycIntegrationLogs.resources.requests.cpu }}
+              {{- end}}
+            {{- end}}
+            {{- if .Values.kycIntegrationLogs.resources.limits }}
+            limits:
+              {{- if .Values.kycIntegrationLogs.resources.limits.memory }}
+              memory: {{ .Values.kycIntegrationLogs.resources.limits.memory }}
+              {{- end}}
+              {{- if .Values.kycIntegrationLogs.resources.limits.cpu }}
+              cpu: {{ .Values.kycIntegrationLogs.resources.limits.cpu }}
+              {{- end}}
+            {{- end}}
+          {{- end }}
+          volumeMounts:
+          - name: kyc-integration-instance
+            mountPath: /opt/ibm/wlp/usr/servers/integration-server/logs
+    {{- if .Values.internetRequired.affinity }}
+      affinity:
+{{ toYaml .Values.internetRequired.affinity | indent 8 }}
+    {{- end }}
+      tolerations:
+{{ toYaml .Values.internetRequired.tolerations | indent 8 }}

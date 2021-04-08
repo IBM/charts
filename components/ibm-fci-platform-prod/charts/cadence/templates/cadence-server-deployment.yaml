@@ -1,0 +1,152 @@
+{{- range $service := (list "frontend" "history" "matching" "worker") }}
+{{- $serviceValues := index $.Values.server $service -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cadence.componentname" (list $ $service) }}
+  labels:
+{{- include "common.label.metadata" (list $ ($service) (include "cadence.chart" $) $.Release.Name $.Release.Service ) | indent 4 }}
+spec:
+{{- include "common.scaleDownIfDisabled" $ | indent 2 -}}
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list $ ($service) $.Release.Name ) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list $ ($service) (include "cadence.chart" $) $.Release.Name $.Release.Service ) | indent 8 }}
+{{- include "common.using-secrets" (list "db2") | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" $ | indent 8 }}
+    spec:
+{{ include "common.configureHostAliases" $ | indent 6 }}
+{{ include "common.PodHostConfig" $ | indent 6 }}
+      serviceAccountName: fci-common-scripts
+      securityContext:
+{{ include "common.PodSecurityContextConfig" $ | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" $ | indent 8 }}
+      initContainers:
+{{ if eq $.Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+        - name: import-db2-cert
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." $.Values.global.dockerRegistryPrefix }}/{{ $.Values.global.cryptoUtils.image.repository }}:{{ $.Values.global.cryptoUtils.image.tag }}"
+          command:
+          - bash
+          - -c
+          - openssl pkcs12 -export -out /etc/tls/db2cert.p12 -in db2cert -passout pass:$SSL_KEYSTORE_PASSWORD -nokeys
+          resources:
+{{ toYaml $.Values.sideCarContainers.resources | indent 12 }}
+          env:
+{{- include "common.import-secret" (list $ "SSL_KEYSTORE_PASSWORD" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
+          volumeMounts:
+          - name: fcicert
+            mountPath: /etc/tls
+          - name: db2-cert
+            mountPath: /db2cert
+            subPath: db2_cert
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+{{ end }}
+      containers:
+        - name: {{ $.Chart.Name }}-{{ $service }}
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." $.Values.global.dockerRegistryPrefix }}/{{ $.Values.server.image.repository }}:{{ $.Values.server.image.tag }}"
+          imagePullPolicy: {{ $.Values.server.image.pullPolicy }}
+
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" $ | indent 12 }}
+          envFrom:
+          - configMapRef:
+              name: {{ include "cadence.fullname" $ }}
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: SERVICES
+              value: {{ $service }}
+{{ if eq $.Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+            - name: DB2_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $.Release.Name }}-db2
+                  key: db_userid
+            - name: DB2_SEEDS
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $.Release.Name }}-db2
+                  key: db_host
+            - name: DB_PORT
+              value: "50001"
+{{ else }}
+            - name: DB2_USER
+              value: "db2inst1"
+            - name: DB2_SEEDS
+              value: "fci-db2-datastore-0"
+            - name: DB_PORT
+              value: "56000"
+{{ end }}
+{{- if ne $service "frontend" }}
+            - name: SKIP_SCHEMA_SETUP
+              value: "true"
+{{- end -}}
+{{ if eq $.Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+{{- include "common.import-secret"  (list $ "DB2_PWD" "db2" "db2_password")  | indent 12 -}}
+{{ else }}
+{{- include "common.import-secret"  (list $ "DB2_PWD" "db2" "DB2INST1_PASSWORD")  | indent 12 -}}
+{{ end }}
+{{- include "common.import-secret" (list $ "SQL_TLS_KEY_FILE" "platform" "FCI_JKS_PASSWORD") | indent 12 }}
+          ports:
+            - name: rpc
+              containerPort: {{ include (printf "cadence.%s.internalPort" $service) $ }}
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          livenessProbe:
+            initialDelaySeconds: 150
+            tcpSocket:
+              port: rpc
+          readinessProbe:
+            initialDelaySeconds: 10
+            tcpSocket:
+              port: rpc
+          volumeMounts:
+            - name: config
+              mountPath: /etc/cadence/config/config_template.yaml
+              subPath: config_template.yaml
+            - name: config
+              mountPath: /etc/cadence/config/dynamicconfig/config.yaml
+              subPath: dynamic_config.yaml
+            - mountPath: /etc/tls
+              name: fcicert
+{{ if ne $.Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+            - name: file-secrets
+              mountPath: /etc/tls/db2cert.p12
+              subPath: fci_universal_ks.p12
+{{ end }}
+          resources:
+            {{- toYaml (default $.Values.server.resources $serviceValues.resources) | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "cadence.fullname" $ }}
+        - name: file-secrets
+          secret:
+            defaultMode: 420
+            secretName: {{ $.Release.Name }}-platform-secret-files
+        - name: db2-cert
+          secret:
+            defaultMode: 420
+            secretName: {{ $.Release.Name }}-db2-secrets-env
+        - name: fcicert
+          emptyDir: {}
+      {{- with (default $.Values.server.nodeSelector $serviceValues.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with (default $.Values.server.tolerations $serviceValues.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+---
+{{ end }}
