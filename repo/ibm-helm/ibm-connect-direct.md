@@ -196,6 +196,7 @@ spec:
   - DAC_OVERRIDE
   - FOWNER
   - AUDIT_WRITE
+  - SYS_CHROOT
   allowedHostPaths:
   runAsUser:
     rule: MustRunAsNonRoot
@@ -287,6 +288,7 @@ allowedCapabilities:
 - SETUID
 - DAC_OVERRIDE
 - AUDIT_WRITE
+- SYS_CHROOT
 defaultAddCapabilities: []
 defaultAllowPrivilegeEscalation: false
 forbiddenSysctls:
@@ -396,10 +398,10 @@ The following tables lists the configurable parameters of the IBM Connect Direct
 | `arch`                                 | Node Architecture                                   | `amd64`                                  |
 | `replicaCount`                         | Number of deployment replicas                       | `1`                                      |
 | `image.repository`                     | Image full name including repository                | `cp.icr.io/cp/ibm-connectdirect/cdu6.1_certified_container_6.1.0.3` |
-| `image.tag`                            | Image tag                                           | `6.1.0.3_ifix000`                        |
+| `image.tag`                            | Image tag                                           | `6.1.0.3_ifix015`                        |
 | `image.imageSecrets`                   | Image pull secrets                                  |                                          |
 | `image.digest.enabled`                 | Enable/disable digest to be used for image          | `false`                                  |
-| `image.digest.value`                   | Digest has value for image used for deployment      | `sha256:5ed3c9f781dc6205640ad596e02733eebafb8242def31576b332e9fbb72eb531` |
+| `image.digest.value`                   | Digest has value for image used for deployment      | `sha256:35bae3bc87da3e91dae185a3912cde7edf04c418c6c51d2e35089a20576ea7f4` |
 | `image.pullPolicy`                     | Image pull policy                                   | `IfNotPresent`                           |
 | `cdArgs.nodeName`                      | Node name                                           | `cdnode`                                 |
 | `cdArgs.crtName`                       | Certificate file name                               |                                          |
