@@ -24,6 +24,8 @@ app.kubernetes.io/name: {{ $app }}
 helm.sh/chart: {{ $chart }}
 app.kubernetes.io/managed-by: {{ $heritage }}
 app.kubernetes.io/instance: {{ $release }}
+icpdsupport/addOnId: {{ $release }}
+icpdsupport/app: {{ $release }}
 {{- end}}
 
 {{/*
@@ -60,13 +62,13 @@ Metering Annotations for CP4D
 */}}
 {{- define "common.meteringAnnotations" -}}
 productName: "IBM Financial Crimes Insight for Claims Fraud Software"
-productID: "5737-E41"
-productVersion: "6.5.6"
+productID: "5f0d47196a954c5cb0985241f28ac577"
+productVersion: "6.6.0"
 productMetric: "RESOURCE_VALUE_UNIT"
 productChargedContainers: "All"
-cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+cloudpakId: "5f0d47196a954c5cb0985241f28ac577"
 cloudpakName: "IBM Cloud Pak for Data"
-cloudpakVersion: "3.0.1"
+cloudpakInstanceId: "{{ .Values.global.cloudpakInstanceId }}"
 {{- end -}}
 
 {{/*

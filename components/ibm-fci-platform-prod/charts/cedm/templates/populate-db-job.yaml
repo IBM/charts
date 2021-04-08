@@ -1,4 +1,4 @@
-{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+{{ if and .Values.runPopulateJob .Values.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -25,12 +25,6 @@ spec:
       - name: file-secrets
         secret:
           secretName: {{ .Release.Name }}-platform-secret-files
-      - name: db2-cert
-        secret:
-          defaultMode: 420
-          secretName: {{ .Release.Name }}-db2-secrets-env
-      - name: fcicert
-        emptyDir: {}
       initContainers:
       - name: init-svc-depend
         resources:
@@ -40,33 +34,12 @@ spec:
         image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
         command: [ "/common-scripts/init-container-svc-depend.sh" ]
         args: [ {{ .Release.Namespace }}/{{ .Release.Name }}-cedm-integration ]
-      - name: import-db2-cert
-        image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.cryptoUtils.image.repository }}:{{ .Values.global.cryptoUtils.image.tag }}"
-        command:
-          - bash
-          - -c
-          - cp /fci_universal_ks.jks /etc/tls/fci_universal_ks.jks && /opt/ibm/java-x86_64-80/jre/bin/keytool -import -noprompt -deststorepass $SSL_KEYSTORE_PASSWORD_CONFIG -file /db2cert -storetype JKS -keystore /etc/tls/fci_universal_ks.jks
-        resources:
-{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
-        env:
-{{- include "common.import-secret" (list . "SSL_KEYSTORE_PASSWORD_CONFIG" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
-        volumeMounts:
-        - name: fcicert
-          mountPath: /etc/tls
-        - name: db2-cert
-          mountPath: /db2cert
-          subPath: db2_cert
-        - name: file-secrets
-          mountPath: /fci_universal_ks.jks
-          subPath: fci_universal_ks.jks
-        securityContext:
-{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
       containers:
         - name: populate-db
           command:
           - bash
           - -c
-          - /fcimount/populateDb.sh 
+          - /fcimount/populateDb.sh
           image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.db2.image.repository }}:{{ .Values.db2.image.tag }}"
           imagePullPolicy: {{ .Values.db2.image.pullPolicy }}
           resources:
@@ -88,18 +61,16 @@ spec:
             valueFrom:
               configMapKeyRef:
                 name: {{ .Release.Name }}-db2
-                key: db_host  
+                key: db_host
           - name: DB2_HOST
             valueFrom:
               configMapKeyRef:
                 name: {{ .Release.Name }}-db2
                 key: db_host
           - name: FLYWAY_URL
-            value: "{{ printf "jdbc:db2://$(DB2_HOST):50001/FCIDB:sslConnection=true;sslTrustStoreLocation=/etc/tls/fci_universal_ks.jks;sslTrustStorePassword=$(SSL_KEYSTORE_PASSWORD_CONFIG);" }}"
+            value: "{{ printf "jdbc:db2://$(DB2_HOST):50001/FCIDB:sslConnection=true;sslTrustStoreLocation=/fci_universal_ks.jks;sslTrustStorePassword=$(SSL_KEYSTORE_PASSWORD_CONFIG);" }}"
           volumeMounts:
           - name: file-secrets
             mountPath: /fci_universal_ks.jks
             subPath: fci_universal_ks.jks
-          - name: fcicert
-            mountPath: /etc/tls  
 {{ end }}

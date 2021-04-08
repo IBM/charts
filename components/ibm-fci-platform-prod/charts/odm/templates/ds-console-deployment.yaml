@@ -1,0 +1,244 @@
+{{- if or .Values.decisionServerRuntime.enabled  .Values.decisionRunner.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "odm.decisionserverconsole.fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: {{ template "odm.decisionserverconsole.fullname" . }}
+{{ include "odm-additional-labels" . | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      release: "{{ .Release.Name }}"
+      run: {{ template "odm.decisionserverconsole.fullname" . }}
+  {{- if or (gt (int .Values.decisionServerRuntime.replicaCount) 0) (gt (int .Values.decisionRunner.replicaCount) 0) }}
+  replicas: 1
+  {{- else }}
+  replicas: 0
+  {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        run: {{ template "odm.decisionserverconsole.fullname" . }}
+        app: {{ template "name" . }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: {{ .Release.Name }}
+        heritage: "{{ .Release.Service }}"
+{{ include "odm-additional-labels" . | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+    spec:
+{{ include "odm-serviceAccountName" . | indent 6 }}
+{{- if not (empty (.Values.customization.dedicatedNodeLabel))  }}
+{{ include "odm-tolerations" . | indent 6 }}
+{{- end }}
+{{ include "odm-spec-security-context" . | indent 6 }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                {{- if .Values.image.arch }}
+                - {{ .Values.image.arch }}
+                {{- else }}
+                - {{ template "arch" . }}
+                {{- end }}
+              {{- if not (empty (.Values.customization.dedicatedNodeLabel))  }}
+              - key: {{ .Values.customization.dedicatedNodeLabel }}
+                operator: "Exists"
+              {{- end }}
+      volumes:
+{{ include "odm-dba-volumes-context" . | indent 6 }}
+{{ include "odm-db-ssl-volumes-context" . | indent 6 }}
+      - name: file-secrets
+        secret:
+          defaultMode: 420
+          secretName: {{ .Release.Name }}-platform-secret-files
+      {{- if not (empty (.Values.customization.authSecretRef)) }}
+      - name: {{ template "odm-auth-secret-volume.fullname" . }}
+        secret:
+          secretName: {{ .Values.customization.authSecretRef }}
+      {{ else }}
+      {{- if .Values.oidc.enabled }}
+      - name: {{ template "odm-auth-secret-volume.fullname" . }}
+        secret:
+          secretName: {{ template "odm.oidc-auth-secret.fullname" . }}
+      {{- end}}
+      {{- end}}
+      {{- if not (empty (.Values.externalCustomDatabase.datasourceRef)) }}
+      - name: {{ template "odm-custom-secret-ds.fullname" . }}
+        secret:
+          secretName: {{ .Values.externalCustomDatabase.datasourceRef }}
+      {{- end}}
+      {{- if not (empty (.Values.customization.baiEmitterSecretRef)) }}
+      - name: {{ template "odm-baiemitterconfig-secret-volume.fullname" . }}
+        secret:
+          secretName: {{ .Values.customization.baiEmitterSecretRef }}
+      {{- end}}
+      {{- if not (empty .Values.externalCustomDatabase.driverPvc) }}
+      - name: {{ template "odm-driver-volume.fullname" . }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.externalCustomDatabase.driverPvc }}
+      {{- end }}
+      - name: {{ template "odm-logging-volume.fullname" . }}
+        configMap:
+      {{- if not (empty .Values.decisionServerConsole.loggingRef) }}
+          name: {{ .Values.decisionServerConsole.loggingRef }}
+      {{ else }}
+          name: {{ template "odm.ds-console-logging-configmap.fullname" . }}
+      {{- end }}
+          items:
+           - key: dsc-logging
+             path: logging.xml
+      - name: {{ template "odm-jvm-options-volume.fullname" . }}
+        configMap:
+      {{- if not (empty .Values.decisionServerConsole.jvmOptionsRef ) }}
+          name: {{ .Values.decisionServerConsole.jvmOptionsRef }}
+      {{ else }}
+          name: {{ template "odm.ds-console-jvm-options-configmap.fullname" . }}
+      {{- end }}
+          items:
+           - key: dsc-jvm-options
+             path: jvm.options
+      - name: lib-workarea-volume
+        emptyDir: {}
+      initContainers:
+      - name: init-svc-depend
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        args:
+        - {{ .Release.Namespace }}/{{ .Release.Name }}-odm-decisionserverruntime
+        command:
+        - /common-scripts/init-container-svc-depend.sh
+        resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 10 }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+      containers:
+      - name: {{ template "odm.decisionserverconsole.fullname" . }}
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.decisionServerConsole.image.repository }}:{{ .Values.decisionServerConsole.image.tag }}"
+{{ include "odm-security-context" . | indent 8 }}
+        imagePullPolicy: {{ .Values.decisionServerConsole.image.pullPolicy }}
+        volumeMounts:
+{{ include "odm-dba-volumemounts-context" . | indent 8 }}
+{{ include "odm-db-ssl-volumemounts-context" . | indent 8 }}
+        - name: file-secrets
+          mountPath: /config/security/keystore.jks
+          subPath: fci_universal_ks.jks
+        - name: file-secrets
+          mountPath: /config/security/truststore.jks
+          subPath: fci_universal_ks.jks
+        {{- if not (empty (.Values.customization.baiEmitterSecretRef)) }}
+        - name: {{ template "odm-baiemitterconfig-secret-volume.fullname" . }}
+          readOnly: true
+          mountPath: {{ template "odm-baiemitterconfig-dir" . }}
+        {{- end}}
+        {{- if or (not (empty (.Values.customization.authSecretRef))) (and (.Values.oidc.enabled) (empty (.Values.customization.authSecretRef))) }}
+        - name: {{ template "odm-auth-secret-volume.fullname" . }}
+          mountPath: {{ template "odm-auth-dir" . }}
+        {{- end}}
+        - name: {{ template "odm-logging-volume.fullname" . }}
+          mountPath: {{ template "odm-log-dir" . }}
+        - name: {{ template "odm-jvm-options-volume.fullname" . }}
+          mountPath: {{ template "odm-jvm-options-dir" . }}
+        {{- if not (empty (.Values.externalCustomDatabase.datasourceRef)) }}
+        - name: {{ template "odm-custom-secret-ds.fullname" . }}
+          mountPath: {{ template "odm-customdatasource-dir" . }}
+        {{- end}}
+        {{- if not (empty (.Values.externalCustomDatabase.driverPvc)) }}
+        - name: {{ template "odm-driver-volume.fullname" . }}
+          mountPath: {{ template "odm-driver-dir" . }}
+        {{- end}}
+        - name: lib-workarea-volume
+          mountPath: /opt/ibm/wlp/output/defaultServer/workarea
+        envFrom:
+{{- include "common.import-all-secrets" (list . "odm") | indent 10 }}
+        env:
+{{- include "common.import-secret" (list . "KEYSTORE_PASSWORD" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
+{{- include "common.import-secret" (list . "TRUSTSTORE_PASSWORD" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
+{{ include "odm-db-config" . | indent 10 }}
+{{ include "odm-metering-config" . | indent 10 }}
+          - name: "RELEASE_NAME"
+            value: {{ .Release.Name }}
+          {{- if not (empty (.Values.decisionServerConsole.title)) }}
+          - name: COM_IBM_ODM_RES_CONSOLE_PAGE_TITLE
+            value: "{{ .Values.decisionServerConsole.title }}"
+          {{- end }}
+          {{- if not (empty (.Values.decisionServerConsole.description)) }}
+          - name: COM_IBM_ODM_RES_CONSOLE_DESCRIPTION
+            value: "{{ .Values.decisionServerConsole.description }}"
+          {{- end }}
+          {{- if and (not (empty .Values.decisionServerConsole.extendRoleMapping )) (.Values.decisionServerConsole.extendRoleMapping) }}
+          - name: "DSC_ROLE_GROUP_MAPPING"
+            value: "true"
+          {{- end }}
+          {{- if (not (empty .Values.decisionServerConsole.contextRoot )) }}
+          - name: "ODM_CONTEXT_ROOT"
+            value: "{{ .Values.decisionServerConsole.contextRoot}}"
+          {{- end }}
+          {{- if .Values.service.ingress.enabled }}
+          - name: "DECISION_SERVICE_URL"
+            value: "{{ .Values.decisionServerRuntime.contextRoot}}/DecisionService"
+          {{- else }}
+          - name: "DECISION_SERVICE_URL"
+            value: "{{ .Values.decisionServerConsole.contextRoot}}/DecisionService"
+          {{- end }}
+          {{- if .Values.service.enableTLS }}
+          - name: "ENABLE_TLS"
+            value: "true"
+          {{- end }}
+{{ include "odm-db-ssl-env-context" . | indent 10 }}
+{{ include "odm-kubeVersion" . | indent 10 }}
+{{ include "odm-oidc-context" . | indent 10 }}
+{{ include "odm-dba-env-context" . | indent 10 }}
+{{ include "odm-dba-production" . | indent 10 }}
+        ports:
+        {{- if .Values.service.enableTLS}}
+        - name: dsc-port
+          containerPort: 9443
+        {{- else }}
+        - name: dsc-port
+          containerPort: 9080
+        {{- end }}
+        - containerPort: 1883
+        readinessProbe:
+          httpGet:
+            {{- if .Values.service.enableTLS }}
+            scheme: HTTPS
+            {{- else }}
+            scheme: HTTP
+            {{- end }}
+            path: {{ .Values.decisionServerConsole.contextRoot }}/res
+            port: dsc-port
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+        livenessProbe:
+          httpGet:
+            {{- if .Values.service.enableTLS }}
+            scheme: HTTPS
+            {{- else }}
+            scheme: HTTP
+            {{- end }}
+            path: {{ .Values.decisionServerConsole.contextRoot }}/res
+            port: dsc-port
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+        resources:
+{{ toYaml .Values.decisionServerConsole.resources | indent 10 }}
+{{ include "odm-pullsecret-spec" . | indent 6 }}
+{{- end }}

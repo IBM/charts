@@ -62,9 +62,13 @@ spec:
       nodeSelector:
 {{ toYaml .Values.nodeSelector | indent 8 }}
 {{- end }}
-      serviceAccount: fci-kafka
+{{- if .Values.global.pvRequiresPermissionsFix }}
       serviceAccountName: fci-kafka
+{{ else }}
+      serviceAccountName: fci-common-scripts
+{{ end }}      
       initContainers:
+        {{- if .Values.global.pvRequiresPermissionsFix }}
         - name: permissionsfix
           securityContext:
 {{ include "common.RootFownerContainerSecurityContext" . | indent 12 }}
@@ -79,6 +83,7 @@ spec:
           volumeMounts:
           - mountPath: /mount
             name: {{ .Release.Name }}-data
+        {{- end }}
         - name: init-svc-depend
           image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           resources:
@@ -120,11 +125,8 @@ spec:
         image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: "{{ .Values.image.pullPolicy }}"
         livenessProbe:
-          exec:
-            command:
-              - sh
-              - -ec
-              - /usr/bin/jps | /bin/grep -q SupportedKafka
+          tcpSocket:
+            port: kafka
           initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
           timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
