@@ -2,7 +2,7 @@
 IBM Financial Crimes Insight enables financial institutions to leverage analytics and cognitive capabilities to combat financial crime.
 
 ## Introduction
-This chart deploys IBM Financial Crimes Insight. For more information about IBM Financial Crimes Insight, see the [IBM Financial Crimes Insight product documentation](https://www.ibm.com/support/knowledgecenter/SSCKRH).
+This chart deploys IBM Financial Crimes Insight. For more information about IBM Financial Crimes Insight, see the [IBM Financial Crimes Insight product documentation](https://www.ibm.com/support/knowledgecenter/SSCKRH_6.6.0/main/t_install_fci_platform.html).
 
 
 ## Chart Details
@@ -28,14 +28,17 @@ To install using the command line, ensure you have the following:
 
 - The `kubectl` and `helm` commands available
 - Your environment configured to connect to the target cluster
-See the [IBM Financial Crimes Insight product documentation](https://www.ibm.com/support/knowledgecenter/SSCKRH) for details on setting up an environment to install this chart.
+See the [IBM Financial Crimes Insight product documentation](https://www.ibm.com/support/knowledgecenter/SSCKRH_6.6.0/main/t_inst_checklist.html) for details on setting up an environment to install this chart.
 
 The installation environment has the following prerequisites:
 
-- Kubernetes 1.11.0 or later
+- Kubernetes 1.18.0 or later
 - PersistentVolume support in the underlying infrastructure (See "Create Persistent Volumes" below)
 
 ### Red Hat OpenShift SecurityContextConstraints Requirements
+
+### SecurityContextConstraints Requirements
+
 The IBM Financial Crimes Insight installer for Red Hat OpenShift Container Platform creates the appropriate SecurityContextConstraint bound to the target namespace prior to installation.
 
 
@@ -645,7 +648,7 @@ priority: 0
 
 
 ## Resources Required
-For information about the resource requirements of the IBM Financial Crime Insight Helm chart, including total values and the requirements for each pod and their containers, see the [IBM Financial Crime Insight product documentation](https://www.ibm.com/support/knowledgecenter/SSCKRH).
+For information about the resource requirements of the IBM Financial Crime Insight Helm chart, including total values and the requirements for each pod and their containers, see the [IBM Financial Crime Insight product documentation](https://www.ibm.com/support/knowledgecenter/SSCKRH_6.6.0/main/install_sysreqs.html).
 
 Persistence is enabled by default. You can find more information about storage requirements below.
 
@@ -668,7 +671,7 @@ You can find more information about storage requirements below.
 
 ### Install IBM Financial Crime Insight
 
-See the [IBM Financial Crime Insight product documentation](https://www.ibm.com/support/knowledgecenter/SSCKRH) for information on installing the IBM Financial Crime Insight chart.
+See the [IBM Financial Crime Insight product documentation](https://www.ibm.com/support/knowledgecenter/SSCKRH_6.6.0/main/t_install_roadmap.html) for information on installing the IBM Financial Crime Insight chart.
 
 ### Verifying the Chart
 
@@ -676,22 +679,12 @@ See the NOTES.txt file associated with this chart for verification instructions.
 
 ### Uninstalling the Chart
 
-To uninstall IBM Financial Crimes Insight:
 
-```
-helm delete <release_name> --purge --tls
-```
-
-This command removes all the Kubernetes components associated with the chart, except any persistent volume claims (PVCs). This is the default behavior of Kubernetes, and ensures that valuable data is not deleted. In order to delete the IBM Financial Crimes Insight data, you can delete the PVC using the following command:
-
-```
-kubectl delete pvc -l release=<release_name>
-```
-WARNING: This will remove any existing data from the underlying physical volumes.
+See the [IBM Financial Crime Insight product documentation](https://www.ibm.com/support/knowledgecenter/SSCKRH_6.6.0/main/fci-uninstall-base.html) for information on installing the IBM Financial Crime Insight chart.
 
 ## Configuration
 
-The following table lists some of the configurable parameters of the `ibm-fci-platform-prod` chart and their default values.  See the [IBM Financial Crimes Insight product documentation](https://www.ibm.com/support/knowledgecenter/SSCKRH) for more details on the configurable parameters.
+The following table lists some of the configurable parameters of the `ibm-fci-platform-prod` chart and their default values.  See the [IBM Financial Crimes Insight product documentation](https://www.ibm.com/support/knowledgecenter/SSCKRH_6.6.0/main/t_config_fcco_values_yaml.html) for more details on the configurable parameters.
 
 ### Security authentication settings
 | Parameter                  | Description                                     | Default                                                    |
@@ -726,4 +719,4 @@ More information about persistent volumes and the system administration steps re
 
 ## Documentation
 
-Find out more about [IBM Financial Crimes Insight](https://www.ibm.com/support/knowledgecenter/SSCKRH).
+Find out more about [IBM Financial Crimes Insight](https://www.ibm.com/support/knowledgecenter/SSCKRH_6.6.0/main/welcome.html).

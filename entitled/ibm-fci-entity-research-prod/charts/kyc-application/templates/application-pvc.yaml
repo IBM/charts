@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ template "common.fullname" . }}
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "kyc-application") (include "common.name" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+{{-   if .Values.kycApplicationPvcSpec.accessModes }}
+{{-     with .Values.kycApplicationPvcSpec.accessModes }}
+  accessModes:
+{{        toYaml . | indent 4 -}}
+{{-     end -}}
+{{- end }}
+{{- if .Values.global.persistence.useDynamicProvisioning }}
+{{-   if not .Values.kycApplicationPvcSpec.storageClassName }}
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{-   else }}
+  storageClassName: {{ .Values.kycApplicationPvcSpec.storageClassName | quote }}
+{{- end }}
+{{- else }}
+  storageClassName: {{ default "" .Values.kycApplicationPvcSpec.storageClassName | quote }}
+{{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.kycApplicationPvcSpec.resources.requests.storage }}
+{{- if not .Values.global.persistence.useDynamicProvisioning }}
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "common.name" .) "kyc-application") .Release.Name ) | indent 6 }}
+{{- end -}}

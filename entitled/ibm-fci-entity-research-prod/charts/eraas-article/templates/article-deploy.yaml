@@ -1,0 +1,148 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "common.fullname" . }}
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "eraas-article") (include "common.name" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "common.name" .) "eraas-article") .Release.Name ) | indent 6 }}
+  replicas: {{ .Values.eraasArticle.replicas }}
+  revisionHistoryLimit: {{required "A valid .Values.revision_history_limit entry required!" .Values.revision_history_limit}}
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "eraas-article") (include "common.name" .) .Release.Name .Release.Service ) | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8}}
+    spec:
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . |indent 8}}
+      serviceAccountName: {{ template "common.core-release-name" . }}-common
+      volumes:
+        - name: file-secrets
+          secret:
+            secretName: {{ template "common.core-release-name" . }}-platform-secret-files
+        - name: eraas-article
+          persistentVolumeClaim:
+              claimName: {{ template "common.fullname" . }}
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.global.imagePullSecrets | indent 6 }}
+      {{- end }}
+      containers:
+        - name: eraas-article
+          image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.eraasArticle.image.repository }}:{{ .Values.eraasArticle.image.tag }}
+          imagePullPolicy: {{ .Values.eraasArticle.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          livenessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /actuator/health
+              port: 8443
+            initialDelaySeconds: {{ default 30 .Values.eraasArticle.livenessProbe.initialDelaySeconds }}
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /actuator/health
+              port: 8443
+            initialDelaySeconds: {{ default 30 .Values.eraasArticle.readinessProbe.initialDelaySeconds }}
+            periodSeconds: 30
+          envFrom:
+            - configMapRef:
+                name: {{ template "common.fullname" . }}
+          env:
+            - name: JWT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                  key: JWT_KEY
+            - name: MONGO_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.core-release-name" . }}-mongo-secrets-env
+                  key: mongodb-eraas-article-password
+            - name: SSL_KEY_STORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                  key: FCI_JKS_PASSWORD
+            - name: SSL_TRUST_STORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                  key: FCI_JKS_PASSWORD
+            - name: FCI_KAFKA_MSG_KS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                  key: FCI_KAFKA_MSG_JKS_PASSWORD
+            - name: FCI_KAFKA_MSG_KS_ALIASNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                  key: FCI_KAFKA_MSG_JKS_ALIASNAME
+            - name: KAFKA_SSL_TRUST_STORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: FCI_JKS_PASSWORD
+                  name: fci-platform-secrets-env
+            - name: KAFKA_SSL_KEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: FCI_JKS_PASSWORD
+                  name: fci-platform-secrets-env
+            - name: KAFKA_SSL_KEY_STORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: FCI_JKS_PASSWORD
+                  name: fci-platform-secrets-env
+          ports:
+            - containerPort: 8443
+          volumeMounts:
+            - name: file-secrets
+              mountPath: /opt/app-root/fci_universal_ks.jks
+              subPath: fci_universal_ks.jks
+              readOnly: true
+            - name: file-secrets
+              mountPath: /opt/app-root/fci_kafka_msg.p12
+              subPath: fci_kafka_msg.p12
+              readOnly: true
+            - name: file-secrets
+              mountPath: /opt/app-root/kafka.client.keystore.jks
+              subPath: fci_universal_ks.jks
+              readOnly: true
+            - name: file-secrets
+              mountPath: /opt/app-root/kafka.client.truststore.jks
+              subPath: fci_universal_ks.jks
+              readOnly: true
+            - name: eraas-article
+              mountPath: /data
+          {{- if .Values.eraasArticle.resources }}
+          resources:
+            {{- if .Values.eraasArticle.resources.requests }}
+            requests:
+              {{- if .Values.eraasArticle.resources.requests.memory }}
+              memory: {{ .Values.eraasArticle.resources.requests.memory }}
+              {{- end}}
+              {{- if .Values.eraasArticle.resources.requests.cpu }}
+              cpu: {{ .Values.eraasArticle.resources.requests.cpu }}
+              {{- end}}
+            {{- end}}
+            {{- if .Values.eraasArticle.resources.limits }}
+            limits:
+              {{- if .Values.eraasArticle.resources.limits.memory }}
+              memory: {{ .Values.eraasArticle.resources.limits.memory }}
+              {{- end}}
+              {{- if .Values.eraasArticle.resources.limits.cpu }}
+              cpu: {{ .Values.eraasArticle.resources.limits.cpu }}
+              {{- end}}
+            {{- end}}
+          {{- end }}
+      restartPolicy: Always

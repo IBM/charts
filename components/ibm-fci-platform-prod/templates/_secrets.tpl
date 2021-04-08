@@ -30,11 +30,7 @@ sch:
         create: true
         type: generic
         values:
-        - name: DB2DBADM_PASSWORD
-          generator: "fci.password.generator"
         - name: DB2INST1_PASSWORD
-          generator: "fci.password.generator"
-        - name: FCIAUTHID_PASSWORD
           generator: "fci.password.generator"
       - name: {{ .Release.Name }}-elastic-secrets
         create: true
@@ -61,6 +57,18 @@ sch:
         - name: mongodb-eraas-outcome-password
           generator: "fci.password.generator"
         - name: mongodb-eraas-workflow-password
+          generator: "fci.password.generator"
+        - name: mongodb-eraas-plan-password
+          generator: "fci.password.generator"
+        - name: mongodb-eraas-article-password
+          generator: "fci.password.generator"
+        - name: mongodb-eraas-news-password
+          generator: "fci.password.generator"
+        - name: mongodb-eraas-news-mcd-password
+          generator: "fci.password.generator"
+        - name: mongodb-eraas-ml-api-password
+          generator: "fci.password.generator"
+        - name: mongodb-eraas-ml-password
           generator: "fci.password.generator"
         - name: mongodb-eraas-proxy-password
           generator: "fci.password.generator"

@@ -1,0 +1,63 @@
+{{- if .Values.web.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cadence.componentname" (list . "web") }}
+  labels:
+{{- include "common.label.metadata" (list . ("web") (include "cadence.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+{{- include "common.scaleDownIfDisabled" $ | indent 2 -}}
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . ("web") .Release.Name ) | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+{{- include "common.label.metadata" (list . ("web") (include "cadence.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+    spec:
+      securityContext:
+{{- include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      serviceAccountName: fci-common-scripts
+      serviceAccount: fci-common-scripts
+      initContainers:
+      - name: init-svc-depend
+        resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 10 }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        command: [ "/common-scripts/init-container-svc-depend.sh" ]
+        args: [ "{{ .Release.Namespace }}/{{ template "cadence.fullname" . }}-frontend" ]
+      containers:
+        - name: {{ .Chart.Name }}-web
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.web.image.repository }}:{{ .Values.web.image.tag }}"
+          imagePullPolicy: {{ .Values.web.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          env:
+          - name: CADENCE_TCHANNEL_PEERS
+            value: "{{ include "cadence.fullname" . }}-frontend:{{ .Values.server.frontend.service.port }}"
+
+          ports:
+            - name: http
+              containerPort: 8088
+              protocol: TCP
+          livenessProbe:
+{{ toYaml .Values.web.livenessProbe | indent 12 }}
+          readinessProbe:
+{{ toYaml .Values.web.readinessProbe | indent 12 }}
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+      {{- with .Values.web.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.web.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+{{- end }}

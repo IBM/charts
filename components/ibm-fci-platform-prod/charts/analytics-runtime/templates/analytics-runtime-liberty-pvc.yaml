@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ template "analytics-runtime.fullname" . }}-liberty
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "analytics-runtime.name" .) "liberty") (include "analytics-runtime.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+{{- if .Values.global.persistence.useDynamicProvisioning }}
+{{-   if not .Values.arLibertyPvcSpec.storageClassName }}
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{-   else }}
+  storageClassName: {{ .Values.arLibertyPvcSpec.storageClassName | quote }}
+{{-   end }}
+{{- else }}
+  storageClassName: {{ default "" .Values.arLibertyPvcSpec.storageClassName | quote }}
+{{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.arLibertyPvcSpec.size }}
+{{- if .Values.arLibertyPvcSpec.accessModes }}
+{{-   with .Values.arLibertyPvcSpec.accessModes }}
+  accessModes:
+{{      toYaml . | indent 4 -}}
+{{-   end -}}
+{{- end }}
+{{- if not .Values.global.persistence.useDynamicProvisioning }}
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "cedm.name" .) "liberty") .Release.Name ) | indent 6 }}
+{{- end -}}

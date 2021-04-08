@@ -1,0 +1,135 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "common.fullname" . }}
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "eraas-dsf") (include "common.name" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "common.name" .) "eraas-dsf") .Release.Name ) | indent 6 }}
+  replicas: {{ .Values.eraasDsf.replicas }}
+  revisionHistoryLimit: {{required "A valid .Values.revision_history_limit entry required!" .Values.revision_history_limit}}
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "eraas-dsf") (include "common.name" .) .Release.Name .Release.Service ) | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8}}
+    spec:
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . |indent 8}}
+      serviceAccountName: {{ template "common.core-release-name" . }}-common
+      volumes:
+        - name: file-secrets
+          secret:
+            secretName: {{ template "common.core-release-name" . }}-platform-secret-files
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.global.imagePullSecrets | indent 6 }}
+      {{- end }}
+      containers:
+        - name: eraas-dsf
+          image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.eraasDsf.image.repository }}:{{ .Values.eraasDsf.image.tag }}
+          imagePullPolicy: {{ .Values.eraasDsf.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          livenessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /health
+              port: 8443
+            initialDelaySeconds: {{ default 30 .Values.eraasDsf.livenessProbe.initialDelaySeconds }}
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /health
+              port: 8443
+            initialDelaySeconds: {{ default 30 .Values.eraasDsf.readinessProbe.initialDelaySeconds }}
+            periodSeconds: 30
+          envFrom:
+            - configMapRef:
+                name: {{ template "common.fullname" . }}
+          env:
+            - name: JWT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                  key: JWT_KEY
+            - name: MONGO_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.core-release-name" . }}-mongo-secrets-env
+                  key: mongodb-dsf-password
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.secrets-name" . }}
+                  key: API_KEY
+            - name: DNB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.secrets-name" . }}
+                  key: DNB_PASSWORD
+            - name: DOWJONES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.secrets-name" . }}
+                  key: DOWJONES_PASSWORD
+            - name: OPENCORPORATES_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.secrets-name" . }}
+                  key: OPENCORPORATES_API_TOKEN
+            - name: KYCKR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.secrets-name" . }}
+                  key: KYCKR_PASSWORD
+            - name: BING_WEB_SUBSCRIPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.secrets-name" . }}
+                  key: BING_WEB_SUBSCRIPTION_KEY_V7
+            - name: BING_NEWS_SUBSCRIPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "common.secrets-name" . }}
+                  key: BING_NEWS_SUBSCRIPTION_KEY_V7
+          ports:
+            - containerPort: 8443
+          volumeMounts:
+            - name: file-secrets
+              mountPath: /opt/app-root/src/ssl/{{ .Values.eraasDsfConfig.APP_ENV }}/fci_universal_ks.pvtk.pem
+              subPath: fci_universal_ks.pvtk.pem
+              readOnly: true
+            - name: file-secrets
+              mountPath: /opt/app-root/src/ssl/{{ .Values.eraasDsfConfig.APP_ENV }}/fci_universal_ks.crt.pem
+              subPath: fci_universal_ks.crt.pem
+              readOnly: true
+          {{- if .Values.eraasDsf.resources }}
+          resources:
+            {{- if .Values.eraasDsf.resources.requests }}
+            requests:
+              {{- if .Values.eraasDsf.resources.requests.memory }}
+              memory: {{ .Values.eraasDsf.resources.requests.memory }}
+              {{- end}}
+              {{- if .Values.eraasDsf.resources.requests.cpu }}
+              cpu: {{ .Values.eraasDsf.resources.requests.cpu }}
+              {{- end}}
+            {{- end}}
+            {{- if .Values.eraasDsf.resources.limits }}
+            limits:
+              {{- if .Values.eraasDsf.resources.limits.memory }}
+              memory: {{ .Values.eraasDsf.resources.limits.memory }}
+              {{- end}}
+              {{- if .Values.eraasDsf.resources.limits.cpu }}
+              cpu: {{ .Values.eraasDsf.resources.limits.cpu }}
+              {{- end}}
+            {{- end}}
+          {{- end }}
+      restartPolicy: Always

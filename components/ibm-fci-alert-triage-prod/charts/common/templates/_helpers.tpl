@@ -61,13 +61,13 @@ Metering Annotations for CP4D
 */}}
 {{- define "common.meteringAnnotations" -}}
 productName: "IBM Financial Crimes Insight for Alert Triage Software"
-productID: "5737-E41"
-productVersion: "6.5.2"
-productMetric: "RESOURCE_VALUE_UNIT"
+productID: "5f0d47196a954c5cb0985241f28ac577"
+productVersion: "6.6.0"
+productMetric: "INSTALL"
 productChargedContainers: "All"
-cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+cloudpakId: "5f0d47196a954c5cb0985241f28ac577"
 cloudpakName: "IBM Cloud Pak for Data"
-cloudpakVersion: "3.0.1"
+cloudpakInstanceId: "{{ .Values.global.cloudpakInstanceId }}"
 {{- end -}}
 
 
