@@ -4,30 +4,30 @@
 Enable analysts to quickly assess alerts using Watson analytics and cognitive capabilities to determine which alerts warrant further investigation.
 
 ## Introduction
-This chart deploys Financial Crimes Insight for Alert Triage Software. For more information about IBM Financial Crimes Insight, see the [IBM Financial Crimes Insight product documentation](https://www.ibm.com/support/knowledgecenter/SSCKRH).
+This chart deploys Financial Crimes Insight for Alert Triage Software. For more information about IBM Financial Crimes Insight, see the [IBM Financial Crimes Insight product documentation](https://www.ibm.com/support/knowledgecenter/SSCKRH_6.6.0/tls/tls_welcome.html).
 
 ## Chart Details
 This Helm chart will install the following:
 
-- A Alerts Review component as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
 - A TLS Analytics component as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
 - A TLS UI component as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
-
-- Alert Triage Transaction Monitoring Performance Charts [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
 
 ## Prerequisites
 To install using the command line, ensure you have the following:
 
 - The `kubectl` and `helm` commands available
 - Your environment configured to connect to the target cluster
-See the [IBM Financial Crimes Insight product documentation](https://www.ibm.com/support/knowledgecenter/SSCKRH) for details on setting up an environment to install this chart.
+See the [IBM Financial Crimes Insight product documentation](https://www.ibm.com/support/knowledgecenter/SSCKRH_6.6.0/tls/t_inst_tls_checklist.html) for details on setting up an environment to install this chart.
 
 The installation environment has the following prerequisites:
 
-- Kubernetes 1.11.0 or later
+- Kubernetes 1.18.0 or later
 - PersistentVolume support in the underlying infrastructure (See "Create Persistent Volumes" below)
 
 ### Red Hat OpenShift SecurityContextConstraints Requirements
+
+### SecurityContextConstraints Requirements
+
 The IBM Financial Crimes Insight installer for Red Hat OpenShift Container Platform creates the appropriate SecurityContextConstraint bound to the target namespace prior to installation.
 
 The predefined `SecurityContextConstraints` name: `restricted` has been verified for the components of this chart.
@@ -79,7 +79,7 @@ volumes:
 ```
 
 ## Resources Required
-For information about the resource requirements of the IBM Financial Crimes Insight for Alert Triage Software, see the [IBM Financial Crime Insight product documentation](https://www.ibm.com/support/knowledgecenter/SSCKRH).
+For information about the resource requirements of the IBM Financial Crimes Insight for Alert Triage Software, see the [IBM Financial Crime Insight product documentation](https://www.ibm.com/support/knowledgecenter/SSCKRH_6.6.0/tls/c_inst_tls_requirements.html).
 
 Persistence is enabled by default. You can find more information about storage requirements below.
 
@@ -101,7 +101,7 @@ You can find more information about storage requirements below.
 
 ### Install IBM Financial Crime Insight for Alert Triage Software
 
-See the [IBM Financial Crime Insight product documentation](https://www.ibm.com/support/knowledgecenter/SSCKRH) for information on installing the IBM Financial Crime Insight chart.
+See the [IBM Financial Crime Insight product documentation](https://www.ibm.com/support/knowledgecenter/SSCKRH_6.6.0/tls/c_tls_install_overview.html) for information on installing the IBM Financial Crime Insight chart.
 
 ### Uninstalling the Chart
 
@@ -131,10 +131,15 @@ If these persistent volumes are to be created automatically at the time of insta
 
 More information about persistent volumes and the system administration steps required can be found in the [Kubernetes documentation](https://kubernetes.io/docs/concepts/storage/persistent-volumes/).
 
+## Configuration
+
+See the [IBM Financial Crime Insight product documentation](https://www.ibm.com/support/knowledgecenter/SSCKRH_6.6.0/tls/c_confg_tls.html)for more details on the configurable parameters.
+
+
 ## Limitations
 - Linux on Power (ppc64le) is not supported.
 - Mixed worker node architecture deployments are not supported.
 
 ## Documentation
 
-Find out more about [IBM Financial Crimes Insight](https://www.ibm.com/support/knowledgecenter/SSCKRH).
+Find out more about [IBM Financial Crimes Insight](https://www.ibm.com/support/knowledgecenter/SSCKRH_6.6.0/tls/tls_welcome.html).

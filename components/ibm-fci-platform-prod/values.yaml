@@ -1,11 +1,6 @@
 global:
 
   persistence:
-    # This field can always be left blank because when running the cpd
-    # installer, the storage class is provided using the -c command line
-    # option, which overrides this setting.
-    storageClassName: ''
-
     # By default, installation assumes that there is a dynamic provisioner
     # that allocates persistent volues using the storageClassName provided
     # above.
@@ -29,11 +24,34 @@ global:
   # root-level priviledges in order to mount the volume, fix the filesystem
   # permissions, and then terminate.  If the PVs that are allocated already
   # have appropriate permissions, this field may be set to false.
-  pvRequiresPermissionsFix: true
+  pvRequiresPermissionsFix: false
 
   # runAsUser is the user id that containers requiring updates to file system permissions
   # run as if pvRequiresPermissionsFix is set to true
   runAsUser: 1000
+
+  cloudpakInstanceId: "override"
+
+  networkPolicy:
+    ## Enable creation of NetworkPolicy resources.
+    ##
+    enabled: False
+
+    ## add additional selectors to allow ingress from other namespaces or pods
+    # e.g.
+    #     - namespaceSelector:
+    #         matchLabels:
+    #           network.openshift.io/policy-group: mylabel
+    ingressSelector:
+
+    # The IP address of the Kubernetes API server
+    # The port and the IP address of the Kubernetes API server can be found by
+    # running the following command:
+    # oc get endpoints --namespace default kubernetes
+    kubernetesIp:
+
+    #The port that the Kubernetes API server runs on
+    kubernetesPort:
 
   # Provide the subdomain of the host used to access the cluster for
   # HTTP/HTTPS traffic.  This often can be determined by running this command:
@@ -64,11 +82,8 @@ global:
   # making it impossible to determine the correct URL automatically.
   tcpIngressSubdomain: localhost.localdomain
 
-  # At this time, DB2 instances must be set to 1
-  db2Instances: 1
-
   # Change to CLOUD_PAK to use DB2 from Cloud Pak
-  DB2_PROVISIONER: 'FCI'
+  DB2_PROVISIONER: 'CLOUD_PAK'
   DB2_CONNECTION_NAME: "FCI_DB2"
 
   # generateInternalPasswords determines whether secrets for internal
@@ -83,39 +98,6 @@ global:
   # does not normally need to be changed.
   externalSecretName: fci-platform-external-secrets-env
 
-  # hostAliases provides a way to manage /etc/hosts in all Kubernetes
-  # pods that will be installed in the Kubernetes cluster.
-  # This is useful in situations where DNS may not work properly,
-  # or DNS entries are not used at all.  Most often, this is used
-  # to add the Hadoop (HDP) servers into the /etc/hosts of each pod to
-  # ensure that pods can resolve the HDP servers to the correct IP
-  # addresses.
-  #
-  # In addition if you are using this because of DNS issues
-  # you most likely would need to create /etc/hosts entries on the
-  # nodes (hosts) that are running Kubernetes (the Kubernetes Master
-  # and Kubernetes Worker nodes) to contain the hostnames and ip
-  # addresses of the Hadoop servers (nodes).
-  #
-  # Below are examples with hostnames of hdp1, hdp2, hdp3
-  # and the dns of the servers end in .yourcompany.com
-  # If you have 6 HDP servers then follow the pattern below
-  # and enter ip and hostnames for 6 servers
-  #
-  # Also uncomment all the lines below for this to take affect
-  #
-  # hostAliases:
-  # - ip: "10.187.45.4"
-  #   hostnames:
-  #   - "hdp1.yourcompany.com"
-  # - ip: "10.187.45.38"
-  #   hostnames:
-  #   - "hdp2.yourcompany.com"
-  # - ip: "10.187.45.37"
-  #   hostnames:
-  #   - "hdp3.yourcompany.com"
-
-
   # The product name to brand the login page
   productName: "IBM Financial Crimes Insight"
 
@@ -125,10 +107,10 @@ global:
 
   swidtag:
     # Indicate license used for this installation.
-    # For production use, set file to: ibm.com_IBM_Cloud_Pak_for_Data_Financial_Crimes_Insight-6.5.1.swidtag
-    # For non-production use, set file to: ibm.com_IBM_Cloud_Pak_for_Data_Financial_Crimes_Insight_for_Non-Production_Environment-6.5.1.swidtag
-    # For FCI for Watson Private use, set file to: ibm.com_IBM_Financial_Crimes_Insight_with_Watson_Private-6.5.1.swidtag
-    file: 'ibm.com_IBM_Cloud_Pak_for_Data_Financial_Crimes_Insight_for_Non-Production_Environment-6.5.1.swidtag'
+    # For production use, set file to: ibm.com_IBM_Financial_Crimes_Insight_Cartridge_for_IBM_Cloud_Pak_for_Data-6.6.0.swidtag
+    # For non-production use, set file to: ibm.com_IBM_Cloud_Pak_for_Data_Financial_Crimes_Insight_for_Non-Production_Environment-6.6.0.swidtag
+    # For FCI for Watson Private use, set file to: ibm.com_IBM_Financial_Crimes_Insight_with_Watson_Private-6.6.0.swidtag
+    file: 'ibm.com_IBM_Cloud_Pak_for_Data_Financial_Crimes_Insight_for_Non-Production_Environment-6.6.0.swidtag'
 
   cryptoUtils:
     image:
@@ -291,45 +273,14 @@ global:
   smtp_auth_password: "<secret>"
 
   # The type of identity server being used.
-  # Options include 'msad', 'sds', 'open', or 'none' (Keep the ' around the value)
+  # Options include 'msad', 'sds', or 'open', or (Keep the ' around the value)
+  # Note: FCI 6.6.0 no longer allows 'none' for basic registry
   # CLOUD_PAK -- Cloud Pak for Data authentication
   # msad -- Microsoft Active Directory
   # sds -- IBM Security Directory Server, formerly known as Tivoli Directory Server
   # open -- OpenLDAP
-  # none -- no LDAP server, use basic registry instead
   # appid -- to enable authentication through IBM Cloud App ID service
-  IDENTITY_SERVER_TYPE: 'none'
-
-  LDAP_SERVER_HOST: '<hostname>'
-  LDAP_SERVER_PORT: '636'
-
-  # set to True if connecting to the LDAP server over SSL
-  # set to False otherwise
-  LDAP_SERVER_SSL: True
-
-  # The user account to connect (bind) to the LDAP server
-  # For IBM Security Directory Server this is often 'cn=bind'
-  LDAP_SERVER_BINDDN: 'administrator'
-
-  # The LDAP_SERVER_SEARCHBASE is often referred to as the Base DN
-  LDAP_SERVER_SEARCHBASE: 'cn=users,dc=aml,dc=ibm,dc=com'
-  LDAP_PROFILE_DISPLAYNAME: 'displayName'
-  LDAP_PROFILE_EMAIL: 'userPrincipalName'
-  LDAP_PROFILE_GROUPS: 'memberOf'
-  LDAP_PROFILE_ID: 'sAMAccountName'
-  LDAP_PROFILE_TENANTS: 'fciTenants'
-  LDAP_SERVER_USERNAME_MAPPING: 'sAMAccountName'
-
-  # These are the default user search filters:
-  # for Microsoft Active Directory: objectcategory=user
-  # for IBM Security Directory Server: objectclass=inetOrgPerson
-  # for OpenLDAP: objectClass=inetOrgPerson
-  # If using a custom LDAP user search filter, uncomment this property and enter the filter as the value.
-  #LDAP_USER_FILTER_OVERRIDE: 'objectclass=ePerson'
-
-  # Performs a nested group search.
-  # Set to true only if the LDAP server does not support recursive server-side searches.
-  LDAP_SERVER_RECURSIVE_SEARCH: 'false'
+  IDENTITY_SERVER_TYPE: 'CLOUD_PAK'
 
   auth:
     # Role definitions
@@ -365,7 +316,7 @@ global:
     TEAM_TRIAGE_TEAM: 'TriageTeam'
     TEAM_INVESTIGATION_TEAM: 'InvestigationTeam'
     TEAM_SUPERVISOR_TEAM: 'SupervisorTeam'
-    TEAM_CONFIDENTIAL_TEAM: 'confidential'
+    TEAM_CONFIDENTIAL_TEAM: 'ConfidentialTeam'
     TEAM_VENDOR_TEAM: 'VendorTeam'
     TEAM_LEGAL_TEAM: 'LegalTeam'
 
@@ -375,32 +326,9 @@ global:
     supplementalGroups:
     - 0
 
-  hdp:
-    # If using a non-prod HDP topology do two things to configure the HDP_NAME_NODE
-    # i) uncomment the line below and provide HDP_MASTER_NODE (just delete the #)
-    #HDP_NAME_NODE: 'hdfs://<HDP_MASTER_NODE>:8020'
-    # ii) comment out the other line HDP_NAME_NODE: 'hdfs://fcicluster'
-
-    # If using the HDP production environment, leave the line below as is. For HDP dev env. & single server comment it out
-    HDP_NAME_NODE: 'hdfs://fcicluster'
-
-    # Set to the fully qualified domain name of the HDP master node.
-    HDP_MASTER_NODE: 'HDP_MASTER_FQDN'
-
-    # If using the HDP production environment, make sure to set to the fully qualified domain name of the HDP secondary master node.
-    HDP_SECONDARY_MASTER_NODE: 'HDP_SECONDARY_MASTER_FQDN'
-
-    # Set to the fully qualified domain name of the HDP Ambari server.
-    HDP_AMBARI_NODE: 'AMBARI_FQDN'
-
   kerberos:
-    # This value should not be changed.
-    KERBEROS_REALM: 'FCI.IBM'
-
+    # Frequency of kerberos ticket refresh
     KINIT_SECONDS: '3600'
-    HADOOP_VERSION: '3.x'
-    HDP_CLUSTER_NAME: 'fcicluster'
-    KERBEROS_ENABLED: 'true'
 
     runAsUser: 1000
     resources:
@@ -411,84 +339,24 @@ global:
         memory: "512Mi"
         cpu: ".5"
 
-
-  hbase:
-    # For the hbase_zookeeper_quorum property, you must specify at least one zookeeper
-    # server. For a 6 server hdp install (prod topology)  Zookeeper servers are: HDP Master Node.
-    # HDP Gateway and HDP Secondary Master. For 3 server hdp install (dev topology) the Zookeeper servers are:
-    # HDP Master and HDP Gateway. For single server hdp install the Zookeeper server is the HDP Hostname.
-    # Do not inlcude the <> in the hostname.  For example
-    # hbase_zookeeper_quorum: 'hdp-master.acme.com,hdp-gw.acme.com,hdp-2gw.acme.com'
-    hbase_zookeeper_quorum: '<ZOOKEEPER_SERVER_1,ZOOKEEPER_SERVER_2,ZOOKEEPER_SERVER_N>'
-    hbase_zookeeper_property_clientPort: '2181'
-
   commonUI:
     # For ROKS and Cloud Pak for Data releases, add full hostname (subdomain of the ingress subdomain) of fci-common-ui-nginx route for http traffic
     SSO_HOSTNAME: "<roks_subdomain>"
     # Prior releases to 6.5, keep this to 3000 for the security-auth service port.
     SSO_PORT: "443"
 
-  # CP4D Application Volume name to be created for analytics runtime 
+  # CP4D Application Volume name to be created for analytics runtime
   FCII_APP_VOLUME_NAME: fciiappvolume
 
 db2:
-  hostIPC: true
-  # Select antiAffinity as either hard or soft
-  podAntiAffinity: hard
-
-  nodeSelector: {}
-
-  resources:
-    requests:
-      memory: "5Gi"
-      cpu: "0.5"
-    limits:
-      memory: "32Gi"
-      cpu: "8"
-
-  # Load Balancer Node Ports - Ports to expose in load balancer for Cloud Pak for Data installs
-  # Set to an empty string to use a random port
-  sslNodePort: "30560" 
- 
-  image:
-    repository: ibmcom/fci-data-store-server
-    tag: <BUILD_TAG>
-    pullPolicy: "IfNotPresent"
-
-  instancePvcSpec:
-    accessModes:
-      - ReadWriteOnce
-    storageClassName: null
-    size: 1Gi
-
-  dbPvcSpec:
-    accessModes:
-      - ReadWriteOnce
-    storageClassName: null
-    size: 100Gi
-
-  scriptsPvcSpec:
-    accessModes:
-      - ReadWriteMany
-    storageClassName: null
-    size: 1Gi
-
-  storageType:
-    META_STORAGE_CLASS: null
-    DATA_STORAGE_CLASS: null
-    BACKUP_STORAGE_CLASS: null
-
   config:
-    ENV_HEALTHCHECK_CONNECTION_TEST: 'false'
-    com_fci_db2_precheck: 'true'
-    NAMESPACE: 'fci'
-    DB2OLTP_VERSION: '11.5.5.0-x86_64'
+    DB2OLTP_VERSION: '11.5.5.0-cn1-x86_64'
     ARCHITECTURE: 'x86_64'
     DB2_CPU: '2'
     DATABASE_NAME: 'FCIDB'
     METADATA_DEDICATED: 'false'
     METADATA_DISPLAY_NAME: 'IBM FCI DB2'
-    DB2_MEM: '6'
+    DB2_MEM: '5'
     META_STORAGE_SIZE: '10'
     DATA_STORAGE_SIZE: '10'
     BACKUP_STORAGE_SIZE: '10'
@@ -519,8 +387,7 @@ global-name-mgmt:
   gnmPvcSpec:
     accessModes:
     - ReadWriteMany
-    storageClassName: null
-    size: 1Gi  
+    size: 1Gi
 
 kafka:
   # Set to False to disable Kafka in a non-production environment
@@ -532,7 +399,6 @@ kafka:
   zookeeperReplicaCount: 3
 
   pvcSpec:
-    storageClassName: null
     size: 10Gi
 
   image:
@@ -564,6 +430,16 @@ kafka:
     - name: FCI_IGA_AI_Data_Transaction
       partitions: 1
     - name: FCDD_ML_CLASSIFIED
+      partitions: 10
+    - name: naas-news-task-topic
+      partitions: 1
+    - name: naas-article-metadata-topic
+      partitions: 4
+    - name: naas-article-content-topic
+      partitions: 10
+    - name: naas-article-results-topic
+      partitions: 1
+    - name: naas-news-mcd-task-topic
       partitions: 1
     - name: FCI_SEC_AuditRecords
       partitions: 1
@@ -602,6 +478,8 @@ kafka:
   # Set to an empty string to use a random port
   nodeport:
     firstListenerPort: "31090"
+  externalService:
+    annotations: {}
   zookeeper:
     image:
       repository: ibmcom/fci-zookeeper
@@ -610,13 +488,13 @@ kafka:
     # The external port for Zookeeper.
     # Set to an empty string to use a random port
     externalNodePort: "32181"
+    externalService:
+      annotations: {}
 
     dataPvcSpec:
-      storageClassName: null
       size: 10Gi
 
     logPvcSpec:
-      storageClassName: null
       size: 10Gi
 
 ibm-sch:
@@ -637,7 +515,6 @@ mongodb:
   pvcSpec:
     accessModes:
       - ReadWriteOnce
-    storageClassName: null
     size: 10Gi
 
   image:
@@ -646,59 +523,202 @@ mongodb:
     pullPolicy: IfNotPresent
 
 elasticsearch:
-  enabled: True
+  client:
+    numReplicas: 0
+    image:
+      repository: ibmcom/fci-logsearch
+      tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent
+    resources:
+      limits:
+        cpu: "1"
+        memory: 2Gi
+      requests:
+        cpu: ".1"
+        memory: 2Gi
 
-  config:
-    ES_ADMIN_DN: "CN=FCI_server,OU=FCI_platform,O=FCI_Development,C=US"
+  master:
+    numReplicas: 3
+    image:
+      repository: ibmcom/fci-logsearch
+      tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent
+    pvcSpec:
+      size: 10Gi
+    resources:
+      limits:
+        cpu: "1"
+        memory: 2Gi
+      requests:
+        cpu: ".1"
+        memory: 2Gi
 
-    # Set the minimum heap size (Xms) and maximum heap size (Xmx) to be equal to each other.
-    ES_JAVA_OPTS: "-Xmx1g -Xms1g"
+  data:
+    numReplicas: 3
+    image:
+      repository: ibmcom/fci-logsearch
+      tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent
+    pvcSpec:
+      size: 10Gi
+    resources:
+      limits:
+        cpu: "1"
+        memory: 8Gi
+      requests:
+        cpu: ".1"
+        memory: 8Gi
 
-    # The Elasticsearch user id is fci_admin
-    # The number of minutes to wait until Elasticsearch starts.
-    # If Elasticsearch has not started within this amount of time, then the Elasticsearch
-    # container will be restarted.
-    # Increase this value on systems with a slow disk.
-    WAIT_MINUTES: '3'
+  sideCarContainers:
+     resources:
+      limits:
+        cpu: "1"
+        memory: 4Gi
+      requests:
+        cpu: ".1"
+        memory: 4Gi
 
-  image:
-    repository: ibmcom/fci-logsearch
-    tag: "<BUILD_TAG>"
-    pullPolicy: "IfNotPresent"
+ibm-odm-prod:
 
-  # If upgrading from the 6.5 release, then change below to ReadWriteMany
-  pvcSpec:
-    accessModes:
-    - ReadWriteOnce
-    storageClassName: null
-    size: 10Gi
+  serviceAccountName: ""
 
-odm:
-  # set to False to disable ODM
-  # set to True otherwise
-  enabled: False
+  service:
+    enableTLS: true
+    type: ClusterIP
+    enableRoute: true
+    hostname: ""
+    ingress:
+      enabled: false
+      annotations: # {annotation1: "1",annotation2: "2"}
 
+  decisionServerRuntime:
+    enabled: true
+    replicaCount: 0
+    loggingRef:
+    jvmOptionsRef:
+    xuConfigRef:
+    extendRoleMapping: false
+    contextRoot:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 2
+        memory: 4096Mi
+    image:
+      repository: ibmcom/fci-odm-decisionserverruntime
+      tag: "<BUILD_TAG>"
+      pullPolicy: "IfNotPresent"
+
+  decisionServerConsole:
+    loggingRef:
+    jvmOptionsRef:
+    extendRoleMapping: false
+    title:
+    description:
+    contextRoot:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 2
+        memory: 1024Mi
+    image:
+      repository: ibmcom/fci-odm-decisionserverconsole
+      tag: "<BUILD_TAG>"
+      pullPolicy: "IfNotPresent"
+
+  decisionCenter:
+    enabled: false
+    persistenceLocale: en_US
+    replicaCount: 0
+    customlibPvc:
+    loggingRef:
+    jvmOptionsRef:
+    extendRoleMapping: false
+    contextRoot:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1500Mi
+      limits:
+        cpu: 2
+        memory: 4096Mi
+    image:
+      repository: ibmcom/fci-odm-decisioncenter
+      tag: "<BUILD_TAG>"
+      pullPolicy: "IfNotPresent"
+
+  decisionRunner:
+    enabled: true
+    replicaCount: 0
+    loggingRef:
+    jvmOptionsRef:
+    extendRoleMapping: false
+    contextRoot:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 2
+        memory: 4096Mi
+    image:
+      repository: ibmcom/fci-odm-decisionrunner
+      tag: "<BUILD_TAG>"
+      pullPolicy: "IfNotPresent"
+
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    failureThreshold: 45
+    timeoutSeconds: 5
+
+  livenessProbe:
+    initialDelaySeconds: 300
+    periodSeconds: 10
+    failureThreshold: 10
+    timeoutSeconds: 5
+
+  customization:
+    authSecretRef: "fci-odm-user-registry"
+    dedicatedNodeLabel:
+    kubeVersion: "ODM on K8s"
+    deployForProduction: true
+
+  sideCarContainers:
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "0.03"
+      limits:
+        memory: "512Mi"
+        cpu: "0.1"
   dbClient:
     image:
       repository: ibmcom/fci-rms-odm-data-store
       tag: <BUILD_TAG>
       pullPolicy: IfNotPresent
 
-  odm:
-    image:
-      repository: ibmcom/fci-rms-odm
-      tag: <BUILD_TAG>
-      pullPolicy: IfNotPresent
     resources:
       requests:
         memory: "256Mi"
-        cpu: "0.1"
+        cpu: "0.02"
       limits:
-        memory: "8Gi"
-        cpu: "3"
+        memory: "512Mi"
+        cpu: "0.5"
+  oidc:
+    enabled: false
+    serverUrl:
+    clientRef:
+    provider:
+    allowedDomains:
 
-  config:
-    FLYWAY_BASELINE_VERSION: '01.01.01.00.005'
+  networkPolicy:
+    enabled: false
+    apiVersion: networking.k8s.io/v1
 
 wca:
   enabled: false
@@ -706,7 +726,6 @@ wca:
   pvcSpec:
     accessModes:
       - ReadWriteMany
-    storageClassName: null
     size: 30Gi
 
   image:
@@ -717,34 +736,20 @@ wca:
 cognos:
   enabled: false
 
-  image:
-    repository: ibmcom/fci-cognos
-    tag: <BUILD_TAG>
-    pullPolicy: "IfNotPresent"
-
-  pvcSpec:
-    accessModes:
-      - ReadWriteMany
-    storageClassName: null
-    size: 1Gi
-
-  resources:
-    requests:
-      memory: "10Gi"
-      cpu: "1"
-    limits:
-      memory: "16Gi"
-      cpu: "4"
+  storageType:
+    # The folowing values are for the CPD-provisioned Cognos Analytics with db2-as-a-service instance.
+    # DATA_STORAGE_CLASS is used for COGNOSDB as well as other Cognos PVCs. Make sure it supports the access mode.
+    # DATA_STORAGE_SIZE is for COGNOSDB.
+    META_STORAGE_CLASS: null
+    DATA_STORAGE_CLASS: null
 
   config:
     # MAX_HTTP_HEADER_SIZE: max size in bytes of HTTP headers that Cognos will allow in HTTP requests
     MAX_HTTP_HEADER_SIZE: "16000"
-    # The folowing values are for the CPD-provisioned Cognos Analytics with db2-as-a-service instance.
-    # DATA_STORAGE_CLASS is used for COGNOSDB as well as other Cognos PVCs. Make sure it supports the access mode. 
-    # DATA_STORAGE_SIZE is for COGNOSDB.
-    DATA_STORAGE_CLASS: ""
     DATA_STORAGE_ACCESS_MODE: ReadWriteMany
     DATA_STORAGE_SIZE: "10"
+    META_STORAGE_ACCESS_MODE: ReadWriteMany
+    META_STORAGE_SIZE: "10"
     DATABASE_NAME: COGNOSDB
     APPLHEAPSZ: "2048"
     APP_CTL_HEAP_SZ: "1024"
@@ -762,18 +767,11 @@ cognos:
     NAMESPACE: 'fci'
     PAGE_SIZE: "32768"
     PCKCACHESZ: AUTOMATIC
-    DB2OLTP_VERSION: '11.5.5.0-x86_64'
-
-  proxy:
-    resources: {}
-    image:
-      repository: ibmcom/fci-dashboards-proxy
-      tag: <BUILD_TAG>
-      pullPolicy: "IfNotPresent"
+    DB2OLTP_VERSION: '11.5.5.0-cn1-x86_64'
 
 logging:
   # set to False to disable logging infrastructure in a non-production environment
-  enabled: True
+  enabled: False
 
   logstash:
     image:
@@ -786,7 +784,7 @@ logging:
       tag: <BUILD_TAG>
 
 security-audit:
-  # set to False to disable auditing in a non-production environment
+  # set to False to disable auditing in a non-production environment. Also set AUDIT_ACTIVE: '0' under securityAuthConfig:
   enabled: True
 
   image:
@@ -796,7 +794,7 @@ security-audit:
 
   config:
     FLYWAY_BASELINE_VERSION: '2019.02.28.13.59.00'
-    AUDIT_STORE: "CLOUD_PAK"
+    AUDIT_STORE: "db2"
     AUDIT_FILE_LOCATION: "/var/log/fciAudit-%g.log"
     AUDIT_FILE_SIZE_IN_BYTES: "10000000"
     AUDIT_NUM_FILES: "2"
@@ -851,39 +849,8 @@ security-auth:
         memory: 64Mi
 
   securityAuthConfig:
-    # set to '0' to disable auditing in a non-production environment
+    # set to '0' to disable auditing in a non-production environment. Also set enabled: False under security-audit:
     AUDIT_ACTIVE: '1'
-
-    # Role groups
-    GROUP_ANALYST: 'CN=analysts,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_INVESTIGATOR: 'CN=investigators,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_SUPERVISOR: 'CN=supervisors,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_ADMIN: 'CN=admins,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_DATA_SCIENTIST: 'CN=datascientists,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_EXECUTIVE: 'CN=executives,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_QUALITY_ASSURANCE: 'CN=qualityassurance,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_READ_ONLY: 'CN=readonly,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_CONFIDENTIAL: 'CN=confidential,CN=Users,DC=aml,DC=ibm,DC=com'
-
-    # UI configuration groups
-    GROUP_SURVEILLANCE: 'CN=surveillance,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_COMPLAINTS: 'CN=complaints,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_VOICE: 'CN=voice,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_CASE_MANAGER: 'CN=casemanager,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_INSURANCE: 'CN=insurance,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_KYC: 'CN=kyc,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_GRAPH: 'CN=graph,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_ALERTS_INSIGHT: 'CN=alerts_insight,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_TOOLING: 'CN=tooling,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_TLS: 'CN=tls,CN=Users,DC=aml,DC=ibm,DC=com'
-
-    # Team groups
-    GROUP_TRIAGE_TEAM: 'CN=TriageTeam,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_INVESTIGATION_TEAM: 'CN=InvestigationTeam,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_SUPERVISOR_TEAM: 'CN=SupervisorTeam,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_CONFIDENTIAL_TEAM: 'CN=confidential,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_VENDOR_TEAM: 'CN=VendorTeam,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_LEGAL_TEAM: 'CN=LegalTeam,CN=Users,DC=aml,DC=ibm,DC=com'
 
     # If integrating with Cloud Pak for Data authentication, this property specifies
     # whether to create internal users in the Cloud Pak for Data user registry.
@@ -899,27 +866,27 @@ security-auth:
     # to add additional users, add additional user properties numbered 17, 18, etc.
     USER_ID_1: fciadmin
     USER_ROLES_1: admin,supervisor,investigator,analyst,data_scientist
-    USER_CPROLE_1: FCI administrator
+    USER_CPROLE_1: zen_fci_admin_role
     USER_TEAMS_1: SupervisorTeam,InvestigationTeam,TriageTeam
     USER_TENANTS_1: ibm.com
     USER_ID_2: fcianalyst
     USER_ROLES_2: analyst
-    USER_CPROLE_2: FCI analyst
+    USER_CPROLE_2: zen_fci_analyst_role
     USER_TEAMS_2: TriageTeam
     USER_TENANTS_2: ibm.com
     USER_ID_3: fciinvestigator
     USER_ROLES_3: investigator
-    USER_CPROLE_3: FCI investigator
+    USER_CPROLE_3: zen_fci_investigator_role
     USER_TEAMS_3: InvestigationTeam
     USER_TENANTS_3: ibm.com
     USER_ID_4: fcisupervisor
     USER_ROLES_4: supervisor
-    USER_CPROLE_4: FCI supervisor
+    USER_CPROLE_4: zen_fci_supervisor_role
     USER_TEAMS_4: SupervisorTeam,InvestigationTeam,TriageTeam
     USER_TENANTS_4: ibm.com
     USER_ID_5: fcivendor
     USER_ROLES_5: analyst,insurance
-    USER_CPROLE_5: Claims Fraud vendor
+    USER_CPROLE_5: zen_fcii_vendor_role
     USER_TEAMS_5: VendorTeam
     USER_TENANTS_5: ibm.com
     USER_ID_6: fciconfidential
@@ -928,22 +895,22 @@ security-auth:
     USER_TENANTS_6: ibm.com
     USER_ID_7: fciiadmin
     USER_ROLES_7: admin,insurance
-    USER_CPROLE_7: Claims Fraud administrator
+    USER_CPROLE_7: zen_fcii_admin_role
     USER_TEAMS_7: SupervisorTeam,InsuranceTeam
     USER_TENANTS_7: ibm.com
     USER_ID_8: fciianalyst
     USER_ROLES_8: analyst,insurance
-    USER_CPROLE_8: Claims Fraud analyst
+    USER_CPROLE_8: zen_fcii_analyst_role
     USER_TEAMS_8: TriageTeam,InsuranceTeam
     USER_TENANTS_8: ibm.com
     USER_ID_9: fciiinvestigator
     USER_ROLES_9: investigator,insurance
-    USER_CPROLE_9: Claims Fraud investigator
+    USER_CPROLE_9: zen_fcii_investigator_role
     USER_TEAMS_9: InvestigationTeam,InsuranceTeam
     USER_TENANTS_9: ibm.com
     USER_ID_10: fciisupervisor
     USER_ROLES_10: supervisor,insurance
-    USER_CPROLE_10: Claims Fraud supervisor
+    USER_CPROLE_10: zen_fcii_supervisor_role
     USER_TEAMS_10: SupervisorTeam,InsuranceTeam
     USER_TENANTS_10: ibm.com
     USER_ID_11: tlsadmin
@@ -972,32 +939,27 @@ security-auth:
     USER_TENANTS_16: ibm.com
     USER_ID_17: toolingadmin
     USER_ROLES_17: admin,data_scientist,tooling
-    USER_CPROLE_17: Conduct Surveillance tooling administrator
     USER_TEAMS_17: SupervisorTeam
     USER_TENANTS_17: ibm.com
     USER_ID_18: graphadmin
     USER_ROLES_18: admin,supervisor,graph
-    USER_CPROLE_18: Graph analytics admin
+    USER_CPROLE_18: zen_graph_admin_role
     USER_TEAMS_18: SupervisorTeam
     USER_TENANTS_18: ibm.com
     USER_ID_19: sisupervisor
     USER_ROLES_19: si,si-complaints,supervisor
-    USER_CPROLE_19: Conduct Surveillance supervisor
     USER_TEAMS_19: SupervisorTeam,InvestigationTeam,TriageTeam
     USER_TENANTS_19: ibm.com
     USER_ID_20: sianalyst
     USER_ROLES_20: si,analyst
-    USER_CPROLE_20: Conduct Surveillance analyst
     USER_TEAMS_20: TriageTeam
     USER_TENANTS_20: ibm.com
     USER_ID_21: siinvestigator
     USER_ROLES_21: si,investigator
-    USER_CPROLE_21: Conduct Surveillance investigator
     USER_TEAMS_21: InvestigationTeam
     USER_TENANTS_21: ibm.com
     USER_ID_22: siadmin
     USER_ROLES_22: si,si-voice,admin
-    USER_CPROLE_22: Conduct Surveillance administrator
     USER_TEAMS_22: SupervisorTeam,InvestigationTeam,TriageTeam
     USER_TENANTS_22: ibm.com
     USER_ID_23: kycadmin
@@ -1008,7 +970,7 @@ security-auth:
     USER_TENANTS_23: ibm.com
     USER_ID_24: fcilegal
     USER_ROLES_24: supervisor,insurance
-    USER_CPROLE_24: Claims Fraud legal
+    USER_CPROLE_24: zen_fcii_legal_role
     USER_TEAMS_24: LegalTeam
     USER_TENANTS_24: ibm.com
 
@@ -1018,29 +980,6 @@ security-auth:
     JWT_KEY_EXPIRY: '4h'
     # DO NOT CHANGE THIS VALUE:
     JWT_ISSUER: 'fci.ibm.com'
-
-    #SAML configuration
-    SAML_DISABLEREQUESTEDAUTHNCONTEXT: "true"
-    # identity provider entrypoint
-    # This is typically the URL provided by the identity provider for a user to log in
-    SAML_ENTRY_POINT: 'https://<hostname>/adfs/ls'
-    # name identifier format to request from identity provider
-    SAML_IDENTIFIERFORMAT: 'urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified'
-    # issuer string to supply to identity provider
-    SAML_ISSUER: 'https://<hostname>/adfs/services/trust'
-    # the SAML profile property that maps to a user's display name
-    SAML_PROFILE_DISPLAYNAMEPROP: 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name'
-    # the SAML profile property that maps to a user's email address
-    SAML_PROFILE_EMAILPROP: 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'
-    # the SAML profile property that maps to a user's groups
-    SAML_PROFILE_GROUPSPROP: 'http://schemas.xmlsoap.org/claims/Group'
-    # the SAML profile property that maps to a user's id
-    SAML_PROFILE_NAMEIDPROP: 'nameID'
-    # SAML_ACCEPTED_CLOCK_SKEW is the time in milliseconds of skew
-    # that is acceptable between client and server
-    # when checking OnBefore and NotOnOrAfter assertion condition validity timestamps.
-    # Setting to -1 will disable checking these conditions entirely.
-    SAML_ACCEPTED_CLOCK_SKEW: '5000'
 
     ### IBM Cloud AppID configuration ###
     ## You can find these configuration values by clicking View credentials
@@ -1100,6 +1039,8 @@ case-manager:
     nodeSelector: {}
     tolerations: []
     affinity: {}
+    externalService:
+      annotations: {}
   liberty:
     image:
       repository: ibmcom/fci-solution
@@ -1133,14 +1074,12 @@ case-manager:
   solutionPvcSpec:
     accessModes:
     - ReadWriteMany
-    storageClassName: null
     size: 1Gi
 
   # If upgrading from the 6.5 release, then change below to ReadWriteMany
   mqPvcSpec:
     accessModes:
     - ReadWriteOnce
-    storageClassName: null
     size: 1Gi
 
 cedm:
@@ -1150,6 +1089,9 @@ cedm:
 
   # set to True to mount the Analytics Runtime application volume
   requireARMount: False
+
+  # Set this to False when running an upgrade
+  runPopulateJob: True
 
   liberty:
     image:
@@ -1179,7 +1121,6 @@ cedm:
   libertyPvcSpec:
     accessModes:
       - ReadWriteMany
-    storageClassName: null
     size: 30Gi
 
   cedmConfig:
@@ -1192,31 +1133,6 @@ cedm:
     PARTY_PUBLISH_BATCH_SIZE: '250'
     PARTY_PUBLISH_PERIOD_SECONDS: '300'
 
-    # HDP VERSION 2.6 or 3.1.0
-    HDP_VERSION: '3.1.0'
-
-    # Big Match Oozie Workflow Config
-    # The number of worker tasks, threads, Java heap size are automatically adjusted during  
-    # installation by the IBM data platform install script that takes into account HDP cluster resources.
-    OOZIE_MAX_JVM_HEAP_SIZE: '4712'
-    OOZIE_NUM_OF_WORKER_TASKS: '4'
-    OOZIE_NUM_OF_THREADS_FOR_EACH_WORKER: '1'
-    OOZIE_PORT: '11443'
-    OOZIE_JOBTRACKER_PORT: '8050'
-    OOZIE_SECURE_CONNECTION: 'true'
-    # The Fully Qualified DNS Name (FQDN) of the Oozie server.  The Oozie server is the
-    # Hadoop Master for both production topology (6 servers), dev topology (3 servers) and
-    # single HDP server install.  Do not include the <> in the hostname
-    OOZIE_SERVER: '<hostname>'
-    OOZIE_USER_NAME: 'bigmatch'
-
-    #  Scoring Oozie workflow config Spark parameters
-    # By default, yarn decides the HDP container requirements. The Scoring Driver & Executor Memory & 
-    # Number of Executors are automatically adjusted during installation by the IBM data platform install 
-    # script that takes into account HDP cluster resources.
-    SCORING_DRIVER_MEMORY: '2048m'
-    SCORING_EXECUTOR_MEMORY: '2048m'
-    SCORING_NO_OF_EXECUTORS: '8'
     SCORING_NO_PARTITIONS: '8'
 
     # Time interval for running Entity Resolution (in seconds)
@@ -1250,17 +1166,6 @@ cedm:
     # Enrichment batch size and frequency
     ENRICHMENT_PUBLISH_BATCH_SIZE: '100'
     ENRICHMENT_PUBLISH_PERIOD_SECONDS: '300'
-
-
-    # HBase REST Configuration
-    # The value is required for
-    # a) DERS
-    # b) watchlist processing
-
-    # fully qualified domain name of the Hadoop  (HDP) master node, for example HBASE_REST_SERVER: 'master.acme.com'
-    HBASE_REST_SERVER: '<hostname>'
-    HBASE_REST_PORT: '9081'
-    HBASE_REST_SECURE_CONNECTION: 'true'
 
 search:
   # set to False to disable Search
@@ -1312,22 +1217,34 @@ common-ui:
       repository: ibmcom/fci-narrative-service
       tag: <BUILD_TAG>
 
+  sidecar:
+    image:
+      repository: ibmcom/fci-audit-sidecar
+      tag: '<BUILD_TAG>'
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: ".2"
+      limits:
+        memory: "512Mi"
+        cpu: ".5"
+
   nginxConfig:
     # INCLUDE_CONFIG is a comma-separated list of components to include
     # valid values are: case,cedm,odm,search,fcai,fcdd,sifs,graph,art
     INCLUDE_CONFIG: 'case,cedm,odm,search,graph'
-
+    CPD_ROUTE_NAME: "fci-cpd"
+    CONTAINERNAME: ibm-fci-nginx-container
 
   bkPvcSpec:
     accessModes:
       - ReadWriteMany
-    storageClassName: null
     size: 1Gi
 
   nginxPvcSpec:
     accessModes:
       - ReadWriteMany
-    storageClassName: null
     size: 512Mi
 
   config:
@@ -1355,7 +1272,6 @@ cdn-proxy:
   bkPvcSpec:
     accessModes:
       - ReadWriteMany
-    storageClassName: null
     size: 5Gi
 
 dsf:
@@ -1411,18 +1327,18 @@ graph-writer:
       tag: <BUILD_TAG>
     graphGremlinConfig:
       gremlinNodePort: "30184"
-
+    numReplicas: 0
+    externalService:
+      annotations: {}
 
   libertyPvcSpec:
     accessModes:
       - ReadWriteMany
-    storageClassName: null
     size: 1Gi
 
   gremlinPvcSpec:
     accessModes:
       - ReadWriteMany
-    storageClassName: null
     size: 1Gi
 
 analytics-runtime:
@@ -1440,7 +1356,7 @@ analytics-runtime:
         memory: "256Mi"
         cpu: "1"
       limits:
-        memory: "8Gi"
+        memory: "16Gi"
         cpu: "4"
 
   arCanvas:
@@ -1456,12 +1372,18 @@ analytics-runtime:
         cpu: "2"
         memory: "2Gi"
 
+  storageType:
+    ZEN_VOLUME_STORAGE_CLASS: null
+
   arLibertyConfig:
+    CP4D_VERSION: '3.5.1'
     CP4D_URL: https://internal-nginx-svc:12443
+    ART_CONFIG: ''
     FCII_SPARK_INSTANCE_NAME: 'fciisparkinstance'
     FCII_SPARK_VOLUME_NAME: 'fciisparkvolume'
     FCII_SPARK_VOLUME_SIZE: '20Gi'
-    FCII_APP_VOLUME_SIZE: '20Gi'
+    FCII_APP_VOLUME_SIZE: '40Gi'
+    DATASTORE: 'HBASE'
 
   kerberosClient:
     image:
@@ -1482,4 +1404,13 @@ realtime-scoring:
         cpu: "1"
       limits:
         memory: "8Gi"
-        cpu: "4"  
+        cpu: "4"
+
+cadence:
+  enabled: false
+
+  server:
+    image:
+      repository: ibmcom/fci-cadence-server
+      tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent

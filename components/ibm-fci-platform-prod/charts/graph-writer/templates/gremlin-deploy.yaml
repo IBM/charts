@@ -5,7 +5,7 @@ metadata:
   labels:
 {{- include "common.label.metadata" (list . (printf "%s-%s" (include "graph-writer.name" .) "gremlin") (include "graph-writer.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
-{{ include "common.scaleDownIfDisabled" . | indent 2 }}
+  replicas: {{ .Values.gremlin.numReplicas }}
   selector:
     matchLabels:
 {{- include "common.selector.labels" (list . (printf "%s-%s" (include "graph-writer.name" .) "gremlin") .Release.Name ) | indent 6 }}
@@ -51,7 +51,7 @@ spec:
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
           command: [ "/common-scripts/init-container-svc-depend.sh" ]
-          args: [ "{{ .Release.Namespace }}/{{ .Release.Name }}-elasticsearch" ]
+          args: [ "{{ .Release.Namespace }}/{{ .Release.Name }}-elasticsearch-master" ]
           resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 12 }}
         {{- if .Values.global.pvRequiresPermissionsFix }}
@@ -111,10 +111,8 @@ spec:
             value: /home/fcigraph
           - name: ELASTICSEARCH_USERNAME
             value: fci_admin
-          - name: hbase_zookeeper_quorum
-            value: "{{ .Values.global.hbase.hbase_zookeeper_quorum }}"
           - name: ELASTICSEARCH_SERVICE_NAME
-            value: "{{ .Release.Name }}-elasticsearch"
+            value: "{{ .Release.Name }}-elasticsearch-master"
           ports:
           - containerPort: 8182
           volumeMounts:
@@ -167,7 +165,7 @@ spec:
 {{ include "common.readinessProbe" . | indent 10 }}
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
-          args: [/bin/sh, -c, 'tail -500f /logs/gremlin.log']
+          args: [/bin/sh, -c, 'tail -n+1 -F /logs/gremlin.log']
           volumeMounts:
           - name: logs
             mountPath: /logs

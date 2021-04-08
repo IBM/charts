@@ -1,90 +1,187 @@
-global:
-  dockerRegistryPrefix: ""
-  createPv: true
-  nfsServer: ""
+# Default values for odmcharts.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+image:
+  repository: ""
+  tag: 8.10.5.0
+  pullPolicy: IfNotPresent
+## Optionally specify an list of imagePullSecrets.
+## Secrets must be manually created in the namespace.
+## ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+  pullSecrets: []
+  # - admin.registrykey
+  # - admin.registrykey
 
-#Leightweight init containers, message-log and trace-log
-sideCarContainers:
+## Architecture - e.g. amd64, ppc64le. If left empty, the architecture will be determined automatically.
+## You can use kubectl version command to determine the architecture on the desired worker node.
+  arch: "amd64"
+
+serviceAccountName: ""
+
+service:
+  enableTLS: true
+  type: NodePort
+  enableRoute: false
+  hostname: ""
+  ingress:
+    enabled: false
+    annotations: # {annotation1: "1",annotation2: "2"}
+    tlsHosts: []
+    tlsSecretRef:
+    host:
+
+decisionServerRuntime:
+  enabled: true
+  tagOrDigest:
+  replicaCount: 1
+  loggingRef:
+  jvmOptionsRef:
+  xuConfigRef:
+  extendRoleMapping: false
+  contextRoot:
   resources:
     requests:
-      memory: "64Mi"
-      cpu: "0.03"
+      cpu: 500m
+      memory: 512Mi
     limits:
-      memory: "512Mi"
-      cpu: "0.1"
+      cpu: 2
+      memory: 4096Mi
 
-
-arch: amd64
-
-config:
-  FLYWAY_BASELINE_ON_MIGRATE: 'true'
-  FLYWAY_PLACEHOLDER_REPLACEMENT: 'true'
-  FLYWAY_PLACEHOLDERS_RUNASID: 'user999'
-  FLYWAY_VALIDATE_ON_MIGRATE: 'false'
-
-  odm_db2_java: "${shared.resource.dir}/db2"
-  odm_db2_dbname: "FCIDB"
-  odm_db2_port: "50001"
-  odm_db2_schema: "ODMDS"
-  odm_db2_sslconnection: "true"
-
-  SERVER_TRUSTSTORE: "${server.output.dir}/resources/security/fci_universal_ks.jks"
-  SERVER_TRUSTSTORE_TYPE: "jks"
-  DB2_CONFIGURE_XMLS: "server_db2.xml"
-  MODE: "PROD"
-
-dbClient:
-  image:
-    repository: ibmcom/fci-rms-odm-data-store
-    tag: 6.5.5
-    pullPolicy: IfNotPresent
-
+decisionServerConsole:
+  tagOrDigest:
+  loggingRef:
+  jvmOptionsRef:
+  extendRoleMapping: false
+  title:
+  description:
+  contextRoot:
   resources:
     requests:
-      memory: "256Mi"
-      cpu: "0.02"
+      cpu: 500m
+      memory: 512Mi
     limits:
-      memory: "512Mi"
-      cpu: "0.5"
+      cpu: 2
+      memory: 1024Mi
 
-odm:
-  image:
-    repository: ibmcom/fci-rms-odm
-    tag: 6.5.5
-    pullPolicy: IfNotPresent
-
-  readinessProbe:
-    initialDelaySeconds: 60
-    httpGet:
-      path: /console/api/docs/
-      port: 9080
-  livenessProbe:
-    initialDelaySeconds: 300
-    httpGet:
-      path: /console/api/docs/
-      port: 9080
+decisionCenter:
+  enabled: true
+  tagOrDigest:
+  persistenceLocale: en_US
+  replicaCount: 1
+  customlibPvc:
+  loggingRef:
+  jvmOptionsRef:
+  extendRoleMapping: false
+  contextRoot:
   resources:
     requests:
-      memory: "256Mi"
-      cpu: "0.03"
+      cpu: 500m
+      memory: 1500Mi
     limits:
-      memory: "4Gi"
-      cpu: "3"
+      cpu: 2
+      memory: 4096Mi
+
+decisionRunner:
+  enabled: true
+  tagOrDigest:
+  replicaCount: 1
+  loggingRef:
+  jvmOptionsRef:
+  extendRoleMapping: false
+  contextRoot:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2
+      memory: 4096Mi
+
+internalDatabase:
+  databaseName: odmdb
+  tagOrDigest:
+  user: odmusr # deprecated, please use secretCredentials
+  password: "odmpwd" # deprecated, please use secretCredentials
+  secretCredentials: ""
+  populateSampleData: false
+  persistence:
+    enabled: true
+    useDynamicProvisioning: false
+    storageClassName: ""
+    resources:
+      requests:
+        storage: 5Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2
+      memory: 4096Mi
+  runAsUser: 26
+
+externalDatabase:
+  type: ""
+  serverName: ""
+  databaseName: ""
+  user: "" # deprecated, please use secretCredentials
+  password: "" # deprecated, please use secretCredentials
+  secretCredentials: ""
+  port: ""
+  sslSecretRef:
+
+externalCustomDatabase:
+  datasourceRef:
+  driverPvc:
+
+readinessProbe:
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  failureThreshold: 45
+  timeoutSeconds: 5
+
+livenessProbe:
+  initialDelaySeconds: 300
+  periodSeconds: 10
+  failureThreshold: 10
+  timeoutSeconds: 5
+
+customization:
+  securitySecretRef:
+  baiEmitterSecretRef:
+  authSecretRef:
+  dedicatedNodeLabel:
+  kubeVersion: "ODM on K8s"
+  productName:
+  productID:
+  productVersion:
+  cloudpakID:
+  cloudpakVersion:
+  deployForProduction: true
+  usageMeteringSecretRef:
 
 
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #  cpu: 100m
-  #  memory: 128Mi
-  # requests:
-  #  cpu: 100m
-  #  memory: 128Mi
+dba:
+# https://github.ibm.com/dba/cert-kubernetes/blob/master/operator/UMS/README_config_SSL.md
+# if no rootCaSecretRef is defined then no keytoolinit init-container
+  rootCaSecretRef:
+  ldapSslSecretRef:
+  passwordSecretRef:
+  keytoolInitContainer:
+    image:
+    imagePullPolicy:
+    imagePullSecret:
 
-nodeSelector: {}
+oidc:
+  enabled: false
+  serverUrl:
+  clientRef:
+  provider:
+  allowedDomains:
 
-tolerations: []
-
-affinity: {}
+networkPolicy:
+  # Enable creation of NetworkPolicy resources.
+  enabled: true
+  # For Kubernetes v1.4, v1.5 and v1.6, use 'extensions/v1beta1'
+  # For Kubernetes v1.7, use 'networking.k8s.io/v1'
+  apiVersion: networking.k8s.io/v1

@@ -23,6 +23,11 @@ spec:
 {{ include "common.ArchNodeAffinity" . | indent 8 }}
       restartPolicy: Never
       serviceAccountName: fci-common-scripts
+      volumes:
+      - name: internal-tls
+        secret:
+          defaultMode: 420
+          secretName: internal-tls
       containers:
         - name: {{ template "common-scripts.fullname" . }}
           securityContext:
@@ -40,9 +45,13 @@ spec:
             value: {{ .Values.global.productName }}
           - name: UPDATE_PRODUCT_NAME
             value: "{{ .Values.global.updateProductName }}"
+{{- include "common.import-secret" (list . "TRUSTSTORE_PWD" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
           command:
             - bash
             - -c
             - /common-scripts/fci-preinstall-config.sh
+          volumeMounts:
+          - mountPath: /etc/internal-tls
+            name: internal-tls
           resources:
 {{ toYaml .Values.resources | indent 12 }}

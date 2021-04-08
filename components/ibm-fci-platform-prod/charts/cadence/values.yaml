@@ -1,0 +1,255 @@
+global:
+  imagePullSecrets:
+  dockerRegistryPrefix: ""
+  createPv: true
+  persistence:
+    storageClassName: ''
+    useDynamicProvisioning: false
+  nfsServer: ""
+  runAsUser: 1000
+
+# Chart debug mode
+# (eg. disable helm hook delete policy)
+debug: false
+
+arch: amd64
+
+
+server:
+  image:
+    repository: ibmcom/fci-cadence-server
+    tag: 6.6.0
+    pullPolicy: IfNotPresent
+
+    # Global default settings (can be overridden per service)
+  replicaCount: 1
+
+  metrics:
+      # Annotate pods directly with Prometheus annotations.
+      # Use this if you installed Prometheus from a Helm chart.
+    annotations:
+      enabled: false
+      # Enable Prometheus ServiceMonitor
+      # Use this if you installed the Prometheus Operator (https://github.com/coreos/prometheus-operator).
+    serviceMonitor:
+      enabled: false
+      interval: 30s
+    prometheus:
+      timerType: histogram
+    statsd: { }
+      #   hostPort: localhost:8125
+
+  podAnnotations: {}
+  resources:
+     limits:
+      cpu: 100m
+      memory: 256Mi
+     requests:
+      cpu: 100m
+      memory: 256Mi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  config:
+    logLevel: "debug,info"
+
+      # IMPORTANT: This value cannot be changed, once it's set.
+    numHistoryShards: 512
+
+    persistence:
+      tls:
+        enabled: true
+        certFile: "/etc/tls/db2cert.p12"
+
+      default:
+        driver: "sql"
+
+        sql:
+          pluginName: "go_ibm_db"
+          database: fcidb/cadence
+          maxConns: 20
+          maxIdleConns: 20
+          maxConnLifetime: "1h"
+          tls:
+            enabled: true
+            certFile: "/etc/tls/db2cert.p12"
+
+      visibility:
+        driver: "sql"
+
+        sql:
+          pluginName: "go_ibm_db"
+          database: fcidb/cadence_visibility
+          maxConns: 20
+          maxIdleConns: 20
+          maxConnLifetime: "1h"
+          tls:
+            enabled: true
+            certFile: "/etc/tls/db2cert.p12"
+
+  frontend:
+      # replicaCount: 1
+    service:
+      type: ClusterIP
+      port: 7933
+    metrics:
+      annotations: {}
+          # enabled: false
+      serviceMonitor: {}
+          # enabled: false
+      prometheus: {}
+          # timerType: histogram
+      statsd: {}
+        #   hostPort: localhost:8125
+    podAnnotations: {}
+
+    resources:
+     limits:
+      cpu: 0.5
+      memory: 256Mi
+     requests:
+      cpu: 0.5
+      memory: 256Mi
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
+  history:
+      # replicaCount: 1
+    service:
+        # type: ClusterIP
+      port: 7934
+    metrics:
+      annotations: {}
+          # enabled: false
+      serviceMonitor: {}
+          # enabled: false
+      prometheus: {}
+          # timerType: histogram
+      statsd: {}
+        #   hostPort: localhost:8125
+    podAnnotations: {}
+    resources:
+      limits:
+        cpu: 2
+        memory: 1Gi
+      requests:
+        cpu: 1
+        memory: 1Gi
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
+  matching:
+      # replicaCount: 1
+    service:
+        # type: ClusterIP
+      port: 7935
+    metrics:
+      annotations: {}
+          # enabled: false
+      serviceMonitor: {}
+          # enabled: false
+      prometheus: {}
+          # timerType: histogram
+      statsd: {}
+        #   hostPort: localhost:8125
+    podAnnotations: {}
+    resources:
+      limits:
+        cpu: 0.5
+        memory: 256Mi
+      requests:
+        cpu: 0.5
+        memory: 256Mi
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
+  worker:
+      # replicaCount: 1
+    service:
+        # type: ClusterIP
+      port: 7939
+    metrics:
+      annotations: {}
+          # enabled: false
+      serviceMonitor: {}
+          # enabled: false
+      prometheus: {}
+          # timerType: histogram
+      statsd: {}
+        #   hostPort: localhost:8125
+    podAnnotations: {}
+    resources:
+      limits:
+        cpu: 0.2
+        memory: 256Mi
+      requests:
+        cpu: 0.2
+        memory: 256Mi
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
+web:
+  enabled: true
+
+  replicaCount: 1
+
+  image:
+    repository: ibmcom/fci-cadence-web
+    tag: 6.6.0
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+    annotations: {}
+      # loadBalancerIP:
+
+  ingress:
+    enabled: false
+    annotations: {}
+    hosts:
+      - "/"
+    tls: []
+
+  livenessProbe:
+    initialDelaySeconds: 180
+    httpGet:
+      path: /
+      port: http
+  readinessProbe:
+    initialDelaySeconds: 60
+    httpGet:
+      path: /
+      port: http
+  resources:
+    limits:
+      cpu: 1
+      memory: 512Mi
+    requests:
+      cpu: 0.5
+      memory: 512Mi
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  affinity: {}
+
+sideCarContainers:
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: ".01"
+    limits:
+      memory: "512Mi"
+      cpu: "1"
+
+dynamicConfig:
+  values: {}
+  pollInterval: "10s"
+
