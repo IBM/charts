@@ -1,0 +1,212 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "common.fullname" . }}
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "kyc-ml") (include "common.name" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "common.name" .) "kyc-ml") .Release.Name ) | indent 6 }}
+  replicas: {{ ternary .Values.kycMl.replicas 0 ( ne .Values.global.nlpMode "WCA_ONLY" ) }}
+  revisionHistoryLimit: {{required "A valid .Values.revision_history_limit entry required!" .Values.revision_history_limit}}
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "kyc-ml") (include "common.name" .) .Release.Name .Release.Service ) | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8}}
+    spec:
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . |indent 8}}
+      serviceAccountName: {{ template "common.core-release-name". }}-common
+      volumes:
+        - name: file-secrets
+          secret:
+            secretName: {{ template "common.core-release-name" . }}-platform-secret-files
+        - name: logs
+          emptyDir: {}
+        - name: kyc-ml
+          persistentVolumeClaim:
+            claimName: {{ template "common.fullname" . }}
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+        - name: db2-cert
+          secret:
+            defaultMode: 420
+            secretName: {{ template "common.core-release-name" . }}-db2-secrets-env
+{{ end }}
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.global.imagePullSecrets | indent 6 }}
+      {{- end }}
+      initContainers:
+        - name: init-pv
+          image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.kycMlInit.image.repository }}:{{ .Values.kycMlInit.image.tag }}
+          imagePullPolicy: {{ .Values.kycMlInit.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          command: [ "sh", "-c", "/init-pv.sh" ]
+          {{- if .Values.kycMlInit.resources }}
+          resources:
+            {{- if .Values.kycMlInit.resources.requests }}
+            requests:
+              {{- if .Values.kycMlInit.resources.requests.memory }}
+              memory: {{ .Values.kycMlInit.resources.requests.memory }}
+              {{- end}}
+              {{- if .Values.kycMlInit.resources.requests.cpu }}
+              cpu: {{ .Values.kycMlInit.resources.requests.cpu }}
+              {{- end}}
+            {{- end}}
+            {{- if .Values.kycMlInit.resources.limits }}
+            limits:
+              {{- if .Values.kycMlInit.resources.limits.memory }}
+              memory: {{ .Values.kycMlInit.resources.limits.memory }}
+              {{- end}}
+              {{- if .Values.kycMlInit.resources.limits.cpu }}
+              cpu: {{ .Values.kycMlInit.resources.limits.cpu }}
+              {{- end}}
+            {{- end}}
+          {{- end }}
+          volumeMounts:
+          - name: kyc-ml
+            mountPath: /pv
+      containers:
+        - name: kyc-ml
+          image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.kycMl.image.repository }}:{{ .Values.kycMl.image.tag }}
+          imagePullPolicy: {{ .Values.kycMl.image.pullPolicy }}
+          {{- if .Values.kycMl.resources }}
+          resources:
+            {{- if .Values.kycMl.resources.requests }}
+            requests:
+              {{- if .Values.kycMl.resources.requests.memory }}
+              memory: {{ .Values.kycMl.resources.requests.memory }}
+              {{- end}}
+              {{- if .Values.kycMl.resources.requests.cpu }}
+              cpu: {{ .Values.kycMl.resources.requests.cpu }}
+              {{- end}}
+            {{- end}}
+            {{- if .Values.kycMl.resources.limits }}
+            limits:
+              {{- if .Values.kycMl.resources.limits.memory }}
+              memory: {{ .Values.kycMl.resources.limits.memory }}
+              {{- end}}
+              {{- if .Values.kycMl.resources.limits.cpu }}
+              cpu: {{ .Values.kycMl.resources.limits.cpu }}
+              {{- end}}
+            {{- end}}
+          {{- end }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ default 30 .Values.kycMl.livenessProbe.initialDelaySeconds }}
+            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 1
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ default 30 .Values.kycMl.readinessProbe.initialDelaySeconds }}
+            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 1
+          envFrom:
+          - configMapRef:
+              name: {{ template "common.fullname" . }}
+          env:
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+{{- include "common.import-secret" (list . "ORCH_DB_PWD" "db2" "db2_password") | indent 10 }}
+          - name: ORCH_DB_USER
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "common.core-release-name" . }}-db2
+                key: db_userid
+          - name: ORCH_DB_HOST
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "common.core-release-name" . }}-db2
+                key: db_host
+          - name: ORCH_DB_PORT
+            value: "{{ .Values.kycDbConfig.DB_SSL_PORT }}"
+          - name: ORCH_DB_SSL_ENABLED
+            value: "True"
+{{ else }}
+{{- include "common.import-secret" (list . "ORCH_DB_PWD" "db2" "DB2INST1_PASSWORD") | indent 10 }}
+          - name: ORCH_DB_USER
+            value: "{{ .Values.kycDbConfig.DB_USER }}"
+          - name: ORCH_DB_HOST
+            value: "{{ .Values.kycDbConfig.DB_HOST }}"
+          - name: ORCH_DB_PORT
+            value: "{{ .Values.kycDbConfig.DB_PORT }}"
+{{ end }}
+          - name: ORCH_API_ACCESS_HEADER_VALUE
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.secrets-name" . }}
+                key: ORCH_API_ACCESS_HEADER_VALUE
+          - name: ML_TRUSTSTORE_PWD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          - name: ML_KEYSTORE_PWD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          - name: ML_SSL_KEY_PWD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          - name: FCI_KAFKA_MSG_KS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                key: FCI_KAFKA_MSG_JKS_PASSWORD
+          - name: FCI_KAFKA_MSG_KS_ALIASNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                key: FCI_KAFKA_MSG_JKS_ALIASNAME
+          - name: MONGO_PWD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.core-release-name" . }}-mongo-secrets-env
+                key: mongodb-eraas-ml-password
+          - name: JWT_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "common.core-release-name" . }}-platform-secrets-env
+                key: JWT_KEY
+          ports:
+          - containerPort: 8099
+          volumeMounts:
+            - name: kyc-ml
+              mountPath: /data/CKYC/ML
+            - name: file-secrets
+              mountPath: /data/CKYC/ML/security/kafka.client.keystore.jks
+              subPath: fci_universal_ks.jks
+            - name: file-secrets
+              mountPath: /data/CKYC/ML/security/kafka.client.truststore.jks
+              subPath: fci_universal_ks.jks
+            - name: file-secrets
+              mountPath: /data/CKYC/ML/security/fci_kafka_msg.p12
+              subPath: fci_kafka_msg.p12
+            - name: logs
+              mountPath: /data/CKYC/ML/logs
+{{ if eq .Values.global.DB2_PROVISIONER "CLOUD_PAK" }}
+            - name: db2-cert
+              mountPath: /db2cert.arm
+              subPath: db2_cert
+{{ end }}

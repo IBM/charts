@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "common.fullname" . }}
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "kyc-wex") (include "common.name" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "common.name" .) "kyc-wex") .Release.Name ) | indent 6 }}
+  replicas: {{ .Values.kycWex.replicas }}
+  revisionHistoryLimit: {{required "A valid .Values.revision_history_limit entry required!" .Values.revision_history_limit}}
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common.name" .) "kyc-wex") (include "common.name" .) .Release.Name .Release.Service ) | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8}}
+    spec:
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . |indent 8}}
+      serviceAccountName: fci-kube-api-fowner
+      serviceAccount: fci-kube-api-fowner
+      volumes:
+        - name: file-secrets
+          secret:
+            secretName: {{ template "common.core-release-name" . }}-platform-secret-files
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.global.imagePullSecrets | indent 6 }}
+      {{- end }}
+      containers:
+        - name: kyc-wex
+          image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.kycWex.image.repository }}:{{ .Values.kycWex.image.tag }}
+          imagePullPolicy: {{ .Values.kycWex.image.pullPolicy }}
+          {{- if .Values.kycWex.resources }}
+          resources:
+            {{- if .Values.kycWex.resources.requests }}
+            requests:
+              {{- if .Values.kycWex.resources.requests.memory }}
+              memory: {{ .Values.kycWex.resources.requests.memory }}
+              {{- end}}
+              {{- if .Values.kycWex.resources.requests.cpu }}
+              cpu: {{ .Values.kycWex.resources.requests.cpu }}
+              {{- end}}
+            {{- end}}
+            {{- if .Values.kycWex.resources.limits }}
+            limits:
+              {{- if .Values.kycWex.resources.limits.memory }}
+              memory: {{ .Values.kycWex.resources.limits.memory }}
+              {{- end}}
+              {{- if .Values.kycWex.resources.limits.cpu }}
+              cpu: {{ .Values.kycWex.resources.limits.cpu }}
+              {{- end}}
+            {{- end}}
+          {{- end }}  
+          env:
+          - name: SSL_CERTIFICATE_FILE
+            value: /security/fci_universal_ks.crt.pem
+          - name: SSL_CERTIFICATE_KEY_FILE
+            value: /security/fci_universal_ks.pvtk.pem
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+            runAsUser: 1010
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ default 30 .Values.kycWex.readinessProbe.initialDelaySeconds }}
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ default 30 .Values.kycWex.livenessProbe.initialDelaySeconds }}
+            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+          ports:
+          - containerPort: 9080
+          volumeMounts:
+          - name: file-secrets
+            mountPath: /security/fci_universal_ks.crt.pem
+            subPath: fci_universal_ks.crt.pem
+          - name: file-secrets
+            mountPath: /security/fci_universal_ks.pvtk.pem
+            subPath: fci_universal_ks.pvtk.pem
+    {{- if .Values.internetRequired.affinity }}
+      affinity:
+{{ toYaml .Values.internetRequired.affinity | indent 8 }}
+    {{- end }}
+      tolerations:
+{{ toYaml .Values.internetRequired.tolerations | indent 8 }}

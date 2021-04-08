@@ -1,0 +1,26 @@
+{{- if and .Values.decisionServerRuntime.enabled (and .Values.service.enableRoute .Values.service.enableTLS) }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{  template "odm-ds-runtime-route.fullname" . }}
+  labels:
+    app: {{ template "name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+{{ include "odm-additional-labels" . | indent 4 }}
+spec:
+  {{- if not (empty .Values.service.hostname) }}
+  host: decisionserverruntime.odm.{{ .Release.Name }}.{{ .Values.service.hostname }}
+  {{- end }}
+  port:
+    targetPort: decisionserverruntime-https
+  tls:
+    termination: passthrough
+  to:
+    kind: Service
+    name:  {{ template "odm.decisionserverruntime.fullname" . }}
+    weight: 100
+  wildcardPolicy: None
+
+{{- end }}
