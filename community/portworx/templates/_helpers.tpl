@@ -20,6 +20,41 @@ productVersion: {{ .Values.imageVersion }}
 {{$version := .Capabilities.KubeVersion.GitVersion | regexFind "^v\\d+\\.\\d+\\.\\d+"}}{{$version}}
 {{- end -}}
 
+{{- define "px.getETCDPreInstallHookImage" -}}
+{{- if (.Values.customRegistryURL) -}}
+    {{- if (eq "/" (.Values.customRegistryURL | regexFind "/")) -}}
+        {{ cat (trim .Values.customRegistryURL) "/px-etcd-preinstall-hook:v1.2" | replace " " ""}}
+    {{- else -}}
+        {{cat (trim .Values.customRegistryURL) "/portworx/px-etcd-preinstall-hook:v1.2" | replace " " ""}}
+    {{- end -}}
+{{- else -}}
+    {{ "portworx/px-etcd-preinstall-hook:v1.2" }}
+{{- end -}}
+{{- end -}}
+
+{{- define "px.getK8KubectlImage" -}}
+{{- if (.Values.customRegistryURL) -}}
+    {{- if (eq "/" (.Values.customRegistryURL | regexFind "/")) -}}
+        {{ cat (trim .Values.customRegistryURL) "/k8s-kubectl" | replace " " ""}}
+    {{- else -}}
+        {{cat (trim .Values.customRegistryURL) "/portworx/k8s-kubectl" | replace " " ""}}
+    {{- end -}}
+{{- else -}}
+    {{ "lachlanevenson/k8s-kubectl" }}
+{{- end -}}
+{{- end -}}
+
+{{- define "px.getPauseImage" -}}
+{{- if (.Values.customRegistryURL) -}}
+    {{- if (eq "/" (.Values.customRegistryURL | regexFind "/")) -}}
+        {{ cat (trim .Values.customRegistryURL) "/pause:3.1" | replace " " ""}}
+    {{- else -}}
+        {{cat (trim .Values.customRegistryURL) "/portworx/pause:3.1" | replace " " ""}}
+    {{- end -}}
+{{- else -}}
+    {{ "k8s.gcr.io/pause:3.1" }}
+{{- end -}}
+{{- end -}}
 
 {{- define "px.getImage" -}}
 {{- if (.Values.customRegistryURL) -}}
@@ -143,7 +178,7 @@ Populate the ports based on deployemnt environment
 
 {{- define "px.pxSDKPort" -}}
 {{- if ( eq true .Values.changePortRange) -}}
-    {{- printf "17020" -}}
+    {{- printf "17017" -}}
 {{- else -}}
     {{- printf "9020" -}}
 {{- end -}}
