@@ -2,7 +2,7 @@
 ## ibm-security-solutions-prod
 
 ## Introduction
-IBM Cloud Pak&reg; for Security Shared Platform Services, `ibm-security-solutions-prod`, provides a shared platform that integrates your disconnected security systems for a complete view of all your security data, without moving the data. It turns individual apps, services, and capabilities into unified solutions to empower your teams to act faster, and improves your security posture with collective intelligence from a global community. Reduce complexity, expand your visibility and maximize your existing investments with a powerful, open, cloud security platform that connects your teams, tools and data. For further details see the [IBM Cloud Pak for Security Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/scp-core/overview.html).
+IBM Cloud Pak&reg; for Security Shared Platform Services, `ibm-security-solutions-prod`, provides a shared platform that integrates your disconnected security systems for a complete view of all your security data, without moving the data. It turns individual apps, services, and capabilities into unified solutions to empower your teams to act faster, and improves your security posture with collective intelligence from a global community. Reduce complexity, expand your visibility and maximize your existing investments with a powerful, open, cloud security platform that connects your teams, tools and data. For further details see the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/scp-core/overview.html).
 
 ## Chart Details
 
@@ -12,7 +12,7 @@ The Cases and Postgres operators deployed as part of this chart are Namespace-sc
 
 ## Prerequisites
 
-Please refer to the `Preparing to install IBM Cloud Pak® for Security` section in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/install_prep.html).
+Please refer to the `Preparing to install IBM Cloud Pak® for Security` section in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/security-pak/install_prep.html).
 
 ## PodDisruptionBudget
 Pod disruption budget is used to maintain high availability during Node maintenance. Administrator role or higher is required to enable pod disruption budget on clusters with role based access control. The default is false. See `global.poddisruptionbudget` in the [configuration](#configuration) section.
@@ -48,7 +48,7 @@ IBM Cloud Pak for Security requires specific persistent volumes and persistent v
 
 Persistent storage separates the management of storage from the management and lifecycle of compute. For example, persistent storage, allows data to persist across Kubernetes container and worker restarts.
 
-For more details on the size of the persistent volume please refer to [persistent storage requirements](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/scp-core/persistent_storage.html)
+For more details on the size of the persistent volume please refer to [persistent storage requirements](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/scp-core/persistent_storage.html)
 
 The persistent volume claim must have an access mode of ReadWriteOnce (RWO).
 
@@ -57,23 +57,23 @@ For volumes that support ownership management, specify the group ID of the group
 
 ## Installing the Chart
 
-Please refer to the `Installation` section in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/installation.html).
+Please refer to the `Installation` section in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/security-pak/installation.html).
 
 ### Verifying the Chart
 
-Please refer to the `Verifying Cloud Pak for Security installation` section in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/verification.html).
+Please refer to the `Verifying Cloud Pak for Security installation` section in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/security-pak/verification.html).
 
 ### Upgrade or update the installation
 
-Please refer to the `Upgrading Cloud Pak for Security` section in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/upgrading.html).
+Please refer to the `Upgrading Cloud Pak for Security` section in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/security-pak/upgrading.html).
 
 ### Uninstalling the chart
 
-Please refer to the `Uninstalling IBM Cloud Pak for Security` section in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/uninstalling_cp4s.html).
+Please refer to the `Uninstalling IBM Cloud Pak for Security` section in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/security-pak/uninstalling_cp4s.html).
 
 ## Configuration
 
-Please refer to the `Configuration parameters` table for each type of install in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/installation.html).
+Please refer to the `Configuration parameters` table for each type of install in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/security-pak/installation.html).
 
 ## Limitations
 
@@ -83,4 +83,4 @@ This chart sets `global.useDynamicProvisioning` to `true`. Dynamic provisioning 
 
 
 ## Documentation
-Further guidance can be found in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/scp-core/overview.html).
+Further guidance can be found in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/scp-core/overview.html).
