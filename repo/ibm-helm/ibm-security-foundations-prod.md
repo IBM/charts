@@ -25,7 +25,7 @@ The ibm-security-foundations-prod chart installs foundation elements of IBM Clou
 The Middleware and Sequence operator deployed as part of this chart are Namespace-scoped. They watch and manage resources within the namespace that IBM Cloud Pak for Security is installed.
 
 ## Prerequisites
-Please refer to the `Preparing to install IBM Cloud Pak® for Security` section in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/install_prep.html).
+Please refer to the `Preparing to install IBM Cloud Pak® for Security` section in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/security-pak/install_prep.html).
 
 ## PodDisruptionBudget
 
@@ -112,27 +112,27 @@ By default, `ibm-security-foundations` has the following resource request requir
 
 ## Installing the Chart
 
-Please refer to the `Installation` section in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/installation.html).
+Please refer to the `Installation` section in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/security-pak/installation.html).
 
 ### Verifying the Chart
 
-Please refer to the `Verifying Cloud Pak for Security installation` section in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/verification.html).
+Please refer to the `Verifying Cloud Pak for Security installation` section in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/security-pak/verification.html).
 
 ### Upgrade or update the installation
 
-Please refer to the `Upgrading Cloud Pak for Security` section in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/upgrading.html).
+Please refer to the `Upgrading Cloud Pak for Security` section in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/security-pak/upgrading.html).
 
 ### Uninstalling the chart
 
-Please refer to the `Uninstalling IBM Cloud Pak for Security` section in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/uninstalling_cp4s.html).
+Please refer to the `Uninstalling IBM Cloud Pak for Security` section in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/security-pak/uninstalling_cp4s.html).
 
 ## Configuration
 
-Please refer to the `Configuration parameters` table for each type of install in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/security-pak/installation.html).
+Please refer to the `Configuration parameters` table for each type of install in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/security-pak/installation.html).
 
 ## Limitations
 
 This chart can only run on amd64 architecture type.
 
 ## Documentation
-Further guidance can be found in the [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.6.0/platform/docs/scp-core/overview.html).
+Further guidance can be found in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/scp-core/overview.html).
