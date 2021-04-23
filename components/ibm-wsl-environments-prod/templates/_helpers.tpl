@@ -8,7 +8,7 @@
     productChargedContainers: All
     productID: eb9998dcc5d24e3eb5b6fb488f750fe2
     productName: IBM Cloud Pak for Data Common Core Services
-    productVersion: "3.5.0"
+    productVersion: "3.5.4"
     hook.deactivate.cpd.ibm.com/command: "[]"
     hook.activate.cpd.ibm.com/command: "[]"
 
