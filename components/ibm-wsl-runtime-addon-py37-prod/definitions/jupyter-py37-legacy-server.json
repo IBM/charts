@@ -1,14 +1,10 @@
 {
-    "displayName": "Jupyterlab Notebook IDE with Python 3.7",
-    "description": "Jupyterlab Notebook IDE",
+    "displayName": "Jupyter with Python 3.7 (Legacy)",
+    "description": "Jupyter Notebook Server with Python 3.7",
     "annotations": [
       {
         "name": "cloudpakName",
         "value": "{{ .Values.annotations.cloudpakName }}"
-      },
-      {
-        "name": "productID",
-        "value": "{{ .Values.annotations.productID }}"
       },
       {
         "name": "cloudpakId",
@@ -60,8 +56,8 @@
     "author": "IBM",
     "tested": true,
     "isService": true,
-    "features": ["environment", "python"],
-    "runtimeType": "jupyter-lab-py37",
+    "features": ["environment", "python", "worker"],
+    "runtimeType": "jupyter-py37",
     "portMappings": [
       {
         "servicePort": 8888,
@@ -75,9 +71,26 @@
       }
     ],
     "replicas": 1,
-    "image": "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.py37oce.image.repository }}:{{ .Values.py37oce.image.tag }}-{{ include "global.arch" . }}",
+    "image": "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.py37main.image.repository }}:{{ .Values.py37main.image.tag }}-{{ include "global.arch" . }}",
     "command": ["/usr/sbin/tini", "--", "/opt/ibm/ws/bin/setup_container.sh"],
+    "env": [
+      {
+        "name": "APP_ENV_KG_CONNECT_TIMOUT",  
+        "value": "600"
+      },
+      {
+        "name": "APP_ENV_KG_REQUEST_TIMOUT",  
+        "value": "600"
+      }
+    ],
     "volumes": [
+      {
+        "volume": "scripts",
+        "mountPath": "/cc-home/.scripts",
+        "subPath": ".scripts",
+        "readOnly": true,
+        "claimName": "cc-home-pvc"
+      },
       {
         "volume": "dbdrivers",
         "mountPath": "/user-home/_global_/dbdrivers",
@@ -141,24 +154,11 @@
         "subPath": "projects/$project_id/assets/data_asset"
       },
       {
-        "volume": "jupyterlab_dir",
-        "mountPath": "/home/wsuser",
-        "claimName": "file-api-claim",
-        "subPath": "projects/$project_id/jupyterlab/$user_id"
-      },
-      {
         "volume": "notebookscript",
         "mountPath": "/opt/ibm/ws",
         "claimName": "cc-home-pvc",
         "readOnly": true,
         "subPath": "_global_/config/.notebookscripts/active_scripts"
-      },
-      {
-        "volume": "filechannel",
-        "mountPath": "/opt/ibm/filechannels",
-        "claimName": "cc-home-pvc",
-        "readOnly": true,
-        "subPath": "_global_/config/.filechannels/active_channels"
       },
       {
         "volume": "user-home-conda",
@@ -173,13 +173,6 @@
         "claimName": "cc-home-pvc",
         "readOnly": true,
         "subPath": "_global_/config/conda"
-      },
-      {
-        "volume": "cc-home-git-certificate",
-        "mountPath": "/cc-home/_global_/config/git",
-        "claimName": "cc-home-pvc",
-        "readOnly": true,
-        "subPath": "_global_/config/git"
       }
     ],
     "probes": {
