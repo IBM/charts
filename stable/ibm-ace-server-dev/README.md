@@ -1,4 +1,6 @@
-# IBM APP CONNECT ENTERPRISE
+# IBM 
+THIS CHART IS NOW DEPRECATED. Here’s what you need to know: On May 15th, 2021 the helm chart for IBM App Connect Enterprise for Developers integration server will be removed from IBM's public helm repository on github.com as the Helm chart is no longer supported.
+
 
 ![Integration Server Logo](https://raw.githubusercontent.com/ot4i/ace-helm/master/integration_server.svg?sanitize=true)
 
