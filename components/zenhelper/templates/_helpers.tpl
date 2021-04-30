@@ -7,12 +7,10 @@ Create the default zen base chart annotations
 cloudpakName: IBM Cloud Pak for Data
 cloudpakInstanceId: {{ .Values.global.cloudpakInstanceId }}
 cloudpakId: eb9998dcc5d24e3eb5b6fb488f750fe2
-productCloudpakRatio: 1:1
 productID: eb9998dcc5d24e3eb5b6fb488f750fe2
 productName: IBM Cloud Pak for Data Control Plane
-productVersion: 1.2.1.0
-productMetric: VIRTUAL_PROCESSOR_CORE
-productChargedContainers: All
+productVersion: 3.5.3
+productMetric: FREE
 {{- end }}
 
 
