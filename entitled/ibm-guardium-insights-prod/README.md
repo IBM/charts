@@ -203,7 +203,7 @@ The installer.sh script can be run interactively (this is the default behavior) 
 For example, this would run the script non-interactively since all parameters are specified:
 
 ```
-$ ./installer.sh -n staging -h staging.apps.samplecluster.ibm.com -l true -i cp.icr.io/cp/ibm-guardium-insights -o values-small.yaml -y L-TESX-BTCSA5
+$ ./installer.sh -n staging -h staging.apps.samplecluster.ibm.com -l true -i cp.icr.io/cp/ibm-guardium-insights -o values-small.yaml -y L-OOLE-C25MQR
 ```
 
 8- After running installer.sh, it may take another 15 to 25 minutes for all pods in the Guardium Insights namespace to reach the **Running** state. When the pods are running and your application is ready to be used, the configmap will be available. Use this command to determine if the configmap exists:
@@ -342,10 +342,10 @@ The installer.sh script supports both interactive and non-interactive mode. If y
 | --- | --- |
 | -n | IBM Security Guardium Insights Openshift namespace (this value must be 10 or fewer characters and it is the same value as is used for the Helm Release). |
 | -h | global.insights.ingress.hostName for Ingress user interface access (for example, insight.apps.new-coral.plum-sofa.com). |
-| -l | global.licenseAccept (true/false). Review the license files (LICENSE_en, LICENSE_notices and LICENSE_non_ibm_license) within the licenses/Licenses/L-TESX-XXXXXX folder and specify true to agree to them them. If you specify false, the installation will not proceed. This parameter is not case-sensitive. |
+| -l | global.licenseAccept (true/false). Review the license files (LICENSE_en, LICENSE_notices and LICENSE_non_ibm_license) within the licenses/Licenses/L-OOLE-XXXXXX folder and specify true to agree to them them. If you specify false, the installation will not proceed. This parameter is not case-sensitive. |
 | -i | Image registry from which images will be pulled. Specify "cp.icr.io/cp/ibm-guardium-insights" to pull from the IBM Entitled Registry. Otherwise, use a private docker registry or OpenShift internal registry (`image-registry.openshift-image-registry.svc:5000/<insights openshift namespace>`). Both cases require the images to be pushed manually. |
 | -o | Override YAML (examples include values-small.yaml, values-med.yaml, and values-xxx.yaml) |
-| -y | This is the license that you accept corresponding to the version of Guardium Insights you wish install. Select the version by selecting the corresponding license in the 'licenses/Licenses' folder (for example, L-TESX-XXXXXX). |
+| -y | This is the license that you accept corresponding to the version of Guardium Insights you wish install. Select the version by selecting the corresponding license in the 'licenses/Licenses' folder (for example, L-OOLE-XXXXXX). |
 
 ## Configuration
 
@@ -358,9 +358,9 @@ This table lists the configurable properties of the ibm-guardium-insights-prod c
 | `ibm-db2u.storage.storageLocation.metaStorage.pvc.claim.storageClassName` |  Mandatory | Storage class of type file storage, for example `rook-ceph-cephfs-internal`. |
 | `ticketing.persistentVolumesClaims.ticketing-keystore.storageClassName` |  Mandatory | Storage class of type file storage, for example `rook-ceph-cephfs-internal`. |
 | `global.insights.ingress.hostName` |  Mandatory <br> Set by the installer| Must be set to the reachable hostname, for example `<your namespace>.apps.<openshift host>` |
-| `global.licenseAccept=true` |  Mandatory <br> Set by the installer | Review the license files (LICENSE_en, LICENSE_notices and LICENSE_non_ibm_license) in the licenses/Licenses/L-TESX-XXXXXX folder. |
+| `global.licenseAccept=true` |  Mandatory <br> Set by the installer | Review the license files (LICENSE_en, LICENSE_notices and LICENSE_non_ibm_license) in the licenses/Licenses/L-OOLE-XXXXXX folder. |
 | `global.license`| Mandatory <br> Set by the installer | Set to true to confirm that you have read and agreed to the license agreements : http://ibm.biz/oms-license & http://ibm.biz/oms-apps-license |
-| `global.insights.licenseType`| Mandatory <br> Set by the installer | Enter the product license to accept. This license corresponds to the version of Guardium Insights you wish install. These are found in the licenses/Licenses folder, and should be in the form "L-TESX-XXXXXX" corresponding to one of the several Guardium Insights Versions available. |
+| `global.insights.licenseType`| Mandatory <br> Set by the installer | Enter the product license to accept. This license corresponds to the version of Guardium Insights you wish install. These are found in the licenses/Licenses folder, and should be in the form "L-OOLE-XXXXXX" corresponding to one of the several Guardium Insights Versions available. |
 | `global.image.repository=<PathToRegistry>` | Mandatory <br> Set by the installer | Image registry from which images will be pulled. Specify "cp.icr.io/cp/ibm-guardium-insights" to pull from the IBM Entitled Registry. Otherwise, use a private docker registry or OpenShift internal registry (`image-registry.openshift-image-registry.svc:5000/<insights openshift namespace>`). Both cases require the images to be pushed manually. |
 | `global.imageRegistry=<PathToRegistry>` | Mandatory <br> Set by the installer | Same as above (required by different subcharts). |
 | `global.insights.icp.authEndpoint=https://icp-console.apps.<openshift host>"` |  Optional | IBM Cloud Platform Common Service authEndpoint. |
