@@ -31,10 +31,10 @@ declare -a OPTION_DESCRIPTION
 OPTION_DESCRIPTION=(
   'IBM Security Guardium Insights Openshift namespace (this value must be 10 or fewer characters and it is the same value as is used for the Helm Release).'
   'Ingress user interface access (for example, insight.apps.new-coral.plum-sofa.com).'
-  'Review the license files (LICENSE_en, LICENSE_notices and LICENSE_non_ibm_license) within the licenses/Licenses/L-TESX-XXXXXX folder and specify true to agree to them them. If you specify false, the installation will not proceed. This parameter is not case-sensitive.'
+  'Review the license files (LICENSE_en, LICENSE_notices and LICENSE_non_ibm_license) within the licenses/Licenses/L-OOLE-XXXXXX folder and specify true to agree to them them. If you specify false, the installation will not proceed. This parameter is not case-sensitive.'
   'Image registry from which images will be pulled. Specify "cp.icr.io/cp/ibm-guardium-insights" to pull from the IBM Entitled Registry. Otherwise, use a private docker registry or OpenShift internal registry (`image-registry.openshift-image-registry.svc:5000/<insights openshift namespace>`). Both cases require the images to be pushed manually.'
   'Override YAML (examples include values-small.yaml, values-med.yaml, and values-xxx.yaml)'
-  'This is the license that you accept corresponding to the version of Guardium Insights you wish install. Select the version by selecting the corresponding license in the 'licenses/Licenses' folder (for example, L-TESX-XXXXXX).'
+  'This is the license that you accept corresponding to the version of Guardium Insights you wish install. Select the version by selecting the corresponding license in the 'licenses/Licenses' folder (for example, L-OOLE-XXXXXX).'
 )
 
 # lists the values for the corresponding options in the OPTIONS_LIST
@@ -57,7 +57,7 @@ if [[ ${OPTIONS_LENGTH} -ne 0 ]] && [[ ${OPTIONS_LENGTH} -ne ${#OPTION_VALUE[@]}
   for i in "${!OPTION_LIST[@]}"; do
     echo  -e "- ${OPTION_LIST[i]} \t ${OPTION_LABEL[i]}"
   done
-  echo "e.g     $0 -n sample-ns -h samplehostname -l true -i sample-registry.default.sample:9999/sample -o values-small.yaml -y L-TESX-XXXXXX"
+  echo "e.g     $0 -n sample-ns -h samplehostname -l true -i sample-registry.default.sample:9999/sample -o values-small.yaml -y L-OOLE-XXXXXX"
   exit 1
 fi
 
@@ -95,14 +95,16 @@ fi
 # map license values to product annotation files
 declare -a LICENSE_LIST
 LICENSE_LIST=(
-  'L-TESX-BTCSA5'
-  'L-TESX-BTCS8Z'
-  'L-TESX-BTCS75'
+  'L-OOLE-BYZK7E'
+  'L-OOLE-C25MQR'
+  'L-OOLE-C25MVE'
+  'L-OOLE-C25MXQ'
 )
 
 METERING_ANNOTATIONS_DIR="${BASEDIR}/product_annotations"
 declare -a PRODUCT_FILE_LIST
 PRODUCT_FILE_LIST=(
+  'isgi-cp4s-vpc.yaml'
   'isgi-standard.yaml'
   'isgi-zos.yaml'
   'isgi-cp4s.yaml'
