@@ -104,6 +104,18 @@ productVersion: {{ .Values.imageVersion }}
 {{- end -}}
 {{- end -}}
 
+{{- define "px.getCSIprovisioner" -}}
+{{- if (.Values.customRegistryURL) -}}
+    {{- if (eq "/" (.Values.customRegistryURL | regexFind "/")) -}}
+        {{ trim .Values.customRegistryURL }}
+    {{- else -}}
+        {{cat (trim .Values.customRegistryURL) "/quay.io/openstorage" | replace " " ""}}
+    {{- end -}}
+{{- else -}}
+        {{ "quay.io/openstorage" }}
+{{- end -}}
+{{- end -}}
+
 {{- define "px.getLighthouseImages" -}}
 {{- if (.Values.customRegistryURL) -}}
     {{- if (eq "/" (.Values.customRegistryURL | regexFind "/")) -}}
