@@ -21,7 +21,7 @@ This chart deploys IBM Sterling Control Center Monitor on a container management
 Before you install IBM Certified Container Software for IBM Sterling Control Center Monitor, ensure that the installation files are available on your client system.
 
 #### Downloading the IBM Certified Container Software helm chart from IBM Chart repository
-You can download the IBM CCS for IBM Sterling Control Center Monitor helm chart from [IBM Public chart repository](https://www.ibm.com/links?url=https://github.com/IBM/charts/tree/master/repo/ibm-helm/ibm-sccm-1.1.1.tgz).
+You can download the IBM CCS for IBM Sterling Control Center Monitor helm chart from [IBM Public chart repository](https://www.ibm.com/links?url=https://github.com/IBM/charts/tree/master/repo/ibm-helm/ibm-sccm-1.0.3.tgz).
 
 
 ####  Downloading the IBM Certified Container Software image from IBM Entitled Registry for AirGap Environment
@@ -31,7 +31,7 @@ You can download the container image from IBM Entitled registry by using either 
 - Download latest version of cloudctl CLI from [Cloud Pak CLI](https://www.ibm.com/links?url=https://github.com/IBM/cloud-pak-cli/releases). 
 - Download and extract the CASE bundle file
 ```
-cloudctl case save -t 1 --case https://github.com/IBM/cloud-pak/raw/master/repo/case/ibm-sccm/1.0.0/ibm-sccm-1.0.0.tgz --outputdir download_dir/ && tar -xf download_dir/ibm-sccm-1.0.0.tgz
+cloudctl case save -t 1 --case https://github.com/IBM/cloud-pak/raw/master/repo/case/ibm-sccm/1.0.0/ibm-sccm-1.0.1.tgz --outputdir download_dir/ && tar -xf download_dir/ibm-sccm-1.0.1.tgz
 ```
 > **Note**: download_dir is the output directory in which the BM Sterling Control Center Monitor resources are placed. The output directory is created if it does not exist. You can choose an arbitrary name for --outputdir if required.` 
 
