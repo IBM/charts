@@ -348,14 +348,6 @@ Install the IBM Cloud Object Storage plug-in with a Helm chart to set up pre-def
      helm install ibm-object-storage-plugin ./ [--namespace <namespace>] --set license=true --set cos.endpoint=https://<s3_endpoint> --set cos.storageClass=<storageclass_name> --tls
      ```
 
-     Example: Install with custom pod security policy:
-
-     ```
-     helm install ibm-object-storage-plugin ./ [--namespace <namespace>] --set license=true --set useCustomPSP=true --set cos.endpoint=https://<s3_endpoint> --set cos.storageClass=<storageclass_name> --tls
-     ```
-
-     Note the `useCustomPSP` flag passed to the command.
-
      Also add `--set workerOS=redhat` in above commands if worker node's OS is `Red Hat`. To check worker node's OS, run `kubectl get nodes -o jsonpath='{ .items[0].status.nodeInfo.osImage }{"\n"}'`
 
 8. Go to **Limit secret access**
