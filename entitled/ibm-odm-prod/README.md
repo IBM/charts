@@ -330,6 +330,15 @@ Use cases for PostgreSQL as an internal database:
     - internalDatabase.persistence.useDynamicProvisioning: false (default)
   - Kubernetes binding process selects a pre-existing volume based on the accessMode and size.
 
+### Storage Options Supported
+
+IBM Cloud storage options supported:
+- `File Bronze`
+- `File Silver`
+- `File Gold`
+
+On-premise storage options supported for all architectures:
+- `Rook-Ceph`
 
 ## Limitations
 

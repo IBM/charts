@@ -533,11 +533,13 @@ Define database configuration for deployment
 {{- else }}
 - name: DB_USER
   value: "{{ .Values.externalDatabase.user }}"
+{{- if (empty .Values.customization.vault) }}
 - name: DB_PASSWORD
   valueFrom:
     secretKeyRef:
       name: {{ template "odm.secret.fullname" . }}
       key: db-password
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}
@@ -580,6 +582,7 @@ helm.sh/chart: {{ $root.Chart.Name }}-{{ $root.Chart.Version | replace "+" "_" }
   {{- else }}
   value: "*"
   {{- end }}
+{{- if (not (eq .Values.customization.vault "initcontainer")) }}
 - name: OPENID_CLIENT_ID
   valueFrom:
     secretKeyRef:
@@ -600,15 +603,22 @@ helm.sh/chart: {{ $root.Chart.Name }}-{{ $root.Chart.Version | replace "+" "_" }
   {{- end }}
   {{- end }}
 {{- end }}
+{{- end }}
 
 {{- define "odm-dba-volumes-context" -}}
-{{- if not (empty .Values.dba.rootCaSecretRef) }}
+
+{{- if  (not (empty .Values.dba.rootCaSecretRef)) }}
 - name: root-ca
+{{- if (empty .Values.customization.vault) }}
   secret:
     secretName: {{ .Values.dba.rootCaSecretRef }}
-- name: tls-stores
+{{- else}}
   emptyDir: {}
 {{- end }}
+{{- end }}
+- name: tls-stores
+  emptyDir: {}
+
 {{- if not (empty .Values.dba.ldapSslSecretRef) }}
 - name: ldap-ssl-secret
   secret:
@@ -780,15 +790,15 @@ serviceAccountName: {{ template "fullname" . }}-service-account
 {{- end}}
 
 {{- define "odm-metering-volumes-context" -}}
-{{- if not (empty (.Values.customization.usageMetering)) }}
+{{- if not (empty (.Values.customization.usageMeteringSecretRef)) }}
 - name: {{ template "odm-meteringconfig-secret-volume.fullname" . }}
   secret:
-    secretName: {{ .Values.customization.usageMetering }}
+    secretName: {{ .Values.customization.usageMeteringSecretRef }}
 {{- end}}
 {{- end}}
 
 {{- define "odm-metering-volumemounts-context" -}}
-{{- if not (empty (.Values.customization.usageMetering)) }}
+{{- if not (empty (.Values.customization.usageMeteringSecretRef)) }}
 - name: {{ template "odm-meteringconfig-secret-volume.fullname" . }}
   readOnly: true
   mountPath: {{ template "odm-meteringconfig-dir" . }}
@@ -833,15 +843,151 @@ type: {{ .Values.service.type }}
 Trusted certificate list.
 */}}
 {{- define "odm-trusted-cert-volume" -}}
+{{- if eq .Values.customization.vault "initcontainer" }}
+- name: "trusted-cert-volume"
+  emptyDir: {}
+{{- else}}
   {{- range .Values.customization.trustedCertificateList }}
 - name: {{ .  | printf "%s-trusted-cert-volume" }}
   secret:
     secretName: {{ . }}
   {{ end }}
+ {{- end}}
 {{- end -}}
 {{- define "odm-trusted-cert-volume-mount" -}}
+{{- if eq .Values.customization.vault "initcontainer" }}
+- name: "trusted-cert-volume"
+  mountPath:  /config/security/trusted-cert-volume/
+{{- else }}
 {{- range .Values.customization.trustedCertificateList }}
 - name: {{ .  | printf "%s-trusted-cert-volume" }}
   mountPath:  /config/security/trusted-cert-volume/{{ . -}}
-{{ end }}
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Script dir for init-container
+*/}}
+{{- define "odm-init-container-volume" -}}
+{{- $context := .initcontext -}}
+{{- $container := .containername -}}
+{{- if (not (empty $context.configRef))  }}
+- name: initcontainer-configmap
+  configMap:
+    name:  {{ $context.configRef }}
+{{- end }}
+{{- if (not (empty $context.configOidcRef))  }}
+- name: initcontainer-configmap-oidc
+  configMap:
+    name:  {{ $context.configOidcRef }}
+{{- end }}
+{{- if (not (empty $context.existingClaimName))  }}
+- name: initcontainer-claimname
+  persistentVolumeClaim:
+    claimName: {{ $context.existingClaimName }}
+{{- end}}
+{{- if (not (eq $container "odm.oidc-registration")) }}
+- name: scriptdir
+  emptyDir: {}
+- name: {{ template "odm-auth-secret-volume.fullname" .root }}
+  emptyDir: {}
+- name: {{ template "odm-custom-secret-ds.fullname" .root }}
+  emptyDir: {}
+- name: {{ template "odm-driver-volume.fullname" .root }}
+  emptyDir: {}
+{{- end }}
+{{- if or (eq $container "odm.decisionServerRuntime") (eq $container "odm.decisionServerConsole") }}
+- name: {{ template "odm-baiemitterconfig-secret-volume.fullname" .root }}
+  emptyDir: {}
+{{- end }}
+{{- end -}}
+
+
+{{- define "odm-init-container-all-volume-mount" -}}
+{{- $context := .initcontext -}}
+{{- if (not (empty $context.configRef))  }}
+- name: initcontainer-configmap
+  mountPath: /ibm/icp4ba/initconfig
+{{- end }}
+{{- if (not (empty $context.configOidcRef))  }}
+- name: initcontainer-configmap-oidc
+  mountPath: /ibm/icp4ba/initconfigoidc
+{{- end }}
+{{- if (not (empty $context.existingClaimName))  }}
+- name: initcontainer-claimname
+  mountPath: /ibm/icp4ba/initpv
+{{- end }}
+{{- end -}}
+
+{{- define "odm-init-container-odm-pod-volume-mount" -}}
+- name: scriptdir
+  mountPath: /ibm/icp4ba/decisions/init/
+{{- if  (not (empty .root.Values.dba.rootCaSecretRef)) }}
+- name: root-ca
+  mountPath: /ibm/icp4ba/shared/rootca/
+{{- end }}
+- name: "trusted-cert-volume"
+  mountPath: "/ibm/icp4ba/shared/trustedcertificates/"
+{{- if or (not (empty (.root.Values.customization.authSecretRef))) (and (.root.Values.oidc.enabled) (empty (.root.Values.customization.authSecretRef))) }}
+- name: "{{ template "odm-auth-secret-volume.fullname" .root }}"
+  mountPath: "/ibm/icp4ba/decisions/auth/"
+{{- end }}
+- name: "{{ template "odm-custom-secret-ds.fullname" .root }}"
+  mountPath: "/ibm/icp4ba/decisions/customdatasource/"
+- name: "{{ template "odm-driver-volume.fullname" .root }}"
+  mountPath: "/ibm/icp4ba/decisions/jdbcdrivers/"
+{{- end -}}
+
+{{- define "odm-init-container-registration-job-volume-mount" -}}
+{{- $context := .initcontext -}}
+{{- if and ( .root.Values.oidc.enabled) (empty .root.Values.oidc.clientRef) }}
+- name: oidc-credentials
+  mountPath: /ibm/icp4ba/decisions/oidc/
+{{- end}}
+{{- end -}}
+
+{{- define "odm-init-container-volume-mount" -}}
+- name: scriptdir
+  mountPath: /script/init
+{{- end -}}
+
+{{- define "odm-init-container-template-full" -}}
+{{- $context := .initcontext -}}
+{{- $container := .containername -}}
+{{- if (not (empty $context.image))  }}
+- name: custom-init-container
+{{- end }}
+  image: {{ $context.image }}
+{{ include "odm-security-context" .root | indent 2 }}
+  imagePullPolicy: {{ .root.Values.image.pullPolicy }}
+{{- if (not (empty $context.command))  }}
+  command:
+{{ toYaml $context.command  | indent 4 }}
+{{- end}}
+{{- if (not (empty $context.resources))  }}
+  resources:
+{{ toYaml $context.resources | indent 4 }}
+{{- end }}
+  env:
+    - name: "PRODUCT_NAME"
+      value: "decisions"
+    - name: "PRODUCT_VERSION"
+      value: "{{  default .root.Chart.AppVersion .root.Values.customization.productVersion  }}"
+    - name: "CONTAINER_NAME"
+      value: "{{ $container }}"
+{{- if (not (empty $context.env)) }}
+{{ toYaml $context.env | indent 4 }}
+  {{- end }}
+  volumeMounts:
+{{ include "odm-init-container-all-volume-mount" . | indent 2 }}
+{{- if eq $container "odm.oidc-registration" }}
+{{ include "odm-init-container-registration-job-volume-mount" . | indent 2 }}
+{{- else }}
+{{ include "odm-init-container-odm-pod-volume-mount" . | indent 2 }}
+{{- end }}
+{{- if or (eq $container "odm.decisionServerRuntime") (eq $container "odm.decisionServerConsole") }}
+  - name: {{ template "odm-baiemitterconfig-secret-volume.fullname" .root }}
+    mountPath: "/ibm/icp4ba/decisions/baiemitter/"
+{{- end }}
 {{- end -}}
