@@ -1,4 +1,4 @@
-{{- if .Values.oidc.enabled  }}
+{{- if and (.Values.oidc.enabled) (not (empty .Values.oidc.adminRef))  }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -42,6 +42,10 @@ spec:
                 {{- else }}
                 - {{ template "arch" . }}
                 {{- end }}
+{{- if eq .Values.customization.vault "initcontainer" }}
+      initContainers:
+{{- include "odm-init-container-template-full" (dict "initcontext" .Values.oidc.initContainer "root" . "containername" "odm.oidc-registration")  | indent 6 }}
+{{- end }}
       containers:
       - name: {{ template "odm.oidc-registration.fullname" . }}
 {{ include "image.tagOrDigest" (dict "containerName" "odm-decisionrunner" "containerTag" .Values.decisionRunner.tagOrDigest "root" .) | indent 8  }}
@@ -59,6 +63,10 @@ spec:
             mountPath: /server_url
           - name: provider
             mountPath: /provider
+          {{- if eq .Values.customization.vault "initcontainer" }}
+          - name: oidc-credentials
+            mountPath: /oidc-credentials
+          {{- else }}
           - name: oidc-client-id
             mountPath: /oidc-client-id
           - name: oidc-client-secret
@@ -67,6 +75,7 @@ spec:
             mountPath: /oidc-username
           - name: oidc-password
             mountPath: /oidc-password
+          {{- end }}
       volumes:
         - name: oidc
           configMap:
@@ -102,6 +111,10 @@ spec:
             items:
               - key: provider
                 path: provider.properties
+        {{- if eq .Values.customization.vault "initcontainer" }}
+        - name: oidc-credentials
+          emptyDir: {}
+        {{- else }}
         - name: oidc-client-id
           secret:
             {{- if not (empty .Values.oidc.clientRef) }}
@@ -134,6 +147,10 @@ spec:
             items:
             - key: adminPassword
               path: oidc-password
+        {{- end }}
+{{- if eq .Values.customization.vault "initcontainer" }}
+{{ include "odm-init-container-volume" (dict "initcontext" .Values.oidc.initContainer "root" . "containername" "odm.oidc-registration") | indent 8 }}
+{{- end }}
       restartPolicy: Never
 {{ include "odm-pullsecret-spec" . | indent 6 }}
 {{- end }}
