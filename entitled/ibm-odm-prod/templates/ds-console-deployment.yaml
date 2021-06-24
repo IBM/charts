@@ -67,17 +67,14 @@ spec:
                 operator: "Exists"
               {{- end }}
       volumes:
-{{ include "odm-dba-volumes-context" . | indent 6 }}
-{{ include "odm-db-ssl-volumes-context" . | indent 6 }}
-      {{- if not (empty (.Values.customization.securitySecretRef)) }}
-      - name: {{ template "odm-security-secret-volume.fullname" . }}
+{{- if eq .Values.customization.vault "initcontainer" }}
+{{ include "odm-init-container-volume" (dict "initcontext" .Values.decisionServerConsole.initContainer "root" . "containername" "odm.decisionServerConsole") | indent 6 }}
+{{- else }}
+      # BAI Volume
+      {{- if and (.Values.customization.baiEmitterSecretRef) (not (empty (.Values.customization.baiEmitterSecretRef))) }}
+      - name: {{ template "odm-baiemitterconfig-secret-volume.fullname" . }}
         secret:
-          secretName: {{ .Values.customization.securitySecretRef }}
-          items:
-            - key: keystore.jks
-              path: keystore.jks
-            - key: truststore.jks
-              path: truststore.jks
+          secretName: {{ .Values.customization.baiEmitterSecretRef }}
       {{- end}}
       {{- if not (empty (.Values.customization.authSecretRef)) }}
       - name: {{ template "odm-auth-secret-volume.fullname" . }}
@@ -95,16 +92,26 @@ spec:
         secret:
           secretName: {{ .Values.externalCustomDatabase.datasourceRef }}
       {{- end}}
-      {{- if not (empty (.Values.customization.baiEmitterSecretRef)) }}
-      - name: {{ template "odm-baiemitterconfig-secret-volume.fullname" . }}
-        secret:
-          secretName: {{ .Values.customization.baiEmitterSecretRef }}
-      {{- end}}
       {{- if not (empty .Values.externalCustomDatabase.driverPvc) }}
       - name: {{ template "odm-driver-volume.fullname" . }}
         persistentVolumeClaim:
           claimName: {{ .Values.externalCustomDatabase.driverPvc }}
       {{- end }}
+{{- end }}
+
+{{ include "odm-dba-volumes-context" . | indent 6 }}
+{{ include "odm-db-ssl-volumes-context" . | indent 6 }}
+      {{- if not (empty (.Values.customization.securitySecretRef)) }}
+      - name: {{ template "odm-security-secret-volume.fullname" . }}
+        secret:
+          secretName: {{ .Values.customization.securitySecretRef }}
+          items:
+            - key: keystore.jks
+              path: keystore.jks
+            - key: truststore.jks
+              path: truststore.jks
+      {{- end}}
+
       - name: {{ template "odm-logging-volume.fullname" . }}
         configMap:
       {{- if not (empty .Values.decisionServerConsole.loggingRef) }}
@@ -129,6 +136,9 @@ spec:
         emptyDir: {}
 {{ include "odm-trusted-cert-volume" . | indent 6 }}
       initContainers:
+{{- if eq .Values.customization.vault "initcontainer" }}
+{{ include "odm-init-container-template-full" (dict "initcontext" .Values.decisionServerConsole.initContainer "root" . "containername" "odm.decisionServerConsole" )  | indent 6 }}
+{{- end -}}
       {{- if and (empty .Values.externalCustomDatabase.datasourceRef) (empty .Values.externalDatabase.serverName) }}
       - name: init-decisionserverconsole
 {{ include "image.tagOrDigest" (dict "containerName" "dbserver" "containerTag" .Values.internalDatabase.tagOrDigest "root" .) | indent 8  }}
@@ -144,7 +154,11 @@ spec:
       - name: {{ template "odm.decisionserverconsole.fullname" . }}
 {{ include "image.tagOrDigest" (dict "containerName" "odm-decisionserverconsole" "containerTag" .Values.decisionServerConsole.tagOrDigest "root" .) | indent 8  }}
 {{ include "odm-security-context" . | indent 8 }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
         volumeMounts:
+{{- if eq .Values.customization.vault "initcontainer" }}
+{{ include "odm-init-container-volume-mount" . | indent 8 }}
+{{- end}}
 {{ include "odm-dba-volumemounts-context" . | indent 8 }}
 {{ include "odm-db-ssl-volumemounts-context" . | indent 8 }}
 {{ include "odm-trusted-cert-volume-mount" . | indent 8 }}
@@ -176,7 +190,6 @@ spec:
         {{- end}}
         - name: lib-workarea-volume
           mountPath: /opt/ibm/wlp/output/defaultServer/workarea
-        imagePullPolicy: {{ .Values.image.pullPolicy }}
         env:
           {{- if not (empty (.Values.customization.securitySecretRef)) }}
           - name: KEYSTORE_PASSWORD

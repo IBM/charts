@@ -68,18 +68,10 @@ spec:
             podAffinityTerm:
               topologyKey: "kubernetes.io/hostname"
       volumes:
-{{ include "odm-dba-volumes-context" . | indent 6 }}
-{{ include "odm-db-ssl-volumes-context" . | indent 6 }}
-      {{- if not (empty (.Values.customization.securitySecretRef)) }}
-      - name: {{ template "odm-security-secret-volume.fullname" . }}
-        secret:
-          secretName: {{ .Values.customization.securitySecretRef }}
-          items:
-            - key: keystore.jks
-              path: keystore.jks
-            - key: truststore.jks
-              path: truststore.jks
-      {{- end}}
+{{- if eq .Values.customization.vault "initcontainer" }}
+{{ include "odm-init-container-volume" (dict "initcontext" .Values.decisionServerRuntime.initContainer "root" . "containername" "odm.decisionServerRuntime") | indent 6 }}
+{{- else }}
+      # BAI Volume
       {{- if not (empty (.Values.customization.baiEmitterSecretRef)) }}
       - name: {{ template "odm-baiemitterconfig-secret-volume.fullname" . }}
         secret:
@@ -101,6 +93,26 @@ spec:
         secret:
           secretName: {{ .Values.externalCustomDatabase.datasourceRef }}
       {{- end}}
+      {{- if not (empty .Values.externalCustomDatabase.driverPvc) }}
+      - name: {{ template "odm-driver-volume.fullname" . }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.externalCustomDatabase.driverPvc }}
+      {{- end }}
+{{- end }}
+
+{{ include "odm-dba-volumes-context" . | indent 6 }}
+{{ include "odm-db-ssl-volumes-context" . | indent 6 }}
+      {{- if not (empty (.Values.customization.securitySecretRef)) }}
+      - name: {{ template "odm-security-secret-volume.fullname" . }}
+        secret:
+          secretName: {{ .Values.customization.securitySecretRef }}
+          items:
+            - key: keystore.jks
+              path: keystore.jks
+            - key: truststore.jks
+              path: truststore.jks
+      {{- end}}
+
       - name: {{ template "odm-logging-volume.fullname" . }}
         configMap:
       {{- if not (empty .Values.decisionServerRuntime.loggingRef) }}
@@ -121,11 +133,6 @@ spec:
           items:
            - key: dsr-jvm-options
              path: jvm.options
-      {{- if not (empty .Values.externalCustomDatabase.driverPvc) }}
-      - name: {{ template "odm-driver-volume.fullname" . }}
-        persistentVolumeClaim:
-          claimName: {{ .Values.externalCustomDatabase.driverPvc }}
-      {{- end }}
       - name: lib-workarea-volume
         emptyDir: {}
       - name: {{ template "odm-ds-runtime-xuconfigref-volume.fullname" . }}
@@ -135,9 +142,11 @@ spec:
       {{ else }}
           name: {{ template "odm.ds-runtime-xu-configmap.fullname" . }}
       {{- end}}
-
 {{ include "odm-trusted-cert-volume" . | indent 6 }}
       initContainers:
+{{- if eq .Values.customization.vault "initcontainer" }}
+{{ include "odm-init-container-template-full" (dict "initcontext" .Values.decisionServerRuntime.initContainer "root" . "containername" "odm.decisionServerRuntime" )  | indent 6 }}
+{{- end -}}
       {{- if and (empty .Values.externalCustomDatabase.datasourceRef) (empty .Values.externalDatabase.serverName) }}
       - name: init-decisionserverruntime
 {{ include "image.tagOrDigest" (dict "containerName" "dbserver" "containerTag" .Values.internalDatabase.tagOrDigest "root" .) | indent 8  }}
@@ -155,6 +164,9 @@ spec:
 {{ include "odm-security-context" . | indent 8 }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         volumeMounts:
+{{- if eq .Values.customization.vault "initcontainer" }}
+{{ include "odm-init-container-volume-mount" . | indent 8 }}
+{{- end}}
 {{ include "odm-dba-volumemounts-context" . | indent 8 }}
 {{ include "odm-db-ssl-volumemounts-context" . | indent 8 }}
 {{ include "odm-trusted-cert-volume-mount" . | indent 8 }}
@@ -172,6 +184,10 @@ spec:
         - name: {{ template "odm-auth-secret-volume.fullname" . }}
           mountPath: {{ template "odm-auth-dir" . }}
         {{- end}}
+        - name: {{ template "odm-logging-volume.fullname" . }}
+          mountPath: {{ template "odm-log-dir" . }}
+        - name: {{ template "odm-jvm-options-volume.fullname" . }}
+          mountPath: {{ template "odm-jvm-options-dir" . }}
         {{- if not (empty (.Values.externalCustomDatabase.datasourceRef)) }}
         - name: {{ template "odm-custom-secret-ds.fullname" . }}
           mountPath: {{ template "odm-customdatasource-dir" . }}
@@ -180,10 +196,6 @@ spec:
         - name: {{ template "odm-driver-volume.fullname" . }}
           mountPath: {{ template "odm-driver-dir" . }}
         {{- end}}
-        - name: {{ template "odm-logging-volume.fullname" . }}
-          mountPath: {{ template "odm-log-dir" . }}
-        - name: {{ template "odm-jvm-options-volume.fullname" . }}
-          mountPath: {{ template "odm-jvm-options-dir" . }}
         - name: lib-workarea-volume
           mountPath: /opt/ibm/wlp/output/defaultServer/workarea
         - name: {{ template "odm-ds-runtime-xuconfigref-volume.fullname" . }}
