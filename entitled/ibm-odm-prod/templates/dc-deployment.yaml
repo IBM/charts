@@ -68,18 +68,9 @@ spec:
             podAffinityTerm:
               topologyKey: "kubernetes.io/hostname"
       volumes:
-{{ include "odm-dba-volumes-context" . | indent 6 }}
-{{ include "odm-db-ssl-volumes-context" . | indent 6 }}
-      {{- if not (empty (.Values.customization.securitySecretRef)) }}
-      - name: {{ template "odm-security-secret-volume.fullname" . }}
-        secret:
-          secretName: {{ .Values.customization.securitySecretRef }}
-          items:
-            - key: keystore.jks
-              path: keystore.jks
-            - key: truststore.jks
-              path: truststore.jks
-      {{- end}}
+{{- if eq .Values.customization.vault "initcontainer" }}
+{{ include "odm-init-container-volume" (dict "initcontext" .Values.decisionCenter.initContainer "root" . "containername" "odm.decisionCenter") | indent 6 }}
+{{- else }}
       {{- if not (empty (.Values.customization.authSecretRef)) }}
       - name: {{ template "odm-auth-secret-volume.fullname" . }}
         secret:
@@ -101,6 +92,21 @@ spec:
         persistentVolumeClaim:
           claimName: {{ .Values.externalCustomDatabase.driverPvc }}
       {{- end }}
+{{- end }}
+
+{{ include "odm-dba-volumes-context" . | indent 6 }}
+{{ include "odm-db-ssl-volumes-context" . | indent 6 }}
+      {{- if not (empty (.Values.customization.securitySecretRef)) }}
+      - name: {{ template "odm-security-secret-volume.fullname" . }}
+        secret:
+          secretName: {{ .Values.customization.securitySecretRef }}
+          items:
+            - key: keystore.jks
+              path: keystore.jks
+            - key: truststore.jks
+              path: truststore.jks
+      {{- end}}
+
       - name: {{ template "odm-logging-volume.fullname" . }}
         configMap:
       {{- if not (empty .Values.decisionCenter.loggingRef) }}
@@ -130,6 +136,9 @@ spec:
         emptyDir: {}
 {{ include "odm-trusted-cert-volume" . | indent 6 }}
       initContainers:
+{{- if eq .Values.customization.vault "initcontainer" }}
+{{ include "odm-init-container-template-full" (dict "initcontext" .Values.decisionCenter.initContainer "root" . "containername" "odm.decisionCenter" )  | indent 6 }}
+{{- end -}}
       {{- if and (empty .Values.externalCustomDatabase.datasourceRef) (empty .Values.externalDatabase.serverName) }}
       - name: init-dc
 {{ include "image.tagOrDigest" (dict "containerName" "dbserver" "containerTag" .Values.internalDatabase.tagOrDigest "root" .) | indent 8  }}
@@ -147,6 +156,9 @@ spec:
 {{ include "odm-security-context" . | indent 8 }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         volumeMounts:
+{{- if eq .Values.customization.vault "initcontainer" }}
+{{ include "odm-init-container-volume-mount" . | indent 8 }}
+{{- end}}
 {{ include "odm-dba-volumemounts-context" . | indent 8 }}
 {{ include "odm-db-ssl-volumemounts-context" . | indent 8 }}
 {{ include "odm-trusted-cert-volume-mount" . | indent 8 }}
@@ -263,6 +275,12 @@ spec:
           {{- if (not (empty .Values.decisionRunner.contextRoot )) }}
           - name: "DECISIONRUNNER_CONTEXT_ROOT"
             value: "{{ .Values.decisionRunner.contextRoot}}"
+          {{- end }}
+          {{- if and (empty .Values.externalCustomDatabase.datasourceRef) (empty .Values.externalDatabase.serverName) }}
+          {{- if .Values.internalDatabase.populateSampleData }}
+          - name: "DEMO"
+            value: "true"
+          {{- end }}
           {{- end }}
 {{ include "odm-db-ssl-env-context" . | indent 10 }}
 {{ include "odm-kubeVersion" . | indent 10 }}

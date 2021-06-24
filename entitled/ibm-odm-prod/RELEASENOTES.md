@@ -1,5 +1,5 @@
-# What's new in Helm chart 21.1.0
-The version 21.1.0 of the Helm chart installs version 8.10.5.0 of IBM Operational Decision Manager. For a complete list of new features in this release, go to [What's new](https://www.ibm.com/support/knowledgecenter/en/SSQP76_8.10.x/com.ibm.odm.distrib.overview/shared_whatsnew_topics/con_whats_new8105.html).
+# What's new in Helm chart 21.2.0
+The version 21.2.0 of the Helm chart installs version 8.10.5.1 of IBM Operational Decision Manager. For a complete list of new features in this release, go to [What's new](https://www.ibm.com/support/knowledgecenter/en/SSQP76_8.10.x/com.ibm.odm.distrib.overview/shared_whatsnew_topics/con_whats_new8105.html).
 
 # Prerequisites
 1. Kubernetes 1.11 or higher, with Helm 3.2 or higher.
@@ -14,14 +14,6 @@ For more information, go to [Operational Decision Manager knowledge center](http
 
 # Upgrading
 
-## Upgrade when service.enableRoute is set to true
-In 21.1.0, the `service.type` value is now overridden to `ClusterIP` if `service.enableRoute` is set to `true`.
-Since the type of a service cannot be updated, you will have to delete the services before performing the `helm upgrade`.
-
-```console
-oc delete service --selector release=<RELEASE_NAME>
-```
-
 For details about how to upgrade, see [Upgrading ODM releases](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.kube/topics/tsk_k8s_upgrade.html)
 
 
@@ -31,6 +23,7 @@ For details about how to upgrade, see [Upgrading ODM releases](https://www.ibm.c
 # Version History
 | Chart | Date     | Details                           |
 | ----- | -------- | --------------------------------- |
+| 21.2.0 | June 2021 | ODM 8.10.5.1 release - Support airgap installation with entitled registry, Bug fixes |
 | 21.1.0 | March 2021 | ODM 8.10.5 IFix 03 release - Add trusted certificate list management, Default service type update if route enabled |
 | 20.3.0 | Dec 2020 | ODM 8.10.5 release - Add default custom serviceAccount, Support `restricted` scc in Openshift, Microsoft SQL Server 2019 support, PostgreSQL version 12 support, Digest support, Automate Ingress creation to access ODM services, Decision Server Console title configuration |
 | 20.2.1 | Sept 2020 | Security update, Bug fixes |
