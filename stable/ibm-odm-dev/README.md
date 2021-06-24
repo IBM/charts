@@ -203,7 +203,7 @@ priority: 0
 
 ## Installing the Chart
 
-The following instructions should be executed as namespace administrator.
+The following instructions should be executed as namespace administrator. Multiple instances can be deployed in the single cluster and in the single namespace.
 
 Add the ibm chart repository:
 
@@ -310,6 +310,15 @@ Uses cases for H2 as an internal database:
     - internalDatabase.persistence.useDynamicProvisioning: false (default)
   - Kubernetes binding process selects a pre-existing volume based on the accessMode and size.
 
+### Storage Options Supported
+
+IBM Cloud storage options supported:
+- `File Bronze`
+- `File Silver`
+- `File Gold`
+
+On-premise storage options supported for all architectures:
+- `Rook-Ceph`
 
 ## Limitations
 
