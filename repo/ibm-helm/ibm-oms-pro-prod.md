@@ -12,7 +12,7 @@ Ensure that you set up and configure the database and messaging server because t
 
 **Note:** You can by default deploy Sterling Order Management Software with Db2 database and MQ messaging by using the Helm chart. If you want to deploy Sterling Order Management Software with a different database and JMS provider, ensure that you customize the certified containers. For more information about customizing the certified containers, see [Customizing certified containers](https://www.ibm.com/support/knowledgecenter/SS6PEW_10.0.0/installation/c_OMRHOC_customizing_OMS_runtime.html).
 
-## Deployment prerequisites
+## Prerequisites
 
 Before deploying Sterling Order Management Software, review and complete the following prerequisites:
 
@@ -21,9 +21,7 @@ Before deploying Sterling Order Management Software, review and complete the fol
 - Install Db2 or Oracle database. Ensure that the database is accessible from within the cluster. For more
   information about the database time zone considerations, see [Time zone considerations.](#time-zone-considerations)
 - Install MQ or any other JMS server. Ensure that the MQ server is accessible from within the cluster.
-- Load the container images to the appropriate container registry. The default images are available in the IBM Cloud 
-  Registry. When you are installing the Helm chart, if you want to automatically pull the images, use image pull secret. 
-  Alternatively, you can use customized images.
+- Load the container images to the appropriate container registry. The default images are available in the IBM Cloud Registry. When you are installing the Helm chart, if you want to automatically pull the images, use image pull secret.  Alternatively, you can use customized images.
 - Configure container registry and container image to pull them to all Kubernetes worker nodes.
 - Create a Persistent Volume with access mode as 'Read write many' and having a minimum of 10 GB hard disk space.
 - [Create a Secret](#creating-a-secret) with the datasource connectivity details.
@@ -31,8 +29,7 @@ Before deploying Sterling Order Management Software, review and complete the fol
 - Configure the agent or integration servers in the Helm chart. For more information about configuring the agent or integration servers, see [Configuring agent and integration server.](#configuring-agent-and-integration-servers)
 - Install PodDisruptionBudget.
 
-  The PodDisruptionBudget ensures that a certain number or percentage of pods with an assigned label are not voluntarily 
-  evicted at any point in time. For more information about PodDisruptionBudget, see [Disruptions](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/) and [Specifying a disruption budget for your application](https://kubernetes.io/docs/tasks/run-application/configure-pdb/).
+  The PodDisruptionBudget ensures that a certain number or percentage of pods with an assigned label are not voluntarily evicted at any point in time. For more information about PodDisruptionBudget, see [Disruptions](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/) and [Specifying a disruption budget for your application](https://kubernetes.io/docs/tasks/run-application/configure-pdb/).
 
 ## Creating a Secret
 
@@ -55,22 +52,22 @@ To create a Secret, complete the following steps:
       keyStorePassword: '<password for custom KeyStore>'
     ```
   
-  2. Pass the name of the Secret as a value to the `global.appSecret` parameter. 
+2. Pass the name of the Secret as a value to the `global.appSecret` parameter.
 `
      **Note:** For the Secret name, it is recommended that you prefix release name.
-     
-  3. Run the following command:
+
+3. Run the following command:
 
      ```sh
        kubectl create -f <sample_secret_file>.yaml  -n <namespace>
 
      ```
+
      A Secret based on the values entered in the <sample_secret_file>.yaml is created and encoded.
-     
+
 ## Creating a Role Based Access Control (RBAC)
 
-If you are deploying the application on a namespace other than the default namespace, and if you have not created Role Based 
-  Access Control (RBAC), create RBAC with the cluster admin role.
+If you are deploying the application on a namespace other than the default namespace, and if you have not created Role Based Access Control (RBAC), create RBAC with the cluster admin role.
   
 The following sample file illustrates RBAC for the default service account with the target namespace as `<namespace>`.
 
@@ -101,7 +98,7 @@ The following sample file illustrates RBAC for the default service account with 
     apiGroup: rbac.authorization.k8s.io
   ```
   
-## The Helm chart details
+## Chart details
 
 The Helm chart creates following resources:
 
@@ -120,10 +117,10 @@ The Helm chart creates following resources:
   - `<deployment name>-datasetup` - Set up data for deploying and running the applications, if you enable data setup.
   - `<deployment name>-preinstall` - Complete the pre-installation activities such as generating ingress, tls, and secret.
 
-  Here, 
-    - `<deployment name>` refers to `<release name>-ibm-oms-pro-prod`, which can be overridden with `global.fullNameOverride`.
-    - `<release name>` refers to the Helm release name.
-    - `<server name>` refers to the name of agent or integration server.
+  Here,
+  - `<deployment name>` refers to `<release name>-ibm-oms-pro-prod`, which can be overridden with `global.fullNameOverride`.
+  - `<release name>` refers to the Helm release name.
+  - `<server name>` refers to the name of agent or integration server.
 
 ## Time zone considerations
 
@@ -160,19 +157,19 @@ use the following resources:
 - Worker nodes (3 worker nodes on 3 separate Power9 machines):
   - 16 CPU cores each
   - 32 GB memory each
-    
+
 ## Installing the Helm chart
 
 You can install the Helm chart on a new or preloaded database by appropriately configuring the parameters of values.yaml.
 
 ### Installing the Helm chart on a new database
 
-To install the Helm chart on a new database that does not contain tables and factory data, configure the following parameters. 
+To install the Helm chart on a new database that does not contain tables and factory data, configure the following parameters.
 
-- Set the value of `datasetup.loadFactoryData` to `install` and `datasetup.mode` to `create`. 
+- Set the value of `datasetup.loadFactoryData` to `install` and `datasetup.mode` to `create`.
   
 - Set the value of `datasetup.fixPack.loadFPFactoryData` to `install` and `datasetup.fixPack.installedFPNo`
-  to `0`. 
+  to `0`.
   
   The application takes appropriate action based on the configured values.
 
@@ -186,7 +183,7 @@ To install the Helm chart on a database that contains tables and factory data, c
 
 - Set the value of `datasetup.loadFactoryData` to `donotinstall` or blank.
 
-- If you want to apply the fix pack factory setup, set the value of `datasetup.fixPack.loadFPFactoryData` to `install` and `datasetup.fixPack.installedFPNo` to the most recently installed fix pack number. 
+- If you want to apply the fix pack factory setup, set the value of `datasetup.fixPack.loadFPFactoryData` to `install` and `datasetup.fixPack.installedFPNo` to the most recently installed fix pack number.
 
 ## Configuration parameters in values.yaml
 
@@ -283,6 +280,7 @@ The following table describes the configurable parameters that are applicable fo
 | `global.database.datasourceName`                                                  | Specify the name for the external datasource.                                                                                                                                                                                  | jdbc or OMDS                                                |
 | `global.database.systemPool`                                                      | Specify whether the database is used as system pool.                                                                                                                                                                                         | true                                                     |
 | `global.database.schema`                                                          | Specify the database schema name. For `Db2` it is defaulted as `global.database.dbname` and for `Oracle` it is defaulted as `global.database.user`.                                                                         |
+| `global.database.ssl`                                                             | Indicates the SSL connection for Db2. If you set the value to 'true', ensure to specify the Db2 SSL port number under global.database.port. The default Db2 SSL port number is 50001.   | false     
 | `global.serviceAccountName`                                                       | Specify the name of the service account that is used for deployment.                                                                                                                                                                                      |
 | `global.customerOverrides`                                                        | Provide an array of customer override properties as `key=value`.                                                                                                                                                     |
 | `global.envs`                                                                     | Provide an array of environment variables as Kubernetes `EnvVars` objects.                                                                                                                                            |
@@ -307,7 +305,7 @@ As part of your solution, you might come across situations where your applicatio
 
   - Using a custom TrustStore
 
-    This approach provides you the flexibility to trust the specific services with which your application must establish SSL connection. You can create your own TrustStore by using the `keytool` command of JDK in p12 format. Copy the newly created TrustStore to the Persistent Volume and provide the complete path to the TrustStore with respect to the volume mounted within the pod in the Helm values by using `global.security.ssl.trustStore.storeLocation`. Also, add the password for this TrustStore in the secret created as a prerequisite provided in [Create a Secret](#creating-a-secret) section with the key `trustStorePassword`. For example, if the TrustStore is present in the Persistent Volume at `certs/truststore.p12` provide the value of `global.security.ssl.trustStore.storeLocation` as `/shared/certs/truststore.p12`. 
+    This approach provides you the flexibility to trust the specific services with which your application must establish SSL connection. You can create your own TrustStore by using the `keytool` command of JDK in p12 format. Copy the newly created TrustStore to the Persistent Volume and provide the complete path to the TrustStore with respect to the volume mounted within the pod in the Helm values by using `global.security.ssl.trustStore.storeLocation`. Also, add the password for this TrustStore in the secret created as a prerequisite provided in [Create a Secret](#creating-a-secret) section with the key `trustStorePassword`. For example, if the TrustStore is present in the Persistent Volume at `certs/truststore.p12` provide the value of `global.security.ssl.trustStore.storeLocation` as `/shared/certs/truststore.p12`.
 
   - Using specific server certificates
 
@@ -315,13 +313,13 @@ As part of your solution, you might come across situations where your applicatio
 
 - Providing identity certificates for mutual or client authentication
 
-  You can provide your identity certificates for mutual or client authentication. You can create your own KeyStore by using the `keytool` command of JDK in p12 format. Ensure that this KeyStore includes all your identity certificates and keys that are required for mutual authentication between application and agent servers and external services. Copy the newly created KeyStore to the Persistent Volume and provide the complete path to the KeyStore with respect to the volume mounted within the pod in the Helm values by using `global.security.ssl.keyStore.storeLocation`. Also, add the password for this KeyStore in the secret created as a prerequisite provided in [Create a Secret](#creating-a-secret) section with the key `keyStorePassword`. For example, if the KeyStore is present in the Persistent Volume at `certs/keystore.p12` provide the value of `global.security.ssl.keyStore.storeLocation` as `/shared/certs/keystore.p12`. 
+  You can provide your identity certificates for mutual or client authentication. You can create your own KeyStore by using the `keytool` command of JDK in p12 format. Ensure that this KeyStore includes all your identity certificates and keys that are required for mutual authentication between application and agent servers and external services. Copy the newly created KeyStore to the Persistent Volume and provide the complete path to the KeyStore with respect to the volume mounted within the pod in the Helm values by using `global.security.ssl.keyStore.storeLocation`. Also, add the password for this KeyStore in the secret created as a prerequisite provided in [Create a Secret](#creating-a-secret) section with the key `keyStorePassword`. For example, if the KeyStore is present in the Persistent Volume at `certs/keystore.p12` provide the value of `global.security.ssl.keyStore.storeLocation` as `/shared/certs/keystore.p12`.
 
 **Note:** If you add a new certificate to the TrustStore or KeyStore, ensure that you perform a rolling update of application and agent servers so that the new certificates are considered.
 
 ## Deploying multiple application images
 
-By using the Helm chart, you can deploy multiple application images as part of a single Helm release. 
+By using the Helm chart, you can deploy multiple application images as part of a single Helm release.
 
 To deploy multiple application images, use the following `appserver.images` structure in values.yaml:
 
@@ -340,6 +338,7 @@ appserver:
         - path:
           routePrefix:
 ```
+
 To pass an array of image names, use `appserver.image.names` with optional configuration for specifying:
 
 - paths to expose
@@ -354,11 +353,11 @@ For example:
 appserver:
   replicaCount: 1
   image:
-    tag: 10.0.0.21
+    tag: 10.0.0.23
     pullPolicy: IfNotPresent
     names:
       - name: om-app
-        tag: 10.0.0.21
+        tag: 10.0.0.23
       - name: om-app-isccs_sbc
       - name: om-app-sma_wsc
         applications:
@@ -373,7 +372,7 @@ appserver:
             routePrefix: 'smcfsdocs'
 ```
 
-In this example, 4 deployments are created for 4 images that are listed (`om-app`, `om-app-isccs_sbc`, `om-app-sma_wsc`, and `om-app-docs`). 
+In this example, 4 deployments are created for 4 images that are listed (`om-app`, `om-app-isccs_sbc`, `om-app-sma_wsc`, and `om-app-docs`).
 
 The routes and paths that are exposed adheres to the following conventions:
 
@@ -431,7 +430,7 @@ Configure the following parameters of values.yaml:
 
 Configure the following parameters of values.yaml:
 
-- `appserver.ingress.host` - The fully qualified domain name of the cluster through which the applications are exposed. 
+- `appserver.ingress.host` - The fully qualified domain name of the cluster through which the applications are exposed.
 
 - `appserver.ingress.ssl.enabled` - Set to `true` by default as SSL is recommended for production environments.
 
@@ -467,9 +466,9 @@ To configure IBM MQ, complete the following steps:
 
 2. Create a ConfigMap to store the IBM MQ bindings. For example, run the following command to create a ConfigMap for the  `.bindings` file.
 
-```sh
-kubectl create configmap <config map name> --from-file=<path_to_.bindings_file> -n <namespace>
-```
+    ```sh
+    kubectl create configmap <config map name> --from-file=<path_to_.bindings_file> -n <namespace>
+    ```
 
 3. Specify the ConfigMap in `global.mq.bindingConfigName`.
 
@@ -544,7 +543,6 @@ spec:
 
 - `maxSurge` is an optional field that specifies the number of pods that can be created beyond the maximum number of pods defined in `replicas`.
 
-
 #### Recreate
 
 The `Recreate` deployment strategy kills the existing pods at once and replaces with new pods.
@@ -565,7 +563,7 @@ spec:
 
 The Helm chart requires a `PodSecurityPolicy` to be bound to the target namespace prior to installation. You can select either a predefined `PodSecurityPolicy` or custom `PodSecurityPolicy` that is shared by your cluster administrator.
 
-#### Custom PodSecurityPolicy definition:
+Custom PodSecurityPolicy definition:
 
 ```yaml
 apiVersion: extensions/v1beta1
@@ -618,7 +616,7 @@ To create a custom `PodSecurityPolicy`, create a yaml file with the custom `PodS
 kubectl create -f <custom_psp.yaml>
 ```
 
-#### Sample ClusterRole and RoleBinding definitions
+### Sample ClusterRole and RoleBinding definitions
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -664,7 +662,7 @@ kubectl create -f <custom_psp_role_and_binding.yaml>
 
 The Helm chart is verified with the predefined `SecurityContextConstraints` named [`ibm-anyuid-scc.`](https://ibm.biz/cpkspec-scc) Alternatively, you can use a custom `SecurityContextConstraints.` Ensure that you bind the `SecurityContextConstraints` resource to the target namespace prior to installation.
 
-#### Custom SecurityContextConstraints definition:
+Custom SecurityContextConstraints definition:
 
 ```yaml
 apiVersion: security.openshift.io/v1
@@ -716,7 +714,7 @@ To create a custom `SecurityContextConstraints`, create a yaml file with the cus
 kubectl create -f <custom-scc.yaml>
 ```
 
-## Installing the Helm chart
+## Installing the chart
 
 In values.yaml, set the values of `global.license` and `global.licenseStoreCallCenter` to `True` along with the required chart parameters.
 
@@ -751,7 +749,6 @@ You can install certified containers in an air gap environment where your Kubern
 ### Downloading Sterling Order Management Software case bundle
 
 You can download the Sterling Order Management Software case bundle and the Helm chart from the remote repositories to your local machine, which will eventually be used for offline installation by running the following command:
-
 
   ```bash
     cloudctl case save                                \
@@ -869,21 +866,20 @@ The following parameters are exposed to configure affinity and tolerations. For 
 
   - For application servers, configure pod anti-affinity by using the following parameters:
     - `appserver.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`
-    - `appserver.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution` 
+    - `appserver.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution`
   - For agent servers, configure pod anti-affinity by using the following parameters:
     - `omserver.common.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`
     - `omserver.common.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution`
 
   Depending on the value of `podAntiAffinity.replicaNotOnSameNode`, a suitable value for pod anti-affinity is automatically appended in addition to the custom values. This ensures that replicas of a pod are scheduled on the same node.
-  - If the value is set to `prefer`, then `podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution` is automatically 
-    appended. The `podAntiAffinity.weightForPreference` parameter is set as the preference for which the value must be
+  - If the value is set to `prefer`, then `podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution` is automatically appended. The `podAntiAffinity.weightForPreference` parameter is set as the preference for which the value must be
     specified in the range of 1-100.
   - If the value is set to `require`, then `podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution` is appended.
   - If the value is blank, then no pod anti-affinity value is automatically appended.
 
-### For application servers
+### Application servers affinity and tolerations
 
-- `appserver.tolerations` 
+- `appserver.tolerations`
 - `appserver.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`
 - `appserver.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`
 - `appserver.podAffinity.requiredDuringSchedulingIgnoredDuringExecution`
@@ -891,14 +887,14 @@ The following parameters are exposed to configure affinity and tolerations. For 
 - `appserver.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`
 - `appserver.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution`
 
-### For agent servers
+### Agent servers affinity and tolerations
 
 - `omserver.common.tolerations`
 - `omserver.common.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`
 - `omserver.common.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`
 - `omserver.common.podAffinity.requiredDuringSchedulingIgnoredDuringExecution`
 - `omserver.common.podAffinity.preferredDuringSchedulingIgnoredDuringExecution`
-- `omserver.common.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution` 
+- `omserver.common.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`
 - `omserver.common.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution`
   
 ## Readiness and liveness
@@ -907,19 +903,19 @@ Kubernetes uses liveness probes to know when to restart a container. It also use
 
 You can tune readiness and liveness checks for agent and application server pods by using the following parameters:
 
-### For application servers
+### Application servers readiness and liveness
 
 - `appserver.livenessCheckBeginAfterSeconds`
 - `appserver.livenessFailRestartAfterMinutes`
 
-For example, if you set the values of `appserver.livenessCheckBeginAfterSeconds` and `appserver.livenessFailRestartAfterMinutes` to `900` and `10` respectively, and the application server pod is not able to start successfully even after `25` minutes, the application server pod restarts. 
+For example, if you set the values of `appserver.livenessCheckBeginAfterSeconds` and `appserver.livenessFailRestartAfterMinutes` to `900` and `10` respectively, and the application server pod is not able to start successfully even after `25` minutes, the application server pod restarts.
 
 Even though the application server pod has successfully started, if the liveness check keeps failing continuously for 10 minutes, the application server pod restarts.
 
-### For agent servers
+### Agent servers readiness and liveness
 
 - `omserver.common.readinessFailRestartAfterMinutes`
-   
+
    For example, if you set the value of `omserver.common.readinessFailRestartAfterMinutes` to`10` and the agent server pod is not able to successfully start even after `10` minutes, the agent server pod restarts.
 
 For more information about these parameters, see [Configuration parameters in values.yaml.](#configuration-parameters-in-values.yaml)
@@ -955,7 +951,7 @@ To upgrade the Helm chart, complete the following steps:
 
 1. Download the Helm chart. For more information about downloading the Helm chart, see [Downloading the Helm charts.](https://www.ibm.com/support/knowledgecenter/SS6PEW_10.0.0/com.ibm.help.install.omsoftware.doc/installation/c_OMRHOC_download_OMSChart.html)
 
-2. Ensure to set the value of `datasetup.loadFactoryData` parameter to `donotinstall` or blank. 
+2. Ensure to set the value of `datasetup.loadFactoryData` parameter to `donotinstall` or blank.
 
 3. Run the following command to upgrade your deployments:
 
@@ -972,6 +968,7 @@ To roll back a Helm release, run the following command:
 ```sh
 helm rollback <release-name> <revision>
 ```
+
 Here, `<revision>` refers to the revision of the Helm release.
 
 For more information about rolling back a Helm release version, see [Helm documentation.](https://helm.sh/docs/helm/helm_rollback/)
