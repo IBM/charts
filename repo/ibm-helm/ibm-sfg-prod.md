@@ -1,4 +1,4 @@
-# IBM Sterling File Gateway Enterprise Edition v6.1.0.2
+# IBM Sterling File Gateway Enterprise Edition v6.1.0.3
 ## Introduction
 
 IBM Sterling File Gateway lets organizations transfer files between partners by using different protocols, conventions for naming files, and file formats. A scalable and security-enabled gateway, Sterling File Gateway enables companies to consolidate all their internet-based file transfers on a single edge gateway, which helps secure your B2B collaboration network and the data flowing through it. To find out more, see [IBM Sterling File Gateway](https://www.ibm.com/products/file-gateway) on IBM Marketplace.
@@ -18,7 +18,7 @@ Services
 
 ## Prerequisites
 
-1. Kubernetes version >= 1.14.6 with beta APIs enabled
+1. Kubernetes version >= 1.17
 
 2. Helm version >= 3.2
 
@@ -288,9 +288,10 @@ spec:
   - {}
   policyTypes:
   - Ingress
+
    ```
   * To implement your own Network Policy, you can follow the steps documented here [Network Policy](https://kubernetes.io/docs/concepts/services-networking/network-policies)
-
+  
 ## Resources Required
 
 The following table describes the default usage and limits per pod
@@ -326,10 +327,12 @@ Depending on the capacity of the kubernetes worker node and database network con
 Parameter                                      | Description                                                          | Default 
 -----------------------------------------------| ---------------------------------------------------------------------| -------------
 `global.image.repository`                      | Repository for B2B docker images                                     | 
-`global.image.tag          `                   | Docker image tag                                                     | `6.1.0.2`
+`global.image.tag          `                   | Docker image tag                                                     | `6.1.0.3`
+`global.image.digest          `                | Docker image digest. Takes precedence over tag                       | `sha256:64f9fc917d849dbffde556f53e0aced2c6c623871f8193701e5c14ee069d5cdd`
 `global.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `global.image.pullSecret `         			   | Pull secret for repository access                                    | 
-`arch`                                         | Compatible platform architecture                                     | `x86_64`
+`arch.amd64`                                   | Specify architecture (amd64, s390x) and weight to be used for scheduling           | `2 - No Preference`
+`arch.s390x`                                   | Specify architecture (amd64, s390x) and weight to be used for scheduling           | `2 - No Preference`
 `serviceAccount.create`                        | Create custom defined service account                                | false
 `serviceAccount.name`                          | Existing service account name                                        | `default`
 `persistence.enabled`                          | Enable storage access to persistent volumes                          | true
@@ -354,7 +357,7 @@ Parameter                                      | Description                    
 `appDocumentsPVC.selector.value`               | Documents persistent volume selector value                           | `documents`
 `appDocumentsPVC.accessMode`                   | Documents persistent volume access mode                              | `ReadWriteMany`
 `appDocumentsPVC.size`                         | Documents persistent volume storage size                             | 1Gi
-`extraPVCs`                                    | Extra volume claims shared across all deployments                    |
+`extraPVCs`                                    | Extra volume claims shared across all deployments                    | 
 `security.supplementalGroups`                  | Supplemental group id to access the persistent volume                | 5555
 `security.fsGroup`                             | File system group id to access the persistent volume                 | 1010
 `security.runAsUser`                           | The User ID that needs to be run as by all containers                | 1010
@@ -367,6 +370,7 @@ Parameter                                      | Description                    
 `env.tz`                                       | Timezone for application runtime                                     | `UTC`
 `env.license`                                  | view or accept license                                               | `accept`
 `env.upgradeCompatibilityVerified`             | Indicate release upgrade compatibility verification done             | `false`
+`env.extraEnvs`                                | Provide extra global environment variables                           | 
 `logs.enableAppLogOnConsole`                   | Enable application logs redirection to pod console                   | `true` 
 `integrations.seasIntegration.isEnabled`       | Enable Seas integration. For more information, please refer to the product documentation           | false
 `integrations.seasIntegration.seasVersion`     | Seas version                                                         | `1.0`
@@ -421,6 +425,7 @@ Parameter                                      | Description                    
 `setupCfg.jcePolicyFile`                       | JCE policy file name                                                 |
 `asi.replicaCount`                             | Application server independent(ASI) deployment replica count         | 1
 `asi.env.jvmOptions`                           | JVM options for asi                                                  | 
+`asi.env.extraEnvs`                            | Provide extra environment variables for ASI                          | 
 `asi.frontendService.type`                             | Service type                                                         | `NodePort`
 `asi.frontendService.ports.http.name`                  | Service http port name                                               | `http`
 `asi.frontendService.ports.http.port`                  | Service http port number                                             | 35000
@@ -496,8 +501,10 @@ Parameter                                      | Description                    
 `asi.extraConfigMaps`              | Extra configmaps. `mountAsVolume` if `true`, the configmap will be mounted as a volume on `/ibm/resources/<configmap-name>` folder else they will be exposed as environment variables.  | 
 `asi.myFgAccess.myFgPort`          | If myFG is hosted on HTTP Server adapter on ASI server, provide the internal port used while configuring that.  | 
 `asi.myFgAccess.myFgProtocol`      | If myFG is hosted on HTTP Server adapter on ASI server, provide the internal protocol used while configuring that.  | 
+`asi.hostAliases`                             | Host aliases to be added to pod /etc/hosts  |
 `ac.replicaCount`                             | Adapter Container server (ac) deployment replica count               | 1
 `ac.env.jvmOptions`                           | JVM options for ac                                                   | 
+`ac.env.extraEnvs`                            | Provide extra environment variables for AC                            | 
 `ac.frontendService.type`                             | Service type                                                         | `NodePort`
 `ac.frontendService.ports.http.name`                  | Service http port name                                               | `http`
 `ac.frontendService.ports.http.port`                  | Service http port number                                             | 35001
@@ -547,9 +554,11 @@ Parameter                                      | Description                    
 `ac.extraSecrets`                 | Extra secrets. `mountAsVolume` if `true`, the secrets will be mounted as a volume on `/ibm/resources/<secret-name>` folder else they will be exposed as environment variables.  | 
 `ac.extraConfigMaps`              | Extra configmaps. `mountAsVolume` if `true`, the configmap will be mounted as a volume on `/ibm/resources/<configmap-name>` folder else they will be exposed as environment variables.  | 
 `ac.myFgAccess.myFgPort`          | If myFG is hosted on HTTP Server adapter on AC server, provide the internal port used while configuring that.  | 
-`ac.myFgAccess.myFgProtocol`      | If myFG is hosted on HTTP Server adapter on AC server, provide the internal protocol used while configuring that.  | 
+`ac.myFgAccess.myFgProtocol`      | If myFG is hosted on HTTP Server adapter on AC server, provide the internal protocol used while configuring that.  |
+`ac.hostAliases`                             | Host aliases to be added to pod /etc/hosts  | 
 `api.replicaCount`                             | Liberty API server (API) deployment replica count                    | 1
 `api.env.jvmOptions`                           | JVM options for api                                                  | 
+`api.env.extraEnvs`                            | Provide extra environment variables for API                          | 
 `api.frontendService.type`                             | Service type                                                         | `NodePort`
 `api.frontendService.ports.http.name`                  | Service http port name                                               | `http`
 `api.frontendService.ports.http.port`                  | Service http port number                                             | 35002
@@ -593,16 +602,19 @@ Parameter                                      | Description                    
 `api.tolerations`                              | Tolerations to pods, and allow (but do not require) the pods to schedule onto nodes with matching taints  |  
 `api.extraSecrets`                 | Extra secrets. `mountAsVolume` if `true`, the secrets will be mounted as a volume on `/ibm/resources/<secret-name>` folder else they will be exposed as environment variables.  | 
 `api.extraConfigMaps`              | Extra configmaps. `mountAsVolume` if `true`, the configmap will be mounted as a volume on `/ibm/resources/<configmap-name>` folder else they will be exposed as environment variables.  | 
+`api.hostAliases`                             | Host aliases to be added to pod /etc/hosts  |
 `nameOverride`                                 | Chart resource short name override                                   | 
 `fullnameOverride`                             | Chart resource full name override                                    | 
 `dashboard.enabled`                            | Enable sample Grafana dashboard                                      | false
 `test.image.repository`                        | Repository for docker image used for helm test and cleanup           | 'ibmcom'
 `test.image.name          `                    | helm test and cleanup docker image name                              | `opencontent-common-utils`
 `test.image.tag          `                     | helm test and cleanup docker image tag                               | `1.1.4`
+`test.image.digest          `                  | helm test and cleanup docker image digest. Takes precedence over tag | `sha256:45fbb199f046eb939ebfaf08fa6fb29da1583ac18f92c97333b3940eb236e005`
 `test.image.pullPolicy`                        | Pull policy for helm test image repository                           | `IfNotPresent`
 `purge.enabled`                                | Enable external purge job                                            | 'false'
 `purge.image.repository          `             | External purge docker image repository                               | `purge`
-`purge.image.tag          `                    | External purge image tag                                             | `6.1.0.2`
+`purge.image.tag          `                    | External purge image tag                                             | `6.1.0.3`
+`purge.image.digest          `                 | External purge image digest. Takes precedence over tag               | `sha256:314ff91441d218032d667fa56435b132960a7c6fb20bbd60d35eb0a56af25672`
 `purge.image.pullPolicy`                       | Pull policy for external purge docker image                          | `IfNotPresent`
 `purge.image.pullSecret`                       | Pull secret for repository access                                    | 
 `purge.schedule`                               | External purge job creation and execution schedule. Its a Cron format string such as 1 * * * * or 
@@ -614,6 +626,7 @@ Parameter                                      | Description                    
 `purge.successfulJobsHistoryLimit`             | Specify how many completed external purge jobs should be kept in history   | 3
 `purge.failedJobsHistoryLimit`                 | Specify how many failed external purge jobs should be kept in history      | 1
 `purge.env.jvmOptions`                         | JVM options for purge                                                      | 
+`purge.env.extraEnvs`                          | Provide extra environment variables for Purge Job                          | 
 `purge.resources`                              | CPU/Memory resource requests/limits for the external purge job pod         | 1 CPU and 2Gi Memory
 `purge.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`    | k8s PodSpec.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".       | 
 `purge.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`   | k8s PodSpec.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    |
