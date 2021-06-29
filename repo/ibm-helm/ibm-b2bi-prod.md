@@ -1,4 +1,4 @@
-# IBM Sterling B2B Integrator Enterprise Edition v6.1.0.2
+# IBM Sterling B2B Integrator Enterprise Edition v6.1.0.3
 ## Introduction
 
 IBM Sterling B2B Integrator helps companies integrate complex B2B EDI processes with their partner communities. Organizations get a single, flexible B2B platform that supports most communication protocols, helps secure your B2B network and data, and achieves high-availability operations. The offering enables companies to reduce costs by consolidating EDI and non-EDI any-to-any transmissions on a single B2B platform and helps automate B2B processes across enterprises, while providing governance and visibility over those processes.
@@ -19,7 +19,7 @@ Services
 
 ## Prerequisites
 
-1. Kubernetes version >= 1.14.6 with beta APIs enabled
+1. Kubernetes version >= 1.17
 
 2. Helm version >= 3.2
 
@@ -292,7 +292,7 @@ spec:
 
    ```
   * To implement your own Network Policy, you can follow the steps documented here [Network Policy](https://kubernetes.io/docs/concepts/services-networking/network-policies)
-
+  
 ## Resources Required
 
 The following table describes the default usage and limits per pod
@@ -328,10 +328,12 @@ Depending on the capacity of the kubernetes worker node and database network con
 Parameter                                      | Description                                                          | Default 
 -----------------------------------------------| ---------------------------------------------------------------------| -------------
 `global.image.repository`                      | Repository for B2B docker images                                     | 
-`global.image.tag          `                   | Docker image tag                                                     | `6.1.0.2`
+`global.image.tag          `                   | Docker image tag                                                     | `6.1.0.3`
+`global.image.digest          `                | Docker image digest. Takes precedence over tag                       | `sha256:c0d8808e4a68b3d952ed738a586dd34677d386edc50b4dc7388b2038c4a76675`
 `global.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `global.image.pullSecret `         			   | Pull secret for repository access                                    | 
-`arch`                                         | Compatible platform architecture                                     | `x86_64`
+`arch.amd64`                                   | Specify architecture (amd64, s390x) and weight to be used for scheduling           | `2 - No Preference`
+`arch.s390x`                                   | Specify architecture (amd64, s390x) and weight to be used for scheduling           | `2 - No Preference`
 `serviceAccount.create`                        | Create custom defined service account                                | false
 `serviceAccount.name`                          | Existing service account name                                        | `default`
 `persistence.enabled`                          | Enable storage access to persistent volumes                          | true
@@ -369,6 +371,7 @@ Parameter                                      | Description                    
 `env.tz`                                       | Timezone for application runtime                                     | `UTC`
 `env.license`                                  | view or accept license                                               | `accept`
 `env.upgradeCompatibilityVerified`             | Indicate release upgrade compatibility verification done             | `false`
+`env.extraEnvs`                                | Provide extra global environment variables                           | 
 `logs.enableAppLogOnConsole`                   | Enable application logs redirection to pod console                   | `true` 
 `integrations.seasIntegration.isEnabled`       | Enable Seas integration. For more information, please refer to the product documentation           | false
 `integrations.seasIntegration.seasVersion`     | Seas version                                                         | `1.0`
@@ -423,6 +426,7 @@ Parameter                                      | Description                    
 `setupCfg.jcePolicyFile`                       | JCE policy file name                                                 |
 `asi.replicaCount`                             | Application server independent(ASI) deployment replica count         | 1
 `asi.env.jvmOptions`                           | JVM options for asi                                                  | 
+`asi.env.extraEnvs`                            | Provide extra environment variables for ASI                          | 
 `asi.frontendService.type`                             | Service type                                                         | `NodePort`
 `asi.frontendService.ports.http.name`                  | Service http port name                                               | `http`
 `asi.frontendService.ports.http.port`                  | Service http port number                                             | 35000
@@ -498,8 +502,10 @@ Parameter                                      | Description                    
 `asi.extraConfigMaps`              | Extra configmaps. `mountAsVolume` if `true`, the configmap will be mounted as a volume on `/ibm/resources/<configmap-name>` folder else they will be exposed as environment variables.  | 
 `asi.myFgAccess.myFgPort`          | If myFG is hosted on HTTP Server adapter on ASI server, provide the internal port used while configuring that.  | 
 `asi.myFgAccess.myFgProtocol`      | If myFG is hosted on HTTP Server adapter on ASI server, provide the internal protocol used while configuring that.  | 
+`asi.hostAliases`                             | Host aliases to be added to pod /etc/hosts  |
 `ac.replicaCount`                             | Adapter Container server (ac) deployment replica count               | 1
 `ac.env.jvmOptions`                           | JVM options for ac                                                   | 
+`ac.env.extraEnvs`                            | Provide extra environment variables for AC                            | 
 `ac.frontendService.type`                             | Service type                                                         | `NodePort`
 `ac.frontendService.ports.http.name`                  | Service http port name                                               | `http`
 `ac.frontendService.ports.http.port`                  | Service http port number                                             | 35001
@@ -549,9 +555,11 @@ Parameter                                      | Description                    
 `ac.extraSecrets`                 | Extra secrets. `mountAsVolume` if `true`, the secrets will be mounted as a volume on `/ibm/resources/<secret-name>` folder else they will be exposed as environment variables.  | 
 `ac.extraConfigMaps`              | Extra configmaps. `mountAsVolume` if `true`, the configmap will be mounted as a volume on `/ibm/resources/<configmap-name>` folder else they will be exposed as environment variables.  | 
 `ac.myFgAccess.myFgPort`          | If myFG is hosted on HTTP Server adapter on AC server, provide the internal port used while configuring that.  | 
-`ac.myFgAccess.myFgProtocol`      | If myFG is hosted on HTTP Server adapter on AC server, provide the internal protocol used while configuring that.  | 
+`ac.myFgAccess.myFgProtocol`      | If myFG is hosted on HTTP Server adapter on AC server, provide the internal protocol used while configuring that.  |
+`ac.hostAliases`                             | Host aliases to be added to pod /etc/hosts  | 
 `api.replicaCount`                             | Liberty API server (API) deployment replica count                    | 1
 `api.env.jvmOptions`                           | JVM options for api                                                  | 
+`api.env.extraEnvs`                            | Provide extra environment variables for API                          | 
 `api.frontendService.type`                             | Service type                                                         | `NodePort`
 `api.frontendService.ports.http.name`                  | Service http port name                                               | `http`
 `api.frontendService.ports.http.port`                  | Service http port number                                             | 35002
@@ -595,16 +603,19 @@ Parameter                                      | Description                    
 `api.tolerations`                              | Tolerations to pods, and allow (but do not require) the pods to schedule onto nodes with matching taints  |  
 `api.extraSecrets`                 | Extra secrets. `mountAsVolume` if `true`, the secrets will be mounted as a volume on `/ibm/resources/<secret-name>` folder else they will be exposed as environment variables.  | 
 `api.extraConfigMaps`              | Extra configmaps. `mountAsVolume` if `true`, the configmap will be mounted as a volume on `/ibm/resources/<configmap-name>` folder else they will be exposed as environment variables.  | 
+`api.hostAliases`                             | Host aliases to be added to pod /etc/hosts  |
 `nameOverride`                                 | Chart resource short name override                                   | 
 `fullnameOverride`                             | Chart resource full name override                                    | 
 `dashboard.enabled`                            | Enable sample Grafana dashboard                                      | false
 `test.image.repository`                        | Repository for docker image used for helm test and cleanup           | 'ibmcom'
 `test.image.name          `                    | helm test and cleanup docker image name                              | `opencontent-common-utils`
 `test.image.tag          `                     | helm test and cleanup docker image tag                               | `1.1.4`
+`test.image.digest          `                  | helm test and cleanup docker image digest. Takes precedence over tag | `sha256:45fbb199f046eb939ebfaf08fa6fb29da1583ac18f92c97333b3940eb236e005`
 `test.image.pullPolicy`                        | Pull policy for helm test image repository                           | `IfNotPresent`
 `purge.enabled`                                | Enable external purge job                                            | 'false'
 `purge.image.repository          `             | External purge docker image repository                               | `purge`
-`purge.image.tag          `                    | External purge image tag                                             | `6.1.0.2`
+`purge.image.tag          `                    | External purge image tag                                             | `6.1.0.3`
+`purge.image.digest          `                 | External purge image digest. Takes precedence over tag               | `sha256:314ff91441d218032d667fa56435b132960a7c6fb20bbd60d35eb0a56af25672`
 `purge.image.pullPolicy`                       | Pull policy for external purge docker image                          | `IfNotPresent`
 `purge.image.pullSecret`                       | Pull secret for repository access                                    | 
 `purge.schedule`                               | External purge job creation and execution schedule. Its a Cron format string such as 1 * * * * or 
@@ -616,6 +627,7 @@ Parameter                                      | Description                    
 `purge.successfulJobsHistoryLimit`             | Specify how many completed external purge jobs should be kept in history   | 3
 `purge.failedJobsHistoryLimit`                 | Specify how many failed external purge jobs should be kept in history      | 1
 `purge.env.jvmOptions`                         | JVM options for purge                                                      | 
+`purge.env.extraEnvs`                          | Provide extra environment variables for Purge Job                          | 
 `purge.resources`                              | CPU/Memory resource requests/limits for the external purge job pod         | 1 CPU and 2Gi Memory
 `purge.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`    | k8s PodSpec.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".       | 
 `purge.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`   | k8s PodSpec.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    |
@@ -643,7 +655,6 @@ helm upgrade my-release -f values.yaml ./ibm-b2bi-prod --timeout 3600s --recreat
 ```
 For product release version upgrade, please refer product documentation.
 
-
 ## Rollback the Chart
 If the upgraded environment is not working as expected or you made an error while upgrading, you can easily rollback the chart to a previous revision. 
 Procedure
@@ -665,10 +676,10 @@ Note : If the revision isn't specified then by default rolls back to the last re
 
 To uninstall/delete the `my-release` deployment run the command:
 
-
 ```sh
  helm delete my-release  --purge
 ```
+
 Since there are certain kubernetes resources created using the `pre-install` hook, helm delete command will try to delete them as a post delete activity. In case it fails to do so, you need to manually delete the following resources created by the chart:
 * ConfigMap - <release name>-b2bi-config
 * PersistentVolumeClaim if persistence is enabled - <release name>-b2bi-resources-pvc
