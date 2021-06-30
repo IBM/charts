@@ -21,7 +21,7 @@ This chart deploys IBM Sterling External Authentication Server on a container ma
 Before you install IBM Certified Container Software for Sterling External Authentication Server, ensure that the helm chart package is available on your client system.
 
 #### Downloading the IBM Certified Container Software helm chart from IBM Chart repository
-You can download the IBM CCS for SEAS helm chart from [IBM Public chart repository](https://www.ibm.com/links?url=https://github.com/IBM/charts/tree/master/repo/ibm-helm/ibm-seas-1.1.1.tgz).
+You can download the IBM CCS for SEAS helm chart from [IBM Public chart repository](https://www.ibm.com/links?url=https://github.com/IBM/charts/tree/master/repo/ibm-helm/ibm-seas-1.1.2.tgz).
 
 
 ####  Downloading the IBM Certified Container Software image from IBM Entitled Registry for AirGap Environment
@@ -31,7 +31,7 @@ You can download the container image from IBM Entitled registry by using either 
 - Download latest version of cloudctl CLI from [Cloud Pak CLI](https://www.ibm.com/links?url=https://github.com/IBM/cloud-pak-cli/releases). 
 - Download and extract the CASE bundle file
 ```
-cloudctl case save -t 1 --case https://github.com/IBM/cloud-pak/raw/master/repo/case/ibm-seas/1.0.0/ibm-seas-1.0.0.tgz --outputdir download_dir/ && tar -xf download_dir/ibm-seas-1.0.0.tgz
+cloudctl case save -t 1 --case https://github.com/IBM/cloud-pak/raw/master/repo/case/ibm-seas/1.0.1/ibm-seas-1.0.1.tgz --outputdir download_dir/ && tar -xf download_dir/ibm-seas-1.0.1.tgz
 ```
 > **Note**: download_dir is the output directory in which the IBM SEAS resources are placed. The output directory is created if it does not exist. You can choose an arbitrary name for --outputdir if required.` 
 
@@ -78,11 +78,11 @@ cloudctl case launch \
   * `docker/podman login -u cp -p <entitled_key> cp.icr.io`
 
 - Pull the container image from IBM Entitled registry by running the following command:
-  * `docker/podman pull cp.icr.io/cp/ibm-seas/seas-docker-image:6.0.2.0.01`
+  * `docker/podman pull cp.icr.io/cp/ibm-seas/seas-docker-image:6.0.2.0.02`
 
 - Tag and push the container image into local repository by running the following commands: 
-  * `docker/podman tag cp.icr.io/cp/ibm-seas/seas-docker-image:6.0.2.0.01 <LOCAL_DOCKER_REGISTRY_REPOSITORY>/seas-docker-image:6.0.2.0.01`
-  * `docker/podman push <LOCAL_DOCKER_REGISTRY_REPOSITORY>/seas-docker-image:6.0.2.0.01`
+  * `docker/podman tag cp.icr.io/cp/ibm-seas/seas-docker-image:6.0.2.0.02 <LOCAL_DOCKER_REGISTRY_REPOSITORY>/seas-docker-image:6.0.2.0.02`
+  * `docker/podman push <LOCAL_DOCKER_REGISTRY_REPOSITORY>/seas-docker-image:6.0.2.0.02`
 
 
 ### Tools (Prereq #2)
@@ -411,7 +411,7 @@ $ helm repo list
 
 # If you do not have the helm repository, add it using the below command
 
-$ helm repo add ibm-seas-1.1.1.tgz <helm repository>
+$ helm repo add ibm-seas-1.1.2.tgz <helm repository>
 
 # This below command will show all the charts related to the repository
 
@@ -419,10 +419,10 @@ $ helm search <helm repository>
 
 # Finally install the respective chart
 
-$ helm install my-release  --set image.repository=<repo name>,image.tag=<image tag>,image.imageSecrets=<image pull secret>,secret.secretName=<SEAS secret name>,service.jettyDns.externalIP=<Service IP>` ibm-seas-1.1.1.tgz
+$ helm install my-release  --set image.repository=<repo name>,image.tag=<image tag>,image.imageSecrets=<image pull secret>,secret.secretName=<SEAS secret name>,service.jettyDns.externalIP=<Service IP>` ibm-seas-1.1.2.tgz
 ```
 
-The command deploys ibm-seas-1.1.1.tgz chart on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
+The command deploys ibm-seas-1.1.2.tgz chart on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
 
 > **Tip**: List all releases using `helm list`
 
@@ -435,10 +435,10 @@ The following tables lists the configurable parameters of the IBM SEAS chart and
 | `license`                                       | License Agreement                                   | `false`                                  |
 | `licenseType`                                   | License Type                                        | `non-prod`                               |
 | `image.repository`                              | Image full name including repository                | `cp.icr.io/cp/ibm-seas/seas-docker-image`|
-| `image.tag`                                     | Image tag                                           | `6.0.2.0.01`                             |
+| `image.tag`                                     | Image tag                                           | `6.0.2.0.02`                             |
 | `image.imageSecrets`                            | Image pull secrets                                  |                                          |
 | `image.digest.enabled`                          | Enable/disable digest to be used for image          | `false`                                  |
-| `image.digest.value`                            | Digest has value for image used for deployment      | `sha256:5e88859118d5145fee14ba895aa351d98652250ecd650f251e056f18dcf2b12b`                                         |
+| `image.digest.value`                            | Digest has value for image used for deployment      | `sha256:0bc104d064770b5278523256051e194b6adbce65ac587c661e655e1760cfee7d`                                         |
 | `image.pullPolicy`                              | Image pull policy                                   | `IfNotPresent`                           |
 | `seasArgs.appUserUid`                           | UID for container user                              | `1000`                                   |
 | `seasArgs.appUserGid`                           | GID for container user                              | `1000`                                   |
@@ -495,13 +495,13 @@ Specify each parameter using the `--set key=value[,key=value]` argument to `helm
 ```bash
 helm install my-release \
   --set service.externalIP=172.20.185.196 \
-  ibm-seas-1.1.1.tgz
+  ibm-seas-1.1.2.tgz
 ```
 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. You can create a copy of values.yaml file e.g. my-values.yaml and edit the values that you need to override. Use the my-values.yaml file for installation. For example,
 
 ```bash
-helm install <release-name> -f my-values.yaml ibm-seas-1.1.1.tgz
+helm install <release-name> -f my-values.yaml ibm-seas-1.1.2.tgz
 ```
 > **Tip**: You can use the default [values.yaml](values.yaml)
 
@@ -534,7 +534,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```bash
-helm upgrade my-release -f values.yaml ibm-seas-1.1.1.tgz
+helm upgrade my-release -f values.yaml ibm-seas-1.1.2.tgz
 ```
 
 ## Rollback the Chart
