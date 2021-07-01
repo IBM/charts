@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-exhaust-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: data-exhaust-operator
+  template:
+    metadata:
+      labels:
+        name: data-exhaust-operator
+        network-policy: allow-egress
+        squad: data-exhaust
+        service: platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/multicontainer: "true"
+    spec:
+      serviceAccountName: "{{ .Values.service_account_name }}"
+      imagePullSecrets:
+      - name: "{{ .Values.image.pull_secret }}"
+      containers:
+      - image: "{{ .Values.image.registry }}{{ .Values.image.pushgateway }}"
+        imagePullPolicy: Always
+        name: metricsgateway
+        args:
+        - "--web.listen-address=:2112"
+        ports:
+        - containerPort: 2112
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      - name: operator
+        image: "{{ .Values.image.registry }}{{ .Values.image.version }}"
+        imagePullPolicy: "Always"
+        resources:
+          requests:
+            cpu: "{{ .Values.resources.requests.cpu }}"
+            memory: "{{ .Values.resources.requests.memory }}"
+          limits:
+            cpu: "{{ .Values.resources.limits.cpu }}"
+            memory: "{{ .Values.resources.limits.memory }}"
+        volumeMounts:
+        - mountPath: /tmp/ansible-operator/runner
+          name: runner
+        args:
+          - "--metrics-addr=:2113"
+          - "--max-concurrent-reconciles={{ .Values.max_concurrent_reconciles }}"
+        env:
+        - name: WATCH_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: OPERATOR_NAME
+          value: "data-exhaust-operator"
+        - name: PROMETHEUS_EXPOSITION_PORT
+          value: "2112"
+        - name: ANSIBLE_GATHERING
+          value: explicit
+      volumes:
+      - name: runner
+        emptyDir: {}
