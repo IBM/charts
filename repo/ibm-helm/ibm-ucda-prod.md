@@ -258,7 +258,7 @@ The Helm chart has the following values that can be overriden using the --set pa
 | version |  | UrbanCode Deploy agent product version |  |
 | image | pullPolicy | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to Always |
 |       | secret |  An image pull secret used to authenticate with the image registry | Empty (default) if no authentication is required to access the image registry. |
-| license | accept | Set to true to indicate you have read and agree to license agreements : http://ibm.biz/ucd-license | false |
+| license | accept | Set to true to indicate you have read and agree to license agreements : http://www-03.ibm.com/software/sla/sladb.nsf/searchlis/?searchview&searchorder=4&searchmax=0&query=(urbancode+deploy) | false |
 | persistence | enabled | Determines if persistent storage will be used to hold the UCD agent conf directory contents. This should always be true to preserve agent data on container restarts. | Default value "true" |
 |             | useDynamicProvisioning | Set to "true" if the cluster supports dynamic storage provisoning | Default value "true" |
 |             | fsGroup | The group ID to use to access persistent volumes | Default value "1001" |
