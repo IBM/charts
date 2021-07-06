@@ -260,7 +260,7 @@ The Helm chart has the following values.
 | version |  | UrbanCode Deploy relay product vesion |  |
 | image | pullPolicy | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to Always |
 |       | secret |  An image pull secret used to authenticate with the image registry | Empty (default) if no authentication is required to access the image registry. |
-| license | accept | Set to true to indicate you have read and agree to license agreements : http://ibm.biz/ucd-license | false |
+| license | accept | Set to true to indicate you have read and agree to license agreements : http://www-03.ibm.com/software/sla/sladb.nsf/searchlis/?searchview&searchorder=4&searchmax=0&query=(urbancode+deploy) | false |
 | service | type | Specify type of service | Valid options are ClusterIP, NodePort and LoadBalancer (for clusters that support LoadBalancer). Default is ClusterIP |
 | persistence | enabled | Determines if persistent storage will be used to hold the UCD server appdata directory contents. This should always be true to preserve server data on container restarts. | Default value "true" |
 |             | useDynamicProvisioning | Set to "true" if the cluster supports dynamic storage provisoning | Default value "false" |
