@@ -294,6 +294,7 @@ spec:
     registryNamespace: ibm-common-services
     description: "Requesting the Licensing Service"
 ```
+To retrieve license usage data, please follow these [instructions](https://www.ibm.com/docs/en/cloud-paks/cp-integration/2021.1?topic=service-retrieving-license-usage-data).
 
 ## Resources Required
 
@@ -363,7 +364,7 @@ The Helm chart has the following values.
 |          | jdbcConnUrl | The JDBC Connection URL used to connect to the database used by the UCD server. This value is normally constructed using the database type and other database field values, but must be specified here when using Oracle RAC/ORAAS or SQL Server with Integrated Security. | |
 | secureConnections  | required | Specify whether UCD server connections are required to be secure | Default value is "true" |
 | secret | name | Kubernetes secret which defines required UCD passwords. | You may leave this blank to use default name of HelmReleaseName-secrets where HelmReleaseName is the name of your Helm Release, otherwise specify the secret name here. |
-| license | accept | Set to true to indicate you have read and agree to license agreements : http://ibm.biz/ucd-license | false |
+| license | accept | Set to true to indicate you have read and agree to license agreements : http://www-03.ibm.com/software/sla/sladb.nsf/searchlis/?searchview&searchorder=4&searchmax=0&query=(urbancode+deploy) | false |
 |  | serverURL | Information required to connect to the UCD license server. | Empty (default) to begin a 60-day evaluation license period.|
 | persistence | enabled | Determines if persistent storage will be used to hold the UCD server appdata directory contents. This should always be true to preserve server data on container restarts. | Default value "true" |
 |             | useDynamicProvisioning | Set to "true" if the cluster supports dynamic storage provisoning | Default value "false" |
