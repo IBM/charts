@@ -5,7 +5,7 @@
 
 ## Chart Details
 This chart deploys a single instance of IBM UrbanCode Velocity.
-  * 8 backend microservices
+  * 9 backend microservices
   * 3 frontend microservices
   * Single AMQP (Advanced Message Queuing Protocol) StatefulSet
   * NGINX for inter-service routing
@@ -14,14 +14,14 @@ This chart deploys a single instance of IBM UrbanCode Velocity.
 
 ## Prerequisites
 
-1. Kubernetes 1.9; Tiller 2.9.1
+1. Kubernetes - use [this tool](https://www.ibm.com/software/reports/compatibility/clarity/softwareReqsForProduct.html) to check which versions are supported
 2. MongoDB Database - may be running in your cluster or outside of it. Need to provide the mongo connection string for a user with database create permissions.
 3. Permissions: The installing user needs Cluster Admin privileges in order to install the Argo framework.
 4. Configuration scripts (see below)
 
 ### Configuration Scripts
 
-The scripts below are for [ibm_cloud_pak](https://github.com/IBM/charts/tree/master/stable/ibm-ucv-prod/ibm_cloud_pak/pak_extensions/)
+The scripts below are for [ibm_cloud_pak](https://github.com/IBM/charts/tree/master/entitled/ibm-ucv-prod/ibm_cloud_pak/pak_extensions/)
 
 - common
   - Scripts to check existence of security policy/context
@@ -38,6 +38,7 @@ The scripts below are for [ibm_cloud_pak](https://github.com/IBM/charts/tree/mas
     - createSecurityClusterPrereqs.sh
   - namespaceAdministration
     - createSecurityNamespacePrereqs.sh
+    - createSecretNamespacePrereqs.sh
     - createImagePolicyNamespacePrereqs.sh
 
 ### PodSecurityPolicy Requirements
@@ -91,14 +92,6 @@ This chart also defines a custom PodSecurityPolicy which can be used to finely c
       verbs:
       - use
     ```
-- From the command line, you can run the setup scripts included under pak_extensions
-
-  As a cluster admin the pre-install instructions are located at:
-    - `pre-install/clusterAdministration/createSecurityClusterPrereqs.sh`
-
-  As team admin the namespace scoped instructions are located at:
-    - `pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh`
-    - `pre-install/namespaceAdministration/createImagePolicyNamespacePrereqs.sh`
 
 ### SecurityContextConstraints Requirements
 This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
@@ -134,13 +127,14 @@ This chart also defines a custom SecurityContextConstraints which can be used to
     - secret
     ```
 - From the command line, you can run the setup scripts included under pak_extensions
+  when running the namespace scripts add the namespace as argument
 
   As a cluster admin the pre-install instructions are located at:
     - `pre-install/clusterAdministration/createSecurityClusterPrereqs.sh`
-    - `pre-install/clusterAdministration/createArgoClusterPrereqs.sh`
 
   As team admin the namespace scoped instructions are located at:
     - `pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh`
+    - `pre-install/namespaceAdministration/createSecretNamespacePrereqs.sh`
     - `pre-install/namespaceAdministration/createImagePolicyNamespacePrereqs.sh`
 
 ## Resources Required
@@ -152,7 +146,7 @@ The minimal system resources required:
 ## Installing the Chart
 To install the chart with the release name `my-release`:
 ```bash
-helm install my-release --set license=accept --set access.key=$ACCESS_KEY --set url.domain=localhost ibm-ucv-prod
+helm install my-release --set license=accept --set access.key=$ACCESS_KEY --set url.domain=localhost ibm-marketplace/ibm-ucv-prod
 ```
 The above command sets license, access key and domain name parameters. Other parameters may also be required. If parameters aren't specifed with the --set flag, their values will default to the values specified in the values.yaml file.
 
@@ -218,11 +212,11 @@ UrbanCode Velocity supports LDAP and header based SSO integrations. LDAP roles a
 
 ### Administration and Management
 
-User authentication and authorization is intended to be managed from the UI. Management through the API is also possible.
+User authentication and authorization is intended to be managed from the UI. Management through an API is also possible.
 
 ### Audit
 
-User audit records can be found in the "audit_log" collection in the "security" database.
+User audit records are found in the "audit_log" collection in the "security" database.
 
 ## Backup and Recovery
 
@@ -231,12 +225,12 @@ UrbanCode Velocity can be fully backed-up as a restore point by capturing the fo
 1. Database: This should be a single MongoDB instance containing multiple MongoDB databases per service.
 2. Environmental variables (secrets): these may affect, for instance - encryption, access, and operation.
 
-It is risky, if not impossible, to prescribe a one-size fits all database and/or environment variable (secret) management strategy. Refer to industry and company specific best practices per use case. Common approaches to database backup include the backup of persistent volumes and/or MongoDB's built-in tooling. Environmental variables and secrets should be treated like passwords - lightweight and easily backed-up by simple copying; nevertheless, they are critical and sensitive. Refer to appropriate best practices for your situation.
+For database and environment variable secrets management strategies, it is both risky and difficult to prescribe a one-size fits all solution for either or both plans. Refer to industry and company specific best practices that best apply per use case. Common approaches to database backup include the backup of persistent volumes either with or without using MongoDBs unique built-in tooling. Environmental variables and secrets, both critical and sensitive, should both be treated like passwords that are lightweight and easily backed-up by simple copying.
 
 The following is a simple back-up and restore example:
 
 1. Backup the Database (Refer to MongoDB documentation for details [https://docs.mongodb.com/manual/tutorial/backup-and-restore-tools/](https://docs.mongodb.com/manual/tutorial/backup-and-restore-tools/))
-    1. Run MongoDB's `mongodump` command against UrbanCode Velocity's MongoDB instance (this command can executed against a remote instance). For example:
+    1. Run MongoDBs `mongodump` command against UrbanCode Velocity's MongoDB instance (this command can execute against a remote instance). For example:
 
         `mongodump --host=mongoInstanceAddress --port=27017 --out=/opt/backup/velocity-2020-7-4`
 
@@ -271,7 +265,6 @@ The following services should not be scaled, but might be scaled in future relea
 The following services are not expected to provide performance gains, and therefore are not recommended for scaling.
 - release-events-ui
 - continuous-release-ui
-- reporting-ui
 - rcl-web-client
 
 **Non-service containers**
