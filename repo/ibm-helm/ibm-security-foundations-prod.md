@@ -16,7 +16,6 @@ The ibm-security-foundations-prod chart installs foundation elements of IBM Clou
 
 - **Middleware Operator**. Manages the install of data and platform assets used by IBM Cloud Pak for Security, including: ElasticSearch, Etcd, MinIO and RabbitMQ.
 - **Sequences Operator**. Orchestrates the install of IBM Cloud Pak for Security components.
-- **Arango Operator**. Manages the install of ArangoDB for IBM Cloud Pak for Security.
 - **Ambassador**. Creates and manages the Envoy gateway service of IBM Cloud Pak for Security.
 - **Custom Resource Definitions**. To enable management of these elements by IBM Cloud Pak for Security.
 - **Extensions Operator**. Manages the setup of the connector factories.
@@ -25,11 +24,11 @@ The ibm-security-foundations-prod chart installs foundation elements of IBM Clou
 The Middleware and Sequence operator deployed as part of this chart are Namespace-scoped. They watch and manage resources within the namespace that IBM Cloud Pak for Security is installed.
 
 ## Prerequisites
-Please refer to the `Preparing to install IBM Cloud Pak® for Security` section in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/security-pak/install_prep.html).
+Please refer to the `Preparing to install IBM Cloud Pak® for Security` section in the [IBM Documentation](https://www.ibm.com/docs/en/SSTDPP_1.7/docs/security-pak/install_prep_172.html).
 
-## PodDisruptionBudget
+## PodDisruptionBudget	
 
-Pod disruption budget is used to maintain high availability during Node maintenance. Administrator role or higher is required to enable pod disruption budget on clusters with role based access control. The default is false. See `global.poddisruptionbudget` in the [configuration](#configuration) section.
+Pod disruption budget is used to maintain high availability during Node maintenance. Administrator role or higher is required to enable pod disruption budget on clusters with role based access control. The default is false. See `global.poddisruptionbudget` in the [configuration](#configuration) section. 
 
 ## Custom SecurityContextConstraints Requirements
 
@@ -104,7 +103,6 @@ By default, `ibm-security-foundations` has the following resource request requir
 | Ambassador|    256Mi    | 100m        |
 | Sequences |    256Mi    | 250m        |
 | Middleware|    256Mi    | 250m        |
-| Kube-arangodb|   256Mi    | 250m   |
 | Extension Discovery| 256Mi | 100m |
 | Entitlements | 256Mi | 250m |
 | ISC Truststore | 256Mi | 250m |
@@ -112,27 +110,27 @@ By default, `ibm-security-foundations` has the following resource request requir
 
 ## Installing the Chart
 
-Please refer to the `Installation` section in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/security-pak/installation.html).
+Please refer to the `Installation` section in the [IBM Documentation](https://www.ibm.com/docs/en/SSTDPP_1.7/docs/security-pak/installation_172.html).
 
 ### Verifying the Chart
 
-Please refer to the `Verifying Cloud Pak for Security installation` section in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/security-pak/verification.html).
+Please refer to the `Verifying Cloud Pak for Security installation` section in the [IBM Documentation](https://www.ibm.com/docs/en/SSTDPP_1.7/docs/security-pak/verification_172.html).
 
 ### Upgrade or update the installation
 
-Please refer to the `Upgrading Cloud Pak for Security` section in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/security-pak/upgrading.html).
+Please refer to the `Upgrading Cloud Pak for Security` section in the [IBM Documentation](https://www.ibm.com/docs/en/SSTDPP_1.7/docs/security-pak/upgrading_172.html).
 
 ### Uninstalling the chart
 
-Please refer to the `Uninstalling IBM Cloud Pak for Security` section in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/security-pak/uninstalling_cp4s.html).
+Please refer to the `Uninstalling IBM Cloud Pak for Security` section in the [IBM Documentation](https://www.ibm.com/docs/en/SSTDPP_1.7/docs/security-pak/uninstalling_cp4s_172.html).
 
 ## Configuration
 
-Please refer to the `Configuration parameters` table for each type of install in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/security-pak/installation.html).
+Please refer to the `Configuration parameters` table for each type of install in the [IBM Documentation](https://www.ibm.com/docs/en/SSTDPP_1.7/docs/security-pak/installation_172.html).
 
 ## Limitations
 
 This chart can only run on amd64 architecture type.
 
 ## Documentation
-Further guidance can be found in the [IBM Documentation](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.7.0/docs/scp-core/overview.html).
+Further guidance can be found in the [IBM Documentation](https://www.ibm.com/docs/en/SSTDPP_1.7/docs/scp-core/overview.html).
