@@ -156,47 +156,44 @@ The predefined PodSecurityPolicy named [`ibm-restricted-psp`](https://ibm.biz/cp
 
 ### SecurityContextConstraints Requirements
 
-This chart requires a `SecurityContextConstraints` to be bound to the target namespace prior to installation. The predefined `SecurityContextConstraints` name: [`ibm-restricted-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart, if your target namespace is bound to this `SecurityContextConstraints` resource you can proceed to install the chart.
+This chart requires a `SecurityContextConstraints` to be bound to the target namespace prior to installation. The default `SecurityContextConstraints` named restricted has been verified for this chart, if your target namespace is bound to this `SecurityContextConstraints` resource you can proceed to install the chart.
 
   * Custom SecurityContextConstraints definition:
 
-```
+  ```yaml
   apiVersion: security.openshift.io/v1
   kind: SecurityContextConstraints
-  metadata:
-    annotations:
-    name: ibm-ucd-prod-scc
   allowHostDirVolumePlugin: false
   allowHostIPC: false
   allowHostNetwork: false
   allowHostPID: false
   allowHostPorts: false
+  allowPrivilegeEscalation: true
   allowPrivilegedContainer: false
-  allowedCapabilities: []
-  allowedFlexVolumes: []
-  defaultAddCapabilities: []
-  defaultPrivilegeEscalation: false
-  forbiddenSysctls:
-    - "*"
+  allowedCapabilities: null
+  defaultAddCapabilities: null
   fsGroup:
     type: MustRunAs
-    ranges:
-    - max: 65535
-      min: 1
+  metadata:
+    annotations:
+      kubernetes.io/description: restricted denies access to all host features and requires
+        pods to be run with a UID, and SELinux context that are allocated to the namespace.  This
+        is the most restrictive SCC and it is used by default for authenticated users.
+    name: restricted
+  priority: null
   readOnlyRootFilesystem: false
   requiredDropCapabilities:
-  - ALL
+  - KILL
+  - MKNOD
+  - SETUID
+  - SETGID
   runAsUser:
-    type: MustRunAsNonRoot
-  seccompProfiles:
-  - docker/default
+    type: MustRunAsRange
   seLinuxContext:
-    type: RunAsAny
-  supplementalGroups:
     type: MustRunAs
-    ranges:
-    - max: 65535
-      min: 1
+  supplementalGroups:
+    type: RunAsAny
+  users: []
   volumes:
   - configMap
   - downwardAPI
@@ -204,8 +201,7 @@ This chart requires a `SecurityContextConstraints` to be bound to the target nam
   - persistentVolumeClaim
   - projected
   - secret
-  priority: 0
-```
+  ```
 
 ## Resources Required
 * 200MB of RAM
@@ -258,6 +254,7 @@ The Helm chart has the following values.
 | Qualifier | Parameter  | Definition | Allowed Value |
 |---|---|---|---|
 | version |  | UrbanCode Deploy relay product vesion |  |
+| replicas | relay | Number of UCD relay replicas | Non-zero number of replicas.  Defaults to 1 |
 | image | pullPolicy | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to Always |
 |       | secret |  An image pull secret used to authenticate with the image registry | Empty (default) if no authentication is required to access the image registry. |
 | license | accept | Set to true to indicate you have read and agree to license agreements : http://www-03.ibm.com/software/sla/sladb.nsf/searchlis/?searchview&searchorder=4&searchmax=0&query=(urbancode+deploy) | false |
