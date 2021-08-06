@@ -128,6 +128,7 @@ allowHostNetwork: false
 allowHostPID: false
 allowHostPorts: false
 privileged: false
+allowPrivilegedContainer: false
 allowPrivilegeEscalation: true
 allowedCapabilities:
 - IPC_OWNER
@@ -149,7 +150,8 @@ fsGroup:
   - min: 1
     max: 4294967294
 readOnlyRootFilesystem: false
-requiredDropCapabilities: []
+requiredDropCapabilities: 
+- ALL
 runAsUser:
   type: MustRunAsNonRoot
 seLinuxContext:
