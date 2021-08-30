@@ -1,4 +1,4 @@
-# IBM Spectrum Protect Plus 10.1.8.1
+# IBM Spectrum Protect Plus 10.1.8.2
 
 [IBM Spectrum Protect Plus](https://www.ibm.com/us-en/marketplace/ibm-spectrum-protect-plus) is a modern data protection solution that provides near-instant recovery, replication, retention, and reuse for VMs, databases, and containers in hybrid multicloud environments.
 
