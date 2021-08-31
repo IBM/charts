@@ -1,0 +1,34 @@
+apiVersion: postgresql.k8s.enterprisedb.io/v1
+kind: Cluster
+metadata:
+  name: {{ .Values.servicename }}-edb-db
+  labels:
+    {{- include "metadata_info" . | indent 4 }}
+  annotations:
+    {{- include "edb.annotations" .  | indent 4 }}
+
+spec:
+  imageName: {{ .Values.databaseAS.image.repository }}:{{ .Values.databaseAS.image.tag }}
+  instances: {{ .Values.deployment.members }}
+
+  resources:
+    requests:
+      memory: "{{ .Values.epasInstance.spec.databaseMemoryRequest }}"
+      cpu: "{{ .Values.epasInstance.spec.databaseCPU }}"
+    limits:
+      memory: "{{ .Values.resources.limits.memory }}"
+      cpu: "{{ .Values.resources.limits.cpu }}"
+
+  bootstrap:
+    initdb:
+      database: appdb
+      owner: appuser
+      secret:
+        name: {{ .Values.servicename }}-edb-db-app-user
+
+  superuserSecret:
+    name: {{ .Values.servicename }}-edb-db-superuser
+
+  storage:
+    storageClass: {{ .Values.storage.storageClassName }}
+    size: {{ .Values.epasInstance.spec.databaseStorageRequest }}
