@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .Values.servicename }}-api-management"
+  labels:
+    {{- include "metadata_info" . | indent 4 }}
+    component: edb
+  annotations:
+    {{- include "edb.annotations" .  | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      api-database-status: "{{ .Values.servicename }}-edb-api"
+  replicas: 1
+  revisionHistoryLimit: 2
+  template:
+    metadata:
+      name: edb-api-management
+      labels:
+        {{- include "metadata_info" . | indent 8 }}
+        api-database-status: "{{ .Values.servicename }}-edb-api"
+        component: edb
+      annotations:
+        {{- include "edb.annotations" .  | indent 8 }}
+    spec:
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "tolerations" . | indent 6 }}
+      {{- include "edb.Podsecurity" .  | indent 6 }}
+      serviceAccount: {{ .Values.epasInstance.spec.serviceAccount }}
+      containers:
+      - name: edb-status
+        image: {{ .Values.apiManagement.image.repository }}:{{ .Values.apiManagement.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ['/bin/sh']
+        args: ['-cx', '/var/edb_setup/common/init.sh --namespace {{ .Release.Namespace }} --service-name {{ .Values.servicename }} --cluster-size {{ .Values.deployment.members }}']
+        resources:
+          requests:
+            cpu: '0.10'
+            memory: '128M'
+          limits:
+            cpu: '0.5'
+            memory: '256M'
+        livenessProbe:
+          exec:
+            command: ["/bin/bash", "-c", "ls /var/edb_setup"]
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command: ["/bin/bash", "-c", "ls /var/edb_setup"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        {{- include "edb.Containersecurity" . | indent 8 }}
+        env:
+        - name: NAMESPACE
+          value: {{ .Release.Namespace }}
+      restartPolicy: Always
