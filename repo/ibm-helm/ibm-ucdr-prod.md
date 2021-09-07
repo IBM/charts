@@ -5,6 +5,7 @@
 
 ## Chart Details
 * This chart deploys a single instance of the IBM UrbanCode Deploy agent relay that may be scaled to multiple instances.
+* The Persistent Volume access modes ReadWriteOnce (RWO) and ReadWriteMany (RWX) are both supported for use with IBM UrbanCode Deploy agent relay.  However, ReadWriteMany is required to successfully scale to more than one replica/instance of the agent relay.
 * Includes a StatefulSet workload object
 
 ## Prerequisites
