@@ -7,6 +7,7 @@
 ## Chart Details
 
 * This chart deploys a single server instance of IBM UrbanCode Deploy that may be scaled to multiple instances.
+* The Persistent Volume access modes ReadWriteOnce (RWO) and ReadWriteMany (RWX) are both supported for use with IBM UrbanCode Deploy server.  However, ReadWriteMany is required to successfully scale to more than one replica/instance of the server.
 * Includes two statefulSet workload objects, one for server instances and one for distributed front end instances, and corresponding services for them.
 
 ## Prerequisites
