@@ -1,23 +1,32 @@
-# IBM Sterling Configure Price Quote Software v10.0.0.15
+# Name
+IBM Sterling Configure Price Quote Software
+===========================================
 
-## What's New
-* Featuring Helm Form in the Developer Catalog of Web Console of OCP(4.6). Making it easier to populate values yaml.
-* Introduced timeZone property in CPQ applications, to set the timezone of the environment in which the Applications are running.
-* Added support to execute custom script after Omni Configurator Server startup.
-* Added support to disable the deployment of Configurator UI
-* Qualified on OCP 4.4,4.5,4.6.
+## What's New in this release - v10.0.0.20
+* Upgraded Order Management to FP25, FieldSales to FP16 and VisualModeler/Configurator to FP20
+* Support for air gap Installation
+* Implemented enhanced security for cleartext sensitive fields
+* Upgraded Redhat to Universal Base Image v8 for Base Containers
+* Upgraded Liberty Server to v20 for Application Containers
+* Upgraded Helm client to 3.6x
+* Container Images are now signed and certified for enhanced security
+* Qualified on the 4.4, 4.5, and 4.6 Red Hat OpenShift Container Platform versions
 
 ## Introduction
-* The v10.0.0.15 release of IBM Sterling Configure Price Quote is built and deployed on OpenShift 4.4.
-* Red Hat OpenShift Container Platform 4.4 has a feature of catalog experience for installation of helm  charts.
+* The v10.0.0.20 release of IBM Sterling Configure Price Quote is built and deployed on OpenShift 4.6.
+* Red Hat OpenShift Container Platform 4.4+ has a feature of catalog experience for installation of helm  charts.
 Helm charts which are onboarded to the Red Hat Helm Repo will appear in the OpenShift Developer Catalog out-of-the-box.
 This will facilitate the user to deploy Helm Charts from the Web UI , rather than CLI.
 This feature is available in  Developer Catalog -> Add -> From Catalog -> Check Helm Chart Filter.
-* This document describes how to deploy IBM Sterling Configure Price Quote Software v10.0.0.15. This helm chart does not install database server. Database need to be setup and configured separately for IBM Sterling Configure Price Quote Software.
+* This document describes how to deploy IBM Sterling Configure Price Quote Software v10.0.0.20. This helm chart does not install database server. Database need to be setup and configured separately for IBM Sterling Configure Price Quote Software.
 
 Note: This helm chart supports deployment of IBM Sterling Configure Price Quote Software with DB2 or Oracle database.
 
 ## Highlights of Previous Releases
+* Featuring Helm Form in the Developer Catalog of Web Console of OCP(4.6). Making it easier to populate values yaml.
+* Introduced timeZone property in CPQ applications, to set the timezone of the environment in which the Applications are running.
+* Added support to execute custom script after Omni Configurator Server startup.
+* Added support to disable the deployment of Configurator UI
 * EhCache - The in-memory cache EhCache is implemented in OmniConfigurator, for improved performance.
 * The EhCache works in a distributed mode and makes use of RMI replication to support multiple Pods.
   For more information refer 'Ehcache enablement in OC' topic.
@@ -34,6 +43,35 @@ Note: This helm chart supports deployment of IBM Sterling Configure Price Quote 
 * The Applications Pods run with a arbitrary user id, inside the containers.
 * The Pod logs are externalized in the repository.
 
+## Checklist
+* Use below checklist before launching the CPQ applications
+* Helper scripts can be found in prereqs.zip to create pre-requisite cluster objects. This zip is packaged along with these charts.
+1. Helm is installed
+2. NFS is installed, if this is a option chosen for the configurator repository
+3. Configurator Repository is installed
+4. PV and PVC are created
+5. Hostnames are identified for VisualModeler, Configurator, FieldSales
+6. Certificates for application hostnames are available
+7. Secrets are created for above certificates
+8. User is created in Database
+9. Secrets are created with Database access information and key store
+10. Charts downloaded and fields in values.yaml are populated
+11. Install charts via helm install cmd
+12. Factory Data is loaded into Database by running Datajobs using these charts
+
+**Note** : Please see below for details on each of above checklisted items.
+
+## Details
+* The workload consists of application pods(along with associated objects like services,deployments,ingresses etc), one for each application i.e. VisualModeler, Configurator and FieldSales. 
+* The image names for these applications are as below -  
+* VisualModeler(VM) - `cpq-vm-app` , runs VisualModeler application on liberty.
+* OmniConfigurator(OC) App - `cpq-oc-app` , runs OmniConfigurator application on liberty.
+* Base image for VMOC - `cpq-vmoc-base` , a configurator base container used to generate customized images.
+* Field Sales App - `cpq-ifs-app` , runs Field Sales application on liberty.
+* Field Sales Agent - `cpq-ifs-agent`, used for integration / data job with Field Sales.
+* Field Sales Base - `cpq-ifs-base`, a FieldSales base container used to generate customized images.
+* Image tag for this release - For configurator - `10.0.0.20-amd64` , For Field Sales - `10.0.0.16-amd64`
+
 ## Chart Details
 
 This chart will do the following:
@@ -47,7 +85,7 @@ This chart will do the following:
 
 **Note** : `<release name>` refers to the name of the helm release and `<server name>` refers to the app server name.
 
-## Prerequisites for CPQ
+## Prerequisites
 
 1. Kubernetes version >= 1.17.0
 
@@ -74,11 +112,13 @@ populate the ingress fields - `Values.ocappserver.ingress.host` and `Values.ocap
 
 *Note: If you do the above configuration change after installation of a application, you would need to re-install it to take above change into effect.
 
-## Installing the Chart (Installing the VisualModeler(VM) and OmniConfigurator(OC) Applications)
+## Installing 
+### Installing the VisualModeler(VM) and OmniConfigurator(OC) Applications.
 Prepare a custom values.yaml file based on the configuration section. Ensure that application license is accepted by setting the value of `global.license` to true.
 
 Note:
-1. All the section in values.yaml like global, vmappserver, ocappserver, ifs, ifsappserver, ifsagentserver, ifsdatasetup, vmdatasetup, runtime and metering need to be populated before installing any application like VM, OC or IFS.
+1. All the section in values.yaml like global, vmappserver, ocappserver, ifs, ifsappserver, ifsagentserver, ifsdatasetup, vmdatasetup, runtime and metering need to be populated before installing any application like VM, OC or IFS.  
+* Helper scripts can be found in prereqs.zip to create pre-requisite cluster objects. This zip is packaged along with these charts.
 
 2. The reason is there is integration between VM and OC, VM and SBC, IFS and OC.
    So During installation of VM, the application requires ingress host of OC and ssl certificate of OC.
@@ -87,6 +127,94 @@ Note:
 3. The integration will not work if the user populate one section at a time and install the application.
    For example user should avoid populating only vmappserver and install VM.
 
+## Air gap Installation
+
+You can install certified containers in an air gap environment where your Kubernetes cluster does not have access to the internet. Therefore, it is important to properly configure and install the certified containers in such an environment.
+
+### Downloading Sterling Configure Price Quote Software case bundle
+
+You can download the Sterling Configure Price Quote Software case bundle and the Helm chart from the remote repositories to your local machine, which will eventually be used for offline installation by running the following command:
+
+  ```bash
+    cloudctl case save                                \
+      --case <URL containing the CASE file to parse.> \
+      --outputdir </path/to/output/dir> 
+  ```
+
+For additional help on `cloudctl case save`, run `cloudctl case save -h`.
+
+### Setting credentials to pull or push certified container images
+
+To set up the credentials for downloading the certified container images from IBM Cloud Registry to your local registry, run the appropriate command.
+
+- For local registry without authentication
+
+  ```bash
+    # Set the credentials to use for source registry
+    cloudctl case launch              \
+    --case </path/to/downloaded/case> \
+    --inventory ibmCpqProd        \
+    --action configure-creds-airgap   \
+    --args "--registry $SOURCE_REGISTRY --user $SOURCE_REGISTRY_USER --pass $SOURCE_REGISTRY_PASS"
+  ```
+
+- For local registry with authentication
+
+  ```bash
+    # Set the credentials for the target registry (your local registry)
+    cloudctl case launch              \
+    --case </path/to/downloaded/case> \
+    --inventory ibmCpqProd         \
+    --action configure-creds-airgap   \
+    --args "--registry $TARGET_REGISTRY --user $TARGET_REGISTRY_USER --pass $TARGET_REGISTRY_PASS"
+  ```
+
+### Mirroring the certified container images
+
+To mirror the certified container images and configure your cluster by using the provided credentials, run the following command:
+
+  ```bash
+    cloudctl case launch              \
+    --case </path/to/downloaded/case> \
+    --inventory ibmCpqProd         \ 
+    --action mirror-images            \
+    --args "--registry <your local registry> --inputDir </path/to/directory/that/stores/the/case>"
+  ```
+
+The certified container images are pulled from the source registry to your local registry that you can use for offline installation.
+
+### Installing the Helm chart in an air gap environment
+
+Before you begin, ensure that you review and complete the [prerequisites.](#deployment-prerequisites)  
+
+To install the Helm chart, run the following command:
+
+  ```bash
+    cloudctl case launch                    \
+        --case </path/to/downloaded/case>   \
+        --namespace <NAME_SPACE>            \
+        --inventory ibmCpqProd           \
+        --action install                    \
+        --args "--releaseName <release-name> --chart </path/to/chart>"
+    
+    # --releaseName: refers to the name of the release.
+    # --chart: refers to the path of downloaded chart.
+  ```
+
+### Uninstalling the Helm chart in an air gap environment
+
+To uninstall the Helm chart, run the following command:
+
+  ```bash
+    cloudctl case launch                    \
+        --case </path/to/downloaded/case>   \
+        --namespace <NAME_SPACE>            \
+        --inventory ibmCpqProd           \
+        --action uninstall                  \
+        --args "--releaseName <release-name>"
+    
+    # --releaseName: refers to the name of the release.
+  ```
 ## Installing the CASE
 ## Below steps gives an example to install the helm chart into 'default' namespace of Openshift.
 * Note The file permissions set up in the VM and OC Pod use owner as 1001 and group as root for the application related folders.
@@ -99,7 +227,11 @@ Out of the box , the charts are programmed to pull the image directly from Entit
 To do that follow below steps -
 
 1.Create a secret -
-`oc create secret docker-registry er-secret --docker-username=iamapikey --docker-password=[ER-Prod API Key] --docker-server=cp.icr.io`
+`oc create secret docker-registry er-secret --docker-username=[Username] --docker-password=[Password] --docker-server=cp.icr.io`
+Username/Password can be following -
+`iamapikey/IAM KEY` if Entitlement Key is obtained from Alchemy-registry / image-iam repo OR
+`cp/Key From My IBM` if Entitlement Key is obtained from My IBM OR
+`ekey/Key From IBM Public Cloud` if Entitlement key is obtained from IBM Public Cloud for IBMer usage.
 
 2.Populate the field in charts in Values.yaml - global.image.pullsecret with the above secret name i.e. "er-secret"
 
@@ -133,25 +265,26 @@ If you have a image downloaded , please follow below steps if you plan to use th
    `podman login [image-registry-routeURL]` - you will need admin user credentials.
    * Once you login to the registry, you will need to tag it appropriately.
      For eg to push the image to 'default' namespace eg tag cmd for VisualModeler image would be -
-     `podman tag [ImageId] [image-registry-routeURL]/default/cpq-vm-app:10.0.0.15-x86_64`
+     `podman tag [ImageId] [image-registry-routeURL]/default/cpq-vm-app:10.0.0.20-amd64`
       Then push the image to this registry using 
-     `podman push [image-registry-routeURL]/default/cpq-vm-app:10.0.0.15-x86_64`
+     `podman push [image-registry-routeURL]/default/cpq-vm-app:10.0.0.20-amd64`
 7. Since you are now pointing to OPenshift Repo you don't need the set the field pullsecret
    You can set the filed as  `global.image.pullsecret="'`.
    This will skip the imagepullsecret in the Pods.
 
 ### Helm Install 
 * Install helm client
-1. Install helm v3.4.1 from https://helm.sh/
+1. Install helm v3.6.1 from https://helm.sh/
    Install it on Linux client by running the command
-   curl -s https://get.helm.sh/helm-v3.4.1-linux-amd64.tar.gz | tar xz
+   curl -s https://get.helm.sh/helm-v3.6.1-linux-amd64.tar.gz | tar xz
    Locate helm executable and put it in $PATH
    You may want to update PATH variable in your linux login profile script.
-2. `oc login to cluster` to login to OpenShift cluster
+2. Login to cluster.
 3. `helm version` (you will need to put helm in $PATH) to verify that the Helm client of correct version is installed.
   The above should show something like -
- * version.BuildInfo{Version:"v3.4.1", GitCommit:"c4e74854886b2efe3321e185578e6db9be0a6e29", GitTreeState:"clean", GoVersion:"go1.14.11"}
+ * version.BuildInfo{Version:"v3.6.1", GitCommit:"61d8e8c4a6f95540c15c6a65f36a6dd0a45e7a2f", GitTreeState:"clean", GoVersion:"go1.16.5"}
 
+## Storage
 ### Install repository (Below content explains how to install the repository on a NFS server.)
 1. Repository is the OmniConfigurator file structure where it stores models as xml files.
 2. The repository is provided packaged with the CPQ Base Image as repo.tar inside /opt/VMSDK folder.
@@ -190,8 +323,7 @@ If you have a image downloaded , please follow below steps if you plan to use th
 
    Make sure you have set the permissions on the repository correctly.
    You can do that by mounting the above folder into a node and execute below cmds.
-   * `sudo chown -R 1001 /[mounted dir]`
-   * `sudo chgrp -R 0 /[mounted dir]`
+   * `sudo chown -R 1001:root /[mounted dir]`
    * `sudo chmod -R 770 /[mounted dir]`
 
    The above cmds make sure the repository folders and files have right permissions for the pods to access them.
@@ -333,14 +465,37 @@ For **production environments** it is strongly recommended to obtain a CA certif
         e.g. global.image.repository: "cp.icr.io/ibm-cpq" 
     2. Set the image names -
         e.g. vmappserver.image.name: cpq-vm-app 
-        e.g. vmappserver.image.tag: 10.0.0.15-x86_64
+        e.g. vmappserver.image.tag: 10.0.0.20-amd64
         e.g. ocappserver.image.name: cpq-oc-app
-        e.g. ocappserver.image.tag: 10.0.0.15-x86_64
+        e.g. ocappserver.image.tag: 10.0.0.20-amd64
     3. Set the ingress host
         * Note: The ingress host should end in same subdomain as the cluster node.
     4. Follow above steps for ocappserver.
     5. Check global.persistence.claims.name “nfs-cpq-vmoc-claim” matches with name given in pvc.yaml.
     6. Check the ingress tls secret name is set correctly as per cert created above, in place of vmappserver.ingress.ssl.secretname
+
+### Network Policy
+- Kubernetes Network Policy is a specification of how groups of pods are allowed to communicate with each other and other network endpoints.
+- The Kubernetes Network Policy resource provides firewall capabilities to pods, similar to AWS Security groups, and it programs the software defined networking infrastructure (OpenShift Default, Flannel, etc...). You can implement sophisticated network access policies to control ingress access to your workload pods.
+- The default Network Policy `cpq-network-policy` is provided that allows communications of pods that have a role in either `vmappserver, ocappserver, ifsappserver, healthmonitor`. For e.g.
+
+  ```yaml
+  ---
+  kind: NetworkPolicy
+  apiVersion: networking.k8s.io/v1
+  metadata:
+    name: cpq-network-policy
+  spec:
+    podSelector:
+      matchExpressions:
+    -  {key: role, operator: In, values: [vmappserver, ocappserver, ifsappserver, healthmonitor]}
+    ingress:
+    - from: []
+    policyTypes:
+    - Ingress
+
+  ```
+- To implement your own Network Policy, you can follow the steps documented here [Network Policy](https://kubernetes.io/docs/concepts/services-networking/network-policies/)
 
 ### To install chart using a Helm form on the UI in Web-Console (OCP4.6):
 With release of OCP 4.6 , a new feature is available called Helm Form which is available in the Developer Catalog
@@ -372,7 +527,7 @@ Preferred way is to install one application at a time. Hence you will need to di
   cmd - helm template --name=my-release [chartpath]
   This should give you all kubernetes objects which would be getting deployed on Openshift.
   This cmd won't actually install kubernetes objects.
-4. To install the application in Openshift run below cmd -
+4. To install the visualmodeler VM application run below cmd -
  ```
  helm install my-release [chartpath] --timeout 3600 --set global.license=true, global.install.visualmodeler.enabled=true, global.install.configurator.enabled=false, global.install.ifs.enabled=false, global.install.runtime.enabled=false
  ```
@@ -391,8 +546,8 @@ Preferred way is to install one application at a time. Hence you will need to di
   OC Backend - https://[hostname]/configurator/
 
 Depending on the capacity of the kubernetes worker node and database connectivity, the whole deploy process can take on average 
-* 5-6 minutes for 'installation against a pre-loaded database' and 
-* 50-60 minutes for 'installation against a fresh new database'
+* 5-6 minutes for 'installation against a pre-loaded database' i.e. for the VisualModeler Application to be up and running
+* 50-60 minutes for 'installation against a fresh new database' i.e. including Datajobs execution for loading Factory Data 
 
 When you check the deployment status, the following values can be seen in the Status column: 
 – Running: This container is started. 
@@ -626,6 +781,7 @@ vmdatasetup.migrateDB.fromFPVersion =  10.0.0.10
 vmdatasetup.migrateDB.toFPVersion = 10.0.0.12
 
 Note :
+  global.install.runtime should be set to true to run DataJobs.
   vmdatasetup.createDB should be set to true for Fresh Data Creation.
   vmdatasetup.migrateDB.enabled should be set to true to migrate DB from One Fixpack version to another.
   So at time either of vmdatasetup.createDB or vmdatasetup.migrateDB.enabled can be set to true.
@@ -823,7 +979,7 @@ section "Affinity and Tolerations". |
 `global.persistence.securityContext.fsGroup`   | File system group id to access the persistent volume                 | 0
 `global.persistence.securityContext.supplementalGroup`| Supplemental group id to access the persistent volume          | 0
 `global.database.dbvendor`                     | DB Vendor DB2/Oracle                                                 | DB2
-`global.database.schema`                       | Database schema name.For Db2 it is defaulted as `global.database.dbname` and for Oracle it is defaulted as `global.serviceAccountName`                    | Service account name                                                 |
+`global.database.schema`                       | Database schema name.For Db2 it is defaulted as `global.database.dbname` and for Oracle it is defaulted as `user`                    |                                                  |
 `global.arch`                                  | Architecture affinity while scheduling pods                          | amd64: `2 - No preference`, ppc64le: `2 - No preference`
 `global.install.configurator.enabled`          | Install Configurator                                                 |
 `global.install.visualmodeler.enabled`         | Install VisualModeler                                                |
@@ -1058,12 +1214,12 @@ logger content and re-install OC.
 ### Invoking Custom code on Omni Configurator startup
 In order to invoke custom code on Omni Configurator server startup one can use ocpostappready.sh present in /charts/ibm-cpq-prod/scripts folder.
 
-# IBM Sterling Field Sales Edition v10.0.0.12
+# IBM Sterling Field Sales Edition v10.0.0.16
 =======================================================================
 
 ## Introduction
 
-The below content describes how to deploy IBM Sterling Field Sales v10.0.0.12. This helm chart does not install database server or messaging server. Both these middlewares need to be setup and configured separately for IBM Sterling Field Sales.
+The below content describes how to deploy IBM Sterling Field Sales v10.0.0.16. This helm chart does not install database server or messaging server. Both these middlewares need to be setup and configured separately for IBM Sterling Field Sales.
 
 Note: This helm chart supports deployment of IBM Sterling Field Sales with DB2 database and MQ messaging.
 
@@ -1381,6 +1537,7 @@ By default, the containers are deployed in UTC, also the locale code in Order Ma
 When installing the chart on a new database which does not have Sterling Field Sales tables and factory data, 
 * ensure that `ifsdatasetup.loadFactoryData` parameter is set to `install` and `ifsdatasetup.mode` parameter is set as `create`. This will create the required database tables and factory data in the database before installing the chart.
 * ensure that you do not specify any agents/integration servers with parameters `ifsagentserver.servers.name`. When installing against a fresh database, you will not have any agent and integration server configured in Order Management and hence it does not make sense to configure agents and integration servers in the chart. Once the application server is deployed, you can configure the agents/integration servers in Order Management. Refer section "Configuring Agent/Integration Servers" on how to deploy agents and integration servers.
+* Note: While using Oracle , you would need to create a custom IFS image. Details can be found in the Knowledge Center online.
 
 
 ### Installation against a pre-loaded database
@@ -1502,9 +1659,9 @@ If the optional parameter `ifsappserver.ingress.ssl.secretname` is left as blank
         e.g. global.image.repository: "cp.icr.io/ibm-cpq" 
     2. Set the image names -
         e.g. ifsappserver.image.name: cpq-ifs-app 
-        e.g. ifsappserver.image.tag: 10.0.0.12-x86_64
+        e.g. ifsappserver.image.tag: 10.0.0.16-amd64
         e.g. ifsagentserver.image.name: cpq-ifs-agent
-        e.g. ifsagentserver.image.tag: 10.0.0.12-x86_64
+        e.g. ifsagentserver.image.tag: 10.0.0.16-amd64
     3. Set the ingress host
     4. Check ifs.persistence.claims.name “ifs-common” matches with name given in    pvc.yaml.
     5. Check the ingress tls secret name is set correctly as per cert created above,
@@ -1522,7 +1679,7 @@ To install the chart with the release name `my-release`:
   cmd - helm template my-release stable/ibm-cpq-prod
   This should give you all kubernetes objects which would be getting deployed on Openshift.
   But this cmd won't install anything.
-4. To install the application in Openshift run below cmd -
+4. To install the application run below cmd -
 ```
   helm install my-release [chartpath] --timeout 3600 --set global.license=true, global.install.visualmodeler.enabled=false, global.install.configurator.enabled=false, global.install.ifs.enabled=true, global.install.runtime.enabled=false
 ```
@@ -1686,7 +1843,7 @@ Note: You may also consider deleting the secrets and peristent volume created as
 
 3. Create a IFS base container from the IFS base image by running the Podman command -
    ```
-   podman run -e LICENSE=accept --privileged -v /opt/ssfs/shared:/opt/ssfs/shared -it --name <container_name> cpq-ifs-base:<tagname>
+   podman run -e LICENSE=accept --privileged -v /opt/ssfs/shared:/images -it --name <container_name> cpq-ifs-base:<tagname>
    ```  
    This will take you inside the base container in /opt/ssfs/runtime folder.
    If the IFS base container already exist then use the following command to get into the IFS base container.
@@ -1700,12 +1857,12 @@ Note: You may also consider deleting the secrets and peristent volume created as
     ./installFixpack.sh <TAG_NAME> | tee ifs_fixPack.log
    ```      
     This script will taken an hour to complete.
-5. Once the script completes the ifs image tar file can be located in /opt/ssfs/shared folder.
+5. Once the script completes the ifs image tar file can be located in /images folder.
    cpq-ifs-app_<TAG_NAME>.tar, cpq-ifs-agent_<TAG_NAME>.tar, cpq-ifs-base_<TAG_NAME>.tar
 
 6. Exit from the IFS Base container.
 
-7. Load the app image using following command from /opt/ssfs/shared folder.
+7. Load the app image using following command from /images folder.
 
    ```
    podman load -i cpq-ifs-app_<TAG_NAME.tar>
@@ -1743,7 +1900,7 @@ For example, the compressed file name for fix pack 9 is 10.0.0.0-Sterling-VM-All
 
 3. Extract the contents of the fix pack compressed file to the temp location on the installation node.
 
-4. Create base container using base image cpq-vmoc-base.Need to add command TODO
+4. Create base container using base image cpq-vmoc-base. cmd - `podman run -it --net=podman --privileged -e LICENSE=accept <image>:<tagname>`
 
 5. If the base container exists, go to the base container shell. 
 For more information, see link https://www.ibm.com/support/knowledgecenter/SS4QMC_10.0.0/installation/c_cpqRHOC_customizing_runtime.html
@@ -1936,10 +2093,20 @@ you will need to make sure you login to the registry where you want to push the 
 Make sure you have logged in to the cluster by `oc login` and then
 `podman login -u [username] -p $(oc whoami -t) [image-registry]`
 
+* `sudo buildah info` gives below error -
+kernel does not support overlay fs: 'overlay' is not supported over xfs at "/opt/VMSDK/shared/oci-runtime/overlay": backing file system is unsupported for this graph driver
+WARN[0000] failed to shutdown storage: "kernel does not support overlay fs: 'overlay' is not supported over xfs at \"/opt/VMSDK/shared/oci-runtime/overlay\": backing file system is unsupported for this graph driver"
+This is a error on the host filesystem , resolution is to edit config file /etc/containers/storage.conf and uncomment `mount_program = "/usr/bin/fuse-overlayfs"` in it.
+
 ## Resources Required 
-1. Openshift Cluster 4.4
+1. Openshift Cluster 4.4+
 * Mininum - 3 Master 3 Worker nodes
 * Minimum - Each Node should have 8CPU, 16GB RAM, 250GB Disk
+* Typical - 3 Master 3 Worker nodes
+* Typical - Each Node should have 8CPU, 16GB RAM, 250GB Disk
+* HA - 3 Master 6 Worker nodes
+* HA - Each Node should have 16CPU, 32GB RAM, 500GB Disk
+* HA - Replica Count for each Application suggested set to 2
 
 2. VM/OC	
 * 2560Mi memory for application servers
