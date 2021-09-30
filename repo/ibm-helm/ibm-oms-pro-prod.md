@@ -16,12 +16,11 @@ Ensure that you set up and configure the database and messaging server because t
 
 Before deploying Sterling Order Management Software, review and complete the following prerequisites:
 
-- Install Kubernetes version 1.16.0-0 or later.
-- Install the Helm version 3.0.0 or later.
-- Install Db2 or Oracle database. Ensure that the database is accessible from within the cluster. For more
-  information about the database time zone considerations, see [Time zone considerations.](#time-zone-considerations)
-- Install MQ or any other JMS server. Ensure that the MQ server is accessible from within the cluster.
-- Load the container images to the appropriate container registry. The default images are available in the IBM Cloud Registry. When you are installing the Helm chart, if you want to automatically pull the images, use image pull secret.  Alternatively, you can use customized images.
+- Install the supported version of Kubernetes.
+- Install and configure Helm. For more information about configuring Helm, see [Red Hat OpendShift documentation.](https://docs.openshift.com/container-platform/latest/cli_reference/helm_cli/getting-started-with-helm-on-openshift-container-platform.html)
+- Install Db2 or Oracle database. For more information about the database versions, see [Software Product Compatibility Reports.](https://www.ibm.com/software/reports/compatibility/clarity/index.html) Ensure that the database is accessible from within the cluster. For more information about the database time zone considerations, see [Time zone considerations.](#time-zone-considerations)
+- Install MQ or any other JMS server. For more information about the system requirements, see [Software Product Compatibility Reports.](https://www.ibm.com/software/reports/compatibility/clarity/index.html) Ensure that the MQ server is accessible from within the cluster.
+- Load the container images to the appropriate container registry. The default images are available in the IBM Entitled Registry. When you are installing the Helm chart, if you want to automatically pull the images, use image pull secret.  Alternatively, you can use customized images.
 - Configure container registry and container image to pull them to all Kubernetes worker nodes.
 - Create a Persistent Volume with access mode as 'Read write many' and having a minimum of 10 GB hard disk space.
 - [Create a Secret](#creating-a-secret) with the datasource connectivity details.
@@ -30,6 +29,8 @@ Before deploying Sterling Order Management Software, review and complete the fol
 - Install PodDisruptionBudget.
 
   The PodDisruptionBudget ensures that a certain number or percentage of pods with an assigned label are not voluntarily evicted at any point in time. For more information about PodDisruptionBudget, see [Disruptions](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/) and [Specifying a disruption budget for your application](https://kubernetes.io/docs/tasks/run-application/configure-pdb/).
+
+**Note:** oc commands are interchangeable with kubectl
 
 ## Creating a Secret
 
@@ -59,7 +60,7 @@ To create a Secret, complete the following steps:
 3. Run the following command:
 
      ```sh
-       kubectl create -f <sample_secret_file>.yaml  -n <namespace>
+       oc create -f <sample_secret_file>.yaml  -n <namespace>
 
      ```
 
@@ -208,6 +209,7 @@ The following table describes the configurable parameters that are applicable fo
 | `appserver.config.libertyServerXml`                                               | Provide the custom server.xml for Liberty. For more information about the custom server.xml, see [Customizing server.xml for Liberty](customizing-server.xml-for-Liberty).                                                                                                                        |
 | `appserver.livenessCheckBeginAfterSeconds`                                        | Specify the approximate wait time in seconds to begin the liveness check.                                                                                                                                                      | `900`                                                    |
 | `appserver.livenessFailRestartAfterMinutes`                                       | Specify the approximate time period in minutes after which the server restarts, if liveness check keeps failing for this period.                                                                                                | `10`                                                     |
+| `appserver.terminationGracePeriodSeconds`                                | Specify the time period in seconds allowed for the pod to terminate gracefully, after which the processes running in the pod will be forcibly terminated.                                                                                                 | 60                                                       |
 | `appserver.service.http.port`                                                     | Specify to the HTTP container port.                                                                                                                                                                                      | `9080`                                                   |
 | `appserver.service.https.port`                                                    | Specify to the HTTPS container port.                                                                                                                                                                                     | `9443`                                                   |
 | `appserver.service.annotations`                                                   | Specify the additional annotations for service resource.                                                                                                                                                              |
@@ -239,6 +241,7 @@ The following table describes the configurable parameters that are applicable fo
 | `omserver.common.replicaCount`                                                    | Specify the number of agent server instances to be deployed in common.                                                                                                                                       |
 | `omserver.common.resources`                                                       | Specify the CPU and memory resource requests and limits in common.                                                                                                                                                              | Memory: `1024Mi`, CPU: `0,5`                             |
 | `omserver.common.readinessFailRestartAfterMinutes`                                | Specify the approximate time period in minutes after which the agent restarts if readiness check keeps failing for this period.                                                                                                 | 10                                                       |
+| `omserver.common.terminationGracePeriodSeconds`                                | Specify the time period in seconds allowed for the pod to terminate gracefully, after which the processes running in the pod will be forcibly terminated.                                                                                                 | 60                                                       |
 | `omserver.common.podLabels`                                                       | Specify the custom labels for agent pods.                                                                                                                                                                          |
 | `omserver.common.tolerations`                                                     | Specify tolerations for agent server pods in accordance with Kubernetes **PodSpec.tolerations**.                                                       |
 | `omserver.common.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`     | Configure node affinity for the agent server pods in accordance with Kubernetes **PodSpec.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution**. For more information about affinity and tolerations, see [Configuring affinity and tolerations.](#configuring-affinity-and-tolerations)                                                                        |
@@ -280,7 +283,7 @@ The following table describes the configurable parameters that are applicable fo
 | `global.database.datasourceName`                                                  | Specify the name for the external datasource.                                                                                                                                                                                  | jdbc or OMDS                                                |
 | `global.database.systemPool`                                                      | Specify whether the database is used as system pool.                                                                                                                                                                                         | true                                                     |
 | `global.database.schema`                                                          | Specify the database schema name. For `Db2` it is defaulted as `global.database.dbname` and for `Oracle` it is defaulted as `global.database.user`.                                                                         |
-| `global.database.ssl`                                                             | Indicates the SSL connection for Db2. If you set the value to 'true', ensure to specify the Db2 SSL port number under global.database.port. The default Db2 SSL port number is 50001.   | false     
+| `global.database.ssl`                                                             | Indicates the SSL connection for Db2. If you set the value to 'true', ensure to specify the Db2 SSL port number under global.database.port. The default Db2 SSL port number is 50001.   | false
 | `global.serviceAccountName`                                                       | Specify the name of the service account that is used for deployment.                                                                                                                                                                                      |
 | `global.customerOverrides`                                                        | Provide an array of customer override properties as `key=value`.                                                                                                                                                     |
 | `global.envs`                                                                     | Provide an array of environment variables as Kubernetes `EnvVars` objects.                                                                                                                                            |
@@ -353,11 +356,11 @@ For example:
 appserver:
   replicaCount: 1
   image:
-    tag: 10.0.0.23
+    tag: 10.0.0.26
     pullPolicy: IfNotPresent
     names:
       - name: om-app
-        tag: 10.0.0.23
+        tag: 10.0.0.26
       - name: om-app-isccs_sbc
       - name: om-app-sma_wsc
         applications:
@@ -417,7 +420,7 @@ Configure the following parameters of values.yaml:
   2. Run the following command to create a secret with the name `<Release-name>-ingress-secret` by using the key and certificate files:
 
      ```sh
-     kubectl create secret tls <Release-name>-ingress-secret --key <file containing key> --cert <file containing certificate> -n <namespace>
+     oc create secret tls <Release-name>-ingress-secret --key <file containing key> --cert <file containing certificate> -n <namespace>
      ```
 
   3. Set the secret name as the value under `appserver.ingress.ssl.secretname`.
@@ -467,7 +470,7 @@ To configure IBM MQ, complete the following steps:
 2. Create a ConfigMap to store the IBM MQ bindings. For example, run the following command to create a ConfigMap for the  `.bindings` file.
 
     ```sh
-    kubectl create configmap <config map name> --from-file=<path_to_.bindings_file> -n <namespace>
+    oc create configmap <config map name> --from-file=<path_to_.bindings_file> -n <namespace>
     ```
 
 3. Specify the ConfigMap in `global.mq.bindingConfigName`.
@@ -566,7 +569,7 @@ The Helm chart requires a `PodSecurityPolicy` to be bound to the target namespac
 Custom PodSecurityPolicy definition:
 
 ```yaml
-apiVersion: extensions/v1beta1
+apiVersion: policy/v1beta1
 kind: PodSecurityPolicy
 metadata:
   annotations:
@@ -613,7 +616,7 @@ spec:
 To create a custom `PodSecurityPolicy`, create a yaml file with the custom `PodSecurityPolicy` definition and run the following command:
 
 ```sh
-kubectl create -f <custom_psp.yaml>
+oc create -f <custom_psp.yaml>
 ```
 
 ### Sample ClusterRole and RoleBinding definitions
@@ -655,12 +658,14 @@ Replace the `<namespace>` definition with the namespace of the target environmen
 To create a custom `ClusterRole` and `RoleBinding`, create a yaml file with the custom `ClusterRole` and `RoleBinding` definition and run the following command:
 
 ```sh
-kubectl create -f <custom_psp_role_and_binding.yaml>
+oc create -f <custom_psp_role_and_binding.yaml>
 ```
 
 ## Red Hat OpenShift SecurityContextConstraints Requirements
 
 The Helm chart is verified with the predefined `SecurityContextConstraints` named [`ibm-anyuid-scc.`](https://ibm.biz/cpkspec-scc) Alternatively, you can use a custom `SecurityContextConstraints.` Ensure that you bind the `SecurityContextConstraints` resource to the target namespace prior to installation.
+
+### SecurityContextConstraints Requirements
 
 Custom SecurityContextConstraints definition:
 
@@ -688,7 +693,7 @@ readOnlyRootFilesystem: false
 requiredDropCapabilities:
   - ALL
 runAsUser:
-  type: MustRunAsNonRoot
+  type: MustRunAsRange
 seccompProfiles:
   - docker/default
 seLinuxContext:
@@ -711,7 +716,7 @@ priority: 0
 To create a custom `SecurityContextConstraints`, create a yaml file with the custom `SecurityContextConstraints` definition and run the following command:
 
 ```sh
-kubectl create -f <custom-scc.yaml>
+oc create -f <custom-scc.yaml>
 ```
 
 ## Installing the chart
@@ -736,10 +741,10 @@ Run the following command to verify that the log file does not contain any error
 
 ```sh
 # Run the following command to retrieve the list of pods in the deployment namespace and identify the application server pod.
-kubectl get pods -n <namespace>
+oc get pods -n <namespace>
 
 # Run the following command to view the list of application server pod:
-kubectl logs -f -n <namespace> <pod_name>
+oc logs -f -n <namespace> <pod_name>
 ```
 
 ## Air gap Installation
@@ -760,7 +765,7 @@ For additional help on `cloudctl case save`, run `cloudctl case save -h`.
 
 ### Setting credentials to pull or push certified container images
 
-To set up the credentials for downloading the certified container images from IBM Cloud Registry to your local registry, run the appropriate command.
+To set up the credentials for downloading the certified container images from IBM Entitled Registry to your local registry, run the appropriate command.
 
 - For local registry without authentication
 
@@ -931,7 +936,7 @@ To customize server.xml for the Liberty application server, complete the followi
 2. Run the following command to create a ConfigMap with the custom server.xml file:
 
    ```sh
-   kubectl create configmap <config map name> --from-file=<path to custom server.xml> -n <namespace>
+   oc create configmap <config map name> --from-file=<path to custom server.xml> -n <namespace>
    ```
 
 3. Specify the name of the ConfigMap in the `appserver.config.libertyServerXml` parameter of values.yaml.
