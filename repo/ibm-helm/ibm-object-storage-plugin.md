@@ -290,9 +290,12 @@ Install the IBM Cloud Object Storage plug-in with a Helm chart to set up pre-def
           ```
 7.  Install the IBM Cloud Object Storage plug-in. When you install the plug-in, pre-defined storage classes are added to your cluster.
 
-    **Important note:** The bucket access policy configuration, to configure authorised ips, has been enabled only for VPC-Gen2 clusters. Currently, this feature is not supported on IKS Classic.
+    **Important note1:** The bucket access policy configuration, to configure authorised ips, has been enabled only for VPC-Gen2 clusters. Currently, this feature is not supported on IKS Classic.
     The feature has been enabled by default for VPC-Gen2 clusters in **eu-fr2** region.
     For other regions, to enable bucket access policy, pass the flag `--set bucketAccessPolicy=true` to helm ibmc install command.
+    
+    **Important note2:** If bucketAccessPolicy is set to true, the s3fs plugin gets installed in kube-system namespace. 
+    This is because, to enable access policy for buckets, plugin needs access to `cluster-info` config-map which lies in kube-system ns.
 
     Example: Install chart from helm registry, without any limitation to access specific Kubernetes secrets:
 
