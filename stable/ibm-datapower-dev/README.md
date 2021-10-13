@@ -39,7 +39,7 @@ The following examples create Secrets with different values, but result in an ad
 -  `kubectl create secret generic admin-credentials --from-literal=password-hashed='$1$12345678$8.nskQfP4gQ8tk5xw6Wa8/'`
 
 These two examples also result in Secrets with different values but identical admin credentials
--  `kubectl create secret generic admin-credentials --from-literal=password=hunter2 --from-literal=salt=NaCl --from-literal=method=sha256`  
+-  `kubectl create secret generic admin-credentials --from-literal=password=hunter2 --from-literal=salt=NaCl --from-literal=method=sha256`
 -  `kubectl create secret generic admin-credentials --from-literal=password-hashed='$5$NaCl$aOrRVimQNvZ2ZLjnAyMvT3WgaUEXoWgwkgyBrhwIg04'`
   Notice that, when setting `password-hashed`, the value must be surrounded by single-quotes
 
@@ -63,14 +63,14 @@ This chart also defines a custom PodSecurityPolicy which can be used to finely c
     kind: PodSecurityPolicy
     metadata:
       annotations:
-        kubernetes.io/description: "This policy allows pods to run with 
+        kubernetes.io/description: "This policy allows pods to run with
           any UID and GID, but preventing access to the host."
       name: ibm-datapower-psp
     spec:
       allowPrivilegeEscalation: true
       fsGroup:
         rule: RunAsAny
-      requiredDropCapabilities: 
+      requiredDropCapabilities:
       - MKNOD
       allowedCapabilities:
       - SETPCAP
@@ -85,7 +85,7 @@ This chart also defines a custom PodSecurityPolicy which can be used to finely c
       - SETGID
       - NET_BIND_SERVICE
       - SYS_CHROOT
-      - SETFCAP 
+      - SETFCAP
       runAsUser:
         rule: RunAsAny
       seLinux:
@@ -99,8 +99,8 @@ This chart also defines a custom PodSecurityPolicy which can be used to finely c
       - secret
       - downwardAPI
       - persistentVolumeClaim
-      forbiddenSysctls: 
-      - '*' 
+      forbiddenSysctls:
+      - '*'
     ```
 
 ### SecurityContextConstraints Requirements
@@ -336,7 +336,7 @@ The helm chart has the following Values that can be overriden using the install 
 | Value                                 | Description                                   | Default             |
 |---------------------------------------|-----------------------------------------------|---------------------|
 | `datapower.replicaCount`              | The replicaCount for the deployment           | 1                   |
-| `datapower.image.repository`          | The image to use for this deployment          | ibmcom/datapower    |
+| `datapower.image.repository`          | The image to use for this deployment          | icr.io./integration/datapower/datapower-limited    |
 | `datapower.image.tag`                 | The image tag to use for this deployment      | 2018.4.1.10.318002  |
 | `datapower.image.pullPolicy`          | Determines when the image should be pulled    | IfNotPresent        |
 | `datapower.image.pullSecret`          | Secret used for pulling images                | N/A                 |
@@ -392,7 +392,7 @@ See NOTES.txt associated with this chart for verification instructions
 To uninstall/delete the `my-release` deployment:
 ```bash
 $ helm delete my-release --tls
-```  
+```
 
 To completely uninstall/delete the `my-release` deployment:
 ```bash
@@ -428,7 +428,7 @@ See NOTES.txt associated with this chart for verification instructions
 
 > **Tip**: You can use the default [values.yaml](values.yaml)
 
-[View the official IBM DataPower Gateway for Developers Docker Image in Docker Hub](https://hub.docker.com/r/ibmcom/datapower/)
+Get your official IBM DataPower Gateway for Developers Docker Image from IBM Container Registry at `icr.io/integration/datapower/datapower-limited`. Starting in 2018.4.1.18, this image will no longer be published to Docker Hub.
 
 [View the IBM DataPower Gateway Product Page](https://www.ibm.com/products/datapower-gateway/resources)
 
