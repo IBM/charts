@@ -7,6 +7,9 @@ The IBM Operator Catalog is an index of operators available to automate deployme
 This chart deploys the IBM Operator Catalog for Cluster Administrators to discover and install IBM operators via the OperatorHub embedded in OpenShift.
 
 - IBM Operator Catalog : curated catalog of operators to deploy select [IBM Cloud Paks](https://www.ibm.com/support/knowledgecenter/en/cloudpaks) and standalone container software
+   Beginning with OpenShift version 4.9, a Catalog can be OCP version specific.
+
+This chart will deploy the `latest` tagged image prior to OCP version 4.9 and deploy the Kube major.minor version tagged image (ie `v1.22` ) dynamically starting with 4.9 clusters
 
 For step by step operator installation instruction, including options, see ['Installing Operators from the OperatorHub'](https://docs.openshift.com/container-platform/4.4/operators/olm-adding-operators-to-cluster.html#olm-installing-operators-from-operatorhub_olm-adding-operators-to-a-cluster)
 
@@ -72,8 +75,8 @@ See the instructions (from NOTES.txt within chart) after the helm installation c
 
 The Helm chart contains a Helm test that will automate the validation process. This test requires the creation of a ServiceAccount, Role, and RoleBinding to allow the test to access the `openshift-marketplace` namespace. Replace `{{ NAMESPACE }}` with the namespace where you installed the IBM Operator Catalog.
 
-
 Create a ServiceAccount
+
 ```
 apiVersion: v1
 kind: ServiceAccount
@@ -83,8 +86,9 @@ metadata:
 ```
 
 Create a RoleBinding
+
 ```
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata: 
   name: ibm-operator-catalog-enablement-rb
@@ -100,6 +104,7 @@ subjects:
 ```
 
 Create a Role
+
 ```
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
