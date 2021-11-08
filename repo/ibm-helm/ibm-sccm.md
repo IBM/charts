@@ -1,4 +1,4 @@
-# IBM Sterling Control Center Monitor V6.2.0.0
+# IBM Sterling Control Center Monitor V6.2.1.0
 
 ## Introduction
 
@@ -21,7 +21,7 @@ This chart deploys IBM Sterling Control Center Monitor on a container management
 Before you install IBM Certified Container Software for IBM Sterling Control Center Monitor, ensure that the installation files are available on your client system.
 
 #### Downloading the IBM Certified Container Software helm chart from IBM Chart repository
-You can download the IBM CCS for IBM Sterling Control Center Monitor helm chart from [IBM Public chart repository](https://www.ibm.com/links?url=https://github.com/IBM/charts/tree/master/repo/ibm-helm/ibm-sccm-1.0.4.tgz).
+You can download the IBM CCS for IBM Sterling Control Center Monitor helm chart from [IBM Public chart repository](https://www.ibm.com/links?url=https://github.com/IBM/charts/tree/master/repo/ibm-helm/ibm-sccm-1.0.5.tgz).
 
 
 ####  Downloading the IBM Certified Container Software image from IBM Entitled Registry for AirGap Environment
@@ -31,7 +31,7 @@ You can download the container image from IBM Entitled registry by using either 
 - Download latest version of cloudctl CLI from [Cloud Pak CLI](https://www.ibm.com/links?url=https://github.com/IBM/cloud-pak-cli/releases). 
 - Download and extract the CASE bundle file
 ```
-cloudctl case save -t 1 --case https://github.com/IBM/cloud-pak/raw/master/repo/case/ibm-sccm/1.0.2/ibm-sccm-1.0.2.tgz --outputdir download_dir/ && tar -xf download_dir/ibm-sccm-1.0.2.tgz
+cloudctl case save -t 1 --case https://github.com/IBM/cloud-pak/raw/master/repo/case/ibm-sccm/1.0.3/ibm-sccm-1.0.3.tgz --outputdir download_dir/ && tar -xf download_dir/ibm-sccm-1.0.3.tgz
 ```
 > **Note**: download_dir is the output directory in which the BM Sterling Control Center Monitor resources are placed. The output directory is created if it does not exist. You can choose an arbitrary name for --outputdir if required.` 
 
@@ -78,11 +78,11 @@ cloudctl case launch \
   * `docker/podman login -u cp -p <entitled_key> cp.icr.io`
 
 - Pull the container image from IBM Entitled registry by running the following command:
-  * `docker/podman pull cp.icr.io/cp/ibm-scc/ibmscc:6.2.0.0_iFix10`
+  * `docker/podman pull cp.icr.io/cp/ibm-scc/ibmscc:6.2.1.0`
 
 - Tag and push the container image into local repository by running the following commands: 
-  * `docker/podman tag cp.icr.io/cp/ibm-scc/ibmscc:6.2.0.0_iFix10 <LOCAL_DOCKER_REGISTRY_REPOSITORY>/ibm-scc/ibmscc:6.2.0.0_iFix10`
-  * `docker/podman push <LOCAL_DOCKER_REGISTRY_REPOSITORY>/ibm-scc/ibmscc:6.2.0.0_iFix10`
+  * `docker/podman tag cp.icr.io/cp/ibm-scc/ibmscc:6.2.1.0 <LOCAL_DOCKER_REGISTRY_REPOSITORY>/ibm-scc/ibmscc:6.2.1.0`
+  * `docker/podman push <LOCAL_DOCKER_REGISTRY_REPOSITORY>/ibm-scc/ibmscc:6.2.1.0`
 
 ### Tools (Prereq #2)
 
@@ -395,7 +395,7 @@ This chart uses the following resources by default:
 ## Agreement to IBM Control Center License
 
 You must read the IBM Sterling Control Center License agreement terms before installation, using the below link:
-[License] http://www-03.ibm.com/software/sla/sladb.nsf (L/N: L-BCHE-BLPGYB)
+[License] http://www-03.ibm.com/software/sla/sladb.nsf (L/N: L-KNAN-C6VGE3)
 
 ## Installing
 
@@ -408,7 +408,7 @@ $ helm repo list
 
 # If you do not have the helm repository, add it using the below command
 
-$ helm repo add ibm-sccm-1.0.2.tgz <helm repository>
+$ helm repo add ibm-sccm-1.0.5.tgz <helm repository>
 
 # This below command will show all the charts related to the repository
 
@@ -416,10 +416,10 @@ $ helm search <helm repository>
 
 # Finally install the respective chart
 
-$ helm install my-release -f values.yaml ibm-sccm-1.0.2.tgz
+$ helm install my-release -f values.yaml ibm-sccm-1.0.5.tgz
 ```
 
-The command deploys ibm-sccm-1.0.2.tgz chart on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured in values.yaml file during installation.
+The command deploys ibm-sccm-1.0.5.tgz chart on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured in values.yaml file during installation.
 
 > **Tip**: List all releases using `helm list`
 
@@ -556,13 +556,13 @@ Specify each parameter in values.yaml to `helm install`. For example,
 ```bash
 helm install my-release \
   -f values.yaml \
-  ibm-sccm-1.0.2.tgz
+  ibm-sccm-1.0.5.tgz
 ```
 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. You can create a copy of values.yaml file e.g. my-values.yaml and edit the values that you need to override. Use the my-values.yaml file for installation. For example,
 
 ```bash
-helm install <release-name> -f my-values.yaml ibm-sccm-1.0.2.tgz
+helm install <release-name> -f my-values.yaml ibm-sccm-1.0.5.tgz
 ```
 > **Tip**: You can use the default [values.yaml](values.yaml)
 
@@ -595,7 +595,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-sccm-1.0.2.tgz
+helm upgrade my-release -f values.yaml ibm-sccm-1.0.5.tgz
 ```
 
 ## Rollback the Chart
