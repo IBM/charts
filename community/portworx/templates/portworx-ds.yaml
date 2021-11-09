@@ -21,6 +21,7 @@
 {{- $internalKVDB := .Values.internalKVDB | default false }}
 {{- $changePortRange := .Values.changePortRange | default false }}
 {{- $csi := .Values.csi | default false }}
+{{- $telemetry := .Values.telemetry | default false }}
 
 {{- $etcdSecret := .Values.etcd.secret | default "none" }}
 {{- $etcdEndPoints := .Values.kvdb }}
@@ -256,6 +257,65 @@ spec:
               mountPath: /var/run/crio
             - name: crioconf
               mountPath: /etc/crictl.yaml
+          {{- if eq $telemetry true }}
+        - name: telemetry
+          image: purestorage/ccm-service:3.0.3
+          imagePullPolicy: Always
+          args:
+            ["-Dserver.rest_server.core_pool_size=2"]
+          resources:
+            limits:
+              memory: 512Mi
+            requests:
+              memory: 256Mi
+          env:
+            - name: configFile
+              value: /etc/ccm/ccm.properties
+            - name: PX_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: controller_sn
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+          livenessProbe:
+            httpGet:
+              host: 127.0.0.1
+              path: /1.0/status
+              port: 1970
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              host: 127.0.0.1
+              path: /1.0/status
+              port: 1970
+            periodSeconds: 30
+          securityContext:
+            privileged: true
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /var/cache
+              name: varcache
+            - mountPath: /etc/timezone
+              name: timezone
+            - mountPath: /etc/localtime
+              name: localtime
+            - mountPath: /etc/ccm
+              name: ccm-config
+            - mountPath: /var/cores
+              name: cores
+            - mountPath: /etc/pwx
+              name: etcpwx
+            - mountPath: /var/run/log
+              name: journalmount1
+              readOnly: true
+            - mountPath: /var/log
+              name: journalmount2
+              readOnly: true
+          {{- end}}
           {{- if eq $csi true }}
         - name: csi-node-driver-registrar
           imagePullPolicy: Always
@@ -344,3 +404,22 @@ spec:
         - name: crioconf
           hostPath:
             path: /etc/crictl.yaml
+        {{- if eq $telemetry true }}
+        - name: varcache
+          hostPath:
+            path: /var/cache
+        - name: timezone
+          hostPath:
+            path: /etc/timezone
+        - name: localtime
+          hostPath:
+            path: /etc/localtime
+        - name: ccm-config
+          configMap:
+            items:
+              - key: ccm.properties
+                path: ccm.properties
+              - key: location
+                path: location
+            name: px-telemetry-config
+        {{- end}}       
