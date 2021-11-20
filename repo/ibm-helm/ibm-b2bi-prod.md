@@ -1,4 +1,4 @@
-# IBM Sterling B2B Integrator Enterprise Edition v6.1.0.3
+# IBM Sterling B2B Integrator Enterprise Edition v6.1.0.4
 ## Introduction
 
 IBM Sterling B2B Integrator helps companies integrate complex B2B EDI processes with their partner communities. Organizations get a single, flexible B2B platform that supports most communication protocols, helps secure your B2B network and data, and achieves high-availability operations. The offering enables companies to reduce costs by consolidating EDI and non-EDI any-to-any transmissions on a single B2B platform and helps automate B2B processes across enterprises, while providing governance and visibility over those processes.
@@ -328,7 +328,7 @@ Depending on the capacity of the kubernetes worker node and database network con
 Parameter                                      | Description                                                          | Default 
 -----------------------------------------------| ---------------------------------------------------------------------| -------------
 `global.image.repository`                      | Repository for B2B docker images                                     | 
-`global.image.tag          `                   | Docker image tag                                                     | `6.1.0.3`
+`global.image.tag          `                   | Docker image tag                                                     | `6.1.0.4`
 `global.image.digest          `                | Docker image digest. Takes precedence over tag                       | `sha256:c0d8808e4a68b3d952ed738a586dd34677d386edc50b4dc7388b2038c4a76675`
 `global.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `global.image.pullSecret `         			   | Pull secret for repository access                                    | 
@@ -614,7 +614,7 @@ Parameter                                      | Description                    
 `test.image.pullPolicy`                        | Pull policy for helm test image repository                           | `IfNotPresent`
 `purge.enabled`                                | Enable external purge job                                            | 'false'
 `purge.image.repository          `             | External purge docker image repository                               | `purge`
-`purge.image.tag          `                    | External purge image tag                                             | `6.1.0.3`
+`purge.image.tag          `                    | External purge image tag                                             | `6.1.0.4`
 `purge.image.digest          `                 | External purge image digest. Takes precedence over tag               | `sha256:314ff91441d218032d667fa56435b132960a7c6fb20bbd60d35eb0a56af25672`
 `purge.image.pullPolicy`                       | Pull policy for external purge docker image                          | `IfNotPresent`
 `purge.image.pullSecret`                       | Pull secret for repository access                                    | 
