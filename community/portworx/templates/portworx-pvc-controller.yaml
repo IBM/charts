@@ -50,7 +50,7 @@ rules:
   verbs: ["create"]
 - apiGroups: [""]
   resources: ["configmaps"]
-  verbs: ["get", "create", "update"]
+  verbs: ["get", "create", "update", "list", "watch"]
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
@@ -96,26 +96,20 @@ spec:
       - command:
         - kube-controller-manager
         - --leader-elect=true
-        - --bind-address=0.0.0.0
+        - --secure-port=9031
         - --controllers=persistentvolume-binder,persistentvolume-expander
         - --use-service-account-credentials=true
-        - --leader-elect-resource-lock=endpoints
+        - --leader-elect-resource-lock=configmaps
         - --leader-elect-resource-name=portworx-pvc-controller
         image: "{{ template "px.getk8sImages" . }}/kube-controller-manager-amd64:{{ template "px.kubernetesVersion" . }}"
+        imagePullPolicy: Always
         livenessProbe:
           failureThreshold: 8
           httpGet:
             host: 127.0.0.1
             path: /healthz
-            port: 10252
-            scheme: HTTP
-        readinessProbe:
-          failureThreshold: 8
-          httpGet:
-            host: 127.0.0.1
-            path: /healthz
-            port: 10252
-            scheme: HTTP
+            port: 9031
+            scheme: HTTPS
           initialDelaySeconds: 15
           timeoutSeconds: 15
         name: portworx-pvc-controller-manager
