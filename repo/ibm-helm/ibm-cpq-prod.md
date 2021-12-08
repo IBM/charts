@@ -2,23 +2,19 @@
 IBM Sterling Configure Price Quote Software
 ===========================================
 
-## What's New in this release - v10.0.0.20
-* Upgraded Order Management to FP25, FieldSales to FP16 and VisualModeler/Configurator to FP20
-* Support for air gap Installation
-* Implemented enhanced security for cleartext sensitive fields
-* Upgraded Redhat to Universal Base Image v8 for Base Containers
-* Upgraded Liberty Server to v20 for Application Containers
-* Upgraded Helm client to 3.6x
-* Container Images are now signed and certified for enhanced security
+## What's New in this release - v10.0.0.22
+* Upgraded Order Management to FP27, FieldSales to FP16 and VisualModeler/Configurator to FP22
+* Defect Fixes
+* Security Fixes
 * Qualified on the 4.4, 4.5, and 4.6 Red Hat OpenShift Container Platform versions
 
 ## Introduction
-* The v10.0.0.20 release of IBM Sterling Configure Price Quote is built and deployed on OpenShift 4.6.
+* The v10.0.0.22 release of IBM Sterling Configure Price Quote is built and deployed on OpenShift 4.6.
 * Red Hat OpenShift Container Platform 4.4+ has a feature of catalog experience for installation of helm  charts.
 Helm charts which are onboarded to the Red Hat Helm Repo will appear in the OpenShift Developer Catalog out-of-the-box.
 This will facilitate the user to deploy Helm Charts from the Web UI , rather than CLI.
 This feature is available in  Developer Catalog -> Add -> From Catalog -> Check Helm Chart Filter.
-* This document describes how to deploy IBM Sterling Configure Price Quote Software v10.0.0.20. This helm chart does not install database server. Database need to be setup and configured separately for IBM Sterling Configure Price Quote Software.
+* This document describes how to deploy IBM Sterling Configure Price Quote Software v10.0.0.22. This helm chart does not install database server. Database need to be setup and configured separately for IBM Sterling Configure Price Quote Software.
 
 Note: This helm chart supports deployment of IBM Sterling Configure Price Quote Software with DB2 or Oracle database.
 
@@ -42,6 +38,13 @@ Note: This helm chart supports deployment of IBM Sterling Configure Price Quote 
 * Added support to execute VisualModeler Database SQL migration script using existing datasetup job.
 * The Applications Pods run with a arbitrary user id, inside the containers.
 * The Pod logs are externalized in the repository.
+* Support for air gap Installation
+* Implemented enhanced security for cleartext sensitive fields
+* Upgraded Redhat to Universal Base Image v8 for Base Containers
+* Upgraded Liberty Server to v20 for Application Containers
+* Upgraded Helm client to 3.6x
+* Container Images are now signed and certified for enhanced security
+
 
 ## Checklist
 * Use below checklist before launching the CPQ applications
@@ -70,11 +73,11 @@ Note: This helm chart supports deployment of IBM Sterling Configure Price Quote 
 * Field Sales App - `cpq-ifs-app` , runs Field Sales application on liberty.
 * Field Sales Agent - `cpq-ifs-agent`, used for integration / data job with Field Sales.
 * Field Sales Base - `cpq-ifs-base`, a FieldSales base container used to generate customized images.
-* Image tag for this release - For configurator - `10.0.0.20-amd64` , For Field Sales - `10.0.0.16-amd64`
+* Image tag for this release - For configurator - `10.0.0.22-amd64` , For Field Sales - `10.0.0.16-amd64`
 
 ## Chart Details
 
-This chart will do the following:
+For VisualModeler and COnfigurator applications, this chart will do the following:
 * Create a deployment `<release name>-ibm-cpq-prod-vmappserver` for IBM Sterling Visual Modeler(VM) application server with 1 replica by default. 
 * Create a deployment `<release name>-ibm-cpq-prod-ocappserver` for IBM Sterling Omni Configurator(OC) application server with 1 replica by default. 
 * Create a service `<release name>-ibm-cpq-prod-vmappserver`. This service is used to access the VM application server using a consistent IP address.
@@ -84,6 +87,7 @@ This chart will do the following:
 * Create a ConfigMap `<release name>-ibm-cpq-prod-oc-config`. This is used to provide OC and Liberty configuration.
 
 **Note** : `<release name>` refers to the name of the helm release and `<server name>` refers to the app server name.
+For FieldSales application, please go to 'IBM Sterling FieldSales' section below.
 
 ## Prerequisites
 
@@ -573,7 +577,7 @@ metadata:
   namespace: <namespace>
 rules:
 - apiGroups: [""]
-  resources: ["secrets"]
+  resources: ["secrets","configmaps","persistentvolumeclaims"]
   verbs: ["get", "watch", "list","create","delete","patch","update"]
 
 ---
@@ -893,7 +897,7 @@ runtime:
 ```
 Then run helm install command to install database. 
   ```
-   helm install my-release [chartpath] --timeout 3600 
+   helm install my-release --set global.license=true [chartpath] --timeout 3600 
   ```
 
 ### The following table lists the configurable parameters for the VM and OC charts.
@@ -1214,7 +1218,7 @@ logger content and re-install OC.
 ### Invoking Custom code on Omni Configurator startup
 In order to invoke custom code on Omni Configurator server startup one can use ocpostappready.sh present in /charts/ibm-cpq-prod/scripts folder.
 
-# IBM Sterling Field Sales Edition v10.0.0.16
+# IBM Sterling FieldSales v10.0.0.16
 =======================================================================
 
 ## Introduction
