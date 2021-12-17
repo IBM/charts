@@ -5,18 +5,17 @@ The [IBM® Operational Decision Manager](https://www.ibm.com/us-en/marketplace/o
 
 ## Introduction
 
-ODM is a tool for capturing, automating, and governing repeatable business decisions. You identify situations about your business and then automate the actions to take as a result of the insight you gained about your policies and customers. For more information, see [ODM in knowledge center](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/welcome/kc_welcome_odmV.html).
+ODM is a tool for capturing, automating, and governing repeatable business decisions. You identify situations about your business and then automate the actions to take as a result of the insight you gained about your policies and customers. For more information, see [ODM in knowledge center](https://www.ibm.com/docs/en/odm/8.11.0).
 
 ## Chart Details
 
 The `ibm-odm-prod` Helm chart is a package of preconfigured Kubernetes resources that bootstrap an ODM deployment on a Kubernetes cluster. Configuration parameters are available to customize most aspects of the deployment. The default values serve as examples but are appropriate to a production environment and can be used as is.
 
-The `ibm-odm-prod` chart deploys five containers corresponding to the five ODM services:
+The `ibm-odm-prod` chart deploys five containers corresponding to the four ODM services:
 - Decision Center Business Console
-- Decision Center Enterprise Console
 - Decision Server Console
 - Decision Server Runtime
-- Decision Server Runner
+- Decision Runner
 
 The `ibm-odm-prod` chart supports the following options for persistence:
 
@@ -32,7 +31,7 @@ The following architectures are supported:
 
 ## Prerequisites
 
-- Kubernetes 1.11+ with Beta APIs enabled
+- Kubernetes 1.19+ with Beta APIs enabled
 - Helm 3.2 and later version
 - One PersistentVolume needs to be created prior to installing the chart if internalDatabase.persistence.enabled=true and internalDatabase.persistence.dynamicProvisioning=false. In that case, it is required that the securityContext.fsGroup 26 has read and write permissions on the postgres data directory. You can update the permissions by mounting the volume temporarily or accessing the host machine and performing the following commands:
 
@@ -47,17 +46,17 @@ Ensure you have a good understanding  of the underlying concepts and technologie
 - Helm commands
 - Kubernetes command line tool
 
-Before you install ODM for production, you need to gather all the configuration information that you will use for your release. For more details, refer to the [ODM for production configuration parameters](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.kube/topics/ref_parameters_prod.html).
+Before you install ODM for production, you need to gather all the configuration information that you will use for your release. For more details, refer to the [ODM for production configuration parameters](https://www.ibm.com/docs/en/odm/8.11.0?topic=reference-odm-production-configuration-parameters).
 
-If you want to provide customized user access, read [Configuring user access](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.kube/topics/tsk_config_user_access.html)
+If you want to provide customized user access, read [Configuring user access](https://www.ibm.com/docs/en/odm/8.11.0?topic=production-configuring-user-access)
 
-If you want to use a custom security certificate, read [Defining the security certificate](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.kube/topics/tsk_replace_security_certificate.html)
+If you want to use a custom security certificate, read [Defining the security certificate](https://www.ibm.com/docs/en/odm/8.11.0?topic=production-defining-security-certificate)
 
- If you want to create your own decision services from scratch, you need to install Rule Designer from the [Eclipse Marketplace](https://marketplace.eclipse.org/content/ibm-operational-decision-manager-developers-v-8105-rule-designer).
+ If you want to create your own decision services from scratch, you need to install Rule Designer from the [Eclipse Marketplace](https://marketplace.eclipse.org/content/ibm-operational-decision-manager-developers-v-8110-rule-designer).
 
 ### Database Credentials Secret
 
- To preserve sensitive data, you must create a secret that encapsulates the database user and password before you install the Helm release. For details, see the **Before you begin** section in [Installing a Helm release of ODM for production](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.kube/topics/tsk_config_odm_kube.html).
+ To preserve sensitive data, you must create a secret that encapsulates the database user and password before you install the Helm release. For details, refer to [Configuring user access](https://www.ibm.com/docs/en/odm/8.11.0?topic=production-configuring-user-access).
 
  Specify the name of the secret as the value for the parameters `internalDatabase.secretCredentials` or `externalDatabase.secretCredentials`, depending on the type of database you use.
 
@@ -190,7 +189,7 @@ readOnlyRootFilesystem: false
 requiredDropCapabilities:
 - ALL
 runAsUser:
-  type: MustRunAsNonRoot
+  type: MustRunAsRange
 seccompProfiles:
 - docker/default
 seLinuxContext:
@@ -225,16 +224,57 @@ $ oc adm policy add-scc-to-user ibm-odm-scc /
 
 ## Resources Required
 
-### Minimum Configuration
+### Starter Profile
 
-| Service  | CPU Minimum (m) | Memory Minimum (Mi) |
-| ---------- | ----------- | ------------------- |
-| Decision Center | 500           | 1500                  |
-| Decision Runner     | 500           | 512                  |
-| Decision Server Console  | 500           | 512                  |
-| Decision Server Runtime    | 500           | 512                   |
-| **Total**  | **2000** (2CPU)     | **2048** (2Gb)             |
+The default configuration:
 
+| Service  | CPU Request | CPU Limit | Memory Request (Mi) | Memory Limit (Mi) | Replica Count |
+| - | - | - | - | - | - |
+| Decision Center | 0.5 | 2 | 1500 | 4096 | 1 |
+| Decision Runner | 0.5 | 2 | 512 | 4096 | 1 |
+| Decision Server Console | 0.5 | 2 | 512 | 1024 | 1 |
+| Decision Server Runtime | 0.5 | 2 | 512 | 4096 | 1 |
+| **Total**  | **2CPU** | **4CPU** | **3036Mi** | **13Gi** | **/** |
+
+Cluster Node: 1
+Networking speed: 1Gbs
+
+### Custom Configuration
+
+You can customize the CPU and Memory Requests and Limits per container (decisionCenter, decisionRunner, decisionServerRuntime, decisionServerConsole) by using the parameters:
+- `<containerName>.replicaCount` (except for decisionServerConsole where it can only be 1)
+- `<containerName>.resources.limits.cpu`
+- `<containerName>.resources.limits.memory`
+- `<containerName>.resources.requests.cpu`
+- `<containerName>.resources.requests.memory`
+
+> TIP: For stability, it is recommended to define the request limit values equal, especially for Decision Server Runtime.
+
+#### Production Profile
+
+| Service  | CPU Request | CPU Limit | Memory Request (Gi) | Memory Limit (Gi) | Replica Count |
+| - | - | - | - | - | - |
+| Decision Center | 1 | 1 | 4 | 8 | 2 |
+| Decision Runner | 0.5 | 2 | 2 | 2 | 2 |
+| Decision Server Console | 0.5 | 2 | 0.5 | 1 | 1 |
+| Decision Server Runtime | 2 | 2 | 2 | 2 | 3 |
+| **Total**  | **9.5CPU** | **14CPU** | **18.5Gi** | **27Gi** | **/** |
+
+Cluster Node: 2
+Networking speed: 1Gbs
+
+#### HA Profile
+
+| Service  | CPU Request | CPU Limit | Memory Request (Gi) | Memory Limit (Gi) | Replica Count |
+| - | - | - | - | - | - |
+| Decision Center | 2 | 2 | 4 | 16 | 2 |
+| Decision Runner | 0.5 | 4 | 2 | 2 | 2 |
+| Decision Server Console | 0.5 | 2 | 0.5 | 2 | 1 |
+| Decision Server Runtime | 2 | 2 | 4 | 4 | 6 |
+| **Total**  | **17.5CPU** | **26CPU** | **36.5Gi** | **62Gi** | **/** |
+
+Cluster Node: 2
+Networking speed: 1Gbs
 
 ## Installing the Chart
 
@@ -287,7 +327,7 @@ The release is an instance of the `ibm-odm-prod` chart: all the ODM components a
 
 ### Verifying the Chart
 
-Navigate to your release and view the service details. For details, see the **What to do next** section in [Installing a Helm release of ODM for production](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.kube/topics/tsk_config_odm_kube.html).
+Navigate to your release and view the service details. For details, refer to [Completing post-deployment tasks](https://www.ibm.com/docs/en/odm/8.11.0?topic=production-completing-post-deployment-tasks).
 
 ### Uninstalling the Chart
 
@@ -306,12 +346,12 @@ $ kubectl delete pvc <release_name>-odm-pvclaim -n <namespace>
 ## Post-installation Steps
 
 If you have been customizing the default user registry, you will have to synchronize it with the Decision Center database. For details, see
-[Synchronizing users and groups in Decision Center](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.kube/topics/tsk_synchronize_users.html).
+[Synchronizing users and groups in Decision Center](https://www.ibm.com/docs/en/odm/8.11.0?topic=access-synchronizing-users-groups-in-decision-center).
 
 
 ## Configuration
 
-To configure the `ibm-odm-prod` chart, check out the list of available [ODM for production configuration parameters](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.kube/topics/ref_parameters_prod.html).
+To configure the `ibm-odm-prod` chart, check out the list of available [ODM for production configuration parameters](https://www.ibm.com/docs/en/odm/8.11.0?topic=reference-odm-production-configuration-parameters).
 
 ## Storage
 
@@ -343,8 +383,8 @@ On-premise storage options supported for all architectures:
 ## Limitations
 
 The following ODM on premises features are not supported:
-[Features not included](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.kube/topics/con_limitations.html)
+[Features not included](https://www.ibm.com/docs/en/odm/8.11.0?topic=kubernetes-features-not-included-in-odm-certified)
 
 ## Documentation
 
-See [ODM knowledge center](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/welcome/kc_welcome_odmV.html).
+See [ODM on Certified Kubernetes in knowledge center](https://www.ibm.com/docs/en/odm/8.11.0?topic=operational-decision-manager-certified-kubernetes-8110).

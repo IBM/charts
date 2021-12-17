@@ -34,7 +34,7 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
             - matchExpressions:
-              - key: beta.kubernetes.io/arch
+              - key: kubernetes.io/arch
                 operator: In
                 values:
                 {{- if .Values.image.arch }}
@@ -51,7 +51,12 @@ spec:
 {{ include "image.tagOrDigest" (dict "containerName" "odm-decisionrunner" "containerTag" .Values.decisionRunner.tagOrDigest "root" .) | indent 8  }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         resources:
-{{ toYaml .Values.decisionRunner.resources | indent 10 }}
+          requests:
+            cpu: "200m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
 {{ include "odm-security-context" . | indent 8 }}
         command: ["/bin/bash", "-c", "/oidc/run.sh"]
         volumeMounts:
@@ -59,10 +64,8 @@ spec:
             mountPath: /oidc
           - name: redirect-uris
             mountPath: /redirect_uris
-          - name: server-url
-            mountPath: /server_url
-          - name: provider
-            mountPath: /provider
+          - name: registration-url
+            mountPath: /registration-url
           {{- if eq .Values.customization.vault "initcontainer" }}
           - name: oidc-credentials
             mountPath: /oidc-credentials
@@ -91,7 +94,7 @@ spec:
             items:
               - key: redirect-uris
                 path: redirect_uris.properties
-        - name: server-url
+        - name: registration-url
           configMap:
           {{- if not (empty .Values.oidc.redirectUrisRef) }}
             name: {{ .Values.oidc.redirectUrisRef }}
@@ -99,18 +102,8 @@ spec:
             name: {{ template "odm.oidc-redirect-uris-configmap.fullname" . }}
           {{- end }}
             items:
-              - key: server-url
-                path: server_url.properties
-        - name: provider
-          configMap:
-          {{- if not (empty .Values.oidc.redirectUrisRef) }}
-            name: {{ .Values.oidc.redirectUrisRef }}
-          {{- else }}
-            name: {{ template "odm.oidc-redirect-uris-configmap.fullname" . }}
-          {{- end }}
-            items:
-              - key: provider
-                path: provider.properties
+              - key: registration-url
+                path: registration-url.properties
         {{- if eq .Values.customization.vault "initcontainer" }}
         - name: oidc-credentials
           emptyDir: {}
