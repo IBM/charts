@@ -34,6 +34,7 @@ echo "augmented urisToRegister = ${urisToRegister}"
 echo "register OIDC_CLIENT_ID : ${OIDC_CLIENT_ID}"
 export json=$(cat  << EOF
 {
+"token_endpoint_auth_method": "client_secret_basic",
 "client_id":"${OIDC_CLIENT_ID}",
 "client_secret":"${OIDC_CLIENT_SECRET}",
 "redirect_uris":[${urisToRegister}],
@@ -49,8 +50,8 @@ export json=$(cat  << EOF
 EOF
 )
 
-echo "registration URL : ${OIDC_SERVER_URL}/oidc/endpoint/${OIDC_PROVIDER}/registration"
-retCode=$(curl --max-time 10 --retry 5 --retry-delay 0 --retry-max-time 40 -k -s -X POST -H "Content-Type:application/json" -u ${OIDC_USERNAME}:${OIDC_PASSWORD} -d "$json" "${OIDC_SERVER_URL}/oidc/endpoint/${OIDC_PROVIDER}/registration" -o /dev/null -s  -w "%{http_code}")
+echo "registration URL : ${OIDC_REGISTRATION_URL}"
+retCode=$(curl --max-time 10 --retry 5 --retry-delay 0 --retry-max-time 40 -k -s -X POST -H "Content-Type:application/json" -u ${OIDC_USERNAME}:${OIDC_PASSWORD} -d "$json" "${OIDC_REGISTRATION_URL}" -o /dev/null -s  -w "%{http_code}")
 echo "RET Code = $retCode"
 if [ $retCode -eq 200 ] || [ $retCode -eq 201 ]; then
     addResult=0
