@@ -1,8 +1,7 @@
 #!/bin/bash
 
-OIDC_SERVER_URL=$(cat /server_url/server_url.properties)
-OIDC_PROVIDER=$(cat /provider/provider.properties)
 OIDC_REDIRECT_URIS=$(cat /redirect_uris/redirect_uris.properties)
+OIDC_REGISTRATION_URL=$(cat /registration-url/registration-url.properties)
 
 if [ -s "/oidc-credentials/oidc-credentials.properties" ]
 then
