@@ -46,7 +46,7 @@ spec:
           #valid operators: In, NotIn, Exists, DoesNotExist, Gt, Lt
             nodeSelectorTerms:
             - matchExpressions:
-              - key: beta.kubernetes.io/arch
+              - key: kubernetes.io/arch
                 operator: In
                 values:
                 - {{ .Values.image.arch }}
@@ -61,6 +61,11 @@ spec:
         secret:
           secretName: {{ .Values.customization.baiEmitterSecretRef }}
       {{- end}}
+      {{- if not (empty (.Values.customization.authSecretRef)) }}
+      - name: {{ template "odm-auth-secret-volume.fullname" . }}
+        secret:
+          secretName: {{ .Values.customization.authSecretRef }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
 {{ include "image.tagOrDigest" (dict "containerName" "odm" "root" .) | indent 10  }}
@@ -97,9 +102,14 @@ spec:
             value: "{{ .Values.decisionCenter.persistenceLocale }}"
           - name: "RELEASE_NAME"
             value: {{ .Release.Name }}
+          - name: USERS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "odm.secret.fullname" . }}
+                key: users-password
           ports:
           - containerPort: 9060
-    #      {{- if or (not (empty (.Values.customization.baiEmitterSecretRef))) (and .Values.internalDatabase.persistence.enabled (empty .Values.externalDatabase.serverName)) }}
+    #      {{- if or (or (not (empty (.Values.customization.baiEmitterSecretRef))) (and .Values.internalDatabase.persistence.enabled (empty .Values.externalDatabase.serverName))) (not (empty (.Values.customization.authSecretRef))) }}
           volumeMounts:
           {{- if and .Values.internalDatabase.persistence.enabled (empty .Values.externalDatabase.serverName) }}
           - name: {{ template "fullname" . }}-volume
@@ -109,6 +119,11 @@ spec:
           - name: {{ template "odm-baiemitterconfig-secret-volume.fullname" . }}
             readOnly: true
             mountPath: {{ template "odm-baiemitterconfig-dir" . }}
+          {{- end}}
+          {{- if not (empty (.Values.customization.authSecretRef)) }}
+          - name: {{ template "odm-auth-secret-volume.fullname" . }}
+            mountPath: "/config/webSecurity.xml"
+            subPath: webSecurity.xml
           {{- end}}
     #      {{- end}}
           readinessProbe:
