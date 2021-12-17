@@ -12,7 +12,6 @@
     if [ $DECISION_CENTER_ENABLED = "true" ]
     then
       sh /tests/wait-for-url.sh $DECISION_CENTER_NAME/decisioncenter/t
-      sh /tests/wait-for-url.sh $DECISION_CENTER_NAME/teamserver
       sh /tests/wait-for-url.sh $DECISION_CENTER_NAME/decisioncenter/assets/decision-center-client-api.zip
     fi
 

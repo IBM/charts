@@ -50,7 +50,7 @@ spec:
           #valid operators: In, NotIn, Exists, DoesNotExist, Gt, Lt
             nodeSelectorTerms:
             - matchExpressions:
-              - key: beta.kubernetes.io/arch
+              - key: kubernetes.io/arch
                 operator: In
                 values:
                 {{- if .Values.image.arch }}
@@ -71,6 +71,8 @@ spec:
 {{- if eq .Values.customization.vault "initcontainer" }}
 {{ include "odm-init-container-volume" (dict "initcontext" .Values.decisionCenter.initContainer "root" . "containername" "odm.decisionCenter") | indent 6 }}
 {{- else }}
+
+{{ include "odm-metering-volumes-context" . | indent 6 }}
       {{- if not (empty (.Values.customization.authSecretRef)) }}
       - name: {{ template "odm-auth-secret-volume.fullname" . }}
         secret:
@@ -147,7 +149,7 @@ spec:
         env:
 {{ include "odm-sql-internal-db-check-env" . | indent 8 }}
         resources:
-{{ toYaml .Values.decisionCenter.resources | indent 10 }}
+{{ include "odm-sql-internal-db-check-resources" . | indent 10 }}
       {{- end}}
 {{ include "odm-dba-context" . | indent 6 }}
       containers:
@@ -162,6 +164,7 @@ spec:
 {{ include "odm-dba-volumemounts-context" . | indent 8 }}
 {{ include "odm-db-ssl-volumemounts-context" . | indent 8 }}
 {{ include "odm-trusted-cert-volume-mount" . | indent 8 }}
+{{ include "odm-metering-volumemounts-context" . | indent 8 }}
         {{- if not (empty (.Values.customization.securitySecretRef)) }}
         - name: {{ template "odm-security-secret-volume.fullname" . }}
           readOnly: true
@@ -254,10 +257,18 @@ spec:
           - name: "ENABLE_TLS"
             value: "true"
           {{- end }}
+          {{- if .Values.customization.enableFips }}
+          - name: "ENABLE_FIPS"
+            value: "true"
+          {{- end }}
           - name: "RELEASE_NAME"
             value: {{ .Release.Name }}
           {{- if and (not (empty .Values.decisionCenter.extendRoleMapping )) (.Values.decisionCenter.extendRoleMapping) }}
           - name: "DC_ROLE_GROUP_MAPPING"
+            value: "true"
+          {{- end }}
+          {{- if and (not (empty .Values.decisionCenter.disableAllAuthenticatedUser )) (.Values.decisionCenter.disableAllAuthenticatedUser) }}
+          - name: "DISABLE_ALL_AUTHENTICATED_RTSUSER"
             value: "true"
           {{- end }}
           {{- if (not (empty .Values.decisionCenter.contextRoot )) }}
@@ -281,6 +292,10 @@ spec:
           - name: "DEMO"
             value: "true"
           {{- end }}
+          {{- end }}
+          {{- if .Values.customization.disableWSJavaAgent }}
+          - name: "WLP_SKIP_BOOTSTRAP_AGENT"
+            value: "true"
           {{- end }}
 {{ include "odm-db-ssl-env-context" . | indent 10 }}
 {{ include "odm-kubeVersion" . | indent 10 }}
