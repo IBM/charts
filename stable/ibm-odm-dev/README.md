@@ -6,7 +6,7 @@ The [IBM® Operational Decision Manager](https://www.ibm.com/us-en/marketplace/o
 
 ## Introduction
 
-ODM is a tool for capturing, automating, and governing repeatable business decisions. You identify situations about your business and then automate the actions to take as a result of the insight you gained about your policies and customers. For more information, see [ODM in knowledge center](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/welcome/kc_welcome_odmV.html).
+ODM is a tool for capturing, automating, and governing repeatable business decisions. You identify situations about your business and then automate the actions to take as a result of the insight you gained about your policies and customers. For more information, see [ODM in knowledge center](https://www.ibm.com/docs/en/odm/8.11.0).
 
 ## Chart Details
 
@@ -17,7 +17,7 @@ The `ibm-odm-dev` chart deploys a single container of five ODM services:
 - Decision Center Enterprise Console
 - Decision Server Console
 - Decision Server Runtime
-- Decision Server Runner
+- Decision Runner
 
 The `ibm-odm-dev` chart supports the following options for persistence:
 
@@ -31,7 +31,7 @@ By default, the `internalDatabase.populateSampleData` parameter is set to `true`
 
 ## Prerequisites
 
-- Kubernetes 1.11+ with Beta APIs enabled
+- Kubernetes 1.19+ with Beta APIs enabled
 - Helm 3.2 and later version
 - One PersistentVolume needs to be created prior to installing the chart if internalDatabase.persistence.enabled=true and internalDatabase.persistence.dynamicProvisioning=false. In that case, it is required that the securityContext.fsGroup 1001 has read and write permissions on the postgres data directory. You can update the permissions by mounting the volume temporarily or accessing the host machine and performing the following commands:
 ```console
@@ -43,15 +43,19 @@ chmod o-t /config/dbdata/
   - Set license=view to print the license agreement
   - Set license=accept to accept the license
 
+- Define a password for the default users:
+  You must define a password to be used by the default users like **odmAdmin** by setting the parameter `usersPassword`.
+  > **Note**: To define the users and customize the user access, refer to [Configuring user access](#configuring-user-access)
+
 Ensure you have a good understanding of the underlying concepts and technologies:
 - Helm chart, Docker, container
 - Kubernetes
 - Helm commands
 - Kubernetes command line tool
 
-Before you install ODM for developers, you need to gather all the configuration information that you will use for your release. For more details, refer to the [ODM for developers configuration parameters](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.kube/topics/ref_parameters_dev.html).
+Before you install ODM for developers, you need to gather all the configuration information that you will use for your release. For more details, refer to the [ODM for developers configuration parameters](https://www.ibm.com/docs/en/odm/8.11.0?topic=reference-odm-developers-configuration-parameters).
 
-If you want to create your own decision services from scratch, you need to install Rule Designer from the [Eclipse Marketplace](https://marketplace.eclipse.org/content/ibm-operational-decision-manager-developers-v-8104-rule-designer).
+If you want to create your own decision services from scratch, you need to install Rule Designer from the [Eclipse Marketplace](https://marketplace.eclipse.org/content/ibm-operational-decision-manager-developers-v-8110-rule-designer).
 
 ### Service Account Requirements
 
@@ -64,6 +68,7 @@ You can also configure the chart to use a custom serviceAccount. In this case, a
 ```console
 $ helm install my-odm-dev-release \
   --set license=accept \
+  --set usersPassword=my-password \
   --set serviceAccountName=ibm-odm-dev-service-account \
   ibm-charts/ibm-odm-dev
 ```
@@ -96,7 +101,7 @@ spec:
   requiredDropCapabilities:
   - ALL
   runAsUser:
-    rule: MustRunAsNonRoot
+    rule: MustRunAsRange
   seLinux:
     rule: RunAsAny
   supplementalGroups:
@@ -215,7 +220,7 @@ A release must be configured before it is installed.
 To install a release with the default configuration and a release name of `my-odm-dev-release`, use the following command:
 
 ```console
-$ helm install my-odm-dev-release --set license=accept ibm-charts/ibm-odm-dev
+$ helm install my-odm-dev-release --set license=accept --set usersPassword=my-password ibm-charts/ibm-odm-dev
 ```
 
 > **Tip**: List all existing releases with the `helm list` command.
@@ -226,6 +231,7 @@ For example:
 ```console
 $ helm install my-odm-dev-release \
   --set license=accept \
+  --set usersPassword=my-password \
   --set internalDatabase.databaseName=my-db \
   --set internalDatabase.user=my-user \
   --set internalDatabase.password=my-password \
@@ -236,7 +242,7 @@ It is also possible to use a custom-made .yaml file to specify the values of the
 For example:
 
 ```console
-$ helm install --set license=accept my-odm-dev-release -f values.yaml ibm-charts/ibm-odm-dev
+$ helm install my-odm-dev-release -f values.yaml ibm-charts/ibm-odm-dev
 ```
 
 > **Tip**: The default values are in the `values.yaml` file of the `ibm-odm-dev` chart.
@@ -245,27 +251,57 @@ The release is an instance of the `ibm-odm-dev` chart: all the ODM components ar
 
 > **Note**: If you plan on using `helm template` command for ODM installation, add the `--validate` flag to validate your manifests against your Kubernetes cluster:
 > ```console
-> $ helm template my-odm-dev-release --set license=accept ibm-charts/ibm-odm-dev > my-values.yaml
+> $ helm template my-odm-dev-release --set license=accept --set usersPassword=my-password ibm-charts/ibm-odm-dev > my-values.yaml
 > $ kubectl apply -f my-values.yaml
 > ```
 
 ### Verifying the Chart
 
-1. Navigate to your release and view the service details.
+#### Port Exposed
 
->The welcome page of IBM Operational Decision Manager Developer Edition displays with links to the ODM components and other resources.
+The pod exposes only one port externally:
 
->If you accepted the default persistence, a sample project is available in your ODM release and you can explore and modify the rules and decision tables.
+| From |	To | Port	| Protocol | Function |
+| ---- | ---- | ---- | ---- | ---- |
+| End User | Application | 9060 | HTTP | Communication from the end user to the front end UI of the application |
 
->The Loan Validation sample is a decision service that determines whether a borrower is eligible for a loan. The decision service validates transaction data, checks customer eligibility, assigns a score, and computes insurance rates that are based on the assigned score.
+#### Accessing ODM
 
-2. Click the Decision Center Business Console to open the service in a browser.
+1. Navigate to the ODM welcome page
 
-3. Navigate to the Library tab of the Decision Center Business Console, select the decision service, then the release and browse Decision Artifacts to view the rules and make changes.
+  The welcome page of IBM Operational Decision Manager Developer Edition displays with links to the ODM components and other resources.
+
+  - **Option 1**: Using a route
+
+    If you installed IBM Operational Decision Manager Developer Edition in Openshift, a route to access the welcome page will be automatically created.
+
+    You can find it by using the following command:
+    ```console
+    $ oc get routes
+    ```
+
+  - **Option 2**: Using a Nodeport service
+
+    On other kubernetes clusters, a Nodeport service is automatically created to access the welcome page. The page is accessible through this url `http://<public-node-ip>:<node-port>`.
+
+    Refer to your cluster documentation to get the `<public-node-ip>` which is the public IP address of your node.
+    Then you can get the `<node-port>` value by using this command:
+    ```console
+    $ kubectl get services
+    ```
+
+2. Click the **Decision Center** Business Console to open the service in a browser.
+
+3. If you accepted the default persistence, a sample project is available in your ODM release and you can explore and modify the rules and decision tables.
+
+  The *Loan Validation sample* is a decision service that determines whether a borrower is eligible for a loan. The decision service validates transaction data, checks customer eligibility, assigns a score, and computes insurance rates that are based on the assigned score.
+
+  Navigate to the *Library* tab of the **Decision Center** Business Console, select the decision service, then the release and browse *Decision Artifacts* to view the rules and make changes.
+
+4. Now you want to execute the sample decision service to request a loan. Follow the procedure described here [Try out the Business console](https://www.ibm.com/docs/en/odm/8.11.0?topic=tutorials-try-out-business-console)
 
 **Note:** The persistence locale for Decision Center is set to English (United States), which means that the project can be viewed only in English.
 
-Now you want to execute the sample decision service to request a loan. Follow the procedure described here [Try out the Business console](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.icp/topics/tsk_test_loan_valid.html)
 
 ### Uninstalling the chart
 
@@ -291,7 +327,66 @@ $ kubectl delete pvc <release_name>-odm-pvclaim -n <namespace>
 
 ## Configuration
 
-To configure the `ibm-odm-dev` chart, check out the list of available [ODM for developers configuration parameters](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.kube/topics/ref_parameters_dev.html).
+To configure the `ibm-odm-dev` chart, check out the list of available [ODM for developers configuration parameters](https://www.ibm.com/docs/en/odm/8.11.0?topic=reference-odm-developers-configuration-parameters).
+
+### Configuring user access
+
+You can override the default registry configuration and change the default user credentials.
+
+1. Define your user registry configuration according to your needs in a `webSecurity.xml` file.
+
+  You can update the default configuration from the following `websecurity.xml` file:
+  ```xml
+  <server>
+  	<!-- Web application security -->
+  	<basicRegistry id="basic" realm="customRealm">
+  		<!-- ODM super user -->
+  		<user name="odmAdmin" password="my-password"/>
+  		<!-- Users for Decision Center -->
+  		<user name="rtsAdmin" password="my-password"/>
+  		<user name="rtsConfig" password="my-password"/>
+  		<user name="rtsUser1" password="my-password"/>
+  		<user name="rtsUser2" password="my-password"/>
+  		<!-- Users for Decision Server -->
+  		<user name="resAdmin" password="my-password"/>
+  		<user name="resDeployer" password="resDeployer"/>
+  		<user name="resMonitor" password="my-password"/>
+  		<!-- Groups for Decision Center -->
+  		<group name="rtsAdministrators">
+  			<member name="odmAdmin"/>
+  			<member name="rtsAdmin"/>
+  		</group>
+  		<group name="rtsInstallers">
+  			<member name="odmAdmin"/>
+  			<member name="rtsAdmin"/>
+  		</group>
+  		<group name="rtsConfigManagers">
+  			<member name="rtsConfig"/>
+  		</group>
+  		<!-- Groups for Decision Server -->
+  		<group name="resAdministrators">
+  			<member name="odmAdmin"/>
+  			<member name="resAdmin" />
+  		</group>
+  		<group name="resDeployers">
+  			<member name="resDeployer" />
+  		</group>
+  		<group name="resMonitors">
+  			<member name="resMonitor" />
+  		</group>
+  	</basicRegistry>
+  </server>
+  ```
+
+2. Create a secret with the `webSecurity.xml` file by running the following command.
+
+  ```console
+  kubectl create secret generic my-auth-secret --from-file=webSecurity.xml=myWebSecurity.xml
+  ```
+
+  Where `my-auth-secret` is the name you give to your secret, and `myWebSecurity.xml` the name of your user registry configuration file.
+
+3. Pass the name of your secret as the value for the **customization.authSecretRef** parameter when you create the ODM instance.
 
 ## Storage
 
@@ -322,8 +417,8 @@ On-premise storage options supported for all architectures:
 
 ## Limitations
 
-The following ODM on premises features are not supported: [Features not included in this platform.](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.kube/topics/con_limitations.html)
+The following ODM on premises features are not supported: [Features not included in this platform.](https://www.ibm.com/docs/en/odm/8.11.0?topic=kubernetes-features-not-included-in-odm-certified)
 
 ## Documentation
 
-See [ODM in knowledge center](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/welcome/kc_welcome_odmV.html).
+See [ODM on Certified Kubernetes in knowledge center](https://www.ibm.com/docs/en/odm/8.11.0?topic=operational-decision-manager-certified-kubernetes-8110).
