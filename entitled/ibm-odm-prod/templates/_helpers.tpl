@@ -116,6 +116,10 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 {{- printf "%s-%s" .Release.Name "odm-ds-runtime-xu-configmap" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "odm.ds-runtime-web-configmap.fullname" -}}
+{{- printf "%s-%s" .Release.Name "odm-ds-runtime-web-configmap" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "odm.dc-jvm-options-configmap.fullname" -}}
 {{- printf "%s-%s" .Release.Name "odm-dc-jvm-options-configmap" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
@@ -206,6 +210,10 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 {{- printf "%s-%s" .Release.Name "odm-ds-runtime-xuconfigref-volume" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "odm-ds-runtime-webconfigref-volume.fullname" -}}
+{{- printf "%s-%s" .Release.Name "odm-ds-runtime-webconfigref-volume" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "odm-dc-route.fullname" -}}
 {{- printf "%s-%s" .Release.Name "odm-dc-route" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
@@ -254,6 +262,15 @@ until [ $CHECK_DB_SERVER -eq 0 ]; do echo {{ template "odm.dbserver.fullname" . 
 {{- end }}
 {{- end -}}
 
+{{- define "odm-sql-internal-db-check-resources" -}}
+requests:
+  cpu: 200m
+  memory: 100Mi
+limits:
+  cpu: 500m
+  memory: 200Mi
+{{- end -}}
+
 {{- define "odm-tolerations" -}}
 tolerations:
   - key: {{ .Values.customization.dedicatedNodeLabel }}
@@ -295,23 +312,19 @@ annotations:
 {{- define "odm-annotations.decisionrunner" -}}
 {{- $productName := default .Chart.Description .Values.customization.productName -}}
 {{- $productNameNonProd := printf "%s - %s" $productName "Non Prod" -}}
-{{- $productIDNonProd := default "e32af5770e06427faae142993c691048" .Values.customization.productID -}}
 {{- $productVersion := default .Chart.AppVersion .Values.customization.productVersion -}}
 annotations:
-  {{- if .Values.customization.deployForProduction }}
-  productName: {{ $productName | quote }}
-  {{- else }}
   productName: {{ $productNameNonProd | quote }}
-  {{- end }}
-  productID: {{ $productIDNonProd | quote }}
   productVersion: {{ $productVersion | quote }}
   {{- if and (not (empty (.Values.customization.cloudpakID))) (not (empty .Values.customization.cloudpakVersion)) }}
+  productID: "d803dec7647d48d39f6803e077d36080"
   productMetric: "VIRTUAL_PROCESSOR_CORE"
   productCloudpakRatio: "2:5"
   cloudpakName: "IBM Cloud Pak for Business Automation"
   cloudpakId: {{ .Values.customization.cloudpakID}}
   cloudpakVersion: {{ .Values.customization.cloudpakVersion}}
   {{- else }}
+  productID: "e32af5770e06427faae142993c691048"
   productMetric: "PROCESSOR_VALUE_UNIT"
   {{- end -}}
 {{- end -}}
@@ -704,7 +717,7 @@ helm.sh/chart: {{ $root.Chart.Name }}-{{ $root.Chart.Version | replace "+" "_" }
       mountPath: /shared/tls
 {{ include "odm-security-context" . | indent 2 }}
   resources:
-{{ toYaml .Values.decisionCenter.resources | indent 4 }}
+{{ include "odm-dba-context-resources" . | indent 4 }}
 {{- end }}
 {{- if (not (empty .Values.dba.ldapSslSecretRef )) }}
 - name: ldapsslkeytoolinit
@@ -731,8 +744,17 @@ helm.sh/chart: {{ $root.Chart.Name }}-{{ $root.Chart.Version | replace "+" "_" }
       mountPath: /shared/resources/cert-trusted
 {{ include "odm-security-context" . | indent 2 }}
   resources:
-{{ toYaml .Values.decisionCenter.resources | indent 4 }}
+{{ include "odm-dba-context-resources" . | indent 4 }}
 {{- end }}
+{{- end -}}
+
+{{- define "odm-dba-context-resources" -}}
+requests:
+  cpu: 200m
+  memory: 100Mi
+limits:
+  cpu: 500m
+  memory: 200Mi
 {{- end -}}
 
 {{- define "odm-pullsecret-spec" -}}
