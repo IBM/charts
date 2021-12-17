@@ -1,3 +1,16 @@
+{{- if and (empty .Values.usersPassword) (empty .Values.customization.authSecretRef) -}}
+--------------------------------------------------------------------------------
+Please specify a global password to be used by the default ODM user.
+
+Add the usersPassword parameter to your release:
+
+  - Delete the release {{ .Release.Name }}
+    helm del {{ .Release.Name }}
+
+  - Launch the installation with the parameter usersPassword set
+    helm install {{ .Release.Name }} --set license=accept --set usersPassword=myp4ssw0rd ibm-charts/ibm-odm-dev
+
+{{- else -}}
 {{- if ne .Values.license "accept" -}}
 {{ .Files.Get "LICENSES/LICENSE-LI" }}
 --------------------------------------------------------------------------------
@@ -19,15 +32,13 @@ To accept the license:
 ODM Information
 ----------------
 
-Username/Password :
-  - For Decision Center : odmAdmin/odmAdmin
-  - For Decision Server Console: odmAdmin/odmAdmin
-  - For Decision Server Runtime: odmAdmin/odmAdmin
-  - For Decision Runner: odmAdmin/odmAdmin
+{{- if empty .Values.customization.authSecretRef }}
+You can access to the services using the default user odmAdmin and the usersPassword value passed as parameter.
+{{- end }}
 
 Get the application URLs by running these commands:
 
-{{- if or (.Values.service.enableRoute) (.Capabilities.APIVersions.Has "route.openshift.io/v1/Route") -}}
+{{- if or (.Values.service.enableRoute) (.Capabilities.APIVersions.Has "route.openshift.io/v1/Route") }}
 
   export ROUTE=$(oc get routes {{ .Release.Name }}-route -o jsonpath='{.spec.host}')
 
@@ -46,7 +57,7 @@ Get the application URLs by running these commands:
   -- Decision Runner
   echo http://$ROUTE/DecisionRunner
 
-{{- else -}}
+{{- else }}
 
   export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "fullname" . }})
   export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
@@ -81,7 +92,7 @@ Your PersistenceVolumeClaim is configured with Dynamic Provisioning.
 {{- else }}
 
 Your PersistenceVolumeClaim is not created dynamically.
-You should  create a Persistence Volume in your cluster or use the internalDatabase.persistence.useDynamicProvisioning=true
-charts parameter.
+You should create a Persistence Volume in your cluster or use the internalDatabase.persistence.useDynamicProvisioning=true charts parameter.
+{{- end }}
 {{- end }}
 {{- end }}
