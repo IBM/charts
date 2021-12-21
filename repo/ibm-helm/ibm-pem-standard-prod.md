@@ -3,7 +3,7 @@
 
 ## Chart Details
 
-This chart deploys IBM Parnter Engagement Manager Standard cluster on a container management platform with the following resources.
+This chart deploys IBM Partner Engagement Manager Standard cluster on a container management platform with the following resources.
 
 
 ## Prerequisites
@@ -18,7 +18,7 @@ This chart deploys IBM Parnter Engagement Manager Standard cluster on a containe
 
 5. Ensure that the docker images for IBM Partner Engagement Manager Standard from Entitlement registry are loaded to an appropriate docker registry.
 
-6. When `volumeClaims.resources.enabled` is `true`, create a persistent volume for application resources with access mode as 'Read Only Many' and place the database driver jar , SEAS jars and MQ jars in the mapped volume location.
+6. When `volumeClaims.resources.enabled` is `true`, create a persistent volume for application resources with access mode as 'ReadWriteMany' and place the database driver jar , SEAS jars and MQ jars in the mapped volume location.
 
 7. When `volumeClaims.logs.enable` is `true`, create a persistent volume for application logs with access mode as 'Read Write Many' and create required subfolders for IBM PEM Partner Repository Partner Provisioner PCM_prod and PCM_nonProd must have the 755 permission to read and execute for accessing all subfolders by the pemuser (id:1011) container..
 
@@ -44,7 +44,7 @@ This chart deploys IBM Parnter Engagement Manager Standard cluster on a containe
 
        ```
 
-12. create secrets with confidential certificates (Keystore files) required by Database, MQ for SSL connectivity using below command.
+12. create secrets with confidential certificates (Keystore files for both Partner Engagement Manager and Community Manger) required by Database, MQ for SSL connectivity using below command.
 
      Note: Name of the secret and the keystore filename must be same for server keystore secret
     ```
@@ -113,7 +113,10 @@ This chart optionally defines a custom PodSecurityPolicy which is used to finely
       - DAC_OVERRIDE
       allowedHostPaths:
       runAsUser:
-        rule: MustRunAsNonRoot
+        rule: MustRunAs
+        ranges:
+        - min: 1
+          max: 4294967294
       runAsGroup:
         rule: MustRunAs
         ranges:
@@ -291,7 +294,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | Parameter                | Description             | Default        |
 | ------------------------ | ----------------------- | -------------- |
 | `image.name` | Provide the value in double quotes | `"cp.icr.io/cp/ibm-pem/pem"` |
-| `image.tag` | Specify the tag name | `"6.2.0"` |
+| `image.tag` | Specify the tag name | `"6.2.0.1.2"` |
 | `image.pullPolicy` |  | `null` |
 | `image.pullSecret` | Provide the pull secret name | `""` |
 | `arch` |  | `"amd64"` |
@@ -561,7 +564,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.install` |  | `true` |
 | `communitymanager.image.repository` | Specify the repository | `"cp.icr.io/cp/ibm-pem/pem"` |
 | `communitymanager.image.pullPolicy` | Specify te image pull policy | `null` |
-| `communitymanager.image.tag` | Specify the tag name | `"6.2.0"` |
+| `communitymanager.image.tag` | Specify the tag name | `"6.2.0.1.2"` |
 | `communitymanager.image.pullSecret` | Provide the pull secret name | `null` |
 | `communitymanager.prod.enable` | If you are want to proceed for prod pcm installation then you have to mention it as true or else false | `true` |
 | `communitymanager.prod.setupfile.acceptLicence` | We should make accept-license should be true for pcm installation | `true` |
