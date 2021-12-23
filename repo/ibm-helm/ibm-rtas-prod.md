@@ -213,8 +213,8 @@ oc create secret docker-registry cp.icr.io \
 
 ### Trust of certificate
 
-Some components of the product solution communicate with the server. This is done using HTTPS, verifying that 
-the certificate is signed by a trusted CA. Where default certificates are used, they are typically not signed 
+Some components of the product solution communicate with the server. This is done using HTTPS, verifying that
+the certificate is signed by a trusted CA. Where default certificates are used, they are typically not signed
 by a recognized, trusted, CA.
 
 
@@ -285,7 +285,7 @@ The value should be used in place of the one shown below.
 
 ```console
 helm repo update
-helm pull --untar ibm-helm/ibm-rtas-prod --version 6.1021.0
+helm pull --untar ibm-helm/ibm-rtas-prod --version 6.1021.1
 
 # update the runAsUser and fsGroup to match scc policy
 sed -i -e "s/runAsUser: 1001/runAsUser: $(oc get project test-system -oyaml \
@@ -391,7 +391,7 @@ oc new-project cp
 
 ```bash
 export CASE_NAME=ibm-rtas-case
-export CASE_VERSION=6.1021.0
+export CASE_VERSION=6.1021.1
 export CASE_ARCHIVE=${CASE_NAME}-${CASE_VERSION}.tgz
 export CASE_REMOTE_PATH=https://github.com/IBM/cloud-pak/raw/master/repo/case/${CASE_ARCHIVE}
 export OFFLINEDIR=$HOME/offline
@@ -456,7 +456,7 @@ If your cluster does not use a Machine Config Operator the above step will not u
 * Unpack the product helm chart
 
 ```bash
-tar xf $OFFLINEDIR/charts/ibm-rtas-prod-6.1021.0.tgz
+tar xf $OFFLINEDIR/charts/ibm-rtas-prod-6.1021.1.tgz
 ```
 
 * Continue to install the product as normal but since the global pull secret has been created the pull secret is not required `oc create secret docker-registry cp.icr.io`. Naturally this secret should not be referenced in the helm install `--set global.ibmRtasRegistryPullSecret=cp.icr.io \`.
