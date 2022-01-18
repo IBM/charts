@@ -1,4 +1,4 @@
-# IBM Sterling File Gateway Enterprise Edition v6.1.0.4
+# IBM Sterling File Gateway Enterprise Edition v6.1.0.4_1
 ## Introduction
 
 IBM Sterling File Gateway lets organizations transfer files between partners by using different protocols, conventions for naming files, and file formats. A scalable and security-enabled gateway, Sterling File Gateway enables companies to consolidate all their internet-based file transfers on a single edge gateway, which helps secure your B2B collaboration network and the data flowing through it. To find out more, see [IBM Sterling File Gateway](https://www.ibm.com/products/file-gateway) on IBM Marketplace.
@@ -327,8 +327,8 @@ Depending on the capacity of the kubernetes worker node and database network con
 Parameter                                      | Description                                                          | Default 
 -----------------------------------------------| ---------------------------------------------------------------------| -------------
 `global.image.repository`                      | Repository for B2B docker images                                     | 
-`global.image.tag          `                   | Docker image tag                                                     | `6.1.0.4`
-`global.image.digest          `                | Docker image digest. Takes precedence over tag                       | `sha256:64f9fc917d849dbffde556f53e0aced2c6c623871f8193701e5c14ee069d5cdd`
+`global.image.tag          `                   | Docker image tag                                                     | `6.1.0.4_1`
+`global.image.digest          `                | Docker image digest. Takes precedence over tag                       | `sha256:a22b4ff757fa6afbb238deabfaedc9e94c09251598f795294662dc0d1f825f5d`
 `global.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `global.image.pullSecret `         			   | Pull secret for repository access                                    | 
 `arch.amd64`                                   | Specify architecture (amd64, s390x) and weight to be used for scheduling           | `2 - No Preference`
@@ -613,8 +613,8 @@ Parameter                                      | Description                    
 `test.image.pullPolicy`                        | Pull policy for helm test image repository                           | `IfNotPresent`
 `purge.enabled`                                | Enable external purge job                                            | 'false'
 `purge.image.repository          `             | External purge docker image repository                               | `purge`
-`purge.image.tag          `                    | External purge image tag                                             | `6.1.0.4`
-`purge.image.digest          `                 | External purge image digest. Takes precedence over tag               | `sha256:314ff91441d218032d667fa56435b132960a7c6fb20bbd60d35eb0a56af25672`
+`purge.image.tag          `                    | External purge image tag                                             | `6.1.0.4_1`
+`purge.image.digest          `                 | External purge image digest. Takes precedence over tag               | `sha256:e3284234ca24caa5937e8adfcfc3581f45c580b5d5c836079b4c451d0d361bf7`
 `purge.image.pullPolicy`                       | Pull policy for external purge docker image                          | `IfNotPresent`
 `purge.image.pullSecret`                       | Pull secret for repository access                                    | 
 `purge.schedule`                               | External purge job creation and execution schedule. Its a Cron format string such as 1 * * * * or 
