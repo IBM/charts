@@ -42,7 +42,6 @@ Kubernetes cluster:
 * [OpenShift SDN in _network policy_ mode](https://docs.openshift.com/container-platform/4.6/networking/openshift_sdn/about-openshift-sdn.html) (Optional) The default installation includes NetworkPolicy resources, these will only be acted upon if the SDN is configured appropriately.
 * [Dynamic Volume Provisioning](https://docs.openshift.com/container-platform/4.6/storage/dynamic-provisioning.html) supporting accessModes ReadWriteOnce (RWO) and ReadWriteMany (RWX).
 * [Jaeger Operator](https://docs.openshift.com/container-platform/4.6/service_mesh/v2x/installing-ossm.html#ossm-install-ossm-operator_installing-ossm) (Recommended) If tests should contribute trace information and Jaeger based reports are required.
-* Tech Preview:[RedHat Service Mesh](https://docs.openshift.com/container-platform/4.6/service_mesh/v2x/preparing-ossm-installation.html) v2.0 or later (Optional) If Istio recording and service virtualization features are required.
 
 Installed locally:
 
@@ -213,8 +212,8 @@ oc create secret docker-registry cp.icr.io \
 
 ### Trust of certificate
 
-Some components of the product solution communicate with the server. This is done using HTTPS, verifying that
-the certificate is signed by a trusted CA. Where default certificates are used, they are typically not signed
+Some components of the product solution communicate with the server. This is done using HTTPS, verifying that 
+the certificate is signed by a trusted CA. Where default certificates are used, they are typically not signed 
 by a recognized, trusted, CA.
 
 
@@ -223,8 +222,6 @@ by a recognized, trusted, CA.
 To enable the certificate to be trusted we add the signing CA into a secret so that it can be injected into our trust stores.
 
 
-
-If you are using the Tech Preview: OpenShift Service Mesh service virtualization feature ignore this section and instead read [this](#tech-preview-istio-service-virtualization)
 
 * Verify if an additional CA certificate is required. IBM Cloud uses Lets Encrypt meaning it is already trusted
 
@@ -285,7 +282,7 @@ The value should be used in place of the one shown below.
 
 ```console
 helm repo update
-helm pull --untar ibm-helm/ibm-rtas-prod --version 6.1021.1
+helm pull --untar ibm-helm/ibm-rtas-prod --version 7.1022.0
 
 # update the runAsUser and fsGroup to match scc policy
 sed -i -e "s/runAsUser: 1001/runAsUser: $(oc get project test-system -oyaml \
@@ -391,7 +388,7 @@ oc new-project cp
 
 ```bash
 export CASE_NAME=ibm-rtas-case
-export CASE_VERSION=6.1021.1
+export CASE_VERSION=7.1022.0
 export CASE_ARCHIVE=${CASE_NAME}-${CASE_VERSION}.tgz
 export CASE_REMOTE_PATH=https://github.com/IBM/cloud-pak/raw/master/repo/case/${CASE_ARCHIVE}
 export OFFLINEDIR=$HOME/offline
@@ -456,7 +453,7 @@ If your cluster does not use a Machine Config Operator the above step will not u
 * Unpack the product helm chart
 
 ```bash
-tar xf $OFFLINEDIR/charts/ibm-rtas-prod-6.1021.1.tgz
+tar xf $OFFLINEDIR/charts/ibm-rtas-prod-7.1022.0.tgz
 ```
 
 * Continue to install the product as normal but since the global pull secret has been created the pull secret is not required `oc create secret docker-registry cp.icr.io`. Naturally this secret should not be referenced in the helm install `--set global.ibmRtasRegistryPullSecret=cp.icr.io \`.
@@ -591,53 +588,6 @@ https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/8/html-si
 
 
 
-## Tech Preview: Istio service virtualization
-
-To enable feedback from customers we have provided only the capability to virtualize the [bookinfo](https://istio.io/latest/docs/examples/bookinfo/) sample application. This application MUST be installed in the `bookinfo` namespace.
-
-
-
-
-Before installing the product helm chart create the ingress secrets
-
-```bash
-./files/certificate.sh -n istio-system -s istio-ingressgateway-certs {openshift-cluster-dns-name}
-
-oc create secret generic -n test-system ingress \
-  "--from-literal=ca.crt=$(oc get -n istio-system secret istio-ingressgateway-certs -ojsonpath='{.data.ca\.crt}' | base64 --decode)"
-```
-
-Enable an OpenShift route to be created for the Istio gateway that the product creates
-
-```bash
-cat <<EOF | oc apply -n istio-system -f - >/dev/null
-apiVersion: maistra.io/v1
-kind: ServiceMeshMemberRoll
-metadata:
-  name: default
-spec:
-  members:
-    - test-system
-EOF
-```
-
-
-
-When installing the product helm chart additionally include the arguments
-
-```bash
-  -f ibm-rtas-prod/values-openshift-demo.yaml \
-```
-
-Then enable service virtualization in the specific namespace using this command:
-
-```bash
-oc create rolebinding istio-virtualization-enabled -n bookinfo --clusterrole={my-rtas}-execution-istio-test-system --serviceaccount=test-system:{my-rtas}-execution
-```
-
-Note: Uninstalling the chart will not clean up these manually created role bindings.
-
-
 ## Configuration
 
 
@@ -654,18 +604,16 @@ The defaults shown are not appropriate on OpenShift clusters. The `values-opensh
 | `global.ibmRtasRegistry`                    | The location of container images to use. See [move-images](files/move-images.sh) | cp.icr.io/cp |
 | `global.jaegerAgent.internalHostName`          | The name of the service that execution engines write traces to. | '' |
 | `global.jaegerDashboard.externalURL`           | The URL for where traces may be opened in a browser. | '' |
+| `global.persistence.rwoStorageClass`           | The storageClass to use if the cluster default is not appropriate | '' |
 | `global.persistence.rwxStorageClass`           | For environments that do not provide default StorageClasses that support ReadWriteMany (RWX) accessMode, this value must be set to the name of a suitable StorageClass that has been provisioned to support ReadWriteMany access | REQUIRED |
 | `global.prometheusDashboard.internalURL`       | The URL for where the internal prometheus instance can be found. | http://{{ .Release.Name }}-prometheus-server |
 | `global.prometheusDashboard.podNamespaceLabel` | The label used to partition metrics by namespace in Prometheus. Check the prometheus-config ConfigMap for `metric_relabel_configs`, use the `target_label`. The value is likely to be `kubernetes_namespace` | namespace |
 | `global.rationalLicenseKeyServer`              | Where floating licenses are hosted to entitle use of the product. For example `@ip-address` | '' |
 | `clusterDomain`                                | The DNS name of the Kubernetes cluster if the default is overridden. | cluster.local |
-| `execution.ingress.gatewayName`                | Tech Preview: When using Istio for ingress, instead of creating a gateway to enable access to running assets like virtual services, use a custom one. | '' |
-| `execution.ingress.hostPattern`                | Tech Preview: Pattern used to generate hostnames so that running assets may be accessed via ingress. | '' |
-| `execution.intercepts.clusterRole.create`      | Tech Preview: When `network.policy` to be disabled, NodePorts can be used to enable access to running assets like virtual services | true |
-| `execution.istio.namespaces`                   | Tech Preview: The set of namespaces that are considered for service virtualization. | |
+| `execution.ingress.hostPattern`                | Pattern used to generate hostnames so that running assets may be accessed via ingress. | '' |
+| `execution.intercepts.clusterRole.create`      | When `network.policy` is disabled, NodePorts can be used to enable access to running assets like virtual services | true |
 | `execution.priorityClassName`                  | The products dynamic workload pods will have this priorityClass | '' |
 | `execution.priorityClassValue`                 | When set a priorityClass named `execution.priorityClassName` is created with the set priority value | |
-| `ingress.gatewayName`                          | Tech Preview: When using Istio for ingress, instead of creating a gateway to enable to the product, use a custom one. | '' |
 | `license`                                      | Confirmation that the EULA has been accepted. For example `true` | false |
 | `networkPolicy.enabled`                        | Deny other software, installed in the cluster, access to the product. | false |
 | `preflight.validateHostPattern`                | When false, no check will be made prior to installation to validate that the pattern used to generate hostnames (e.g. for virtual services) will produce viable names  | true |
