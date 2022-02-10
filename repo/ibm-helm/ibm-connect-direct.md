@@ -247,13 +247,18 @@ You need to take backup of configuration data and other information like stats a
    * `SECPLUS`
    * `SECURITY`
    * `PROCESS`
+   * `FACONFIG`
+   * `FALOG`
 
 > **Note**:In case of traditional installation of Connect:Direct for Unix, you should take the backup of the below directories and save them at your desired location:
-   * `work`
-   * `cfg`
-   * `secure+`
-   * `security`
-   * `process`
+   * `<installDir>/work`
+   * `<installDir>/ndm/cfg`
+   * `<installDir>/ndm/secure+`
+   * `<installDir>/ndm/security`
+   * `<installDir>/process`
+   * `<installDir>/file_agent/config`
+   * `<installDir>/file_agent/log`
+   
 
 **To Restore:**
 
