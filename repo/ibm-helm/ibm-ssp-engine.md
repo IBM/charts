@@ -7,7 +7,7 @@ IBMÂ® Sterling Secure Proxy acts as an application proxy between Connect:DirectÂ
 
 ## Chart Details
 
-This chart deploys IBM Sterling Secure Proxy Engine on a container management platform with the following resources deployments
+This chart deploys IBM Sterling Secure Proxy Engine on a container management platform with the following resources deployments 
 
 - a statefulset pod `<release-name>-ibm-ssp-engine` with 1 replica.
 - a configMap `<release-name>-ibm-ssp-engine`. This is used to provide default configuration in engine_config_file.
