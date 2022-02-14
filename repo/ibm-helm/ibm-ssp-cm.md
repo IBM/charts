@@ -8,7 +8,7 @@ When you save a configuration definition (Sterling Secure Proxy configuration st
 
 ## Chart Details
 
-This chart deploys IBM Sterling Secure Proxy CM on a container management platform with the following resources deployments
+This chart deploys IBM Sterling Secure Proxy CM on a container management platform with the following resources deployments 
 
 - a statefulset pod `<release-name>-ibm-ssp-cm` with 1 replica.
 - a configMap `<release-name>-ibm-ssp-cm`. This is used to provide default configuration in cm_config_file.
