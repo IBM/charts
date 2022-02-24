@@ -1,9 +1,7 @@
 ## What's new...
-DataPower 2018.4.1.18
+DataPower 2018.4.1.19
 Refreshing existing charts for firmware upgrade
-Moved containers from docker.io to icr.io
-Changed container from `datapower` to `datapower-limited`
-
+Container image tag no longer has build number
 ## Fixes
 None
 
@@ -19,6 +17,7 @@ See README.md
 
 | Chart   |   Date  | Kubernetes Required |    Image(s) Supported    | Breaking Changes | Details |
 | ------- | ------------ | -------- | ------------------------------------ | ---- | -------------------------------------------------------------- |
+| 3.1.8   | Feb 15, 2022 | >=1.13.0 | ibmcom/datapower:2018.4.1.19 | None | 2018.4.1.19 refresh |
 | 3.1.7   | Oct 12, 2021 | >=1.13.0 | ibmcom/datapower:2018.4.1.18.336067  | None | 2018.4.1.18 refresh |
 | 3.1.6   | Aug 09, 2021 | >=1.13.0 | ibmcom/datapower:2018.4.1.17.334278  | None | 2018.4.1.17 refresh |
 | 3.1.5   | Apr 05, 2021 | >=1.13.0 | ibmcom/datapower:2018.4.1.16.330899  | None | 2018.4.1.16 refresh |
