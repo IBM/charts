@@ -22,10 +22,29 @@ Before deploying Sterling Order Management Software, review and complete the fol
 - Install MQ or any other JMS server. For more information about the system requirements, see [Software Product Compatibility Reports.](https://www.ibm.com/software/reports/compatibility/clarity/index.html) Ensure that the MQ server is accessible from within the cluster.
 - Load the container images to the appropriate container registry. The default images are available in the IBM Entitled Registry. When you are installing the Helm chart, if you want to automatically pull the images, use image pull secret.  Alternatively, you can use customized images.
 - Configure container registry and container image to pull them to all Kubernetes worker nodes.
-- Create a Persistent Volume with access mode as 'Read write many' and having a minimum of 10 GB hard disk space.
+- Create a Persistent Volume with access mode as 'Read write many' and having a minimum of 10 GB hard disk space. Ensure that the PersistentVolume storage is accessible by all containers across the cluster and  the owner group of the PersistenceVolume directory has write access, and the owner group ID is specified in the global.persistence.securityContext.fsGroup parameter of the Sterling Order Management Software Helm chart.
 - [Create a Secret](#creating-a-secret) with the datasource connectivity details.
 - [Create a Role Based Access Control (RBAC).](#creating-a-role-based-access-control-RBAC)
 - Configure the agent or integration servers in the Helm chart. For more information about configuring the agent or integration servers, see [Configuring agent and integration server.](#configuring-agent-and-integration-servers)
+- If you have not enabled anyuid Security Context Constraint (SCC), enable it to the service account that is used for the deployment of Sterling Order Management Software on OpenShift Container Platform by using the following command:
+
+    ```sh
+      oc adm policy add-scc-to-user anyuid -z <service_account_name> -n <namespace>
+    ```
+
+- If you have not enabled the edit permission to the service account, enable it for the specific project by using the following command:
+
+    ```sh
+      oc adm policy add-role-to-user edit system:serviceaccount:<namespace>:<service_account_name>
+    ```
+
+    **Note:** The edit permission is required for setting up the developer certificate and also for propagating the data setup status. For security reasons, it is recommend that you revoke the edit permission after deploying the certified containers.
+To revoke the edit permission, run the following command:
+
+    ```sh
+      oc adm policy remove-role-from-user edit system:serviceaccount:<namespace>:<service_account_name>
+    ```
+
 - Install PodDisruptionBudget.
 
   The PodDisruptionBudget ensures that a certain number or percentage of pods with an assigned label are not voluntarily evicted at any point in time. For more information about PodDisruptionBudget, see [Disruptions](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/) and [Specifying a disruption budget for your application](https://kubernetes.io/docs/tasks/run-application/configure-pdb/).
@@ -70,35 +89,44 @@ To create a Secret, complete the following steps:
 
 If you are deploying the application on a namespace other than the default namespace, and if you have not created Role Based Access Control (RBAC), create RBAC with the cluster admin role.
   
-The following sample file illustrates RBAC for the default service account with the target namespace as `<namespace>`.
+1. The following sample file illustrates RBAC for the default service account with the target namespace as `<namespace>`. Configure the values as illustrated in the following <sample_rbac_file>.yaml file:
 
-  ```yaml
-  kind: Role
-  apiVersion: rbac.authorization.k8s.io/v1
-  metadata:
-    name: oms-role-<namespace>
-    namespace: <namespace>
-  rules:
-    - apiGroups: ['']
-      resources: ['secrets']
-      verbs: ['get', 'watch', 'list', 'create', 'delete', 'patch', 'update']
-
-  ---
-  kind: RoleBinding
-  apiVersion: rbac.authorization.k8s.io/v1
-  metadata:
-    name: oms-rolebinding-<namespace>
-    namespace: <namespace>
-  subjects:
-    - kind: ServiceAccount
-      name: default
-      namespace: <namespace>
-  roleRef:
+    ```yaml
     kind: Role
-    name: oms-role-<namespace>
-    apiGroup: rbac.authorization.k8s.io
-  ```
+    apiVersion: rbac.authorization.k8s.io/v1
+    metadata:
+      name: oms-role-<namespace>
+      namespace: <namespace>
+    rules:
+      - apiGroups: ['']
+        resources: ['secrets']
+        verbs: ['get', 'watch', 'list', 'create', 'delete', 'patch', 'update']
+
+    ---
+    kind: RoleBinding
+    apiVersion: rbac.authorization.k8s.io/v1
+    metadata:
+      name: oms-rolebinding-<namespace>
+      namespace: <namespace>
+    subjects:
+      - kind: ServiceAccount
+        name: default
+        namespace: <namespace>
+    roleRef:
+      kind: Role
+      name: oms-role-<namespace>
+      apiGroup: rbac.authorization.k8s.io
+    ```
   
+2. Run the following command:
+
+     ```sh
+       oc create -f <sample_rbac_file>.yaml  -n <namespace>
+
+     ```
+
+     An RBAC based on the values entered in the <sample_rbac_file>.yaml is created and encoded.
+
 ## Chart details
 
 The Helm chart creates following resources:
@@ -128,6 +156,17 @@ The Helm chart creates following resources:
 Before deploying the application, ensure that the database, application server, and agent server are all in the same time zone. Also, ensure that the time zone is compatible with locale code as specified in the application.
 
 The containers are by default deployed in UTC time zone and the locale code is set to en_US_UTC. Therefore, ensure that you deploy the database in UTC time zone.
+
+## Ephemeral storage
+
+Ephemeral storage is any storage that is not guaranteed to be persisted (in Kubernetes, ephemeral storage on the node is provided by locally-attached writeable devices or, sometimes, by RAM), this is usually an emptyDir or a writable layer in the container.
+
+Ephemeral storage, like all storage, has the option to declare limits and requests for the Kubernetes runtime. Products that do not declare ephemeral storage limits and requests can give an inaccurate picture to the Kubernetes runtime for what their storage requirements are (in terms of memory and cpu units), and this can lead to clusters overcommitting on data requests that cannot be fulfilled.
+
+This rule requires ephemeral-storage requests in all scenarios. For emptyDir - ephemeral-storage limits are needed when the container is non-ReadOnlyRootFilesystem and the emptyDir volume has no sizeLimit. For configMap, downardAPI, and secret ephemeral-storage limits are needed when the container is non-ReadOnlyRootFilesystem.
+
+More information:
+[https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#local-ephemeral-storage](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#local-ephemeral-storage)
 
 ## Resources
 
@@ -168,10 +207,10 @@ You can install the Helm chart on a new or preloaded database by appropriately c
 To install the Helm chart on a new database that does not contain tables and factory data, configure the following parameters.
 
 - Set the value of `datasetup.loadFactoryData` to `install` and `datasetup.mode` to `create`.
-  
+
 - Set the value of `datasetup.fixPack.loadFPFactoryData` to `install` and `datasetup.fixPack.installedFPNo`
-  to `0`.
-  
+   to `0`.
+
   The application takes appropriate action based on the configured values.
 
 **Note:** Do not specify any agent or integration server in `omserver.servers.name`. When you are installing Helm
@@ -356,11 +395,11 @@ For example:
 appserver:
   replicaCount: 1
   image:
-    tag: 10.0.0.26
+    tag: 10.0.0.29
     pullPolicy: IfNotPresent
     names:
       - name: om-app
-        tag: 10.0.0.26
+        tag: 10.0.0.29
       - name: om-app-isccs_sbc
       - name: om-app-sma_wsc
         applications:
