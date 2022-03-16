@@ -294,7 +294,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | Parameter                | Description             | Default        |
 | ------------------------ | ----------------------- | -------------- |
 | `image.name` | Provide the value in double quotes | `"cp.icr.io/cp/ibm-pem/pem"` |
-| `image.tag` | Specify the tag name | `"6.2.0.1.3"` |
+| `image.tag` | Specify the tag name | `"6.2.0.2"` |
 | `image.pullPolicy` |  | `null` |
 | `image.pullSecret` | Provide the pull secret name | `""` |
 | `arch` |  | `"amd64"` |
@@ -564,7 +564,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.install` |  | `true` |
 | `communitymanager.image.repository` | Specify the repository | `"cp.icr.io/cp/ibm-pem/pem"` |
 | `communitymanager.image.pullPolicy` | Specify te image pull policy | `null` |
-| `communitymanager.image.tag` | Specify the tag name | `"6.2.0.1.3"` |
+| `communitymanager.image.tag` | Specify the tag name | `"6.2.0.2"` |
 | `communitymanager.image.pullSecret` | Provide the pull secret name | `null` |
 | `communitymanager.prod.enable` | If you are want to proceed for prod pcm installation then you have to mention it as true or else false | `true` |
 | `communitymanager.prod.setupfile.acceptLicence` | We should make accept-license should be true for pcm installation | `true` |
@@ -1021,6 +1021,20 @@ helm upgrade my-release -f values.yaml ./ibm-pem-standard --timeout 3600s --recr
 ```
 For product release version upgrade, please refer product documentation.
 
+
+## Post install/upgrade patching the routes (Configure SSL for OpenShift Route)
+This chart supports re-encrypt routes and requires the destination CA certificate to be configured in the route.
+
+After installing/upgrading, you must patch the routes manually for PEM, PR, PP, and API Gateway server with the CA certified TLS certificate. The routePatch.sh script allows you to patch all the routes created through the helm install with the certificate information based on the <Release_name>. 
+
+To patch the routes, download the ibm_cloud_pak/pak_extensions/post-install/routePatch.sh script file, update the file with the following values and run the script:
+* RELEASE_NAME= #Provide the release name
+* PEM_DEST_CABUNDLE_FN= #Provide the Destination CA certificate name with path for PEM server
+* PR_DEST_CABUNDLE_FN= #Provide the Destination CA certificate name with path for PR server
+* PP_DEST_CABUNDLE_FN= #Provide the Destination CA certificate name with path for PP server
+* AG_DEST_CABUNDLE_FN= #Provide the Destination CA certificate name with path for API Gateway server
+
+The routePatch.sh file and all destination CA certificates must have the 755 permission to read and execute the script for patching the routes.
 
 ## Rollback the Chart
 If the upgraded environment is not working as expected or you made an error while upgrading, you can easily rollback the chart to a previous revision.
