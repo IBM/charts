@@ -8,6 +8,7 @@
 * This chart deploys a single instance of the UrbanCode Deploy agent that may be scaled to multiple instances.
 * The Persistent Volume access modes ReadWriteOnce (RWO) and ReadWriteMany (RWX) are both supported for use with IBM UrbanCode Deploy agent.  However, ReadWriteMany is required to successfully scale to more than one replica/instance of the agent.
 * Includes a StatefulSet workload object
+* Support has been validated on OpenShift clusters running onPrem, in IBM Satellite, and IBM ROKS.
 
 ## Prerequisites
 
@@ -22,10 +23,10 @@
 
     * Log in to [MyIBM Container Software Library](https://myibm.ibm.com/products-services/containerlibrary) with the IBMid and password that are associated with the entitled software.
     * In the Entitlement keys section, select Copy key to copy the entitlement key to the clipboard.
-    * An imagePullSecret must be created to be able to authenticate and pull images from the Entitled Registry.  Once this secret has been created you will specify the secret name as the value for the image.secret parameter in the values.yaml you provide to 'helm install ...'.  Note that secrets are namespace scoped, so they must be created in every namespace you plan to install UrbanCode Deploy agent into.  Following is an example command to create an imagePullSecret named 'entitledregistry-secret'.
+    * An imagePullSecret must be created to be able to authenticate and pull images from the Entitled Registry.  If the secret is named ibm-entitlement-key it will be used as the default pull secret, no value needs to be specified in the image.secret field.  Once this secret has been created you will specify the secret name as the value for the image.secret parameter in the values.yaml you provide to 'helm install ...'.  Note that secrets are namespace scoped, so they must be created in every namespace you plan to install UrbanCode Deploy agent into.  Following is an example command to create an imagePullSecret named 'ibm-entitlement-key'.
 
 ```
-oc create secret docker-registry entitledregistry-secret --docker-username=cp --docker-password=<EntitlementKey> --docker-server=cp.icr.io
+oc create secret docker-registry ibm-entitlement-key --docker-username=cp --docker-password=<EntitlementKey> --docker-server=cp.icr.io
 ```
 
 3. The agent must have an UrbanCode Deploy server or relay to connect to.
