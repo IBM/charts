@@ -23,12 +23,12 @@ productVersion: {{ .Values.imageVersion }}
 {{- define "px.getETCDPreInstallHookImage" -}}
 {{- if (.Values.customRegistryURL) -}}
     {{- if (eq "/" (.Values.customRegistryURL | regexFind "/")) -}}
-        {{ cat (trim .Values.customRegistryURL) "/px-etcd-preinstall-hook:v1.2" | replace " " ""}}
+        {{ cat (trim .Values.customRegistryURL) "/px-etcd-preinstall-hook:v1.5" | replace " " ""}}
     {{- else -}}
-        {{cat (trim .Values.customRegistryURL) "/portworx/px-etcd-preinstall-hook:v1.2" | replace " " ""}}
+        {{cat (trim .Values.customRegistryURL) "/portworx/px-etcd-preinstall-hook:v1.5" | replace " " ""}}
     {{- end -}}
 {{- else -}}
-    {{ "portworx/px-etcd-preinstall-hook:v1.2" }}
+    {{ "portworx/px-etcd-preinstall-hook:v1.5" }}
 {{- end -}}
 {{- end -}}
 
