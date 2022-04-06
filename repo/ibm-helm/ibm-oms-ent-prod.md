@@ -24,8 +24,8 @@ Before deploying Sterling Order Management Software, review and complete the fol
 - Configure container registry and container image to pull them to all Kubernetes worker nodes.
 - Create a Persistent Volume with access mode as 'Read write many' and having a minimum of 10 GB hard disk space. Ensure that the PersistentVolume storage is accessible by all containers across the cluster and  the owner group of the PersistenceVolume directory has write access, and the owner group ID is specified in the global.persistence.securityContext.fsGroup parameter of the Sterling Order Management Software Helm chart.
 - [Create a Secret](#creating-a-secret) with the datasource connectivity details.
-- [Create a Role Based Access Control (RBAC).](#creating-a-role-based-access-control-RBAC)
-- Configure the agent or integration servers in the Helm chart. For more information about configuring the agent or integration servers, see [Configuring agent and integration server.](#configuring-agent-and-integration-servers)
+- [Create a Role Based Access Control (RBAC).](#creating-a-role-based-access-control-rbac)
+- Configure the agent or integration servers in the Helm chart. For more information about configuring the agent or integration servers, see [Configuring agent and integration server.](#configuring-the-agent-and-integration-servers)
 - If you have not enabled anyuid Security Context Constraint (SCC), enable it to the service account that is used for the deployment of Sterling Order Management Software on OpenShift Container Platform by using the following command:
 
     ```sh
@@ -215,7 +215,7 @@ To install the Helm chart on a new database that does not contain tables and fac
 
 **Note:** Do not specify any agent or integration server in `omserver.servers.name`. When you are installing Helm
   chart on a new database, deploy the application server and configure both agent and integration servers. For more
-  information about deploying the agent and integration servers, see [Configuring agent and integration server.](#configuring-agent-and-integration-servers)
+  information about deploying the agent and integration servers, see [Configuring agent and integration server.](#configuring-the-agent-and-integration-servers)
 
 ### Installing the Helm chart on a preloaded database
 
@@ -245,7 +245,7 @@ The following table describes the configurable parameters that are applicable fo
 | `appserver.config.database.minPoolSize`                                           | Specify the database min pool size.                                                                                                                                                                                        | `10`                                                     |
 | `appserver.config.corethreads`                                                    | Specify the core threads for Liberty.                                                                                                                                                                                | `20`                                                     |
 | `appserver.config.maxthreads`                                                     | Specify the maximum threads for Liberty.                                                                                                                                                                               | `100`                                                    |
-| `appserver.config.libertyServerXml`                                               | Provide the custom server.xml for Liberty. For more information about the custom server.xml, see [Customizing server.xml for Liberty](customizing-server.xml-for-Liberty).                                                                                                                        |
+| `appserver.config.libertyServerXml`                                               | Provide the custom server.xml for Liberty. For more information about the custom server.xml, see [Customizing server.xml for Liberty](#customizing-the-serverxml-file-for-liberty).                                                                                                                        |
 | `appserver.livenessCheckBeginAfterSeconds`                                        | Specify the approximate wait time in seconds to begin the liveness check.                                                                                                                                                      | `900`                                                    |
 | `appserver.livenessFailRestartAfterMinutes`                                       | Specify the approximate time period in minutes after which the server restarts, if liveness check keeps failing for this period.                                                                                                | `10`                                                     |
 | `appserver.terminationGracePeriodSeconds`                                | Specify the time period in seconds allowed for the pod to terminate gracefully, after which the processes running in the pod will be forcibly terminated.                                                                                                 | 60                                                       |
@@ -844,7 +844,7 @@ The certified container images are pulled from the source registry to your local
 
 ### Installing the Helm chart in an air gap environment
 
-Before you begin, ensure that you review and complete the [prerequisites.](#deployment-prerequisites)  
+Before you begin, ensure that you review and complete the [prerequisites.](#prerequisites)  
 
 To install the Helm chart, run the following command:
 
@@ -880,7 +880,7 @@ To uninstall the Helm chart, run the following command:
 
 The Helm chart provides various ways for advanced pod scheduling in Kubernetes such as node affinity, pod affinity, pod anti-affinity, and tolerations. For more information about the usage and specifications of affinity and tolerations, see the [Kubernetes documentation.](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
 
-The following parameters are exposed to configure affinity and tolerations. For more information about these parameters, see [Configuration parameters in values.yaml.](#configuration-parameters-in-values.yaml)
+The following parameters are exposed to configure affinity and tolerations. For more information about these parameters, see [Configuration parameters in values.yaml.](#configuration-parameters-in-valuesyaml)
 
 - Tolerations
   - For application servers, configure tolerations by using `appserver.tolerations`.
@@ -962,7 +962,7 @@ Even though the application server pod has successfully started, if the liveness
 
    For example, if you set the value of `omserver.common.readinessFailRestartAfterMinutes` to`10` and the agent server pod is not able to successfully start even after `10` minutes, the agent server pod restarts.
 
-For more information about these parameters, see [Configuration parameters in values.yaml.](#configuration-parameters-in-values.yaml)
+For more information about these parameters, see [Configuration parameters in values.yaml.](#configuration-parameters-in-valuesyaml)
 
 ## Customizing the server.xml file for Liberty
 
@@ -1034,4 +1034,4 @@ The following resources are created by the Helm chart by using Helm hook:
 - `<release-name>-ibm-oms-ent-prod-datasetup`
 - `<release-name>-ibm-oms-ent-prod-auto-ingress-secret`
 
-**Note:** Additionally, you might want to delete resources that are created as part of [prerequisites.](#deployment-prerequisites)
+**Note:** Additionally, you might want to delete resources that are created as part of [prerequisites.](#prerequisites)
