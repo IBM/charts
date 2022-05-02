@@ -302,26 +302,8 @@ Install the IBM Cloud Object Storage plug-in with a Helm chart to set up pre-def
 
 ### **Optional: Limit secret access**
 Limit the IBM Cloud Object Storage plug-in to access only the Kubernetes secrets that hold your IBM Cloud Object Storage service credentials. By default, the plug-in is authorized to access all Kubernetes secrets in your cluster.
-   1. Navigate to the `templates` directory and list available files.
-      ```
-      cd ./templates && ls
-      ```
-   2. Open the `provisioner-sa.yaml` file and look for the `ibmcloud-object-storage-secret-reader` ClusterRole definition.
-   3. Add the name of the secret that you created earlier to the list of secrets that the plug-in is authorized to access in the `resourceNames` section.
-      ```
-      kind: ClusterRole
-      apiVersion: rbac.authorization.k8s.io/v1
-      metadata:
-        name: ibmcloud-object-storage-secret-reader
-      rules:
-      - apiGroups: [""]
-        resources: ["secrets"]
-        resourceNames: ["<secret_name1>","<secret_name2>"]
-        verbs: ["get"]
-      ```
-   4. Save your changes.
-   5. Navigate back to the `ibm-object-storage-plugin` directory.
-   6. Go back to **Installing the Chart** section and continue with chart installation.
+
+Add the name of the secret that you created earlier to the list of secrets that the plug-in is authorized to access, in the `secretResourceNames` Helm value, by adding `--set secretResourceNames[0]=<secret_name>` in the above commands.
 
 ### Verifying the Chart
 
