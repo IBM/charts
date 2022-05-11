@@ -116,17 +116,6 @@ productVersion: {{ .Values.imageVersion }}
 {{- end -}}
 {{- end -}}
 
-{{- define "px.getLighthouseImages" -}}
-{{- if (.Values.customRegistryURL) -}}
-    {{- if (eq "/" (.Values.customRegistryURL | regexFind "/")) -}}
-        {{ trim .Values.customRegistryURL }}
-    {{- else -}}
-        {{cat (trim .Values.customRegistryURL) "/portworx/" | replace " " ""}}
-    {{- end -}}
-{{- else -}}
-        {{ "portworx" }}
-{{- end -}}
-{{- end -}}
 
 {{/*
 Create the name of the service account to use for hooks
