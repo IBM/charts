@@ -1,4 +1,4 @@
-# IBM Sterling B2B Integrator Enterprise Edition v6.1.0.4_1
+# IBM Sterling B2B Integrator Enterprise Edition v6.1.0.5
 ## Introduction
 
 IBM Sterling B2B Integrator helps companies integrate complex B2B EDI processes with their partner communities. Organizations get a single, flexible B2B platform that supports most communication protocols, helps secure your B2B network and data, and achieves high-availability operations. The offering enables companies to reduce costs by consolidating EDI and non-EDI any-to-any transmissions on a single B2B platform and helps automate B2B processes across enterprises, while providing governance and visibility over those processes.
@@ -328,8 +328,8 @@ Depending on the capacity of the kubernetes worker node and database network con
 Parameter                                      | Description                                                          | Default 
 -----------------------------------------------| ---------------------------------------------------------------------| -------------
 `global.image.repository`                      | Repository for B2B docker images                                     | 
-`global.image.tag          `                   | Docker image tag                                                     | `6.1.0.4_1`
-`global.image.digest          `                | Docker image digest. Takes precedence over tag                       | `sha256:fccba2698a8ce1266c4a63c08d657143f134d0285613ac99826bd23bf7a46df8`
+`global.image.tag          `                   | Docker image tag                                                     | `6.1.0.5`
+`global.image.digest          `                | Docker image digest. Takes precedence over tag                       | `sha256:c18599d555eebb176e3afb43674d730dc8895222e31866e5cfa847cc317b571a`
 `global.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `global.image.pullSecret `         			   | Pull secret for repository access                                    | 
 `arch.amd64`                                   | Specify architecture (amd64, s390x) and weight to be used for scheduling           | `2 - No Preference`
@@ -609,13 +609,13 @@ Parameter                                      | Description                    
 `dashboard.enabled`                            | Enable sample Grafana dashboard                                      | false
 `test.image.repository`                        | Repository for docker image used for helm test and cleanup           | 'ibmcom'
 `test.image.name          `                    | helm test and cleanup docker image name                              | `opencontent-common-utils`
-`test.image.tag          `                     | helm test and cleanup docker image tag                               | `1.1.4`
-`test.image.digest          `                  | helm test and cleanup docker image digest. Takes precedence over tag | `sha256:45fbb199f046eb939ebfaf08fa6fb29da1583ac18f92c97333b3940eb236e005`
+`test.image.tag          `                     | helm test and cleanup docker image tag                               | `1.1.32`
+`test.image.digest          `                  | helm test and cleanup docker image digest. Takes precedence over tag | `sha256:0a688936780c0c32b55e7149f589ffbf5a877efa790af7270d852512b4117272`
 `test.image.pullPolicy`                        | Pull policy for helm test image repository                           | `IfNotPresent`
 `purge.enabled`                                | Enable external purge job                                            | 'false'
 `purge.image.repository          `             | External purge docker image repository                               | `purge`
-`purge.image.tag          `                    | External purge image tag                                             | `6.1.0.4_1`
-`purge.image.digest          `                 | External purge image digest. Takes precedence over tag               | `sha256:e3284234ca24caa5937e8adfcfc3581f45c580b5d5c836079b4c451d0d361bf7`
+`purge.image.tag          `                    | External purge image tag                                             | `6.1.0.5`
+`purge.image.digest          `                 | External purge image digest. Takes precedence over tag               | `sha256:398a6651070bc10af5c1557e76fd161fea13c29f009ece9cd44bbab0c9d16a8d`
 `purge.image.pullPolicy`                       | Pull policy for external purge docker image                          | `IfNotPresent`
 `purge.image.pullSecret`                       | Pull secret for repository access                                    | 
 `purge.schedule`                               | External purge job creation and execution schedule. Its a Cron format string such as 1 * * * * or 
