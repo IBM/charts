@@ -1,0 +1,234 @@
+{{- if or (not (lookup "apps/v1" "DaemonSet" "kube-system" "portworx")) (eq true .Values.generateSTCForMigration) }}
+
+  {{- $telemetry := .Values.telemetry | default false }}
+  {{- $isCoreOS := .Values.isTargetOSCoreOS | default false }}
+  {{- $etcdEndPoints := .Values.kvdb }}
+  {{- $openshiftInstall := .Values.openshiftInstall | default false }}
+  {{- $EKSInstall := .Values.EKSInstall | default false }}
+  {{- $pksInstall := .Values.pksInstall | default false }}
+  {{- $AKSInstall := .Values.AKSInstall | default false }}
+  {{- $usefileSystemDrive := .Values.usefileSystemDrive | default false }}
+  {{- $usedrivesAndPartitions := .Values.usedrivesAndPartitions | default false }}
+  {{- $secretType := .Values.secretType | default "k8s" }}
+  {{- $deployEnvironmentIKS := .Capabilities.KubeVersion.GitVersion | regexMatch "IKS" }}
+  {{- $drives := .Values.drives | default "none" }}
+  {{- $dataInterface := .Values.dataInterface | default "none" }}
+  {{- $managementInterface := .Values.managementInterface | default "none" }}
+  {{- $envVars := .Values.envVars | default "none" }}
+  {{- $customRegistryURL := .Values.customRegistryURL | default "none" }}
+  {{- $registrySecret := .Values.registrySecret | default "none" }}
+  {{- $licenseSecret := .Values.licenseSecret | default "none" }}
+  {{- $kvdbDevice := .Values.kvdbDevice | default "none" }}
+  {{- $journalDevice := .Values.storage.journalDevice | default "none" }}
+  {{- $metadataSize := int64 .Values.storage.metadataSize | int64 }}
+  {{- $advOpts := .Values.advOpts | replace "+" "," | replace ";" " " | default "none" }}
+  {{- $icrRegistry := .Values.icrRegistry | default false }}
+  {{- $icrSecret := .Values.icrSecret | default "default/all-icr-io" }}
+  {{- $csiCloudDrive := .Values.csiCloudDrive | default false }}
+  {{- $internalKVDB := .Values.internalKVDB | default false }}
+  {{- $etcdSecret := .Values.etcd.secret | default "none" }}
+  {{- $changePortRange := .Values.changePortRange | default false }}
+  {{- $pvcControllerEnabled := .Values.enablePVCController | default false }}
+
+kind: StorageCluster
+apiVersion: core.libopenstorage.org/v1
+metadata:
+  name: "{{ required "Clustername cannot be empty" .Values.clusterName }}"
+  namespace: kube-system
+  annotations:
+    {{- if or (ne $advOpts "none") (ne $etcdSecret "none") }}
+      {{- if ne $etcdSecret "none" }}
+    portworx.io/misc-args: "-userpwd $(ETCD_USERNAME):$(ETCD_PASSWORD) -ca /etc/pwx/etcdcerts/ca.pem {{ cat $advOpts | replace "none" ""}}"
+      {{- else }}
+    portworx.io/misc-args: "{{ $advOpts }}"
+      {{- end }}
+    {{- end }}
+    {{- if eq true $pvcControllerEnabled }}
+    portworx.io/pvc-controller: "true"
+    {{- end }}
+    portworx.io/is-iks: "true"
+    portworx.io/migration-approved: "false"
+spec:
+  image: portworx/oci-monitor:{{ required "A valid Image tag is required in the SemVer format" .Values.imageVersion }}
+  imagePullPolicy: Always
+  {{- if not (eq $customRegistryURL "none") }}
+  customImageRegistry: {{ $customRegistryURL }}
+  {{- end }}
+  {{- if not (eq $registrySecret "none") }}
+  imagePullSecret: {{ $registrySecret }}
+  {{- end }}
+  {{- if eq $changePortRange true }}
+  startPort: 17001
+  {{- end }}
+
+  kvdb:
+  {{- if eq $internalKVDB true }}
+    internal: true
+  {{- else }}
+    internal: false
+    {{- if empty $etcdEndPoints }}
+    "{{ required "A valid ETCD url in the format etcd:http://<your-etcd-endpoint> is required. Verify that the key is correct and there isnt any typo in specifying that, also ensure it is accessible from all node of your kubernetes cluster" .etcdEndPoint}}"
+    {{- else }}
+    endpoints:
+      {{- $endpoints := $etcdEndPoints | split ";" }}
+      {{- range $key, $val := $endpoints }}
+      - {{$val}}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+
+  storage:
+    {{- if ne $metadataSize 0 }}
+    systemMetadataDevice: {{ printf "size=%d" (int64 $metadataSize) }}
+    {{- end }}
+    {{- if ne $journalDevice "none" }}
+    journalDevice: {{ $journalDevice }}
+    {{- end }}
+    {{- if not (eq $drives "none") }}
+    devices:
+      {{- $driveNames := $drives | split ";" }}
+      {{- range $index, $name := $driveNames }}
+      - {{ $name }}
+      {{- end }}
+    {{- end }}
+    {{- if or $usefileSystemDrive $deployEnvironmentIKS }}
+    forceUseDisks: true
+    {{- end }}
+    {{- if eq $usedrivesAndPartitions true }}
+    useAllWithPartitions: true
+    {{- end }}
+    {{- if ne $kvdbDevice "none" }}
+    kvdbDevice: {{ $kvdbDevice }}
+    {{- end }}
+
+  {{- if .AKSInstall }}
+  cloudStorage:
+    deviceSpecs:
+      - type=Premium_LRS,size=150
+  {{- end }}
+
+  {{- if or (ne $dataInterface "none") (ne $managementInterface "none") }}
+  network:
+    {{- if ne $dataInterface "none" }}
+    dataInterface: {{ $dataInterface }}
+    {{- end }}
+    {{- if ne $managementInterface "none" }}
+    mgmtInterface: {{ $managementInterface }}
+    {{- end }}
+  {{- end }}
+
+  {{- if ne $secretType "none" }}
+  secretsProvider: {{$secretType}}
+  {{- else }}
+    {{- if $deployEnvironmentIKS }}
+  secretsProvider: ibm-kp
+    {{- end }}
+  {{- end }}
+
+  env:
+  {{ if not (eq $envVars "none") }}
+    {{- $vars := $envVars | split ";" }}
+    {{- range $key, $val := $vars }}
+    {{- $envVariable := $val | split "=" }}
+    - name: {{ $envVariable._0 | trim | quote }}
+      value: {{ $envVariable._1 | trim | quote }}
+    {{ end }}
+  {{- end }}
+  {{- if not (eq $etcdSecret "none") }}
+    - name: ETCD_USERNAME
+      valueFrom:
+        secretKeyRef:
+          key: "username"
+          name: "{{ $etcdSecret }}"
+    - name: ETCD_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          key: "password"
+          name: "{{ $etcdSecret }}"
+  {{- end }}
+  {{- if eq $csiCloudDrive true }}
+    - name: ENABLE_CSI_DRIVE
+      value: "{{ $csiCloudDrive }}"
+  {{- end }}
+  {{- if eq $icrRegistry true }}
+    - name: REGISTRY_SECRET
+      value: "{{ $icrSecret }}"
+  {{- end }}
+  {{- if ne $licenseSecret "none" }}
+    - name: SAAS_ACCOUNT_KEY_STRING
+      valueFrom:
+        secretKeyRef:
+          name: "{{ $licenseSecret }}"
+          key: accountKey
+  {{- end }}
+  {{- if .Values.AKSInstall }}
+    - name: AZURE_CLIENT_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: px-azure
+          key: AZURE_CLIENT_SECRET
+    - name: AZURE_CLIENT_ID
+      valueFrom:
+        secretKeyRef:
+          name: px-azure
+          key: AZURE_CLIENT_ID
+    - name: AZURE_TENANT_ID
+      valueFrom:
+        secretKeyRef:
+          name: px-azure
+          key: AZURE_TENANT_ID
+  {{- end }}
+
+  stork:
+    {{- if (and (.Values.stork) (eq .Values.stork true))}}
+    enabled: true
+      {{- if .Values.storkVersion }}
+    image: {{ template "px.getStorkImage" . }}:{{ required "A valid Image tag is required in the SemVer format" .Values.storkVersion }}
+      {{- end }}
+    {{- else }}
+    enabled: false
+    {{- end }}
+
+  {{- if eq $isCoreOS true}}
+  volumes:
+    - name: src
+      mountPath: /lib/modules
+      hostPath:
+        path: /lib/modules
+        type: Directory
+  {{- end }}
+  {{- if eq $telemetry true}}
+  monitoring:
+    telemetry:
+      enabled: true
+  {{- end }}
+
+  {{- if (and (.Values.csi) (eq .Values.csi true))}}
+  csi:
+    enabled: true
+  {{- end }}
+  {{- if (and (.Values.aut) (eq .Values.aut true))}}
+  autopilot:
+    enabled: true
+  {{- end }}
+
+  placement:
+    {{- with .Values.tolerations }}
+    tolerations:
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+
+  {{- if not (eq $etcdSecret "none") }}
+  volumes:
+  - mountPath: /etc/pwx/etcdcerts
+    name: etcdcerts
+    secret:
+      secretName: {{ $etcdSecret }}
+      items:
+        - key: ca.pem
+          path: ca.pem
+  {{- end }}
+
+{{- end }}
+
+
