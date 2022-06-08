@@ -21,15 +21,84 @@ This chart deploys IBM Sterling Secure Proxy CM on a container management platfo
 
 Please refer to [Planning](https://www.ibm.com/docs/en/secure-proxy/6.0.3?topic=software-planning) and [Pre-installation tasks](https://www.ibm.com/docs/en/secure-proxy/6.0.3?topic=installing-pre-installation-tasks) section in the online Knowledge Center documentation. 
 
+### SecurityContextConstraints Requirements
+
+The IBM Sterling Secure Proxy CM chart requires an SecurityContextConstraints (SCC) to be tied to the target namespace prior to deployment. This chart defines a custom SCC which is the minimum set of permissions/capabilities needed to deploy this chart and the Sterling Secure Proxy CM container to function properly. It is based on the predefined restricted SCC with extra required privileges. This is the recommended SCC for this chart and it can be created on the cluster by cluster administrator. The SCC and cluster role for this chart is defined below. The cluster administrator can either use the snippets given below or the scripts provided in the Helm chart to create the SCC, cluster role and tie it to the project where deployment will be performed. In both the cases, same SCC and cluster role will be created. It is recommended to use the scripts in the Helm chart so that required SCC and cluster role is created without any issue.
+
+* Custom SecurityContextConstraints definition:
+
+```
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata: 
+  name: ibm-ssp-cm-scc
+  labels:
+    app.kubernetes.io/name: ibm-ssp-cm-scc
+    app.kubernetes.io/instance: ibm-ssp-cm-scc
+    app.kubernetes.io/managed-by: IBM
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+privileged: false
+allowPrivilegedContainer: false
+allowPrivilegeEscalation: true
+requiredDropCapabilities:
+- KILL
+- MKNOD
+- SETFCAP
+- FSETID
+- NET_BIND_SERVICE
+- SYS_CHROOT
+- SETPCAP
+- NET_RAW
+allowedCapabilities:
+- SETGID
+- DAC_OVERRIDE 
+defaultAddCapabilities: []
+defaultAllowPrivilegeEscalation: false
+forbiddenSysctls:
+- "*"
+fsGroup:
+  type: MustRunAs
+  ranges:
+  - min: 1
+    max: 4294967294
+readOnlyRootFilesystem: false
+runAsUser:
+  type: MustRunAsRange 
+  uidRangeMin: 1 
+  uidRangeMax: 1000639999
+seLinuxContext:
+  type: RunAsAny
+supplementalGroups:
+  type: RunAsAny
+  ranges:
+  - min: 1
+    max: 4294967294
+volumes:
+- configMap
+- downwardAPI
+- persistentVolumeClaim
+- projected
+- secret
+- nfs
+```
+
+- From the command line, you can run the setup scripts included under pak_extensions (untar the downloaded archive to extract the pak_extensions directory)
+
+  As a cluster admin the pre-install script is located at:
+  - chmod +x pre-install/clusterAdministration/createSecurityClusterPrereqs.sh
+  - pre-install/clusterAdministration/createSecurityClusterPrereqs.sh
+
+  As team admin the namespace scoped pre-install script is located at:
+  - chmod +x pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh
+  - pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh <Namespace/Project>
+  
 ### PodSecurityPolicy Requirements
 
-This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy.
-
-* Predefined  PodSecurityPolicy name: [`ibm-privileged-psp`](https://ibm.biz/cpkspec-psp)
-
-This chart optionally defines a custom PodSecurityPolicy which is used to finely control the permissions/capabilities needed to deploy this chart. It is based on the predefined PodSecurityPolicy name: [`ibm-restricted-psp`](https://github.com/IBM/cloud-pak/blob/master/spec/security/psp/ibm-restricted-psp.yaml) with extra required privileges. You can enable this policy by using the Platform User Interface or configuration file available under pak_extensions/pre-install/ directory
-
-- From the user interface, you can copy and paste the following snippets to enable the custom PodSecurityPolicy
+In Kubernetes the Pod Security Policy (PSP) control is implemented as optional (but recommended). [Click here](https://kubernetes.io/docs/concepts/security/pod-security-policy/) for more information on Pod Security Policy. Based on your organization security policy, you may need to decide the pod security policy for your Kubernetes cluster. The IBM Sterling Secure Proxy CM chart defines a custom Pod Security Policy which is the minimum set of permissions/ capabilities needed to deploy this chart and the Sterling Secure Proxy CM container to function properly. This is the recommended PSP for this chart and it can be created on the cluster by cluster administrator. The PSP and cluster role for this chart is defined below. The cluster administrator can either use the snippets given below or the scripts provided in the Helm chart to create the PSP, cluster role and tie it to the namespace where deployment will be performed. In both the cases, same PSP and cluster role will be created. It is recommended to use the scripts in the Helm chart so that required PSP and cluster role is created without any issue.
 
 * Custom PodSecurityPolicy definition:  
 
@@ -56,9 +125,6 @@ spec:
   - SETPCAP
   - NET_RAW
   allowedCapabilities:
-  - CHOWN
-  - SETGID
-  - SETUID
   - DAC_OVERRIDE
   - FOWNER
   allowedHostPaths:
@@ -123,83 +189,6 @@ rules:
   - chmod +x  pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh 
   - pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh <Namespace/Project>
 
-### SecurityContextConstraints Requirements
-
-* Predefined Red Hat OpenShift SecurityContextConstraints name: [`ibm-privileged-scc`](https://ibm.biz/cpkspec-scc)
-
-This chart optionally defines a custom SecurityContextConstraints (on Red Hat OpenShift Container Platform) which is used to finely control the permissions/capabilities needed to deploy this chart.  It is based on the predefined SecurityContextConstraint name: [`ibm-restricted-scc`](https://github.com/IBM/cloud-pak/blob/master/spec/security/scc/ibm-restricted-scc.yaml) with extra required privileges.
-
-* Custom SecurityContextConstraints definition:
-
-```
-apiVersion: security.openshift.io/v1
-kind: SecurityContextConstraints
-metadata: 
-  name: ibm-ssp-cm-scc
-  labels:
-    app: "ibm-ssp-cm-scc"
-allowHostDirVolumePlugin: false
-allowHostIPC: false
-allowHostNetwork: false
-allowHostPID: false
-allowHostPorts: false
-privileged: false
-allowPrivilegedContainer: false
-allowPrivilegeEscalation: true
-requiredDropCapabilities:
-- KILL
-- MKNOD
-- SETFCAP
-- FSETID
-- NET_BIND_SERVICE
-- SYS_CHROOT
-- SETPCAP
-- NET_RAW
-allowedCapabilities:
-- FOWNER
-- CHOWN
-- SETGID
-- SETUID
-- DAC_OVERRIDE 
-defaultAddCapabilities: []
-defaultAllowPrivilegeEscalation: false
-forbiddenSysctls:
-- "*"
-fsGroup:
-  type: MustRunAs
-  ranges:
-  - min: 1
-    max: 4294967294
-readOnlyRootFilesystem: false
-runAsUser:
-  type: MustRunAsRange 
-  uidRangeMin: 1000 
-  uidRangeMax: 65535
-seLinuxContext:
-  type: RunAsAny
-supplementalGroups:
-  type: RunAsAny
-  ranges:
-  - min: 1
-    max: 4294967294
-volumes:
-- configMap
-- downwardAPI
-- persistentVolumeClaim
-- projected
-- secret
-- nfs
-```
-
-- From the command line, you can run the setup scripts included under pak_extensions (untar the downloaded archive to extract the pak_extensions directory)
-
-  As a cluster admin the pre-install script is located at:
-  - chmod +x pre-install/clusterAdministration/createSecurityClusterPrereqs.sh
-  - pre-install/clusterAdministration/createSecurityClusterPrereqs.sh
-
-  As team admin the namespace scoped pre-install script is located at:
-  - chmod +x pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh
-  - pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh <Namespace/Project>
 
 ## Resources Required
 
@@ -272,4 +261,5 @@ Please refer to [DIME and DARE Security Considerations](https://www.ibm.com/docs
 - IBM Sterling Secure Proxy CM chart is supported with only 1 replica count.
 - IBM Sterling Secure Proxy CM chart supports only amd64 architecture.
 - Non-persistence mode is not supported.
+
 
