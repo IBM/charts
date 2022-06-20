@@ -282,7 +282,7 @@ The value should be used in place of the one shown below.
 
 ```console
 helm repo update
-helm pull --untar ibm-helm/ibm-rtas-prod --version 7.1022.0
+helm pull --untar ibm-helm/ibm-rtas-prod --version 8.1023.0
 
 # update the runAsUser and fsGroup to match scc policy
 sed -i -e "s/runAsUser: 1001/runAsUser: $(oc get project test-system -oyaml \
@@ -388,7 +388,7 @@ oc new-project cp
 
 ```bash
 export CASE_NAME=ibm-rtas-case
-export CASE_VERSION=7.1022.0
+export CASE_VERSION=8.1023.0
 export CASE_ARCHIVE=${CASE_NAME}-${CASE_VERSION}.tgz
 export CASE_REMOTE_PATH=https://github.com/IBM/cloud-pak/raw/master/repo/case/${CASE_ARCHIVE}
 export OFFLINEDIR=$HOME/offline
@@ -453,7 +453,7 @@ If your cluster does not use a Machine Config Operator the above step will not u
 * Unpack the product helm chart
 
 ```bash
-tar xf $OFFLINEDIR/charts/ibm-rtas-prod-7.1022.0.tgz
+tar xf $OFFLINEDIR/charts/ibm-rtas-prod-8.1023.0.tgz
 ```
 
 * Continue to install the product as normal but since the global pull secret has been created the pull secret is not required `oc create secret docker-registry cp.icr.io`. Naturally this secret should not be referenced in the helm install `--set global.ibmRtasRegistryPullSecret=cp.icr.io \`.
@@ -528,6 +528,10 @@ It is possible for users to request executions that exceed the resources availab
 
 As general guidance if your cluster has a fixed number of nodes; configure `execution.priorityClassName` with a class that has a [negative](https://kubernetes.io/blog/2019/04/16/pod-priority-and-preemption-in-kubernetes/) priority. This should make the dynamic workload the least important in the cluster thereby protecting critical services. If your cluster autoscales a negative priority can not be used since the autoscaler will not scale the cluster to meet demand from pods with a negative priority. In such cases setting a default priorityClass in the cluster with a high value for critical services is recommended with a different, lower, non-negative class for the dynamic workload using `execution.priorityClassName`. Further information can be found in the configuration section.
 
+### Egress
+
+In the default configuration, no egress rules are created to restrict the endpoints that the product can connect to. This enables the product to be deployed easily, without knowledge of the system under test. In environments with stricter access requirements, `networkPolicy.egress.enable` can be enabled to restrict traffic to `networkPolicy.egress.cidrs` (which defaults to private addresses defined in RFC1918). Note: With this egress policy applied, `helm test` is expected to fail due to resources used being hosted on github.com.
+
 ### Trust of additional certificates
 
 The product only trusts certificates signed by recognized CAs. To trust additional CAs, for example your internal corporate CA, you must create a secret containing the additional CAs you wish to trust.
@@ -596,6 +600,7 @@ The defaults shown are not appropriate on OpenShift clusters. The `values-opensh
 
 | Parameter                                      | Description | Default |
 |------------------------------------------------|-------------|---------|
+| `gateway.allowedOrigin`                   | A comma separated list of allowed origins for CORS. For example: `*.domain.com,*.test.com,10.10.*.*`  | Empty |
 | `global.ibmRtasCertSecretName`                     | The name of the secret containers use to verify trust of the ingress domain when loopback occurs | ingress |
 | `global.ibmRtasCertSecretOptional`                 | If the ingress domain certificate is signed by a globally trusted CA, skip use of the secret | false |
 | `global.ibmRtasRegistryPullSecret`                    | The name of the secret used to pull images from the Entitlement Registry. | REQUIRED |
@@ -616,6 +621,8 @@ The defaults shown are not appropriate on OpenShift clusters. The `values-opensh
 | `execution.priorityClassValue`                 | When set a priorityClass named `execution.priorityClassName` is created with the set priority value | |
 | `license`                                      | Confirmation that the EULA has been accepted. For example `true` | false |
 | `networkPolicy.enabled`                        | Deny other software, installed in the cluster, access to the product. | false |
+| `networkPolicy.egress.enable`                  | When `network.policy` is enabled create a rule to narrow egress from the product. | false |
+| `networkPolicy.egress.cidrs`                   | Network ranges to allow access to. This does not include access to github.com where helm test resources are stored. | [ 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 ] |
 | `preflight.validateHostPattern`                | When false, no check will be made prior to installation to validate that the pattern used to generate hostnames (e.g. for virtual services) will produce viable names  | true |
 | `priorityClassName`                            | The products pods (excluding dynamic workload) will have this priorityClass | '' |
 | `priorityClassValue`                           | When set a priorityClass named `priorityClassName` is created with the set priority value | |
