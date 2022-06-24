@@ -20,7 +20,7 @@ The `ibm-odm-prod` chart deploys five containers corresponding to the four ODM s
 The `ibm-odm-prod` chart supports the following options for persistence:
 
 - PostgreSQL as an internal database. This is the **default** option. Persistent Volume (PV) is required if you choose to use an internal database. PV represents an underlying storage capacity in the infrastructure. PV must be created with accessMode ReadWriteOnce and storage capacity of 5Gi or more, before you install ODM. You create a PV in the Admin console or with a .yaml file.
-- PostgreSQL, Db2 or Microsoft SQL Server as an external database. If you specify a server name for the external database, the external database is used otherwise the internal database is used. Before you select this option, you must have an external PostgreSQL, Db2 or Microsoft SQL Server database up and running.
+- PostgreSQL, Db2, Microsoft SQL Server or Oracle as an external database. If you specify a server name for the external database, the external database is used otherwise the internal database is used. Before you select this option, you must have an external PostgreSQL, Db2, Microsoft SQL Server or Oracle database up and running.
 
 ## Architecture
 
@@ -33,6 +33,7 @@ The following architectures are supported:
 
 - Kubernetes 1.19+ with Beta APIs enabled
 - Helm 3.2 and later version
+- Review the [product license](LICENSES/LICENSE-EN) and set `license=true` to accept the license agreement
 - One PersistentVolume needs to be created prior to installing the chart if internalDatabase.persistence.enabled=true and internalDatabase.persistence.dynamicProvisioning=false. In that case, it is required that the securityContext.fsGroup 26 has read and write permissions on the postgres data directory. You can update the permissions by mounting the volume temporarily or accessing the host machine and performing the following commands:
 
 ```console
@@ -48,7 +49,8 @@ Ensure you have a good understanding  of the underlying concepts and technologie
 
 Before you install ODM for production, you need to gather all the configuration information that you will use for your release. For more details, refer to the [ODM for production configuration parameters](https://www.ibm.com/docs/en/odm/8.11.0?topic=reference-odm-production-configuration-parameters).
 
-If you want to provide customized user access, read [Configuring user access](https://www.ibm.com/docs/en/odm/8.11.0?topic=production-configuring-user-access)
+To use the default user access, you **must** define a password to be used by the default users like *odmAdmin* by setting the parameter `usersPassword`.
+If you want to provide customized user access, read [Configuring user access](https://www.ibm.com/docs/en/odm/8.11.0?topic=production-configuring-user-access).
 
 If you want to use a custom security certificate, read [Defining the security certificate](https://www.ibm.com/docs/en/odm/8.11.0?topic=production-defining-security-certificate)
 
@@ -70,6 +72,7 @@ You can also configure the chart to use a custom serviceAccount. In this case, a
 
 ```console
 $ helm install my-odm-prod-release \
+  --set license=true \
   --set internalDatabase.secretCredentials=my-odm-db-secret \
   --set serviceAccountName=ibm-odm-prod-service-account \
   /path/to/ibm-odm-prod-<version>.tgz
@@ -149,6 +152,7 @@ To use the `restricted` scc, you must define the `customization.runAsUser` param
 
 ```console
 $ helm install my-odm-prod-release \
+  --set license=true \
   --set customization.runAsUser='' \
   /path/to/ibm-odm-prod-<version>.tgz
 ```
@@ -286,6 +290,8 @@ To install a release with the default configuration and a release name of `my-od
 
 ```console
 $ helm install my-odm-prod-release \
+  --set license=true \
+  --set usersPassword=my-password \
   --set internalDatabase.secretCredentials=my-odm-db-secret \
   /path/to/ibm-odm-prod-<version>.tgz
 ```
@@ -297,12 +303,13 @@ For example:
 
 ```console
 $ helm install my-odm-prod-release \
+  --set license=true \
   --set internalDatabase.databaseName=my-db \
   --set internalDatabase.secretCredentials=my-odm-db-secret \
   /path/to/ibm-odm-prod-<version>.tgz
 ```
 
-> **Tip**: You can set an list of values with the syntax: `--set image.pullSecrets[0]=a,image.pullSecrets[1]=b}` which is equivalent to:
+> **Tip**: You can set a list of values with the syntax: `--set image.pullSecrets="{a,b}"` which is equivalent to:
 > ```yaml
 > image:
 >   pullSecrets:
@@ -372,13 +379,55 @@ Use cases for PostgreSQL as an internal database:
 
 ### Storage Options Supported
 
-IBM Cloud storage options supported:
-- `File Bronze`
-- `File Silver`
-- `File Gold`
+Storage providers supported:
+- OpenShift Container Storage / OpenShift Data Foundation version 4.x, from version 4.2 or higher
+- IBM Cloud File storage:
+  - `File Bronze`
+  - `File Silver`
+  - `File Gold`
+- IBM Storage Suite for IBM Cloud Paks:
+  - File storage from IBM Spectrum Fusion/Scale (ideal for RWX)
+  - Block storage from IBM Spectrum Virtualize, FlashSystem or DS8K
+- Portworx Storage, version 2.5.5 or above
+- Amazon Elastic File Storage (EFS) for RWX mode access
 
 On-premise storage options supported for all architectures:
 - `Rook-Ceph`
+
+## Track ODM usage with the IBM License Service
+
+You must install the IBM License Service in your cluster in order to track your ODM usage.
+
+### In Openshift
+
+Install the IBM Licens Service operator following [the documentation](https://github.com/IBM/ibm-licensing-operator/blob/latest/docs/Content/Install_on_OCP.md).
+
+After a couple of minutes, the pod `ibm-licensing-service-instance` pod should be running and you will be able to retrieve the Licensing Srevice URL with this command:
+
+```bash
+export LICENSING_URL=$(oc get routes -n ibm-common-services | grep ibm-licensing-service-instance | awk '{print $2}')
+```
+
+### For other platforms
+
+Follow the **Installation** section of the [Manual installation without the Operator Lifecycle Manager (OLM)](https://github.com/IBM/ibm-licensing-operator/blob/latest/docs/Content/Install_without_OLM.md)
+
+After a couple of minutes, the you will be able to access the IBM License Service by retrieving the URL with this command:
+
+```bash
+export LICENSING_URL=$(kubectl get ingress ibm-licensing-service-instance -n ibm-common-services | awk '{print $4}' | tail -1)
+```
+
+### Retrieving license usage
+
+Retrieve the License Service token and access the `http://$LICENSING_URL/status?token=$TOKEN` url to view the licensing usage or retrieve the licensing report zip file by running:
+
+```bash
+export TOKEN=$(kubectl get secret ibm-licensing-token -o jsonpath={.data.token} -n ibm-common-services | base64 -d)
+curl -k https://$LICENSING_URL/snapshot?token=$TOKEN --output report.zip
+```
+
+For more information, Refer to the [Licensing Service documentation](https://github.com/IBM/ibm-licensing-operator/blob/latest/docs/Content/Retrieving_data.md).
 
 ## Limitations
 

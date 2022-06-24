@@ -96,17 +96,8 @@ spec:
 {{- end }}
 
 {{ include "odm-dba-volumes-context" . | indent 6 }}
-{{ include "odm-db-ssl-volumes-context" . | indent 6 }}
-      {{- if not (empty (.Values.customization.securitySecretRef)) }}
-      - name: {{ template "odm-security-secret-volume.fullname" . }}
-        secret:
-          secretName: {{ .Values.customization.securitySecretRef }}
-          items:
-            - key: keystore.jks
-              path: keystore.jks
-            - key: truststore.jks
-              path: truststore.jks
-      {{- end}}
+{{ include "odm-db-ssl-volumes-context" (dict "root" . "componentName" "decisionServer") | indent 6 }}
+{{ include "odm-security-volume" . | indent 6 }}
 
       - name: {{ template "odm-logging-volume.fullname" . }}
         configMap:
@@ -135,7 +126,7 @@ spec:
 {{- if eq .Values.customization.vault "initcontainer" }}
 {{ include "odm-init-container-template-full" (dict "initcontext" .Values.decisionRunner.initContainer "root" . "containername" "odm.decisionRunner" )  | indent 6 }}
 {{- end -}}
-      {{- if and (empty .Values.externalCustomDatabase.datasourceRef) (empty .Values.externalDatabase.serverName) }}
+      {{- if eq (include "isInternalDatabase" .) "true" }}
       - name: init-decisionrunner
 {{ include "image.tagOrDigest" (dict "containerName" "dbserver" "containerTag" .Values.internalDatabase.tagOrDigest "root" .) | indent 8  }}
 {{ include "odm-security-context" . | indent 8 }}
@@ -156,13 +147,9 @@ spec:
 {{ include "odm-init-container-volume-mount" . | indent 8 }}
 {{- end}}
 {{ include "odm-dba-volumemounts-context" . | indent 8 }}
-{{ include "odm-db-ssl-volumemounts-context" . | indent 8 }}
+{{ include "odm-db-ssl-volumemounts-context" (dict "root" . "componentName" "decisionCenter") | indent 8 }}
 {{ include "odm-trusted-cert-volume-mount" . | indent 8 }}
-        {{- if not (empty (.Values.customization.securitySecretRef)) }}
-        - name: {{ template "odm-security-secret-volume.fullname" . }}
-          readOnly: true
-          mountPath: {{ template "odm-security-dir" . }}
-        {{- end}}
+{{ include "odm-security-volumemounts-context" . | indent 8 }}
         {{- if or (not (empty (.Values.customization.authSecretRef))) (and (.Values.oidc.enabled) (empty (.Values.customization.authSecretRef))) }}
         - name: {{ template "odm-auth-secret-volume.fullname" . }}
           mountPath: {{ template "odm-auth-dir" . }}
@@ -182,19 +169,8 @@ spec:
         - name: lib-workarea-volume
           mountPath: /opt/ibm/wlp/output/defaultServer/workarea
         env:
-          {{- if not (empty (.Values.customization.securitySecretRef)) }}
-          - name: KEYSTORE_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: "{{ .Values.customization.securitySecretRef }}"
-                key: {{ template "odm-keystore-password-key" . }}
-          - name: TRUSTSTORE_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: "{{ .Values.customization.securitySecretRef }}"
-                key: {{ template "odm-truststore-password-key" . }}
-          {{- end }}
-{{ include "odm-db-config" . | indent 10 }}
+{{ include "odm-security-config" . | indent 10 }}
+{{ include "odm-db-config"  (dict "componentName" "decisionServer" "root" .) | indent 10 }}
 {{ include "odm-metering-config" . | indent 10 }}
           - name: "DECISIONSERVERCONSOLE_NAME"
             value: {{ template "odm.decisionserverconsole.fullname" . }}
@@ -226,13 +202,18 @@ spec:
           - name: "WLP_SKIP_BOOTSTRAP_AGENT"
             value: "true"
           {{- end }}
-{{ include "odm-db-ssl-env-context" . | indent 10 }}
+          {{- if (not (empty .Values.decisionRunner.resURL )) }}
+          - name: "RES_URL"
+            value: "{{ .Values.decisionRunner.resURL}}"
+          {{- end }}
+{{ include "odm-db-ssl-env-context" (dict "root" . "componentName" "decisionServer") | indent 10 }}
 {{ include "odm-kubeVersion" . | indent 10 }}
 {{ include "odm-oidc-context" . | indent 10 }}
 {{ include "odm-dba-env-context" . | indent 10 }}
           # Decision Runner is deployed as non-prod only
           - name: "DEPLOY_FOR_PRODUCTION"
             value: "FALSE"
+{{ include "odm-users-password-env" . | indent 10 }}
         ports:
         {{- if .Values.service.enableTLS }}
         - name: dr-port
@@ -241,32 +222,7 @@ spec:
         - name: dr-port
           containerPort: 9080
         {{- end }}
-        readinessProbe:
-          httpGet:
-            {{- if .Values.service.enableTLS }}
-            scheme: HTTPS
-            {{- else }}
-            scheme: HTTP
-            {{- end }}
-            path: {{ .Values.decisionRunner.contextRoot }}/DecisionRunner
-            port: dr-port
-          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
-          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
-          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
-          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
-        livenessProbe:
-          httpGet:
-            {{- if .Values.service.enableTLS }}
-            scheme: HTTPS
-            {{- else }}
-            scheme: HTTP
-            {{- end }}
-            path: {{ .Values.decisionRunner.contextRoot }}/DecisionRunner
-            port: dr-port
-          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
-          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
-          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
-          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+{{ include "odm-probe-container-template" (dict "root" . "componentPath" "DecisionRunner/" "port" "dr-port" "containerParameters" .Values.decisionRunner )  | indent 8 }}
         resources:
 {{ toYaml .Values.decisionRunner.resources | indent 10 }}
 {{ include "odm-pullsecret-spec" . | indent 6 }}

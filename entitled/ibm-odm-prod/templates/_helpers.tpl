@@ -23,6 +23,10 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 {{- printf "%s-%s" .Release.Name "odm-secret"  | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "odm.secret-dc.fullname" -}}
+{{- printf "%s-%s" .Release.Name "odm-secret-dc"  | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "odm.oidc-client-id-secret.fullname" -}}
 {{- printf "%s-%s" .Release.Name "odm-oidc-client-id-secret"  | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
@@ -114,6 +118,10 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 
 {{- define "odm.ds-runtime-xu-configmap.fullname" -}}
 {{- printf "%s-%s" .Release.Name "odm-ds-runtime-xu-configmap" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "odm.dc-web-configmap.fullname" -}}
+{{- printf "%s-%s" .Release.Name "odm-dc-web-configmap" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "odm.ds-runtime-web-configmap.fullname" -}}
@@ -208,6 +216,10 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 
 {{- define "odm-ds-runtime-xuconfigref-volume.fullname" -}}
 {{- printf "%s-%s" .Release.Name "odm-ds-runtime-xuconfigref-volume" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "odm-dc-webconfigref-volume.fullname" -}}
+{{- printf "%s-%s" .Release.Name "odm-dc-webconfigref-volume" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "odm-ds-runtime-webconfigref-volume.fullname" -}}
@@ -330,7 +342,7 @@ annotations:
 {{- end -}}
 
 {{- define "odm-security-dir" -}}
-"/config/security"
+"/config/security/volume"
 {{- end -}}
 
 {{- define "odm-auth-dir" -}}
@@ -385,30 +397,6 @@ annotations:
 {{- end }}
 {{- end -}}
 
-{{- define "odm.dr.checkurl" -}}
-{{- if .Values.service.enableTLS }}{{ printf "https://%s:9443/DecisionRunner"  (include "odm.decisionrunner.fullname" .)  | quote }}
-{{- else }}{{ printf "http://%s:9443/DecisionRunner"  (include "odm.decisionrunner.fullname" .) | quote }}
-{{- end -}}
-{{- end -}}
-
-{{- define "odm.dsr.checkurl" -}}
-{{- if .Values.service.enableTLS }}{{ printf "https://%s:9443/DecisionService"  (include "odm.decisionserverruntime.fullname" .) | quote  }}
-{{- else }}{{ printf "http://%s:9443/DecisionService"  (include "odm.decisionserverruntime.fullname" .) | quote  }}
-{{- end -}}
-{{- end -}}
-
-{{- define "odm.dsc.checkurl" -}}
-{{- if .Values.service.enableTLS }}{{ printf "https://%s:9443/res"  (include "odm.decisionserverconsole.fullname" .) | quote  }}
-{{- else }}{{ printf "http://%s:9443/res"  (include "odm.decisionserverconsole.fullname" .) | quote  }}
-{{- end -}}
-{{- end -}}
-
-{{- define "odm.dc.checkurl" -}}
-{{- if .Values.service.enableTLS }}{{ printf "https://%s:9453"  (include "odm.decisioncenter.fullname" .) | quote  }}
-{{- else }}{{ printf "http://%s:9453"  (include "odm.decisioncenter.fullname" .) | quote  }}
-{{- end -}}
-{{- end -}}
-
 {{/*
 Check if tag contains specific platform suffix and if not set based on kube platform
 */}}
@@ -461,6 +449,7 @@ hostIPC: false
 securityContext:
   runAsNonRoot: true
   runAsUser: {{ .Values.customization.runAsUser }}
+  fsGroup: {{ .Values.customization.runAsUser }}
 {{- end -}}
 {{- define "odm-kubeVersion" -}}
   {{- if .Values.customization.kubeVersion }}
@@ -492,68 +481,147 @@ Define Metering variable for Deployment
 {{/*
 Define database configuration for deployment
 */}}
+{{- define "isExternalDatabase" -}}
+{{- if and (empty .Values.externalDatabase.serverName) (and (empty .Values.externalDatabase.decisionServer.serverName) (empty .Values.externalDatabase.decisionCenter.serverName))  }} 
+{{- printf "false" }}
+{{- else }}
+{{- printf "true" }}
+{{- end }}
+{{- end -}}
+
+{{- define "isInternalDatabase" -}}
+{{- if (and (empty .Values.externalCustomDatabase.datasourceRef) (eq (include "isExternalDatabase" .) "false") )  }} 
+{{- printf "true" }}
+{{- else }}
+{{- printf "false" }}
+{{- end }}
+{{- end -}}
+
+
+
+{{- define "odm-db-setexternal" -}}
+{{- $componentName := index . "componentName" -}}
+{{- $root := index . "root" -}}
+{{- $config := index . "config" -}}
+- name: DB_TYPE
+  value: "{{ $config.type }}"
+- name: DB_SERVER_NAME
+  value: "{{ $config.serverName }}"
+- name: DB_PORT_NUMBER
+  value: "{{ $config.port }}"
+- name: DB_NAME
+  value: "{{ $config.databaseName }}"
+{{- if not (empty ($config.driversUrl)) }}
+- name: DB_DRIVER_URL
+  value: {{ join "," $config.driversUrl }}
+{{- end }}
+{{- if not (empty $config.secretCredentials) }}
+- name: DB_USER
+  valueFrom:
+    secretKeyRef:
+      name: {{ $config.secretCredentials }}
+      key: db-user
+- name: DB_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ $config.secretCredentials }}
+      key: db-password
+{{- else }}
+- name: DB_USER
+  value: "{{ $config.user }}"
+{{- if (empty $root.Values.customization.vault) }}
+- name: DB_PASSWORD
+  valueFrom:
+    secretKeyRef:
+{{- if  eq $componentName "decisionCenter"  }}
+      name: {{ template "odm.secret-dc.fullname" $root }}
+{{- else}}
+      name: {{ template "odm.secret.fullname" $root }}
+{{- end}}
+      key: db-password
+{{- end }}
+{{- end }}
+{{- end -}}
+
+
+
+
+{{- define "odm-external-sec-password" -}}
+{{- if  not (empty  .Values.externalDatabase.decisionServer.password) }}{{ .Values.externalDatabase.decisionServer.password }}
+{{- else }}{{ .Values.externalDatabase.password }}
+{{- end }}
+{{- end -}}
+
+{{- define "odm-external-sec-dc-password" -}}
+{{- if  not (empty  .Values.externalDatabase.decisionCenter.password) }}{{ .Values.externalDatabase.decisionCenter.password }}
+{{- else }}
+{{ .Values.externalDatabase.password }}
+{{- end }}
+{{- end -}}
+
+{{- define "odm-security-config" -}}
+{{- if not (empty (.Values.customization.securitySecretRef)) }}
+- name: KEYSTORE_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: "{{ .Values.customization.securitySecretRef }}"
+      key: {{ template "odm-keystore-password-key" . }}
+      optional: true
+- name: TRUSTSTORE_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: "{{ .Values.customization.securitySecretRef }}"
+      key: {{ template "odm-truststore-password-key" . }}
+      optional: true
+{{- end }}
+{{- end -}}
+
 {{- define "odm-db-config" -}}
-{{- if empty (.Values.externalCustomDatabase.datasourceRef) -}}
-{{- if empty .Values.externalDatabase.serverName -}}
+{{- $componentName := index . "componentName" -}}
+{{- $root := index . "root" -}}
+{{- if empty ($root.Values.externalCustomDatabase.datasourceRef) }}
+{{- if eq (include "isExternalDatabase" $root) "false"  }}
 - name: DB_TYPE
   value: "postgresql"
 - name: "DB_SERVER_NAME"
-  value: {{ template "odm.dbserver.fullname" . }}
+  value: {{ template "odm.dbserver.fullname" $root }}
 - name: DB_PORT_NUMBER
   value: "5432"
 - name: DB_NAME
-  value: "{{ .Values.internalDatabase.databaseName }}"
-{{- if not (empty .Values.internalDatabase.secretCredentials) }}
+  value: "{{ $root.Values.internalDatabase.databaseName }}"
+{{- if not (empty $root.Values.internalDatabase.secretCredentials) }}
 - name: DB_USER
   valueFrom:
     secretKeyRef:
-      name: {{ .Values.internalDatabase.secretCredentials }}
+      name: {{ $root.Values.internalDatabase.secretCredentials }}
       key: db-user
 - name: DB_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: {{ .Values.internalDatabase.secretCredentials }}
+      name: {{ $root.Values.internalDatabase.secretCredentials }}
       key: db-password
 {{- else }}
 - name: DB_USER
-  value: "{{ .Values.internalDatabase.user }}"
+  value: "{{ $root.Values.internalDatabase.user }}"
 - name: DB_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: {{ template "odm.secret.fullname" . }}
+      name: {{ template "odm.secret.fullname" $root }}
       key: db-password
 {{- end }}
 {{- else }}
-- name: DB_TYPE
-  value: "{{ .Values.externalDatabase.type }}"
-- name: DB_SERVER_NAME
-  value: "{{ .Values.externalDatabase.serverName }}"
-- name: DB_PORT_NUMBER
-  value: "{{ .Values.externalDatabase.port }}"
-- name: DB_NAME
-  value: "{{ .Values.externalDatabase.databaseName }}"
-{{- if not (empty .Values.externalDatabase.secretCredentials) }}
-- name: DB_USER
-  valueFrom:
-    secretKeyRef:
-      name: {{ .Values.externalDatabase.secretCredentials }}
-      key: db-user
-- name: DB_PASSWORD
-  valueFrom:
-    secretKeyRef:
-      name: {{ .Values.externalDatabase.secretCredentials }}
-      key: db-password
+{{- if  and (eq $componentName  "decisionServer") (not (empty $root.Values.externalDatabase.decisionServer.serverName)) }}
+{{ include "odm-db-setexternal"  (dict "componentName" $componentName "root" $root "config" $root.Values.externalDatabase.decisionServer) }}
+{{- else if  and (eq $componentName "decisionCenter") (not (empty $root.Values.externalDatabase.decisionCenter.serverName)) }}
+{{ include "odm-db-setexternal"  (dict "componentName" $componentName "root" $root "config" $root.Values.externalDatabase.decisionCenter) }}
 {{- else }}
-- name: DB_USER
-  value: "{{ .Values.externalDatabase.user }}"
-{{- if (empty .Values.customization.vault) }}
-- name: DB_PASSWORD
-  valueFrom:
-    secretKeyRef:
-      name: {{ template "odm.secret.fullname" . }}
-      key: db-password
+{{ include "odm-db-setexternal"  (dict "componentName" $componentName "root" $root "config" $root.Values.externalDatabase) }}
 {{- end }}
 {{- end }}
+{{- else }}
+{{- if not (empty ($root.Values.externalDatabase.driversUrl)) }}
+- name: DB_DRIVER_URL
+  value: {{ join "," $root.Values.externalDatabase.driversUrl }}
 {{- end }}
 {{- end }}
 {{- end -}}
@@ -758,9 +826,12 @@ limits:
 {{- end -}}
 
 {{- define "odm-pullsecret-spec" -}}
-{{- if or (not (empty .Values.image.pullSecrets )) (not (empty .Values.dba.keytoolInitContainer.imagePullSecret )) }}
-{{- if .Values.image.pullSecrets -}}
+{{- if or (or (not (empty .Values.image.pullSecrets )) (not (empty .Values.dba.keytoolInitContainer.imagePullSecret ))) (contains "cp.icr.io" .Values.image.repository) }}
 imagePullSecrets:
+{{- if contains "cp.icr.io" .Values.image.repository }}
+- name: ibm-entitlement-key
+{{- end }}
+{{- if .Values.image.pullSecrets -}}
 {{- if kindIs "string" .Values.image.pullSecrets }}
 - name: {{ .Values.image.pullSecrets }}
 {{- else -}}
@@ -783,31 +854,65 @@ serviceAccountName: {{ template "fullname" . }}-service-account
 {{- end }}
 {{- end -}}
 
+{{- define "odm-db-get-ssl-env-context" -}}
+{{- $componentName := index . "componentName" -}}
+{{- $root := index . "root" -}}
+{{- if and (not (empty $root.Values.externalDatabase.decisionServer.sslSecretRef)) (eq $componentName "decisionServer")  }}
+{{- $root.Values.externalDatabase.decisionServer.sslSecretRef  }}
+{{- else if and (not (empty $root.Values.externalDatabase.decisionCenter.sslSecretRef)) (eq $componentName "decisionCenter") }}
+{{- $root.Values.externalDatabase.decisionCenter.sslSecretRef }}
+{{- else if not (empty $root.Values.externalDatabase.sslSecretRef)  }}
+{{- $root.Values.externalDatabase.sslSecretRef }}
+{{- else }}
+{{- end }}
+{{- end -}}
+
+
 {{- define "odm-db-ssl-env-context" -}}
-{{- if (not (empty (.Values.externalDatabase.sslSecretRef))) }}
+{{- $componentName := index . "componentName" -}}
+{{- $root := index . "root" -}}
+{{- if (not (empty (include "odm-db-get-ssl-env-context" (dict "root" $root "componentName" $componentName))))  }}
 - name: DB_SSL_TRUSTSTORE_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: "{{ .Values.externalDatabase.sslSecretRef }}"
-      key: {{ template "odm-truststore-password-key" . }}
+      name: {{ include "odm-db-get-ssl-env-context" (dict "root" $root "componentName" $componentName) | quote }}
+      key: {{ template "odm-truststore-password-key" $root }}
 {{- end }}
 {{- end }}
 
 {{- define "odm-db-ssl-volumes-context" -}}
-{{- if (not (empty (.Values.externalDatabase.sslSecretRef))) }}
-- name: {{ template "odm-externaldatabase-security-secret-volume.fullname" . }}
+{{- $componentName := index . "componentName" -}}
+{{- $root := index . "root" -}}
+{{- if (not (empty (include "odm-db-get-ssl-env-context" (dict "root" $root "componentName" $componentName)))) }}
+- name: {{ template "odm-externaldatabase-security-secret-volume.fullname" $root }}
   secret:
-    secretName: {{ .Values.externalDatabase.sslSecretRef }}
+    secretName: {{ include "odm-db-get-ssl-env-context" (dict "root" $root "componentName" $componentName)  }}
     items:
       - key: truststore_file
         path: truststore.jks
 {{- end}}
 {{- end}}
 
+
+{{- define "odm-get-ssl-volumemounts-context" -}}
+{{- $componentName := index . "componentName" -}}
+{{- $root := index . "root" -}}
+{{- if (not (empty ($root.Values.externalDatabase.decisionCenter.sslSecretRef))) }} 
+{{ $root.Values.externalDatabase.decisionCenter.sslSecretRef }}
+{{- else if (not (empty ($root.Values.externalDatabase.decisionServer.sslSecretRef))) }}  
+{{ $root.Values.externalDatabase.decisionServer.sslSecretRef }}
+{{- else if (not (empty ($root.Values.externalDatabase.sslSecretRef))) }} 
+{{ $root.Values.externalDatabase.sslSecretRef }}
+{{- else }}
+{{- end }}
+{{- end -}}
+
 {{- define "odm-db-ssl-volumemounts-context" -}}
-{{- if (not (empty (.Values.externalDatabase.sslSecretRef))) }}
-- name: {{ template "odm-externaldatabase-security-secret-volume.fullname" . }}
-  mountPath: {{ template "odm-customdatasource-dir" . }}
+{{- $componentName := index . "componentName" -}}
+{{- $root := index . "root" -}}
+{{- if (not (empty (include "odm-get-ssl-volumemounts-context"  (dict "root" $root "componentName" $componentName)))) }}
+- name: {{ template "odm-externaldatabase-security-secret-volume.fullname" $root }}
+  mountPath: {{ template "odm-customdatasource-dir" $root }}
 {{- end}}
 {{- end}}
 
@@ -842,6 +947,7 @@ image: {{ template "odm.repository.name" .root }}/{{ .containerName }}:{{ $tag }
 
 {{- define "odm-ingress-annotation-spec" -}}
 annotations:
+{{- if typeIs "[]interface {}" .Values.service.ingress.annotations }}
 {{- range $key, $val := .Values.service.ingress.annotations }}
   {{- if kindIs "string" $val }}
   {{ $val -}}
@@ -851,7 +957,11 @@ annotations:
 {{ end -}}
   {{ end -}}
   {{ end -}}
+{{- else -}}
+{{- toYaml .Values.service.ingress.annotations | nindent 2 }}
 {{- end -}}
+{{- end -}}
+
 
 {{- define "odm-service-type" -}}
 {{- if .Values.service.enableRoute -}}
@@ -1012,4 +1122,64 @@ Script dir for init-container
   - name: {{ template "odm-baiemitterconfig-secret-volume.fullname" .root }}
     mountPath: "/ibm/icp4ba/decisions/baiemitter/"
 {{- end }}
+{{- end -}}
+
+{{- define "odm-probe-container-template" -}}
+readinessProbe:
+{{ include "odm-probe-httpGet-container-template" (dict "root" .root "componentPath" .componentPath "port" .port "containerParameters" .containerParameters) | indent 2 }}
+  periodSeconds: {{ .root.Values.readinessProbe.periodSeconds }}
+  failureThreshold: {{ .root.Values.readinessProbe.failureThreshold }}
+  timeoutSeconds: {{ .root.Values.readinessProbe.timeoutSeconds }}
+{{- if le (int .root.Values.readinessProbe.initialDelaySeconds) 60 }}
+  initialDelaySeconds: {{ .root.Values.readinessProbe.initialDelaySeconds }}
+{{- end }}
+livenessProbe:
+{{ include "odm-probe-httpGet-container-template" (dict "root" .root "componentPath" .componentPath "port" .port "containerParameters" .containerParameters) | indent 2 }}
+  periodSeconds: {{ .root.Values.livenessProbe.periodSeconds }}
+  failureThreshold: {{ .root.Values.livenessProbe.failureThreshold }}
+  timeoutSeconds: {{ .root.Values.livenessProbe.timeoutSeconds }}
+{{- if lt (int .root.Values.livenessProbe.initialDelaySeconds) 60 }}
+  initialDelaySeconds: {{ .root.Values.livenessProbe.initialDelaySeconds }}
+{{- end }}
+{{- if or (ge (int .root.Values.readinessProbe.initialDelaySeconds) 60) (ge (int .root.Values.livenessProbe.initialDelaySeconds) 60) }}
+startupProbe:
+{{ include "odm-probe-httpGet-container-template" (dict "root" .root "componentPath" .componentPath "port" .port "containerParameters" .containerParameters) | indent 2 }}
+  failureThreshold: {{ div (max .root.Values.readinessProbe.initialDelaySeconds .root.Values.livenessProbe.initialDelaySeconds) 10 }}
+  periodSeconds: 10
+  timeoutSeconds: {{ .root.Values.livenessProbe.timeoutSeconds }}
+{{- end }}
+{{- end -}}
+
+{{- define "odm-probe-httpGet-container-template" -}}
+httpGet:
+  {{- if .root.Values.service.enableTLS }}
+  scheme: HTTPS
+  {{- else }}
+  scheme: HTTP
+  {{- end }}
+  path: {{ .containerParameters.contextRoot }}/{{ .componentPath }}
+  port: {{ .port }}
+{{- end -}}
+
+{{- define "odm-users-password-env" -}}
+{{- if empty .Values.customization.authSecretRef -}}
+- name: USERS_PASSWORD
+  value: "{{ .Values.usersPassword }}"
+{{- end }}
+{{- end -}}
+
+{{- define "odm-security-volume" -}}
+{{- if not (empty (.Values.customization.securitySecretRef)) }}
+- name: {{ template "odm-security-secret-volume.fullname" . }}
+  secret:
+    secretName: {{ .Values.customization.securitySecretRef }}
+{{- end}}
+{{- end -}}
+
+{{- define "odm-security-volumemounts-context" -}}
+{{- if not (empty (.Values.customization.securitySecretRef)) }}
+- name: {{ template "odm-security-secret-volume.fullname" . }}
+  readOnly: true
+  mountPath: {{ template "odm-security-dir" . }}
+{{- end}}
 {{- end -}}

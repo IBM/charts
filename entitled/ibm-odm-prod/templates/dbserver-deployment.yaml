@@ -1,4 +1,4 @@
-{{- if and (empty .Values.externalDatabase.serverName) (empty .Values.externalCustomDatabase.datasourceRef) }}
+{{- if eq (include "isInternalDatabase" .) "true" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -38,6 +38,7 @@ spec:
       hostPID: false
       hostIPC: false
       securityContext:
+        runAsNonRoot: true
         runAsUser: {{ .Values.internalDatabase.runAsUser }}
         fsGroup: {{ .Values.internalDatabase.runAsUser }}
       affinity:
@@ -136,15 +137,29 @@ spec:
         readinessProbe:
           tcpSocket:
             port: 5432
+          {{- if lt (int .Values.readinessProbe.initialDelaySeconds) 60 }}
           initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          {{- end }}
           periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
           failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
         livenessProbe:
           tcpSocket:
             port: db-port
+          {{- if lt (int .Values.livenessProbe.initialDelaySeconds) 60 }}
           initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          {{- end }}
           periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
           failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+        {{- if or (ge (int .Values.readinessProbe.initialDelaySeconds) 60) (ge (int .Values.livenessProbe.initialDelaySeconds) 60) }}
+        startupProbe:
+          tcpSocket:
+            port: db-port
+          failureThreshold: {{ div (max .Values.readinessProbe.initialDelaySeconds .Values.livenessProbe.initialDelaySeconds) 5 }}
+          periodSeconds: 10
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+        {{- end }}
         {{- if .Values.internalDatabase.persistence.enabled }}
         volumeMounts:
           - name: {{ template "fullname" . }}-volume
