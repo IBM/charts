@@ -1,5 +1,5 @@
-# What's new in Helm chart 21.3.0
-The version 21.3.0 of the Helm chart installs version 8.11.0 of IBM Operational Decision Manager. For a complete list of new features in this release, go to [What's new](https://www.ibm.com/docs/en/odm/8.11.0?topic=notes-whats-new)
+# What's new in Helm chart 22.1.0
+The version 22.1.0 of the Helm chart installs version 8.11.0.1 of IBM Operational Decision Manager. For a complete list of new features in this release, go to [What's new](https://www.ibm.com/docs/en/odm/8.11.0?topic=notes-whats-new)
 
 # Prerequisites
 1. Kubernetes 1.19 or higher, with Helm 3.2 or higher.
@@ -25,10 +25,11 @@ For more information go to [Operational Decision Manager on Certified Kubernetes
 # Version History
 | Chart | Date     | Details                           |
 | ----- | -------- | --------------------------------- |
+| 22.1.0 | June 2022 | ODM 8.11.0.1 release |
 | 21.3.0 | Dec 2021 | ODM 8.11.0 release - Update Liberty version, Require password for default user access, Add user access configuration, Update default repository to `icr.io/odm-k8s`, Define ephemeral storage default values |
 | 21.2.0 | June 2021 | ODM 8.10.5.1 release |
 | 21.1.0 | March 2021 | Bug fixing, Default values update, Helm Chart values validation with JSON Schemas |
-| 20.3.0 | Dec 2020 | ODM 8.10.5 release - Require license acceptation, Add default custom serviceAccount, Support `restricted` scc in Openshift, Digest support, Automate route creation for Openshift |
+| 20.3.0 | Dec 2020 | ODM 8.10.5 release - Require license acceptance, Add default custom serviceAccount, Support `restricted` scc in Openshift, Digest support, Automate route creation for Openshift |
 | 20.2.0 | June 2020 | ODM 8.10.4 release - Update Liberty version |
 | 2.3.0 | Dec 2019 | Bug fixing |
 | 2.2.1 | Sept 2019 | Network policy security isolation |
