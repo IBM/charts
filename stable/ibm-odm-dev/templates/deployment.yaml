@@ -131,7 +131,9 @@ spec:
               scheme: HTTP
               path: /decisioncenter/healthCheck
               port: 9060
+            {{- if lt (int .Values.readinessProbe.initialDelaySeconds) 60 }}
             initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            {{- end }}
             periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
             failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
           livenessProbe:
@@ -139,9 +141,20 @@ spec:
               scheme: HTTP
               path: /decisioncenter/healthCheck
               port: 9060
+            {{- if lt (int .Values.livenessProbe.initialDelaySeconds) 60 }}
             initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            {{- end }}
             periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
             failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          {{- if or (ge (int .Values.readinessProbe.initialDelaySeconds) 60) (ge (int .Values.livenessProbe.initialDelaySeconds) 60) }}
+          startupProbe:
+            httpGet:
+              scheme: HTTP
+              path: /decisioncenter/healthCheck
+              port: 9060
+            failureThreshold: {{ div (max .Values.readinessProbe.initialDelaySeconds .Values.livenessProbe.initialDelaySeconds) 10 }}
+            periodSeconds: 10
+          {{- end }}
           resources:
 {{ toYaml .Values.resources | indent 12 }}
       {{- if (not (empty .Values.image.pullSecrets )) }}

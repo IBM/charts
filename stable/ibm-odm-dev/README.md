@@ -55,7 +55,7 @@ Ensure you have a good understanding of the underlying concepts and technologies
 
 Before you install ODM for developers, you need to gather all the configuration information that you will use for your release. For more details, refer to the [ODM for developers configuration parameters](https://www.ibm.com/docs/en/odm/8.11.0?topic=reference-odm-developers-configuration-parameters).
 
-If you want to create your own decision services from scratch, you need to install Rule Designer from the [Eclipse Marketplace](https://marketplace.eclipse.org/content/ibm-operational-decision-manager-developers-v-8110-rule-designer).
+If you want to create your own decision services from scratch, you need to install Rule Designer from the [Eclipse Marketplace](https://marketplace.eclipse.org/content/ibm-operational-decision-manager-developers-v-811x-rule-designer).
 
 ### Service Account Requirements
 
@@ -238,6 +238,14 @@ $ helm install my-odm-dev-release \
   ibm-charts/ibm-odm-dev
 ```
 
+> **Tip**: You can set an list of values with the syntax: `--set image.pullSecrets="{a,b}"` which is equivalent to:
+> ```yaml
+> image:
+>   pullSecrets:
+>   - a
+>   - b
+> ```
+
 It is also possible to use a custom-made .yaml file to specify the values of the parameters when you install the chart.
 For example:
 
@@ -289,6 +297,44 @@ The pod exposes only one port externally:
     ```console
     $ kubectl get services
     ```
+
+  - **Option 3**: Using an Ingress controller
+
+    Kubernetes Ingress controllers are the original mechanism for exposing your cluster to external access. Each controller implementation is platform-specific.
+
+    For more information about Ingress, see the [Kubernetes documentation](https://kubernetes.io/docs/concepts/services-networking/ingress/).
+
+    As an example, you can create an Ingress object to access the welcome page this way:
+
+    ```yaml
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: my-odm-dev-release-ingress
+      annotations:
+        kubernetes.io/ingress.class: nginx
+        nginx.ingress.kubernetes.io/backend-protocol: HTTP
+        nginx.ingress.kubernetes.io/affinity: cookie
+
+    spec:
+      tls:
+      - hosts:
+        - mycompany.com
+      rules:
+      - host: mycompany.com
+        http:
+          paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: my-odm-dev-release-ibm-odm-dev
+                port:
+                  number: 9060
+    ```
+
+    Then you will be able to access the ODM Welcome page with this URL:  https://mycompany.com,
+    after having edited your hosts file and added the correspondance between mycompany.com and the external IP provided by the Ingress controller.
 
 2. Click the **Decision Center** Business Console to open the service in a browser.
 
