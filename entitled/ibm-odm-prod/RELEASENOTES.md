@@ -1,5 +1,5 @@
-# What's new in Helm chart 21.3.0
-The version 21.3.0 of the Helm chart installs version 8.11.0 of IBM Operational Decision Manager. For a complete list of new features in this release, go to [What's new](https://www.ibm.com/docs/en/odm/8.11.0?topic=notes-whats-new).
+# What's new in Helm chart 22.1.0
+The version 22.1.0 of the Helm chart installs version 8.11.0.1 of IBM Operational Decision Manager. For a complete list of new features in this release, go to [What's new](https://www.ibm.com/docs/en/odm/8.11.0?topic=notes-whats-new).
 
 # Prerequisites
 1. Kubernetes 1.19 or higher, with Helm 3.2 or higher.
@@ -16,6 +16,12 @@ For more information, go to [Operational Decision Manager on Certified Kubernete
 
 For details about how to upgrade, see [Upgrading ODM releases](https://www.ibm.com/docs/en/odm/8.11.0?topic=kubernetes-upgrading-odm-releases-certified)
 
+- License acceptance
+The chart require now license acceptance to be installed. Review the license agreement and set the license parameter to `true`.
+
+- Default users password
+  You **must** now define a password to be used by the default user *odmAdmin*. Set the parameter `usersPassword` in your `helm install` command.
+
 
 # Breaking Changes
  None
@@ -23,6 +29,7 @@ For details about how to upgrade, see [Upgrading ODM releases](https://www.ibm.c
 # Version History
 | Chart | Date     | Details                           |
 | ----- | -------- | --------------------------------- |
+| 22.1.0 | June 2022 | ODM 8.11.0.1 release - Oracle 21.5 support, Require license acceptance, Require password for default user access |
 | 21.3.0 | Dec 2021 | ODM 8.11.0 release - Update Liberty version, Profiles documentation, Add Decision Server Runtime `web.xml` configuration, Define ephemeral storage default values, Bug fixes |
 | 21.2.0 | June 2021 | ODM 8.10.5.1 release - Support airgap installation with entitled registry, Bug fixes |
 | 21.1.0 | March 2021 | ODM 8.10.5 IFix 03 release - Add trusted certificate list management, Default service type update if route enabled |
