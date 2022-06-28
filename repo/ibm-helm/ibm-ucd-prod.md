@@ -13,7 +13,7 @@
 
 ## Prerequisites
 
-1. Kubernetes 1.16.0+; kubectl and oc CLI; Helm 3;
+1. Kubernetes 1.19.0+; kubectl and oc CLI; Helm 3;
   * Install and setup oc/kubectl CLI depending on your architecture.
     * [ppc64le](https://mirror.openshift.com/pub/openshift-v4/ppc64le/clients/ocp/stable/openshift-client-linux.tar.gz)
     * [s390x](https://mirror.openshift.com/pub/openshift-v4/s390x/clients/ocp/stable/openshift-client-linux.tar.gz)
