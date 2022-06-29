@@ -13,7 +13,7 @@ helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
 {{- define "px.metering.annotations" -}}
 productName: "PX-Enterprise"
 productID: com.portworx.enterprise
-productVersion: {{ .Values.imageVersion }}
+productVersion: {{ quote .Values.imageVersion }}
 {{- end -}}
 
 {{- define "px.kubernetesVersion" -}}
