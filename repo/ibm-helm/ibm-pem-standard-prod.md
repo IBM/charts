@@ -5,71 +5,64 @@
 
 This chart deploys IBM Partner Engagement Manager Standard cluster on a container management platform with the following resources.
 
-
 ## Prerequisites
 
 1. Kubernetes version >= 1.20 with beta APIs enabled
 
-2. ocp version >= 4.0 with beta APIs enabled
+2. Red Hat OpenShift Container Platform version >= 4.0 with beta APIs enabled
 
 3. Helm version >= 3.2
 
-4. Ensure that one of the supported database server (Oracle/DB2) is installed and the database is accessible from inside the cluster.
+4. Ensure that one of the supported database server (Oracle/DB2/MSSQL) is installed and the database is accessible from inside the cluster.
 
 5. Ensure that the docker images for IBM Partner Engagement Manager Standard from Entitlement registry are loaded to an appropriate docker registry.
 
-6. When `volumeClaims.resources.enabled` is `true`, create a persistent volume for application resources with access mode as 'ReadWriteMany' and place the database driver jar , SEAS jars and MQ jars in the mapped volume location.
+6. When `volumeClaims.resources.enabled` is `true`, create a persistent volume for application resources with access mode as 'ReadWriteMany' and place the database driver jar, SEAS jars and MQ jars in the mapped volume location.
 
-7. When `volumeClaims.logs.enable` is `true`, create a persistent volume for application logs with access mode as 'Read Write Many' and create required subfolders for IBM PEM Partner Repository Partner Provisioner PCM_prod and PCM_nonProd must have the 755 permission to read and execute for accessing all subfolders by the pemuser (id:1011) container..
+7. When `volumeClaims.logs.enable` is `true`, create a persistent volume for application logs with access mode as 'Read Write Many' and create required subfolders for IBM PEM, Partner Repository, Partner Provisioner, PCM Prod and PCM NonProd. The subfolders must have the 755 permission to read and execute, to be accessible by the pemuser (id:1011) container.
 
-8. When `communitymanager.prod.archive.enabled` is `true`, create a persistent volume for prod pcm archive document storage with access mode as 'Read Write Many'.
+8. When `communitymanager.prod.archive.enabled` is `true`, create a persistent volume for Prod PCM archive document storage with access mode as 'Read Write Many'.
 
-9. When `communitymanager.nonprod.archive.enabled` is `true`, create a persistent volume for non-prod pcm archive document storage with access mode as 'Read Write Many'.
+9. When `communitymanager.nonprod.archive.enabled` is `true`, create a persistent volume for Non-prod PCM archive document storage with access mode as 'Read Write Many'.
 
-    Mount the archive persistent volume to pem server
+    Mount the archive persistent volume to PEM server
 
-9. Create secrets with requisite confidential credentials for passphrase.txt, Keystore.jks dbpasswords and keystore passwords. You can use the supplied configuration files under pak_extensions/pre-install/secret directory.
+10. Create secrets with requisite confidential credentials for passphrase.txt, Keystore.jks dbpasswords and keystore passwords. You can use the supplied configuration files under pak_extensions/pre-install/secret directory.
 
-
-10. Create a secret from the provided syntax file included in helm charts /ibm-cloudpak-extensons/preinstall/secrets.yaml
+11. Create a secret from the provided syntax file included in helm charts /ibm-cloudpak-extensons/preinstall/secrets.yaml
 
     ```
       oc apply -f app-secrets.yaml
-
       ```
 
-11. Create a secret to pull the image from a private registry or repository using following command
+12. Create a secret to pull the image from a private registry or repository using following command:
     ```
     oc create secret docker-registry <name of secret> --docker-server=<your-registry-server> --docker-username=<your-username> --docker-password=<your-password> --docker-email=<your-email>
-
        ```
 
-12. create secrets with confidential certificates (Keystore files for both Partner Engagement Manager and Community Manger) required by Database, MQ for SSL connectivity using below command.
+13. Create secrets with confidential certificates (Keystore files for both Partner Engagement Manager and Community Manger) required by Database, MQ for SSL connectivity using below command:
 
      Note: Name of the secret and the keystore filename must be same for server keystore secret
     ```
      oc create secret generic <secret-name> --from-file=/path/to/<Keystore.jks>
-
 	   ```
-13. create configmap with localtime file present in local machine using below command
+14. Create configmap with localtime file present in local machine using below command
     ```
      oc create configmap <configmap-name> --from-file=/etc/localtime
-
 	   ```
 
-14. When installing the chart on a new database which does not have IBM PEM standard Software schema tables and metadata,
-* ensure that `dbsetup.upgrade` parameter is set to `false' and `dbsetup.enabled` parameter is set to `true' This will create the required database tables and metadata in the database before installing the chart.
+15. When installing the chart on a new database which does not have IBM PEM standard Software schema tables and metadata,
+* ensure that `dbsetup.upgrade` parameter is set to `false` and `dbsetup.enabled` parameter is set to `true`. This will create the required database tables and metadata in the database before installing the chart.
 
-15. When installing the chart on a database with new image upgrade
-* ensure that `dbsetup.upgrade` parameter is set to `true`
+16. When installing the chart on a database with new image upgrade,
+* ensure that `dbsetup.upgrade` parameter is set to `true`.
 
-16. Apply security context contraints to created service account .
+17. Apply security context contraints to created service account.
 
     ```
      oc adm policy add-scc-to-user ibm-pem-scc system:serviceaccount:<namespace>:<service account name>
-
 	   ```
-* Note: Avoid installing multiple charts on same namespace
+    Note: Avoid installing multiple charts on same namespace
 
 ### PodSecurityPolicy Requirements
 
@@ -81,7 +74,6 @@ This chart optionally defines a custom PodSecurityPolicy which is used to finely
   - Custom PodSecurityPolicy definition:
 
     ```
-
     apiVersion: policy/v1beta1
     kind: PodSecurityPolicy
     metadata:
@@ -166,7 +158,6 @@ This chart optionally defines a custom PodSecurityPolicy which is used to finely
       - use
     ```
 
-
 ### SecurityContextConstraints Requirements
 
 * Predefined SecurityContextConstraints name: [`ibm-anyuid-scc`](https://ibm.biz/cpkspec-scc)
@@ -244,7 +235,7 @@ This chart optionally defines a custom SecurityContextConstraints (on Red Hat Op
     - nfs
     priority: 0
     ```
-    - Custom ClusterRole for the custom SecurityContextConstraints:
+- Custom ClusterRole for the custom SecurityContextConstraints:
 
     ```
     apiVersion: rbac.authorization.k8s.io/v1
@@ -262,14 +253,11 @@ This chart optionally defines a custom SecurityContextConstraints (on Red Hat Op
       - securitycontextconstraints
       verbs:
       - use
-
     ```
 
 ## Resources Required
-
 ## Configuration
 ### The following table lists the configurable parameters for the chart
-
 
 Pod                                       | Memory Requested  | Memory Limit | CPU Requested | CPU Limit
 ------------------------------------------| ------------------|--------------| --------------|----------
@@ -283,18 +271,16 @@ Agent pod                                 |       2 Gi        |     4 Gi     |  
 Purge (API) pod                           |       0.5 Gi      |     1 Gi     |      0.1      |    0.5
 
 
-
 ## Installing the Chart
-
 Prepare a custom values.yaml file based on the configuration section which will be present in chart_Directory/valus.yaml.
-## Configuration
 
+## Configuration
 The following table lists the configurable parameters of the Ibm-pem-standard chart and their default values.
 
 | Parameter                | Description             | Default        |
 | ------------------------ | ----------------------- | -------------- |
 | `image.name` | Provide the value in double quotes | `"cp.icr.io/cp/ibm-pem/pem"` |
-| `image.tag` | Specify the tag name | `"6.2.0.2"` |
+| `image.tag` | Specify the tag name | `"6.2.0.3"` |
 | `image.pullPolicy` |  | `null` |
 | `image.pullSecret` | Provide the pull secret name | `""` |
 | `arch` |  | `"amd64"` |
@@ -564,7 +550,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.install` |  | `true` |
 | `communitymanager.image.repository` | Specify the repository | `"cp.icr.io/cp/ibm-pem/pem"` |
 | `communitymanager.image.pullPolicy` | Specify te image pull policy | `null` |
-| `communitymanager.image.tag` | Specify the tag name | `"6.2.0.2"` |
+| `communitymanager.image.tag` | Specify the tag name | `"6.2.0.3"` |
 | `communitymanager.image.pullSecret` | Provide the pull secret name | `null` |
 | `communitymanager.prod.enable` | If you are want to proceed for prod pcm installation then you have to mention it as true or else false | `true` |
 | `communitymanager.prod.setupfile.acceptLicence` | We should make accept-license should be true for pcm installation | `true` |
@@ -989,82 +975,74 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.nonprod.archive.capacity` |  | `"100Mi"` |
 | `communitymanager.nonprod.archive.storageclass` |  | `"slow"` |
 
+
 To install the chart with the release name `my-release`:
 1. Ensure that the chart is downloaded locally and available.
 
-2. Run the below command
+2. Run the below command:
 ```sh
 $ helm install my-release -f values.yaml ./ibm-pem-standard --timeout 3600s  --namespace <namespace>
 ```
 
-Depending on the capacity of the openshift worker node and database network connectivity, chart deployment can take on average
+Depending on the capacity of the OpenShift worker node and database network connectivity, chart deployment can take on average
 * 2-3 minutes for 'installation against a pre-loaded database' and
-* 10-20 minutes for 'installation against a fresh new or older release upgrade'
-## Upgrading the Chart
+* 10-20 minutes for 'installation against a new release or an older release upgrade'
 
-You would want to upgrade your deployment when you have a new docker image or helm chart verison or a change in configuration, for e.g. new service ports to be exposed.
+## Upgrading the Chart
+You would want to upgrade your deployment when you have a new docker image or helm chart verison or a change in configuration, such as, new service ports to be exposed.
 
 1. Ensure that the chart is downloaded locally and available.
 
-2. Before upgrading the release for any configurations change, set the `dataSetup.type` as `upgrade`
+2. Before upgrading the release for any configuration change, set the `dataSetup.upgrade` as `true`.
 
-3. Run the following command to upgrade your deployments.
-
+3. Run the following command to upgrade your deployments:
 ```sh
 helm upgrade my-release -f values.yaml ./ibm-pem-standard --timeout 3600s
 ```
 
-4. Run the following command to upgrade your deployments
-
+4. Run the following command to upgrade your deployments:
 ```
 helm upgrade my-release -f values.yaml ./ibm-pem-standard --timeout 3600s --recreate-pods
 ```
-For product release version upgrade, please refer product documentation.
-
+For product release version upgrade, refer to the product documentation.
 
 ## Post install/upgrade patching the routes (Configure SSL for OpenShift Route)
 This chart supports re-encrypt routes and requires the destination CA certificate to be configured in the route.
 
-After installing/upgrading, you must patch the routes manually for PEM, PR, PP, and API Gateway server with the CA certified TLS certificate. The routePatch.sh script allows you to patch all the routes created through the helm install with the certificate information based on the <Release_name>. 
+After installing/upgrading, you must patch the routes manually for PEM, PR, PP, and API Gateway server with the CA certified TLS certificate. The `routePatch.sh` script allows you to patch all the routes created through the helm install with the certificate information based on the <Release_name>. 
 
-To patch the routes, download the ibm_cloud_pak/pak_extensions/post-install/routePatch.sh script file, update the file with the following values and run the script:
+To patch the routes, download the `ibm_cloud_pak/pak_extensions/post-install/routePatch.sh` script file, update the file with the following values and run the script:
 * RELEASE_NAME= #Provide the release name
 * PEM_DEST_CABUNDLE_FN= #Provide the Destination CA certificate name with path for PEM server
 * PR_DEST_CABUNDLE_FN= #Provide the Destination CA certificate name with path for PR server
 * PP_DEST_CABUNDLE_FN= #Provide the Destination CA certificate name with path for PP server
 * AG_DEST_CABUNDLE_FN= #Provide the Destination CA certificate name with path for API Gateway server
 
-The routePatch.sh file and all destination CA certificates must have the 755 permission to read and execute the script for patching the routes.
+The `routePatch.sh` file and all destination CA certificates must have the 755 permission to read and execute the script for patching the routes.
 
 ## Rollback the Chart
 If the upgraded environment is not working as expected or you made an error while upgrading, you can easily rollback the chart to a previous revision.
-Procedure
-To rollback a chart with release name <my-release> to a previous revision invoke the following command:
 
-
+To rollback a chart with release name <my-release> to a previous revision, invoke the following command:
 ```sh
 helm rollback my-release <previous revision number>
 ```
 
-To get the revision number execute the following command:
-
+To get the revision number, execute the following command:
 ```sh
 helm history my-release
 ```
-Note : If the revision isn't specified then by default rolls back to the last revision.
+Note : If the revision isn't specified, then by default it rolls back to the last revision.
 
 ## Uninstalling the Chart
-
 To uninstall/delete the `my-release` deployment run the command:
-
-
 ```sh
  helm delete my-release  --purge
 ```
 Since there are certain kubernetes resources created using the `pre-install` hook, helm delete command will try to delete them as a post delete activity. In case it fails to do so, you need to manually delete the following resources created by the chart:
-* ConfigMap - <release name>-Migrator-Setupfile
-* ConfigMap - <release name>-Dbutils-Setupfile
-* PersistentVolumeClaim if persistence is enabled - <release name>-resources-pvc  only if resources pv are enabled
-* PersistentVolumeClaim if persistence is enabled - <release name>-logs-pvc #enable logs for migrator and dbutils
+* ConfigMap - <release-name>-Migrator-Setupfile
+* ConfigMap - <release-name>-Dbutils-Setupfile
+* PersistentVolumeClaim if persistence is enabled - <release-name>-resources-pvc  only if resources pv are enabled
+* PersistentVolumeClaim if persistence is enabled - <release-name>-logs-pvc #enable logs for migrator and dbutils
 
 Note: You may also consider deleting the secrets and peristent volumes created as part of prerequisites, after creating their backups.
