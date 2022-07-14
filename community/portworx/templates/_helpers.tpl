@@ -13,7 +13,7 @@ helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
 {{- define "px.metering.annotations" -}}
 productName: "PX-Enterprise"
 productID: com.portworx.enterprise
-productVersion: {{ .Values.imageVersion }}
+productVersion: {{ quote .Values.imageVersion }}
 {{- end -}}
 
 {{- define "px.kubernetesVersion" -}}
@@ -80,6 +80,79 @@ productVersion: {{ .Values.imageVersion }}
 {{- end -}}
 {{- end -}}
 
+{{- define "px.getGrafanaImage" -}}
+{{- if (.Values.customRegistryURL) -}}
+    {{- if (eq "/" (.Values.customRegistryURL | regexFind "/")) -}}
+        {{ cat (trim .Values.customRegistryURL) "/grafana" | replace " " ""}}
+    {{- else -}}
+        {{cat (trim .Values.customRegistryURL) "/grafana/grafana" | replace " " ""}}
+    {{- end -}}
+{{- else -}}
+    {{ "grafana/grafana" }}
+{{- end -}}
+{{- end -}}
+
+{{- define "px.getPrometheusOperatorImage" -}}
+{{- if (.Values.customRegistryURL) -}}
+    {{- if (eq "/" (.Values.customRegistryURL | regexFind "/")) -}}
+        {{ cat (trim .Values.customRegistryURL) "/prometheus-operator" | replace " " ""}}
+    {{- else -}}
+        {{cat (trim .Values.customRegistryURL) "/prometheus-operator/prometheus-operator" | replace " " ""}}
+    {{- end -}}
+{{- else -}}
+    {{ "quay.io/prometheus-operator/prometheus-operator" }}
+{{- end -}}
+{{- end -}}
+
+{{- define "px.getPrometheusImage" -}}
+{{- if (.Values.customRegistryURL) -}}
+    {{- if (eq "/" (.Values.customRegistryURL | regexFind "/")) -}}
+        {{ cat (trim .Values.customRegistryURL) "/prometheus" | replace " " ""}}
+    {{- else -}}
+        {{cat (trim .Values.customRegistryURL) "/prometheus/prometheus" | replace " " ""}}
+    {{- end -}}
+{{- else -}}
+    {{ "quay.io/prometheus/prometheus" }}
+{{- end -}}
+{{- end -}}
+
+{{- define "px.getPrometheusConfigReloaderImage" -}}
+{{- if (.Values.customRegistryURL) -}}
+    {{- if (eq "/" (.Values.customRegistryURL | regexFind "/")) -}}
+        {{ cat (trim .Values.customRegistryURL) "/prometheus-config-reloader" | replace " " ""}}
+    {{- else -}}
+        {{cat (trim .Values.customRegistryURL) "/prometheus-operator/prometheus-config-reloader" | replace " " ""}}
+    {{- end -}}
+{{- else -}}
+    {{ "quay.io/prometheus-operator/prometheus-config-reloader" }}
+{{- end -}}
+{{- end -}}
+
+{{- define "px.getAlertmanagerImage" -}}
+{{- if (.Values.customRegistryURL) -}}
+    {{- if (eq "/" (.Values.customRegistryURL | regexFind "/")) -}}
+        {{ cat (trim .Values.customRegistryURL) "/alertmanager" | replace " " ""}}
+    {{- else -}}
+        {{cat (trim .Values.customRegistryURL) "/prometheus/alertmanager" | replace " " ""}}
+    {{- end -}}
+{{- else -}}
+    {{ "quay.io/prometheus/alertmanager" }}
+{{- end -}}
+{{- end -}}
+
+{{- define "px.getAutopilotImage" -}}
+{{- if (.Values.customRegistryURL) -}}
+    {{- if (eq "/" (.Values.customRegistryURL | regexFind "/")) -}}
+        {{ cat (trim .Values.customRegistryURL) "/autopilot" | replace " " ""}}
+    {{- else -}}
+        {{cat (trim .Values.customRegistryURL) "/portworx/autopilot" | replace " " ""}}
+    {{- end -}}
+{{- else -}}
+    {{ "portworx/autopilot" }}
+{{- end -}}
+{{- end -}}
+
+
 {{- define "px.getk8sImages" -}}
 {{- if (.Values.customRegistryURL) -}}
     {{- if (eq "/" (.Values.customRegistryURL | regexFind "/")) -}}
@@ -115,7 +188,6 @@ productVersion: {{ .Values.imageVersion }}
         {{ "quay.io/openstorage" }}
 {{- end -}}
 {{- end -}}
-
 
 {{/*
 Create the name of the service account to use for hooks
