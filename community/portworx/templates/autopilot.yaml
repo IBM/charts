@@ -1,0 +1,123 @@
+{{- if and .Values.csiCloudDrive (eq .Values.csiCloudDrive true)}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: autopilot-config
+  namespace: kube-system
+data:
+  config.yaml: |-
+    providers:
+       - name: default
+         type: prometheus
+         params: url=http://prometheus:9090
+    min_poll_interval: 2
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: autopilot-account
+  namespace: kube-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    scheduler.alpha.kubernetes.io/critical-pod: ""
+  labels:
+    tier: control-plane
+  name: autopilot
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      name: autopilot
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ""
+      labels:
+        name: autopilot
+        tier: control-plane
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: "name"
+                    operator: In
+                    values:
+                    - autopilot
+              topologyKey: "kubernetes.io/hostname"
+      hostPID: false
+      containers:
+      - command:
+        - /autopilot
+        - -f
+        - ./etc/config/config.yaml
+        - -log-level
+        - debug
+        imagePullPolicy: Always
+        image: {{ template "px.getAutopilotImage" . }}:{{ required "A valid Image tag is required in the SemVer format" .Values.autopilotVersion }}
+        resources:
+          requests:
+            cpu: '0.1'
+        securityContext:
+          privileged: false
+        name: autopilot
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/config
+      serviceAccountName: autopilot-account
+      volumes:
+        - name: config-volume
+          configMap:
+            name: autopilot-config
+            items:
+            - key: config.yaml
+              path: config.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: autopilot
+  namespace: kube-system
+  labels:
+    name: autopilot-service
+spec:
+  ports:
+    - name: autopilot
+      protocol: TCP
+      port: 9628
+  selector:
+    name: autopilot
+    tier: control-plane
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: autopilot-role
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: autopilot-role-binding
+subjects:
+- kind: ServiceAccount
+  name: autopilot-account
+  namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: autopilot-role
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

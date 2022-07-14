@@ -1,0 +1,401 @@
+{{- if and .Values.csiCloudDrive (eq .Values.csiCloudDrive true)}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: px-prometheus-operator
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: px-prometheus-operator
+  namespace: kube-system
+rules:
+  - apiGroups:
+      - extensions
+    resources:
+      - thirdpartyresources
+    verbs: ["*"]
+  - apiGroups:
+      - apiextensions.k8s.io
+    resources:
+      - customresourcedefinitions
+    verbs: ["*"]
+  - apiGroups:
+      - monitoring.coreos.com
+    resources:
+      - alertmanagers
+      - alertmanagers/finalizers
+      - alertmanagerconfigs
+      - prometheuses
+      - prometheuses/finalizers
+      - thanosrulers
+      - thanosrulers/finalizers
+      - servicemonitors
+      - podmonitors
+      - probes
+      - prometheusrules
+    verbs: ["*"]
+  - apiGroups:
+      - apps
+    resources:
+      - statefulsets
+    verbs: ["*"]
+  - apiGroups: [""]
+    resources:
+      - configmaps
+      - secrets
+    verbs: ["*"]
+  - apiGroups: [""]
+    resources:
+      - pods
+    verbs: ["list", "delete"]
+  - apiGroups: [""]
+    resources:
+      - services
+      - services/finalizers
+      - endpoints
+    verbs: ["get", "create", "update", "delete"]
+  - apiGroups: [""]
+    resources:
+      - nodes
+    verbs: ["list", "watch"]
+  - apiGroups: [""]
+    resources:
+      - namespaces
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["security.openshift.io"]
+    resources:
+      - securitycontextconstraints
+    resourceNames: ["anyuid"]
+    verbs: ["use"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: px-prometheus-operator
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: px-prometheus-operator
+subjects:
+  - kind: ServiceAccount
+    name: px-prometheus-operator
+    namespace: kube-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    k8s-app: px-prometheus-operator
+  name: px-prometheus-operator
+  namespace: kube-system
+  annotations:
+    portworx.com/install-source: "https://install.portworx.com/?comp=prometheus-operator&kbver=1.22.1"
+spec:
+  selector:
+    matchLabels:
+      k8s-app: px-prometheus-operator
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        k8s-app: px-prometheus-operator
+    spec:
+      containers:
+        - args:
+            - -namespaces=kube-system
+            - --kubelet-service=kube-system/kubelet
+            - --prometheus-config-reloader={{ template "px.getPrometheusConfigReloaderImage" . }}:{{ required "A valid Image tag is required in the SemVer format" .Values.prometheusConfigReloaderVersion }}
+          image: {{ template "px.getPrometheusOperatorImage" . }}:{{ required "A valid Image tag is required in the SemVer format" .Values.prometheusOperatorVersion }}
+          imagePullPolicy: Always
+          name: prometheus-operator
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            limits:
+              cpu: 200m
+              memory: 100Mi
+            requests:
+              cpu: 100m
+              memory: 50Mi
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      serviceAccountName: px-prometheus-operator
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  namespace: kube-system
+  name: portworx-prometheus-sm
+  labels:
+    name: portworx-prometheus-sm
+spec:
+  selector:
+    matchLabels:
+      name: portworx
+  namespaceSelector:
+    any: true
+  endpoints:
+    - port: px-api
+      targetPort: 9001
+    - port: px-kvdb
+      targetPort: 9019
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Alertmanager
+metadata:
+  name: portworx #This name is important since the Alertmanager pods wont start unless a secret named alertmanager-${ALERTMANAGER_NAME} is created. in this case if would expect alertmanager-portworx secret in the kube-system namespace
+  namespace: kube-system
+  labels:
+    alertmanager: portworx
+spec:
+  replicas: 3
+  image: {{ template "px.getAlertmanagerImage" . }}:{{ required "A valid Image tag is required in the SemVer format" .Values.alertmanagerVersion }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager-portworx
+  namespace: kube-system
+spec:
+  type: ClusterIP
+  ports:
+    - name: web
+      port: 9093
+      protocol: TCP
+      targetPort: 9093
+  selector:
+    alertmanager: portworx
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  labels:
+    prometheus: portworx
+  name: portworx
+  namespace: kube-system
+spec:
+  groups:
+  - name: portworx.rules
+    rules:
+    - alert: PortworxVolumeUsageCritical
+      annotations:
+        description: {{`Portworx volume {{$labels.volumeid}} on {{$labels.instance}} is over 80% used for
+          more than 10 minutes.`}}
+        summary: {{`Portworx volume capacity is at {{$value}}% used.`}}
+      expr: 100 * (px_volume_usage_bytes / px_volume_capacity_bytes) > 80
+      for: 5m
+      labels:
+        issue: {{`Portworx volume {{$labels.volumeid}} usage on {{$labels.instance}} is high.`}}
+        severity: critical
+    - alert: PortworxVolumeUsage
+      annotations:
+        description: {{`Portworx volume {{$labels.volumeid}} on {{$labels.instance}} is over 70% used for
+          more than 10 minutes.`}}
+        summary: {{`Portworx volume {{$labels.volumeid}} on {{$labels.instance}} is at {{$value}}% used.`}}
+      expr: 100 * (px_volume_usage_bytes / px_volume_capacity_bytes) > 70
+      for: 5m
+      labels:
+        issue: {{`Portworx volume {{$labels.volumeid}} usage on {{$labels.instance}} is critical.`}}
+        severity: warning
+    - alert: PortworxVolumeWillFill
+      annotations:
+        description: {{`Portworx volume {{$labels.volumeid}} on {{$labels.instance}} is over 70% full and has
+          been predicted to fill within 2 weeks.`}}
+        summary: {{`Portworx volume {{$labels.volumeid}} on {{$labels.instance}} is over 70% full and is
+          predicted to fill within 2 weeks.`}}
+      expr: (px_volume_usage_bytes / px_volume_capacity_bytes) > 0.7 and predict_linear(px_cluster_disk_available_bytes[1h],
+        14 * 86400) < 0
+      for: 10m
+      labels:
+        issue: {{`Portworx volume {{$labels.volumeid}} on {{$labels.instance}} is predicted to fill within
+          2 weeks.`}}
+        severity: warning
+    - alert: PortworxVolumeNotInQuorum
+      annotations:
+        description:{{` Portworx volume {{$labels.volumeid}} from cluster {{$labels.cluster}} is out of quorum. Please check all nodes with that volume replicas are online.`}}
+        summary: {{`Portworx volume {{$labels.volumeid}} from cluster {{$labels.cluster}} is out of quorum.`}}
+      expr: px_volume_replication_status == 1
+      labels:
+        issue: Portworx volume out of quorum.
+        severity: warning
+    - alert: PortworxVolumeInResync
+      annotations:
+        description: {{`Portworx volume {{$labels.volumeid}} from cluster {{$labels.cluster}} is in resync state.`}}
+        summary: {{`Portworx volume {{$labels.volumeid}} from cluster {{$labels.cluster}} is in resync state.`}}
+      expr: px_volume_replication_status == 2
+      labels:
+        issue: Portworx volume in resync state.
+        severity: warning
+    - alert: PortworxVolumeDegraded
+      annotations:
+        description: {{`Portworx volume {{$labels.volumeid}} from cluster {{$labels.cluster}} is in degraded state. Please check all nodes with that volume replicas are online.`}}
+        summary: {{`Portworx volume {{$labels.volumeid}} from cluster {{$labels.cluster}} is in degraded state.`}}
+      expr: px_volume_replication_status == 3
+      labels:
+        issue: Portworx volume in degraded state.
+        severity: warning
+    - alert: PortworxStorageUsageCritical
+      annotations:
+        description: {{`Portworx storage {{$labels.volumeid}} on {{$labels.instance}} is over 80% used
+          for more than 10 minutes.`}}
+        summary: {{`Portworx storage {{$labels.volumeid}} on {{$labels.instance}} is at {{$value}}% used.`}}
+      expr: 100 * (1 - px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes)
+        < 20
+      for: 5m
+      labels:
+        issue: {{`Portworx storage {{$labels.volumeid}} usage on {{$labels.instance}} is critical.`}}
+        severity: critical
+    - alert: PortworxStorageUsage
+      annotations:
+        description: {{`Portworx storage {{$labels.volumeid}} on {{$labels.instance}} is over 70% used
+          for more than 10 minutes.`}}
+        summary: {{`Portworx storage {{$labels.volumeid}} on {{$labels.instance}} is at {{$value}}% used.`}}
+      expr: 100 * (1 - (px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes))
+        < 30
+      for: 5m
+      labels:
+        issue: {{`Portworx storage {{$labels.volumeid}} usage on {{$labels.instance}} is critical.`}}
+        severity: warning
+    - alert: PortworxStorageWillFill
+      annotations:
+        description: {{`Portworx storage {{$labels.volumeid}} on {{$labels.instance}} is over 70% full
+          and has been predicted to fill within 2 weeks for more than 10 minutes.`}}
+        summary: {{`Portworx storage {{$labels.volumeid}} on {{$labels.instance}} is over 70% full and
+          is predicted to fill within 2 weeks.`}}
+      expr: (100 * (1 - (px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes)))
+        < 30 and predict_linear(px_cluster_disk_available_bytes[1h], 14 * 86400) <
+        0
+      for: 10m
+      labels:
+        issue: {{`Portworx storage {{$labels.volumeid}} on {{$labels.instance}} is predicted to fill within
+          2 weeks.`}}
+        severity: warning
+    - alert: PortworxStorageNodeDown
+      annotations:
+        description: Portworx Storage Node has been offline for more than 5 minutes.
+        summary: Portworx Storage Node is Offline.
+      expr: max(px_cluster_status_nodes_storage_down) > 0
+      for: 5m
+      labels:
+        issue: Portworx Storage Node is Offline.
+        severity: critical
+    - alert: PortworxQuorumUnhealthy
+      annotations:
+        description: Portworx cluster Quorum Unhealthy for more than 5 minutes.
+        summary: Portworx Quorum Unhealthy.
+      expr: max(px_cluster_status_cluster_quorum) > 1
+      for: 5m
+      labels:
+        issue: Portworx Quorum Unhealthy.
+        severity: critical
+    - alert: PortworxMemberDown
+      annotations:
+        description: Portworx cluster member(s) has(have) been down for more than
+          5 minutes.
+        summary: Portworx cluster member(s) is(are) down.
+      expr: (max(px_cluster_status_cluster_size) - count(px_cluster_status_cluster_size))
+        > 0
+      for: 5m
+      labels:
+        issue: Portworx cluster member(s) is(are) down.
+        severity: critical
+    - alert: PXBackupError
+      annotations:
+        description: {{`Failed to take backup for volume {{$labels.volumename}} with error {{$labels.error_string}}.`}}
+        summary: {{`Failed to take backup for volume {{$labels.volumename}}.`}}
+      expr: px_backup_stats_status == 2
+      labels:
+        issue: Cloudsnap backup error.
+        severity: warning
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+  namespace: kube-system
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - nodes/metrics
+      - services
+      - endpoints
+      - pods
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources:
+      - configmaps
+    verbs: ["get"]
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics", "/metrics/cadvisor", "/federate"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: kube-system
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: prometheus
+  namespace: kube-system
+spec:
+  image: {{ template "px.getPrometheusImage" . }}:{{ required "A valid Image tag is required in the SemVer format" .Values.prometheusVersion }}
+  replicas: 2
+  logLevel: debug
+  serviceAccountName: prometheus
+  alerting:
+    alertmanagers:
+      - namespace: kube-system
+        name: alertmanager-portworx
+        port: web
+  serviceMonitorSelector:
+    matchLabels:
+      name: portworx-prometheus-sm
+  ruleSelector:
+    matchLabels:
+      prometheus: portworx
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: kube-system
+spec:
+  type: ClusterIP
+  ports:
+    - name: web
+      port: 9090
+      protocol: TCP
+      targetPort: 9090
+  selector:
+    prometheus: prometheus
+{{- end }}
