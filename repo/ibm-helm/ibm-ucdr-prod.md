@@ -1,7 +1,7 @@
 # UrbanCode Deploy Agent Relay - Helm Chart
 
 ## Introduction
-[UrbanCode Deploy Agent Relay](https://www.urbancode.com/product/deploy/) is a tool for automating application deployments through your environments. It is designed to facilitate rapid feedback and continuous delivery in agile development while providing the audit trails, versioning and approvals needed in production.
+[UrbanCode Deploy Agent Relay](https://www.ibm.com/cloud/urbancode/deploy) is a tool for automating application deployments through your environments. It is designed to facilitate rapid feedback and continuous delivery in agile development while providing the audit trails, versioning and approvals needed in production.
 
 ## Chart Details
 * This chart deploys a single instance of the IBM UrbanCode Deploy agent relay that may be scaled to multiple instances.
