@@ -373,7 +373,33 @@ Limit the IBM Cloud Object Storage plug-in to access only the Kubernetes secrets
    ibmc-s3fs-vault-cross-region           ibm.io/ibmc-s3fs   8m
    ibmc-s3fs-vault-regional               ibm.io/ibmc-s3fs   8m
    ```
+## Updating the IBM Cloud Object Storage plug-in
 
+You can upgrade the existing IBM Cloud Object Storage plug-in to the most recent version.
+
+1. Get the name of your IBM Cloud Object Storage plug-in Helm release and the version of the plug-in in your cluster.
+
+    ```
+    helm ls -A | grep object
+    ```
+2. Update the IBM Cloud Helm repo to retrieve the most recent version of all Helm charts in this repo.
+
+   ```
+   helm repo update
+   ```
+
+3. Update the IBM Cloud Object Storage ibmc Helm plug-in to the most recent version.
+
+   ```
+   helm ibmc --update
+   ```
+
+4. Install the most recent version of the ibm-object-storage-plugin for your operating system.
+
+   ```
+   helm ibmc upgrade ibm-object-storage-plugin -n ibm-object-s3fs  ibm-helm/ibm-object-storage-plugin --force --set license=true
+
+   ```
 ## Removing the Chart
 If you do not want to provision and use IBM Cloud Object Storage in your cluster, you can uninstall the Helm chart.
 
