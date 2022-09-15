@@ -212,8 +212,8 @@ oc create secret docker-registry cp.icr.io \
 
 ### Trust of certificate
 
-Some components of the product solution communicate with the server. This is done using HTTPS, verifying that 
-the certificate is signed by a trusted CA. Where default certificates are used, they are typically not signed 
+Some components of the product solution communicate with the server. This is done using HTTPS, verifying that
+the certificate is signed by a trusted CA. Where default certificates are used, they are typically not signed
 by a recognized, trusted, CA.
 
 
@@ -282,7 +282,7 @@ The value should be used in place of the one shown below.
 
 ```console
 helm repo update
-helm pull --untar ibm-helm/ibm-rtas-prod --version 8.1023.0
+helm pull --untar ibm-helm/ibm-rtas-prod --version 9.1050.0
 
 # update the runAsUser and fsGroup to match scc policy
 sed -i -e "s/runAsUser: 1001/runAsUser: $(oc get project test-system -oyaml \
@@ -291,6 +291,7 @@ sed -i -e "s/runAsUser: 1001/runAsUser: $(oc get project test-system -oyaml \
   | sed -r -n 's# *openshift.io/sa.scc.supplemental-groups: *([0-9]*)/.*#\1#p')/g" ibm-rtas-prod/values-openshift.yaml
 
 helm install {my-rtas} ./ibm-rtas-prod -n test-system \
+  --set keycloak.signup.enabled=true \
   --set license=true \
   -f ibm-rtas-prod/values-openshift.yaml \
   --set global.persistence.rwxStorageClass=ibmc-file-gold \
@@ -312,6 +313,8 @@ rm -fr ibm-rtas-prod
 
 
 * The password seed is used to create default passwords and should be stored securely. Its required again to restore from a backup.
+
+* When the ingress domain is accessible to untrusted parties, `keycloak.signup.enabled` should be set to `false`.
 
 
 * The _default_ `openshift-cluster-dns-name` referred to above can be found using:
@@ -388,7 +391,7 @@ oc new-project cp
 
 ```bash
 export CASE_NAME=ibm-rtas-case
-export CASE_VERSION=8.1023.0
+export CASE_VERSION=9.1050.0
 export CASE_ARCHIVE=${CASE_NAME}-${CASE_VERSION}.tgz
 export CASE_REMOTE_PATH=https://github.com/IBM/cloud-pak/raw/master/repo/case/${CASE_ARCHIVE}
 export OFFLINEDIR=$HOME/offline
@@ -453,7 +456,7 @@ If your cluster does not use a Machine Config Operator the above step will not u
 * Unpack the product helm chart
 
 ```bash
-tar xf $OFFLINEDIR/charts/ibm-rtas-prod-8.1023.0.tgz
+tar xf $OFFLINEDIR/charts/ibm-rtas-prod-9.1050.0.tgz
 ```
 
 * Continue to install the product as normal but since the global pull secret has been created the pull secret is not required `oc create secret docker-registry cp.icr.io`. Naturally this secret should not be referenced in the helm install `--set global.ibmRtasRegistryPullSecret=cp.icr.io \`.
@@ -464,7 +467,7 @@ tar xf $OFFLINEDIR/charts/ibm-rtas-prod-8.1023.0.tgz
 
 The method by which an upgrade is performed depends on the version being upgraded.  See the appropriate section below.
 
-### Upgrading from 10.1.3
+### Upgrading from 10.1.3 and later
 
 
 
@@ -511,6 +514,7 @@ migrate.sh delete-temp-resources -n test-system {my-rtas}
 ```
 
 ## Security Considerations
+
 
 ### Dynamic workload
 
@@ -619,6 +623,8 @@ The defaults shown are not appropriate on OpenShift clusters. The `values-opensh
 | `execution.intercepts.clusterRole.create`      | When `network.policy` is disabled, NodePorts can be used to enable access to running assets like virtual services | true |
 | `execution.priorityClassName`                  | The products dynamic workload pods will have this priorityClass | '' |
 | `execution.priorityClassValue`                 | When set a priorityClass named `execution.priorityClassName` is created with the set priority value | |
+| `keycloak.signup.enable`                       | Allow users to create their own accounts. (Setting also in realm under Login > User registration) | false |
+| `keycloak.truststoreFileHostnameVerificationPolicy` | HTTPS hostname cerificate verifcation policy. ANY (hostname is not verified), WILDCARD (allows wildcards in subdomain names) or STRICT (the Common Name (CN) must match the hostname exactly). | WILDCARD |
 | `license`                                      | Confirmation that the EULA has been accepted. For example `true` | false |
 | `networkPolicy.enabled`                        | Deny other software, installed in the cluster, access to the product. | false |
 | `networkPolicy.egress.enable`                  | When `network.policy` is enabled create a rule to narrow egress from the product. | false |
