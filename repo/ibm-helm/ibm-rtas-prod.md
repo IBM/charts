@@ -46,14 +46,14 @@ Kubernetes cluster:
 Installed locally:
 
 * [oc cli](https://docs.openshift.com/container-platform/4.6/cli_reference/openshift_cli/getting-started-cli.html)
-* [helm cli](https://access.redhat.com/documentation/en-us/openshift_container_platform/4.6/html/cli_tools/helm-cli) v3.6.2 or later.
+* [helm cli](https://access.redhat.com/documentation/en-us/openshift_container_platform/4.6/html/cli_tools/helm-cli) v3.9.4 or later.
 
 To install the product you need to access the cluster with cluster administrator privileges.
 
 
 ## Red Hat OpenShift SecurityContextConstraints Requirements
 
-The product is compatible with the [`restricted`](https://ibm.biz/cpkspec-scc) SecurityContextConstraint
+The product is compatible with the `restricted` and `restricted-v2` [SecurityContextConstraint](https://docs.openshift.com/container-platform/4.11/authentication/managing-security-context-constraints.html#default-sccs_configuring-internal-oauth).
 
 If you would prefer to use the custom ibm-rtas-restricted SCC, please do the following before installation:
 
@@ -282,7 +282,7 @@ The value should be used in place of the one shown below.
 
 ```console
 helm repo update
-helm pull --untar ibm-helm/ibm-rtas-prod --version 9.1050.0
+helm pull --untar ibm-helm/ibm-rtas-prod --version 10.1051.0
 
 # update the runAsUser and fsGroup to match scc policy
 sed -i -e "s/runAsUser: 1001/runAsUser: $(oc get project test-system -oyaml \
@@ -391,9 +391,9 @@ oc new-project cp
 
 ```bash
 export CASE_NAME=ibm-rtas-case
-export CASE_VERSION=9.1050.0
+export CASE_VERSION=10.1051.0
 export CASE_ARCHIVE=${CASE_NAME}-${CASE_VERSION}.tgz
-export CASE_REMOTE_PATH=https://github.com/IBM/cloud-pak/raw/master/repo/case/${CASE_ARCHIVE}
+export CASE_REMOTE_PATH=https://github.com/IBM/cloud-pak/raw/master/repo/case/${CASE_NAME}/${CASE_VERSION}/${CASE_ARCHIVE}
 export OFFLINEDIR=$HOME/offline
 
 cloudctl case save \
@@ -456,7 +456,7 @@ If your cluster does not use a Machine Config Operator the above step will not u
 * Unpack the product helm chart
 
 ```bash
-tar xf $OFFLINEDIR/charts/ibm-rtas-prod-9.1050.0.tgz
+tar xf $OFFLINEDIR/charts/ibm-rtas-prod-10.1051.0.tgz
 ```
 
 * Continue to install the product as normal but since the global pull secret has been created the pull secret is not required `oc create secret docker-registry cp.icr.io`. Naturally this secret should not be referenced in the helm install `--set global.ibmRtasRegistryPullSecret=cp.icr.io \`.
