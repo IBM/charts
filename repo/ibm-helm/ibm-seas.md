@@ -193,7 +193,7 @@ Please refer [Verification of system requirements](https://www.ibm.com/docs/en/e
 ## Agreement to IBM SEAS License
 
 You must read the IBM Sterling External Authentication Server License agreement terms before installation, using the below link:
-[License] http://www-03.ibm.com/software/sla/sladb.nsf (L/N: L-KNAN-C6EJKA)
+[License] http://www-03.ibm.com/software/sla/sladb.nsf (L/N: L-KNAN-CHKAUA)
 
 ## Installing the Chart
 
