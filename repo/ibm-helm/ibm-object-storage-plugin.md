@@ -7,11 +7,16 @@ The following table details orchestration platforms suitable for deployment of t
 
 |Orchestration platform|Version|Architecture|
 |----------------------|-------|------------|
-|Kubernetes|1.21|x86|
-|Kubernetes|1.20|x86|
-|Kubernetes|1.19|x86|
-|Red Hat® OpenShift®|4.7|x86|
-|Red Hat OpenShift|4.6|x86|
+|Kubernetes|1.26|x86|
+|Kubernetes|1.25|x86|
+|Kubernetes|1.24|x86|
+|Kubernetes|1.23|x86|
+|Kubernetes|1.22|x86|
+|Red Hat OpenShift|4.11|x86|
+|Red Hat OpenShift|4.10|x86|
+|Red Hat OpenShift|4.9|x86|
+|Red Hat OpenShift|4.8|x86|
+|Red Hat OpenShift|4.7|x86|
 
 ## Introduction
 [IBM Cloud Object Storage](https://cloud.ibm.com/docs/services/cloud-object-storage?topic=cloud-object-storage-about-ibm-cloud-object-storage#about-ibm-cloud-object-storage) is persistent, highly available storage that you can mount to apps that run in a Kubernetes cluster by using the IBM Cloud Object Storage plug-in. The plug-in is a Kubernetes Flex-Volume plug-in that connects Cloud Object Storage buckets to pods in your cluster. Information that is stored with IBM Cloud Object Storage is encrypted in transit and at rest, dispersed across multiple geographic locations, and accessed over HTTP by using a REST API.
@@ -293,8 +298,8 @@ Install the IBM Cloud Object Storage plug-in with a Helm chart to set up pre-def
     **Important note1:** The bucket access policy configuration, to configure authorised ips, has been enabled only for VPC-Gen2 clusters. Currently, this feature is not supported on IKS Classic.
     The feature has been enabled by default for VPC-Gen2 clusters in **eu-fr2** region.
     For other regions, to enable bucket access policy, pass the flag `--set bucketAccessPolicy=true` to helm ibmc install command.
-    
-    **Important note2:** If bucketAccessPolicy is set to true, the s3fs plugin gets installed in kube-system namespace. 
+
+    **Important note2:** If bucketAccessPolicy is set to true, the s3fs plugin gets installed in kube-system namespace.
     This is because, to enable access policy for buckets, plugin needs access to `cluster-info` config-map which lies in kube-system ns.
 
     Example: Install chart from helm registry, without any limitation to access specific Kubernetes secrets:
@@ -308,7 +313,7 @@ Install the IBM Cloud Object Storage plug-in with a Helm chart to set up pre-def
     ```
     helm ibmc install ibm-object-storage-plugin ./ --set license=true
     ```
-    
+
     Example: Install chart from helm registry, with bucket access policy feature enabled (for regions other than eu-fr2)
 
     ```
@@ -583,14 +588,14 @@ https://github.ibm.com/IBMPrivateCloud/cloud-pak-airgap-cli
 
 1. Follow the instructions as below to create mirror registry and mirror images
 
-    i. download case from cloud-pak repo 
-    
+    i. download case from cloud-pak repo
+
     **Note** - change the `ibm-object-storage-plugin-1.1.2.tgz` to the required / latest version.
 
     ```
     cloudctl case save --case https://github.com/IBM/cloud-pak/raw/master/repo/case/ibm-object-storage-plugin-1.1.2.tgz --outputdir ./offline
     ```
-    Expected o/p 
+    Expected o/p
     ```
     #  cloudctl case save --case https://github.com/IBM/cloud-pak/raw/master/repo/case/ibm-object-storage-plugin-1.1.2.tgz --outputdir ./offline
     Downloading and extracting the CASE ...
@@ -610,7 +615,7 @@ https://github.ibm.com/IBMPrivateCloud/cloud-pak-airgap-cli
     ```
 
     ii. navigate to airgap case directory
-    
+
     ```
     cd ./offline
     tar -xvzf ibm-object-storage-plugin-1.1.2.tgz
@@ -659,7 +664,7 @@ https://github.ibm.com/IBMPrivateCloud/cloud-pak-airgap-cli
     b9571e1d4230ab05d047f89e5a3dc52dbd53429e01de8dd28e06355810bd9fee
     [INFO] Registry service started at bastion-vdc-qc-objectairgap:5000
     ```
-    
+
     ```
     # podman ps
     CONTAINER ID  IMAGE                              COMMAND               CREATED        STATUS            PORTS                   NAMES
@@ -669,7 +674,7 @@ https://github.ibm.com/IBMPrivateCloud/cloud-pak-airgap-cli
 
     **Note** - the mirror registry takes the hostname of the machine on which scripts are sitting as the registry name by default.
 
-    v. create secret to access mirrored registry 
+    v. create secret to access mirrored registry
 
     **Note** - NOTE: Secret name should be same as the registry name created in above step, here it is hostname of the machine.
 
@@ -689,10 +694,10 @@ https://github.ibm.com/IBMPrivateCloud/cloud-pak-airgap-cli
     ```
 
     vi. check the registries available for mirroring images
-    
+
     ```
     ./airgap.sh image mirror --dir ./offline --to-registry bastion-vdc-qc-objectairgap:5000 --show-registries
-    
+
     [INFO] Processing CASE archive directory: ./offline
     [INFO] Copying image CSV file at ./offline/ibm-object-storage-plugin-1.1.2-images.csv to /tmp/airgap_202107304819/ibm-object-storage-plugin-1.1.2-images.csv temporarily
     [INFO] Creating a CSV file of mirrored images at ./offline/bastion-vdc-qc-objectairgap/ibm-object-storage-plugin-1.1.2-images.csv-mirrored-images.csv
@@ -738,7 +743,7 @@ https://github.ibm.com/IBMPrivateCloud/cloud-pak-airgap-cli
     [INFO] Retrieving target registry authentication secret
     [INFO] Merging cluster pull secret
     [INFO] Applying image content source policy
-    oc set data secret/pull-secret -n openshift-config --from-file=.dockerconfigjson=/tmp/airgap_pull_secret_McKKYaFbZ 
+    oc set data secret/pull-secret -n openshift-config --from-file=.dockerconfigjson=/tmp/airgap_pull_secret_McKKYaFbZ
     secret/pull-secret data updated
     ```
 
@@ -749,7 +754,7 @@ https://github.ibm.com/IBMPrivateCloud/cloud-pak-airgap-cli
     [INFO] Extracting certificate authority from bastion-vdc-qc-objectairgap:5000 ...
     [INFO] Certificate authority saved to /root/.airgap/certs/bastion-vdc-qc-objectairgap:5000-ca.crt
     [INFO] Creating configmap airgap-trusted-ca
-    oc -n openshift-config create configmap airgap-trusted-ca --from-file=bastion-vdc-qc-objectairgap..5000=/root/.airgap/certs/bastion-vdc-qc-objectairgap:5000-ca.crt 
+    oc -n openshift-config create configmap airgap-trusted-ca --from-file=bastion-vdc-qc-objectairgap..5000=/root/.airgap/certs/bastion-vdc-qc-objectairgap:5000-ca.crt
     configmap/airgap-trusted-ca created
     [INFO] Updating cluster image configuration
     E0730 07:57:03.682913   71871 request.go:1001] Unexpected error when reading response body: unexpected EOF
@@ -762,7 +767,7 @@ https://github.ibm.com/IBMPrivateCloud/cloud-pak-airgap-cli
 
     ```
     # ./airgap.sh image mirror --dir ./offline --to-registry bastion-vdc-qc-objectairgap:5000
-    
+
     [INFO] Generating auth.json
     [INFO] Processing CASE archive directory: ./offline
     [INFO] Copying image CSV file at ./offline/ibm-object-storage-plugin-1.1.2-images.csv to /tmp/airgap_202107301005/ibm-object-storage-plugin-1.1.2-images.csv temporarily
@@ -776,7 +781,7 @@ https://github.ibm.com/IBMPrivateCloud/cloud-pak-airgap-cli
     [INFO] Start mirroring CASE images ...
     [INFO] Found 2 images
     [INFO] Mirroring /tmp/airgap_image_mapping_abdupHqsP
-    oc image mirror -a "/root/.airgap/auth.json" -f "/tmp/airgap_image_mapping_abdupHqsP" --filter-by-os '.*' --insecure 
+    oc image mirror -a "/root/.airgap/auth.json" -f "/tmp/airgap_image_mapping_abdupHqsP" --filter-by-os '.*' --insecure
     bastion-vdc-qc-objectairgap:5000/
       ibmcom/ibmcloud-object-storage-driver
         blobs:
@@ -806,12 +811,12 @@ https://github.ibm.com/IBMPrivateCloud/cloud-pak-airgap-cli
         manifests:
           sha256:4adddd3d619c056ed6fd3dc00864e4b7af140dd731557c2e64bfd6ced4232bbf -> 1.8.30
       stats: shared=2 unique=15 size=125MiB ratio=0.70
-    
+
     phase 0:
       bastion-vdc-qc-objectairgap:5000 ibmcom/ibmcloud-object-storage-plugin blobs=9 mounts=0 manifests=1 shared=2
     phase 1:
       bastion-vdc-qc-objectairgap:5000 ibmcom/ibmcloud-object-storage-driver blobs=10 mounts=2 manifests=1 shared=2
-    
+
     info: Planning completed in 490ms
     uploading: bastion-vdc-qc-objectairgap:5000/ibmcom/ibmcloud-object-storage-plugin sha256:6a6822b852cea4cef8e717c761a03dec51941994b2d660599a90a812aff205cd 8.049MiB
     uploading: bastion-vdc-qc-objectairgap:5000/ibmcom/ibmcloud-object-storage-plugin sha256:0eab0e9051c92465535f31b7bebc36aa2ea318f1d78a62474ec3eb844eb3e0f9 131.5KiB
@@ -831,12 +836,12 @@ https://github.ibm.com/IBMPrivateCloud/cloud-pak-airgap-cli
 
     ```
     cd ./offline/charts/
-    tar -xvzf ibm-object-storage-plugin-2.1.2.tgz 
+    tar -xvzf ibm-object-storage-plugin-2.1.2.tgz
     cd ibm-object-storage-plugin
     ```
-    
+
     * update the publicRegistry in values.yaml with manifests of mirrored images
-    
+
     ```
     pluginImage:
         ibmContainerRegistry: registry1.example.com:5000/ibmcom/ibmcloud-object-storage-plugin@sha256:b5aedc1e095733a799ef10a272b3f97ec4226448d981ac5e4d0512ad25be8333
@@ -844,7 +849,7 @@ https://github.ibm.com/IBMPrivateCloud/cloud-pak-airgap-cli
       driverImage:
         ibmContainerRegistry: icr.io/ibm/ibmcloud-object-storage-driver@sha256:b257da723ec6234128fc5dbeeb4329c030126d392af046740fa3aa7d49a377a9
         publicRegistry: bastion-vdc-qc-objectairgap:5000/ibmcom/ibmcloud-object-storage-driver@sha256:324787a10da384bb7bb441538eb65846c9df57bfd0e8a37a2f3efaeb423c2bc9
-    
+
     ```
 
 3. Install helm charts
@@ -890,7 +895,7 @@ Thank you for installing: ibm-object-storage-plugin.   Your release is named: ib
 **Sample pvc yaml**
 
 ```
-# cat pvc.yaml 
+# cat pvc.yaml
 kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
@@ -918,7 +923,7 @@ spec:
 **Sample pod yaml**
 
 ```
-# cat pod.yaml 
+# cat pod.yaml
 apiVersion: v1
 kind: Pod
 metadata:
@@ -927,7 +932,7 @@ metadata:
 spec:
   containers:
   - name: s3fs-test-container-two
-    image:  bastion-vdc-qc-objectairgap:5004/ibmcom/ibmcloud-object-storage-driver:1.8.31 
+    image:  bastion-vdc-qc-objectairgap:5004/ibmcom/ibmcloud-object-storage-driver:1.8.31
     volumeMounts:
     - mountPath: "/mnt/mymount"
       name: s3fs-test-volume
@@ -966,4 +971,3 @@ Review the following links for further information about IBM Cloud Object Storag
 - [General information about IBM Cloud Object Storage](https://cloud.ibm.com/docs/cloud-object-storage?topic=cloud-object-storage-getting-started-cloud-object-storage).
 - [Create your first persistent volume claim (PVC)](https://cloud.ibm.com/docs/containers?topic=containers-object_storage#add_cos) for your app that points to a bucket in Cloud Object Storage.
 - [Use Cloud Object Storage in a Kubernetes stateful set](https://cloud.ibm.com/docs/containers?topic=containers-object_storage#cos_statefulset).
-
