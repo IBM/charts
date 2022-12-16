@@ -1,5 +1,5 @@
 ## What's new...
-DataPower 2018.4.1.23
+DataPower 2018.4.1.24
 Refreshing existing charts for firmware upgrade
 ## Fixes
 None
@@ -16,6 +16,7 @@ See README.md
 
 | Chart   |   Date  | Kubernetes Required |    Image(s) Supported    | Breaking Changes | Details |
 | ------- | ------------ | -------- | ------------------------------------ | ---- | -------------------------------------------------------------- |
+| 3.1.13  | Dec 14, 2022 | >=1.13.0 | ibmcom/datapower:2018.4.1.24         | None | 2018.4.1.24 refresh |
 | 3.1.12  | Oct 26, 2022 | >=1.13.0 | ibmcom/datapower:2018.4.1.23         | None | 2018.4.1.23 refresh |
 | 3.1.11  | Aug 26, 2022 | >=1.13.0 | ibmcom/datapower:2018.4.1.22         | None | 2018.4.1.22 refresh |
 | 3.1.10  | Jun 27, 2022 | >=1.13.0 | ibmcom/datapower:2018.4.1.21         | None | 2018.4.1.21 refresh |
