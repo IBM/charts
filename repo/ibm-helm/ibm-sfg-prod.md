@@ -1,4 +1,4 @@
-# IBM Sterling File Gateway Enterprise Edition v6.1.2.0
+# IBM Sterling File Gateway Enterprise Edition v6.1.2.1
 ## Introduction
 
 IBM Sterling File Gateway lets organizations transfer files between partners by using different protocols, conventions for naming files, and file formats. A scalable and security-enabled gateway, Sterling File Gateway enables companies to consolidate all their internet-based file transfers on a single edge gateway, which helps secure your B2B collaboration network and the data flowing through it. To find out more, see [IBM Sterling File Gateway](https://www.ibm.com/products/file-gateway) on IBM Marketplace.
@@ -32,7 +32,7 @@ Services
 
 6. In case required by an adapter service or Adapter Container server, ensure that a supported MQ Server version (IBM MQ or ActiveMQ Server) is installed and accessible from inside the cluster.
 
-7. Provide external resource artifacts like the database driver jar, JCE policy file, Key store and trust store files, Standards jar and so on using an init container for resources or a persistent volume for resources. Either of the option can be used but not both at the same time. 
+7. Provide external resource artifacts like the database driver jar, Key store and trust store files, Standards jar and so on using an init container for resources or a persistent volume for resources. Either of the option can be used but not both at the same time. 
   a. For using init container for resources when `resourcesInit.enabled` is `true`, create an init container image bundled with the required external resource artifacts and configure the image details in the `resourcesInit.image` section.
   b. For using persistent volume for resources when `appResourcesPVC.enabled` is `true`, create a persistent volume for application resources with access mode as 'Read Only Many' and place the required external resource artifacts in the mapped volume location.
 
@@ -86,7 +86,7 @@ rules:
     resources: ['routes','routes/custom-host']
     verbs: ['get', 'watch', 'list', 'patch', 'update']
   - apiGroups: ['','batch']
-    resources: ['secrets','configmaps','persistentvolumeclaims','pods','services','cronjobs']
+    resources: ['secrets','configmaps','persistentvolumeclaims','pods','services','cronjobs','jobs']
     verbs: ['create', 'get', 'list', 'delete', 'patch', 'update']
 
 ---
@@ -107,11 +107,16 @@ roleRef:
 
 ### PodSecurityPolicy Requirements
 
-This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation.  Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you:
-* Predefined PodSecurityPolicy name: [`ibm-restricted-psp`](https://ibm.biz/cpkspec-psp)
+With Kubernetes v1.25, Pod Security Policy (PSP) API has been removed and replaced with Pod Security Admission (PSA) contoller. Kubernetes PSA conroller enforces predefined Pod Security levels at the namespace level. The Kubernetes Pod Security Standards defines three different levels: privileged, baseline, and restricted. Refer to Kubernetes [`Pod Security Standards`] (https://kubernetes.io/docs/concepts/security/pod-security-standards/) documentation for more details. This chart is compatible with the restricted security level. 
 
-This chart optionally defines a custom PodSecurityPolicy which is used to finely control the permissions/capabilities needed to deploy this chart. It is based on the predefined PodSecurityPolicy name: [`ibm-restricted-psp`](https://github.com/IBM/cloud-pak/blob/master/spec/security/psp/ibm-restricted-psp.yaml) with extra required privileges. You can enable this policy by using the Platform User Interface or configuration file available under pak_extensions/pre-install/ directory
-- From the user interface, you can copy and paste the following snippets to enable the custom PodSecurityPolicy
+For users upgrading from older Kubernetes version to v1.25, refer to Kubernetes [`Migrate from PSP`](https://kubernetes.io/docs/tasks/configure-pod-container/migrate-from-psp/) documentation to help with migrating from PodSecurityPolicies to the built-in Pod Security Admission controller.
+
+For users continuing on older Kubernetes versions (<1.25) and using PodSecurityPolicies, choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you. This chart is compatible with most restrictive policies.
+Below is an optional custom PSP definition based on the IBM restricted PSP.
+
+* Predefined PodSecurityPolicy name: [`ibm-restricted-psp`](https://ibm.biz/cpkspec-psp)
+ 
+- From the user interface or command line, you can copy and paste the following snippets to create and enable the below custom PodSecurityPolicy based on IBM restricted PSP.
   - Custom PodSecurityPolicy definition:
 
     ```
@@ -177,11 +182,11 @@ This chart optionally defines a custom PodSecurityPolicy which is used to finely
       - '*' 
     ```
 
-  - Custom ClusterRole for the custom PodSecurityPolicy:
+  - Custom Role for the custom PodSecurityPolicy:
 
     ```
     apiVersion: rbac.authorization.k8s.io/v1
-    kind: ClusterRole
+    kind: Role
     metadata:
       name: "ibm-b2bi-psp"
       labels:
@@ -197,19 +202,36 @@ This chart optionally defines a custom PodSecurityPolicy which is used to finely
       - use
     ```
 
-- From the command line, you can run the setup scripts included under pak_extensions (untar the downloaded archive to extract the pak_extensions directory)
+  - Custom Role binding for the custom PodSecurityPolicy:
 
-  As a cluster admin the pre-install script is located at:
-  - pre-install/clusterAdministration/createSecurityClusterPrereqs.sh
-
-  As team admin the namespace scoped pre-install script is located at:
-  - pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh
+    ```
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: "ibm-b2bi-psp"
+      labels:
+        app: "ibm-b2bi-psp"
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: "ibm-b2bi-psp"
+    subjects:
+    - apiGroup: rbac.authorization.k8s.io
+      kind: Group
+      name: system:serviceaccounts
+      namespace: {{ NAMESPACE }}
+    ```
 
 ### SecurityContextConstraints Requirements
 
+Red Hat OpenShift provides a pre-defined or default set of SecurityContextConstraints (SCC). These SCCs are used to control permissions for pods. These permissions include actions that a pod can perform and what resources it can access. You can use SCCs to define a set of conditions that a pod must run with to be accepted into the system. Refer to OpenShift [`Managing Security Context Constraints`](https://docs.openshift.com/container-platform/4.11/authentication/managing-security-context-constraints.html#default-sccs_configuring-internal-oauth) documentation for more details on the default SCCs. This chart is compatible with both restricted and resticted-v2 (added in OpenShift v4.11) default SCCs and does not require a custom SCC to be defined explicity.
+
+For OpenShift, choose either a predefined SCC or have your cluster administrator create a custom SCC for you as per the security profile and policies adopted for all OpenShift deployments. This chart is compatible with most restrictive security context constraints.
+Below is an optional custom SCC definition based on the IBM restricted SCC.
+
 * Predefined SecurityContextConstraints name: [`ibm-restricted-scc`](https://ibm.biz/cpkspec-scc)
 
-This chart optionally defines a custom SecurityContextConstraints (on Red Hat OpenShift Container Platform) which is used to finely control the permissions/capabilities needed to deploy this chart.  It is based on the predefined SecurityContextConstraint name: [`ibm-restricted-scc`](https://github.com/IBM/cloud-pak/blob/master/spec/security/scc/ibm-restricted-scc.yaml) with extra required privileges. 
+- From the user interface or command line, you can copy and paste the following snippets to create and enable the below custom SCC based on IBM restricted SCC.
 
   - Custom SecurityContextConstraints definition:
 
@@ -282,11 +304,11 @@ This chart optionally defines a custom SecurityContextConstraints (on Red Hat Op
     - nfs
     priority: 0
     ```
-    - Custom ClusterRole for the custom SecurityContextConstraints:
+    - Custom Role for the custom SecurityContextConstraints:
     
     ```
     apiVersion: rbac.authorization.k8s.io/v1
-	  kind: ClusterRole
+	  kind: Role
 	  metadata:
      name: "ibm-b2bi-scc"
      labels:
@@ -303,13 +325,25 @@ This chart optionally defines a custom SecurityContextConstraints (on Red Hat Op
     
     ```
 
-- From the command line, you can run the setup scripts included under pak_extensions (untar the downloaded archive to extract the pak_extensions directory)
+    - Custom Role binding for the custom SecurityContextConstraints:
 
-  As a cluster admin the pre-install script is located at:
-  - pre-install/clusterAdministration/createSecurityClusterPrereqs.sh
-
-  As team admin the namespace scoped pre-install script is located at:
-  - pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh
+    ```
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: "ibm-b2bi-scc"
+      labels:
+        app: "ibm-b2bi-scc"
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: "ibm-b2bi-scc"
+    subjects:
+    - apiGroup: rbac.authorization.k8s.io
+      kind: Group
+      name: system:serviceaccounts
+      namespace: {{ NAMESPACE }}
+    ```
 
 ## Network Policy
 
@@ -363,7 +397,7 @@ Depending on the capacity of the kubernetes worker node and database network con
 Parameter                                      | Description                                                          | Default 
 -----------------------------------------------| ---------------------------------------------------------------------| -------------
 `global.image.repository`                      | Repository for B2B docker images                                     | 
-`global.image.tag          `                   | Docker image tag                                                     | `6.1.2.0`
+`global.image.tag          `                   | Docker image tag                                                     | `6.1.2.1`
 `global.image.digest          `                | Docker image digest. Takes precedence over tag                       | 
 `global.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `global.image.pullSecret `         			   | Pull secret for repository access                                    | `ibm-entitlement-key`
@@ -376,10 +410,10 @@ Parameter                                      | Description                    
 `arch.s390x`                                   | Specify weight to be used for scheduling for architecture s390x      | `2 - No Preference`
 `serviceAccount.name`                          | Existing service account name                                        | `default`
 `resourcesInit.enabled`                        | Enable resource init containers                                      | false
-`resourcesInit.image.repository`               | Repository for resource init container images                        |
-`resourcesInit.image.name`                     | Docker image name                                                    |
-`resourcesInit.image.tag`                      | Docker image tag                                                     |
-`resourcesInit.image.digest`                   | Docker image digest. Takes precedence over tag                       |
+`resourcesInit.image.repository`               | Repository for resource init container images                        | cp.icr.io/cp/ibm-sfg
+`resourcesInit.image.name`                     | Docker image name                                                    | sfg-resources
+`resourcesInit.image.tag`                      | Docker image tag                                                     | 6.1.2.1
+`resourcesInit.image.digest`                   | Docker image digest. Takes precedence over tag                       | sha256:524d013078f24485a16276beb62489e4b06a217703561f943be0ff7a55862b46
 `resourcesInit.image.pullPolicy`               | Pull policy for repository                                           | `IfNotPresent`
 `resourcesInit.command`                        | Command to be executed in the resource init container                |
 `persistence.enabled`                          | Enable storage access to persistent volumes                          | true
@@ -416,7 +450,7 @@ Parameter                                      | Description                    
 `dataSetup.enabled`                            | Enable database setup job execution                                  | true
 `dataSetup.upgrade`                            | Upgrade an older release                                             | false
 `dataSetup.image.repository`                 | DB setup container image repository                                   | 
-`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.1.2.0`
+`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.1.2.1`
 `dataSetup.image.digest'                      | Docker image digest. Takes precedence over tag                       |
 `dataSetup.image.pullPolicy`                 | Pull policy for repository                                           | `IfNotPresent`
 `dataSetup.image.pullSecret`         		  | Pull secret for repository access                                    |  `ibm-entitlement-key` 
@@ -475,10 +509,10 @@ Parameter                                      | Description                    
 `setupCfg.libertyProtocol`                     | Liberty API server SSL connection protocol                           | `TLSv1.2` 
 `setupCfg.libertySecret`                       | Liberty API server SSL connection secret name                        | 
 `setupCfg.libertyJvmOptions`                   | Liberty API server JVM option (will be deprecated in future release) |
-`setupCfg.updateJcePolicyFile`                 | Enable JCE policy file update                                        | false
-`setupCfg.jcePolicyFile`                       | JCE policy file name                                                 |
 `setupCfg.defaultDocumentStorageType`        | Default document storage type                                        | `DB`
 `setupCfg.restartCluster`        | restartCluster can be set to true to restart the application cluster by cleaning up all previous node entries, locks and set the schedules to node1.                                        | false
+`setupCfg.useSslForRmi`                        | Enable SSL over RMI calls                                            | true
+`setupCfg.rmiTlsSecretName`                    | TLS secret name holding RMI certificate/key pair	              | 
 `asi.replicaCount`                             | Application server independent(ASI) deployment replica count         | 1
 `asi.env.jvmOptions`                           | JVM options for asi                                                  | 
 `asi.env.extraEnvs`                            | Provide extra environment variables for ASI                          | 
@@ -698,7 +732,7 @@ Parameter                                      | Description                    
 `test.image.pullPolicy`                        | Pull policy for helm test image repository                           | `IfNotPresent`
 `purge.enabled`                                | Enable external purge job                                            | 'false'
 `purge.image.repository          `             | External purge docker image repository                               | `purge`
-`purge.image.tag          `                    | External purge image tag                                             | `6.1.2.0`
+`purge.image.tag          `                    | External purge image tag                                             | `6.1.2.1`
 `purge.image.digest          `                 | External purge image digest. Takes precedence over tag               |
 `purge.image.pullPolicy`                       | Pull policy for external purge docker image                          | `IfNotPresent`
 `purge.image.pullSecret`                       | Pull secret for repository access                                    | `ibm-entitlement-key`
