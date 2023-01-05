@@ -367,10 +367,10 @@ Limit the IBM Cloud Object Storage plug-in to access only the Kubernetes secrets
    ```
    ibmc-s3fs-cold-cross-region            ibm.io/ibmc-s3fs   8m
    ibmc-s3fs-cold-regional                ibm.io/ibmc-s3fs   8m
-   ibmc-s3fs-flex-cross-region            ibm.io/ibmc-s3fs   8m
-   ibmc-s3fs-flex-perf-cross-region       ibm.io/ibmc-s3fs   8m
-   ibmc-s3fs-flex-perf-regional           ibm.io/ibmc-s3fs   8m
-   ibmc-s3fs-flex-regional                ibm.io/ibmc-s3fs   8m
+   ibmc-s3fs-smart-cross-region            ibm.io/ibmc-s3fs   8m
+   ibmc-s3fs-smart-perf-cross-region       ibm.io/ibmc-s3fs   8m
+   ibmc-s3fs-smart-perf-regional           ibm.io/ibmc-s3fs   8m
+   ibmc-s3fs-smart-regional                ibm.io/ibmc-s3fs   8m
    ibmc-s3fs-standard-cross-region        ibm.io/ibmc-s3fs   8m
    ibmc-s3fs-standard-perf-cross-region   ibm.io/ibmc-s3fs   8m
    ibmc-s3fs-standard-perf-regional       ibm.io/ibmc-s3fs   8m
