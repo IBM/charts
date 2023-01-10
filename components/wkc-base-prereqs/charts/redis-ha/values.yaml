@@ -1,0 +1,256 @@
+global:
+  chownPV: false
+  ibmProduct: ""
+  dockerRegistryPrefix: ""
+  persistence:
+    storageClassName: ""
+    useDynamicProvisioning: false
+  podLabels:
+    icpdsupport/app: "api"
+    icpdsupport/addOnId: "ccs"
+  podAnnotations:
+    productName: "IBM Common Core Services for IBM Cloud Pak for Data"
+    productID: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    productVersion: "3.5.0"
+    
+## for single node non-HA, set replicas=1, redis.config.min-slaves-to-write=0, sentinel.quorum=1
+  
+## Configure resource requests and limits
+## ref: http://kubernetes.io/docs/user-guide/compute-resources/
+##
+image:
+  repository: redis
+  tag: 6.0.5-101
+  pullPolicy: IfNotPresent
+  pullSecret: ""
+## replicas number for each component
+replicas: 3
+
+## Custom labels for the redis pod
+labels: {}
+
+## Pods Service Account
+## ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
+serviceAccount:
+  ## Specifies whether a ServiceAccount should be created
+  ##
+  create: false
+  ## The name of the ServiceAccount to use.
+  ## If not set and create is true, a name is generated using the redis-ha.fullname template
+  name: default
+
+## Role Based Access
+## Ref: https://kubernetes.io/docs/admin/authorization/rbac/
+##
+
+rbac:
+  create: false
+
+ssl:
+  enabled: true
+  disableNonSSL: false
+  tlsReplication: "yes"
+  tlsPort: 6380
+  tlsSentinelPort: 26380
+  tlsProtocols: TLSv1.2
+  tlsCertFile: /etc/ssl/certs/redis.crt 
+  tlsKeyFile: /etc/ssl/certs/redis.key
+  tlsCaCertFile: /etc/ssl/certs/ca.crt
+  tlsCertAndKeyPEM: /etc/ssl/certs/certandkey.pem
+
+## Redis specific configuration options
+redis:
+  port: 6379
+  masterGroupName: mymaster
+  config:
+    ## Additional redis conf options can be added below
+    ## For all available options see http://download.redis.io/redis-stable/redis.conf
+    min-slaves-to-write: 1
+    min-slaves-max-lag: 5   # Value in seconds
+    maxmemory: "0"       # Max memory to use for each redis instance. Default is unlimited.
+    maxmemory-policy: "volatile-lru"  # Max memory policy to use for each redis instance. Default is volatile-lru.
+    # Determines if scheduled RDB backups are created. Default is false.
+    # Please note that local (on-disk) RDBs will still be created when re-syncing with a new slave. The only way to prevent this is to enable diskless replication.
+    save: "900 1"
+    # When enabled, directly sends the RDB over the wire to slaves, without using the disk as intermediate storage. Default is false.
+    repl-diskless-sync: "yes"
+    rdbcompression: "yes"
+    rdbchecksum: "yes"
+    
+    
+    
+  ## Custom redis.conf files used to override default settings. If this file is
+  ## specified then the redis.config above will be ignored.
+  # customConfig: |-
+      # Define configuration here
+
+  resources: 
+    requests:
+      memory: 200Mi
+      cpu: 100m
+    limits:
+      memory: 700Mi
+      cpu: 1
+
+## Sentinel specific configuration options
+sentinel:
+  port: 26379
+  quorum: 2
+  config:
+    ## Additional sentinel conf options can be added below. Only options that
+    ## are expressed in the format simialar to 'sentinel xxx mymaster xxx' will
+    ## be properly templated.
+    ## For available options see http://download.redis.io/redis-stable/sentinel.conf
+    down-after-milliseconds: 10000
+    ## Failover timeout value in milliseconds
+    failover-timeout: 180000
+    parallel-syncs: 5
+
+  ## Custom sentinel.conf files used to override default settings. If this file is
+  ## specified then the sentinel.config above will be ignored.
+  # customConfig: |-
+      # Define configuration here
+
+  resources: 
+    requests:
+      memory: 200Mi
+      cpu: 100m
+    limits:
+      memory: 200Mi
+      cpu: 1
+
+securityContext:
+  runAsUser: 1000
+  fsGroup: 1000
+  runAsNonRoot: true
+
+## Node labels, affinity, and tolerations for pod assignment
+## ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector
+## ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#taints-and-tolerations-beta-feature
+## ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+affinity: |
+  podAntiAffinity:   
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app:  {{ template "redis-ha.name" . }}
+              release: {{ .Release.Name }}
+          topologyKey: kubernetes.io/hostname
+
+
+podDisruptionBudget: {}
+  # maxUnavailable: 1
+  # minAvailable: 1
+
+## Configures redis with AUTH (requirepass & masterauth conf params)
+auth: false
+
+
+## Use existing secret containing "auth" key
+# existingSecret:
+
+# job for generating secrets.. only runs is existingSecret=false
+secretGeneration:
+  serviceAccountName:
+  image:
+    repository: wkc-init-container
+    tag: 1.0.81
+    imagePullSecrets: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi 
+      
+persistentVolume:
+  enabled: false
+  ## redis-ha data Persistent Volume Storage Class
+  ## If defined, storageClassName: <storageClass>
+  ## If set to "-", storageClassName: "", which disables dynamic provisioning
+  ## If undefined (the default) or set to null, no storageClassName spec is
+  ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
+  ##   GKE, AWS & OpenStack)
+  ##
+  # storageClass: "-"
+  overrideStorageClass: false
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi
+  annotations: {}
+
+# if chown is true, an init-container with sudo is launched to
+# change the owner of the persistence volume mount folder to the user defined in the
+# security context  
+initContainer:
+  chown: false  
+  image:
+    repository: wkc-init-container
+    tag: 1.0.81
+    pullPolicy: IfNotPresent
+  securityContext:
+    runAsUser: 
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 256Mi
+      cpu: 100m
+
+ 
+  
+haproxy:
+  image:
+    repository: haproxy
+    tag: 2.0.14-28
+    pullPolicy: IfNotPresent
+    pullSecret: ""
+  securityContext:
+    runAsUser: 1000  
+  nodeSelector: {}
+  # node schedulling inter-pod anti affinity
+  podAntiAffinity: soft
+  replicas: 1
+  # resource requirements for the container
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 200m
+    limits:
+      memory: 1Gi
+      cpu: 1
+  # haproxy connection origins (* for all)
+  bindAddresses: "*"
+  # stats functionality enablement and configuration
+  stats:
+    # http stats endpoint
+    http:
+      enable: true
+      port: 9094
+    # socket stats access
+    socket:
+      enable: true
+  
+  services:
+    # types available: ClusterIP | LoadBalancer
+    type: ClusterIP
+    # annotations for the service endpoint
+    annotations: {}
+  
+  redis:
+    # max number of connections per backend
+    maxConnections: 9900
+    # connection check interval for backends (in seconds)
+    checkSeconds: 10
+
+  
+## Kubernetes Cluster Domain
+clusterDomain: cluster.local
+
+## arch values
+archx86_64: amd64
+archppc64le: ppc64le
