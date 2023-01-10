@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ template "redis-ha.fullname" . }}-service-test
+  labels:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }} 
+    app.kubernetes.io/name: {{ .Chart.Name }}-service-test
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+{{ include "labels.standard" . | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - {{ .Values.archx86_64 }}
+            - {{ .Values.archppc64le }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  containers:
+  - name: "{{ .Release.Name }}-service-test"
+    image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+    command:
+      - sh
+      - -c
+      - redis-cli -h {{ template "redis-ha.fullname" . }} -p {{ .Values.redis.port }} info server
+    securityContext:
+      privileged: false
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: false
+      runAsNonRoot: true
+      runAsUser: {{ .Values.securityContext.runAsUser }}
+      capabilities:
+        drop:
+        - ALL
+    resources:
+{{ toYaml .Values.initContainer.resources | indent 6 }}
+  restartPolicy: Never
