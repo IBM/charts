@@ -1,0 +1,127 @@
+{{- if eq .Values.envType "cp4d" }}
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{ .Values.microservice.appname }}-reindexing-cronjob
+  labels:
+    app: {{ .Values.microservice.appname }}-reindexing-cronjob
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }} 
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }} 
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  annotations:
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  schedule: {{ .Values.schedule }}
+  suspend: true
+  jobTemplate:    
+    spec:
+      template:
+        metadata:
+          labels:
+            app: {{ .Values.microservice.appname }}-reindexing-cronjob
+            chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+            release: {{ .Release.Name }}
+            heritage: {{ .Release.Service }}  
+            app.kubernetes.io/instance: {{ .Release.Name }}
+            app.kubernetes.io/managed-by: {{ .Release.Service }} 
+            app.kubernetes.io/name: {{ .Chart.Name }}
+            helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+            {{- if .Values.global.podLabels }}
+{{ tpl (toYaml .Values.global.podLabels) . | trim | indent 12 }}
+            {{- end }}
+          annotations:  
+            {{- if .Values.global.podAnnotations }}
+{{ tpl (toYaml .Values.global.podAnnotations) . | trim | indent 12 }}
+            {{- end }}
+        spec:
+          {{- if or .Values.archx86_64 .Values.archppc64le }}
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                    - {{ .Values.archx86_64 }}
+                    - {{ .Values.archppc64le }}
+          {{- end }}
+          containers:
+          - name: "{{ .Values.microservice.appname }}-reindexing-cronjob"
+            imagePullPolicy: {{ .Values.image.pullPolicy }}
+            image: {{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+            command: ["/bin/sh", "/wkc/reindex.sh"]
+            volumeMounts:
+              - name: {{ .Values.microservice.appname }}-reindexing-configmap
+                mountPath: /wkc
+            securityContext:
+              privileged: false
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: false
+              runAsNonRoot: true
+              capabilities:
+                drop:
+                - ALL
+            env:
+              - name: couchdb_url
+                value: "https://wdp-cloudant:443"
+              - name: couchdb_uid
+                valueFrom:
+                   secretKeyRef:
+                     name: wdp-couchdb
+                     key: adminUsername
+              - name: couchdb_pwd
+                valueFrom:
+                   secretKeyRef:
+                     name: wdp-couchdb
+                     key: adminPassword
+              - name: cams_db_prefix
+                value: "v2_"
+              - name: cams_db_admn_db
+                value: "admin"
+              - name: cams_db_ca_cert
+                valueFrom:
+                   secretKeyRef:
+                     name: wdp-cloudant-cert
+                     key: ca.crt.pem
+              - name: elasticsearch_index
+                value: "wkc" 
+              - name: elasticsearch_uri_config
+                value: "elasticsearch-master"
+              - name: elasticsearch_uid_config
+                valueFrom:
+                   secretKeyRef:
+                     name: elasticsearch-master-secret
+                     key: username
+              - name: elasticsearch_pwd_config
+                valueFrom:
+                   secretKeyRef:
+                     name: elasticsearch-master-secret
+                     key: password
+              - name: elasticsearch_uri_port_config
+                value: "9200" 
+              - name: elasticsearch_ca_base64_cert_config
+                valueFrom:
+                   secretKeyRef:
+                     name: elasticsearch-master-cert
+                     key: ca.pem
+              - name: elasticsearch_http_protocol
+                value: "https"  
+            resources: 
+              limits: 
+                memory: 6144M
+              requests: 
+                cpu: 1
+                memory: 4096M
+          restartPolicy: OnFailure
+          volumes:
+            - name: {{ .Values.microservice.appname }}-reindexing-configmap
+              configMap:
+                name: {{ .Values.microservice.appname }}-reindexing-configmap
+{{- end }}
