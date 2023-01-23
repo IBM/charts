@@ -66,7 +66,7 @@ When you install the IBM Cloud Object Storage plug-in Helm chart, the following 
     runAsUser:
       type: RunAsAny
     seLinuxContext:
-      type: RunAsAny
+      type: MustRunAs
     fsGroup:
       type: RunAsAny
     supplementalGroups:
