@@ -1,8 +1,8 @@
-# IBM Sterling Control Center Monitor V6.2.1.0
+# IBM Sterling Control Center Monitor V6.3.0.0
 
 ## Introduction
 
-This tool contains IBM Sterling Control Center Monitor with Red Hat Universal Base Image(UBI). IBM▒ Control Center Monitor is a centralized monitoring and management system. It gives operations personnel the capability to continuously monitor the status of Configuration Managers, engines, and adapters across the enterprise for the following server types from one central location: IBM Sterling Connect:Direct▒, IBM Sterling Connect:Enterprise▒, IBM Sterling B2B Integrator, IBM Sterling File Gateway, IBM Global High Availability Mailbox, IBM Sterling Connect:Express, IBM QuickFile, IBM MQ Managed File Transfer and Many FTP servers. To find out more, see the Knowledge Center for [IBM Sterling Control Center Monitor](  https://www.ibm.com/docs/en/control-center/6.2.1.0?topic=sterling-control-center-monitor-621 ).
+This tool contains IBM Sterling Control Center Monitor with Red Hat Universal Base Image(UBI). IBM▒ Control Center Monitor is a centralized monitoring and management system. It gives operations personnel the capability to continuously monitor the status of Configuration Managers, engines, and adapters across the enterprise for the following server types from one central location: IBM Sterling Connect:Direct▒, IBM Sterling Connect:Enterprise▒, IBM Sterling B2B Integrator, IBM Sterling File Gateway, IBM Global High Availability Mailbox, IBM Sterling Connect:Express, IBM QuickFile, IBM MQ Managed File Transfer and Many FTP servers. To find out more, see the Knowledge Center for [IBM Sterling Control Center Monitor](  https://www.ibm.com/docs/en/control-center/6.3.0?topic=sterling-control-center-monitor-630 ).
 
 ## Details
 
@@ -21,7 +21,7 @@ This chart deploys IBM Sterling Control Center Monitor on a container management
 Before you install IBM Certified Container Software for IBM Sterling Control Center Monitor, ensure that the installation files are available on your client system.
 
 #### Downloading the IBM Certified Container Software helm chart from IBM Chart repository
-You can download the IBM CCS for IBM Sterling Control Center Monitor helm chart from [IBM Public chart repository](https://www.ibm.com/links?url=https://github.com/IBM/charts/tree/master/repo/ibm-helm/ibm-sccm-1.0.11.tgz).
+You can download the IBM CCS for IBM Sterling Control Center Monitor helm chart from [IBM Public chart repository](https://www.ibm.com/links?url=https://github.com/IBM/charts/tree/master/repo/ibm-helm/ibm-sccm-3.0.0.tgz).
 
 
 ####  Downloading the IBM Certified Container Software image from IBM Entitled Registry for AirGap Environment
@@ -31,7 +31,7 @@ You can download the container image from IBM Entitled registry by using either 
 - Download latest version of cloudctl CLI from [Cloud Pak CLI](https://www.ibm.com/links?url=https://github.com/IBM/cloud-pak-cli/releases). 
 - Download and extract the CASE bundle file
 ```
-cloudctl case save -t 1 --case https://github.com/IBM/cloud-pak/raw/master/repo/case/ibm-sccm/1.0.9/ibm-sccm-1.0.9.tgz --outputdir download_dir/ && tar -xf download_dir/ibm-sccm-1.0.9.tgz
+cloudctl case save -t 1 --case https://github.com/IBM/cloud-pak/raw/master/repo/case/ibm-sccm/3.0.0/ibm-sccm-3.0.0.tgz --outputdir download_dir/ && tar -xf download_dir/ibm-sccm-3.0.0.tgz
 ```
 > **Note**: download_dir is the output directory in which the BM Sterling Control Center Monitor resources are placed. The output directory is created if it does not exist. You can choose an arbitrary name for --outputdir if required.` 
 
@@ -78,19 +78,19 @@ cloudctl case launch \
   * `docker/podman login -u cp -p <entitled_key> cp.icr.io`
 
 - Pull the container image from IBM Entitled registry by running the following command:
-  * `docker/podman pull cp.icr.io/cp/ibm-scc/ibmscc:6.2.1.0_ifix08_2022-09-16`
+  * `docker/podman pull cp.icr.io/cp/ibm-scc/ibmscc:6.3.0.0_ifix01_2023-01-15`
 
 - Tag and push the container image into local repository by running the following commands: 
-  * `docker/podman tag cp.icr.io/cp/ibm-scc/ibmscc:6.2.1.0_ifix08_2022-09-16 <LOCAL_DOCKER_REGISTRY_REPOSITORY>/ibm-scc/ibmscc:6.2.1.0_ifix08_2022-09-16`
-  * `docker/podman push <LOCAL_DOCKER_REGISTRY_REPOSITORY>/ibm-scc/ibmscc:6.2.1.0_ifix08_2022-09-16`
+  * `docker/podman tag cp.icr.io/cp/ibm-scc/ibmscc:6.3.0.0_ifix01_2023-01-15 <LOCAL_DOCKER_REGISTRY_REPOSITORY>/ibm-scc/ibmscc:6.3.0.0_ifix01_2023-01-15`
+  * `docker/podman push <LOCAL_DOCKER_REGISTRY_REPOSITORY>/ibm-scc/ibmscc:6.3.0.0_ifix01_2023-01-15`
 
 ### Tools (Prereq #2)
 
 To install chart from the command prompt, tools needed are:
 
-- Kubernetes version >= `1.19.0`
+- Kubernetes version >= `1.23.0`
 - Helm version >= `3.0`
-- OpenShift version = `4.6`
+- OpenShift version = `4.10`
 - The `kubectl` and `helm` commands available
 - The environment should be configured to connect to the target cluster
 
@@ -343,7 +343,9 @@ runAsUser:
   uidRangeMin: 1000 
   uidRangeMax: 65535
 seLinuxContext:
-  type: RunAsAny
+  type: MustRunAs
+  seLinuxOptions:
+    level: s0:c0
 supplementalGroups:
   type: RunAsAny
   ranges:
@@ -412,7 +414,7 @@ $ helm repo list
 
 # If you do not have the helm repository, add it using the below command
 
-$ helm repo add ibm-sccm-1.0.11.tgz <helm repository>
+$ helm repo add ibm-sccm-3.0.0.tgz <helm repository>
 
 # This below command will show all the charts related to the repository
 
@@ -420,10 +422,10 @@ $ helm search <helm repository>
 
 # Finally install the respective chart
 
-$ helm install my-release -f values.yaml ibm-sccm-1.0.11.tgz
+$ helm install my-release -f values.yaml ibm-sccm-3.0.0.tgz
 ```
 
-The command deploys ibm-sccm-1.0.11.tgz chart on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured in values.yaml file during installation.
+The command deploys ibm-sccm-3.0.0.tgz chart on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured in values.yaml file during installation.
 
 > **Tip**: List all releases using `helm list`
 
@@ -560,13 +562,13 @@ Specify each parameter in values.yaml to `helm install`. For example,
 ```bash
 helm install my-release \
   -f values.yaml \
-  ibm-sccm-1.0.11.tgz
+  ibm-sccm-3.0.0.tgz
 ```
 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. You can create a copy of values.yaml file e.g. my-values.yaml and edit the values that you need to override. Use the my-values.yaml file for installation. For example,
 
 ```bash
-helm install <release-name> -f my-values.yaml ibm-sccm-1.0.11.tgz
+helm install <release-name> -f my-values.yaml ibm-sccm-3.0.0.tgz
 ```
 > **Tip**: You can use the default [values.yaml](values.yaml)
 
@@ -599,7 +601,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-sccm-1.0.11.tgz
+helm upgrade my-release -f values.yaml ibm-sccm-3.0.0.tgz
 ```
 
 ## Rollback the Chart
@@ -682,7 +684,7 @@ Use `networkPolicy` to control traffic flow at the port level.
 
 1. All sensitive application data at rest is stored in binary format so user cannot decrypt it. This chart does not support Encryption of user data at rest by default. Administrator can configure storage encryption to encrypt all data at rest.
 
-2. Data in motion is encrypted using transport layer security(TLS 1.2). For more information please see product [Knowledge center link]( https://www.ibm.com/docs/en/control-center/6.2.1.0?topic=sterling-control-center-monitor-621 )
+2. Data in motion is encrypted using transport layer security(TLS 1.2). For more information please see product [Knowledge center link]( https://www.ibm.com/docs/en/control-center/6.3.0?topic=sterling-control-center-monitor-630)
 
 ## Limitations
 
