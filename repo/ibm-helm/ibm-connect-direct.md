@@ -39,8 +39,6 @@ spec:
   hostNetwork: false
   requiredDropCapabilities:
   allowedCapabilities:
-  - IPC_OWNER
-  - IPC_LOCK
   - CHOWN
   - SETGID
   - SETUID
@@ -131,8 +129,6 @@ privileged: false
 allowPrivilegedContainer: false
 allowPrivilegeEscalation: true
 allowedCapabilities:
-- IPC_OWNER
-- IPC_LOCK
 - FOWNER
 - CHOWN
 - SETGID
@@ -155,9 +151,9 @@ requiredDropCapabilities:
 runAsUser:
   type: MustRunAsNonRoot
 seLinuxContext:
-  type: RunAsAny
+  type: MustRunAs
 supplementalGroups:
-  type: RunAsAny
+  type: MustRunAs
   ranges:
   - min: 1
     max: 4294967294
@@ -283,7 +279,5 @@ Please refer to [DIME and DARE Security Considerations](https://www.ibm.com/docs
 - High availability and scalability are supported in traditional way of Connect:Direct deployment using Kubernetes load balancer service.
 - IBM Connect:Direct for Unix chart is supported with only 1 replica count.
 - IBM Connect:Direct for Unix chart supports x64 architecture only.
-- FASP feature is not supported.
-- File agent service is not available inside the container.
 - Interaction with IBM Control Center Director is not supported.
 - Non-persistence mode is not supported
