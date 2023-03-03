@@ -336,8 +336,8 @@ The helm chart has the following Values that can be overriden using the install 
 | Value                                 | Description                                   | Default             |
 |---------------------------------------|-----------------------------------------------|---------------------|
 | `datapower.replicaCount`              | The replicaCount for the deployment           | 1                   |
-| `datapower.image.repository`          | The image to use for this deployment          | icr.io./integration/datapower/datapower-limited    |
-| `datapower.image.tag`                 | The image tag to use for this deployment      | 2018.4.1.10.318002  |
+| `datapower.image.repository`          | The image to use for this deployment          | icr.io./cpopen/datapower/datapower-limited    |
+| `datapower.image.tag`                 | The image tag to use for this deployment      | 2018.4.1.24         |
 | `datapower.image.pullPolicy`          | Determines when the image should be pulled    | IfNotPresent        |
 | `datapower.image.pullSecret`          | Secret used for pulling images                | N/A                 |
 | `datapower.env.workerThreads`         | Number of DataPower worker threads            | 4                   |
@@ -428,7 +428,7 @@ See NOTES.txt associated with this chart for verification instructions
 
 > **Tip**: You can use the default [values.yaml](values.yaml)
 
-Get your official IBM DataPower Gateway for Developers Docker Image from IBM Container Registry at `icr.io/integration/datapower/datapower-limited`. Starting in 2018.4.1.18, this image will no longer be published to Docker Hub.
+Get your official IBM DataPower Gateway for Developers Docker Image from IBM Container Registry at `icr.io/cpopen/datapower/datapower-limited`. Starting in 2018.4.1.18, this image will no longer be published to Docker Hub.
 
 [View the IBM DataPower Gateway Product Page](https://www.ibm.com/products/datapower-gateway/resources)
 
