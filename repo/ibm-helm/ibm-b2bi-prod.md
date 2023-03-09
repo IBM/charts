@@ -1,4 +1,4 @@
-# IBM Sterling B2B Integrator Enterprise Edition v6.1.2.1
+# IBM Sterling B2B Integrator Enterprise Edition v6.1.2.2
 ## Introduction
 
 IBM Sterling B2B Integrator helps companies integrate complex B2B EDI processes with their partner communities. Organizations get a single, flexible B2B platform that supports most communication protocols, helps secure your B2B network and data, and achieves high-availability operations. The offering enables companies to reduce costs by consolidating EDI and non-EDI any-to-any transmissions on a single B2B platform and helps automate B2B processes across enterprises, while providing governance and visibility over those processes.
@@ -20,12 +20,13 @@ Services
 ## Prerequisites
 
 1. Red Hat OpenShift Container Platform 
-   Version 4.8.0 or later fixes 
    Version 4.10.0 or later fixes
+   Version 4.11.0 or later fixes
+   Version 4.12.0 or later fixes
 
-2. Kubernetes version >= 1.21 and <= 1.25
+2. Kubernetes version >= 1.23 and <= 1.26
 
-3. Helm version >= 3.9
+3. Helm version >= 3.10
 
 4. Ensure that the docker images for IBM Sterling B2B Integrator Software Enterprise Edition from IBM Entitled Registry are downloaded and pushed to an image registry accessible to the cluster.
 
@@ -49,6 +50,11 @@ Services
     ```
     kubectl create secret docker-registry <name of secret> --docker-server=<your-registry-server> --docker-username=<your-username> --docker-password=<your-password> --docker-email=<your-email>
     ```
+    Configure this pull secret in the service account used for deployment using this command
+    ```
+    kubectl patch serviceaccount <service-account-name> -p '{"imagePullSecrets": [{"name": "<pull-secret-name>"}]}'
+    ```
+    It is recommended to configure the pull secret in the service account as it automatically binds as a pull secret for all application pods. If the pull secret is added to the service account then the image pullSecret configurations in the helm configuration file are not required.
 
 13. If applicable, create secrets with confidential certificates required by Database, MQ or Liberty for SSL connectivity using below command
     ```
@@ -74,7 +80,7 @@ When installing the chart against a database which already has the Sterling B2B 
 ### Creating a Role Based Access Control (RBAC)
 If you are deploying the application on a namespace other than the default namespace, and if you have not created Role Based Access Control (RBAC), create RBAC with the cluster admin role.
 
-The following sample file illustrates RBAC for the default service account with the target namespace as `<namespace>`.
+The following sample file illustrates RBAC for the default service account with the target namespace as `<namespace>`. The same can be applied to any existing or new service account created for the application by updating the service account name in the below RoleBinding template. 
 
 ```yaml
 kind: Role
@@ -87,7 +93,7 @@ rules:
     resources: ['routes','routes/custom-host']
     verbs: ['get', 'watch', 'list', 'patch', 'update']
   - apiGroups: ['','batch']
-    resources: ['secrets','configmaps','persistentvolumeclaims','pods','services','cronjobs','jobs']
+    resources: ['secrets','configmaps','persistentvolumes','persistentvolumeclaims','pods','services','cronjobs','jobs']
     verbs: ['create', 'get', 'list', 'delete', 'patch', 'update']
 
 ---
@@ -110,7 +116,7 @@ roleRef:
 
 With Kubernetes v1.25, Pod Security Policy (PSP) API has been removed and replaced with Pod Security Admission (PSA) contoller. Kubernetes PSA conroller enforces predefined Pod Security levels at the namespace level. The Kubernetes Pod Security Standards defines three different levels: privileged, baseline, and restricted. Refer to Kubernetes [`Pod Security Standards`] (https://kubernetes.io/docs/concepts/security/pod-security-standards/) documentation for more details. This chart is compatible with the restricted security level. 
 
-For users upgrading from older Kubernetes version to v1.25, refer to Kubernetes [`Migrate from PSP`](https://kubernetes.io/docs/tasks/configure-pod-container/migrate-from-psp/) documentation to help with migrating from PodSecurityPolicies to the built-in Pod Security Admission controller.
+For users upgrading from older Kubernetes version to v1.25 or higher, refer to Kubernetes [`Migrate from PSP`](https://kubernetes.io/docs/tasks/configure-pod-container/migrate-from-psp/) documentation to help with migrating from PodSecurityPolicies to the built-in Pod Security Admission controller.
 
 For users continuing on older Kubernetes versions (<1.25) and using PodSecurityPolicies, choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you. This chart is compatible with most restrictive policies.
 Below is an optional custom PSP definition based on the IBM restricted PSP.
@@ -398,8 +404,10 @@ Depending on the capacity of the kubernetes worker node and database network con
 
 Parameter                                      | Description                                                          | Default 
 -----------------------------------------------| ---------------------------------------------------------------------| -------------
+`global.license`                               | Accept B2BI/SFG license                                              | `false`
+`global.licenseType`                           | Specify the license edition as per license agreement.                | prod
 `global.image.repository`                      | Repository for B2B docker images                                     | 
-`global.image.tag          `                   | Docker image tag                                                     | `6.1.2.1`
+`global.image.tag          `                   | Docker image tag                                                     | `6.1.2.2`
 `global.image.digest          `                | Docker image digest. Takes precedence over tag                       | 
 `global.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `global.image.pullSecret `         			   | Pull secret for repository access                                    | `ibm-entitlement-key`
@@ -414,8 +422,8 @@ Parameter                                      | Description                    
 `resourcesInit.enabled`                        | Enable resource init containers                                      | false
 `resourcesInit.image.repository`               | Repository for resource init container images                        | cp.icr.io/cp/ibm-b2bi/
 `resourcesInit.image.name`                     | Docker image name                                                    | b2bi-resources
-`resourcesInit.image.tag`                      | Docker image tag                                                     | 6.1.2.1
-`resourcesInit.image.digest`                   | Docker image digest. Takes precedence over tag                       | sha256:660f8b8a48985d2981dc1bb31b9667aabfe4b8829221a8e48e64e3de01eaed08
+`resourcesInit.image.tag`                      | Docker image tag                                                     | 6.1.2.2
+`resourcesInit.image.digest`                   | Docker image digest. Takes precedence over tag                       | sha256:4561107cd5762e69e51a78340421ab61c37c28bebd083a584586df46e313c297
 `resourcesInit.image.pullPolicy`               | Pull policy for repository                                           | `IfNotPresent`
 `resourcesInit.command`                        | Command to be executed in the resource init container                |
 `persistence.enabled`                          | Enable storage access to persistent volumes                          | true
@@ -439,10 +447,12 @@ Parameter                                      | Description                    
 `appDocumentsPVC.selector.value`               | Documents persistent volume selector value                           | `documents`
 `appDocumentsPVC.accessMode`                   | Documents persistent volume access mode                              | `ReadWriteMany`
 `appDocumentsPVC.size`                         | Documents persistent volume storage size                             | 1Gi
+`appDocumentsPVC.enableVolumeClaimPerPod'      | Enable persistent volume for Documents at pod level                  | false
 `appDocumentsPVC.preDefinedDocumentPVCName`    | Predefined document persistent volume name                           |
 `extraPVCs`                                    | Extra volume claims shared across all deployments                    | 
 `security.supplementalGroups`                  | Supplemental group id to access the persistent volume                | 0
 `security.fsGroup`                             | File system group id to access the persistent volume                 | 0
+`security.fsGroupChangePolicy`                 | File system group change policy for persistent volume                | `OnRootMismatch`
 `security.runAsUser`                           | The User ID that needs to be run as by all containers                | 
 `security.runAsGroup`                           | The Group ID that needs to be run as by all containers              | 
 `ingress.enabled`                              | Enable ingress resource                                              | false
@@ -452,12 +462,11 @@ Parameter                                      | Description                    
 `dataSetup.enabled`                            | Enable database setup job execution                                  | true
 `dataSetup.upgrade`                            | Upgrade an older release                                             | false
 `dataSetup.image.repository`                 | DB setup container image repository                                   | 
-`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.1.2.1`
+`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.1.2.2`
 `dataSetup.image.digest'                      | Docker image digest. Takes precedence over tag                       |
 `dataSetup.image.pullPolicy`                 | Pull policy for repository                                           | `IfNotPresent`
 `dataSetup.image.pullSecret`         		  | Pull secret for repository access                                    |  `ibm-entitlement-key` 
 `env.tz`                                       | Timezone for application runtime                                     | `UTC`
-`env.license`                                  | view or accept license                                               | `accept`
 `env.upgradeCompatibilityVerified`             | Indicate release upgrade compatibility verification done             | `false`
 `env.debugMode`                                | To view debug logs during pod startup                                | `false`
 `env.extraEnvs`                                | Provide extra global environment variables                           |
@@ -488,7 +497,7 @@ Parameter                                      | Description                    
 `setupCfg.dbSecret`                            | Database user secret name                                            | 
 `setupCfg.adminEmailAddress`                   | Administrator email address                                          | 
 `setupCfg.smtpHost`                            | SMTP email server host                                               |
-`setupCfg.softStopTimeout`                     | Timeout for soft stop                                                | 
+`setupCfg.terminationGracePeriod`              | Termination grace period for Containers                              | 30 
 `setupCfg.jmsVendor`                           | JMS MQ Vendor                                                        | 
 `setupCfg.jmsConnectionFactory`                | MQ connection factory class name                                     | 
 `setupCfg.jmsConnectionFactoryInstantiator`    | MQ connection factory creator class name                             |
@@ -515,10 +524,19 @@ Parameter                                      | Description                    
 `setupCfg.restartCluster`        | restartCluster can be set to true to restart the application cluster by cleaning up all previous node entries, locks and set the schedules to node1.                                        | false
 `setupCfg.useSslForRmi`                        | Enable SSL over RMI calls                                            | true
 `setupCfg.rmiTlsSecretName`                    | TLS secret name holding RMI certificate/key pair	              | 
+`setupCfg.sapSncSecretName`                    | Name of the secret holding SAP SNC PSE file and password along with the sapgenpse utility      | 
+`setupCfg.sapSncLibVendorName`                 | SAP SNC library vendor 
+name	                                         | 
+`setupCfg.sapSncLibVersion`                    | SAP SNC library 
+version	                                       | 
+`setupCfg.sapSncLibName`                       | SAP SNC library 
+name	                                         | 
 `asi.replicaCount`                             | Application server independent(ASI) deployment replica count         | 1
 `asi.env.jvmOptions`                           | JVM options for asi                                                  | 
 `asi.env.extraEnvs`                            | Provide extra environment variables for ASI                          | 
-`asi.frontendService.type`                             | Service type                                                         | `NodePort`
+`asi.frontendService.type`                             | Service type                                                         | `ClusterIP`
+`asi.frontendService.sessionAffinityConfig.timeoutSeconds`  | Session affinity timeout in seconds                                  | 10800
+`asi.frontendService.externalTrafficPolicy`                 | Route external traffic to node-local or cluster-wide endpoints       | `Cluster`
 `asi.frontendService.ports.http.name`                  | Service http port name                                               | `http`
 `asi.frontendService.ports.http.port`                  | Service http port number                                             | 35000
 `asi.frontendService.ports.http.targetPort`            | Service target port number or name on pod                            | `http`
@@ -547,7 +565,10 @@ Parameter                                      | Description                    
 `asi.frontendService.extraPorts`                       | Extra ports for service                                              |
 `asi.frontendService.loadBalancerIP`                   | LoadBalancer IP for service                                          |
 `asi.frontendService.annotations`                      | Additional annotations for the asi frontendService                   |
-`asi.backendService.type`                             | Service type                                                         | `NodePort`
+`asi.backendService.type`                             | Service type                                                         | `LoadBalancer`
+`asi.backendService.sessionAffinity`                       | Used to maintain session affinity                                    | `None`
+`asi.backendService.sessionAffinityConfig.timeoutSeconds`  | Session affinity timeout in seconds                                  | 10800
+`asi.backendService.externalTrafficPolicy`                 | Route external traffic to node-local or cluster-wide endpoints       | `Cluster`
 `asi.backendService.ports`                       | Ports for service                                              |  
 `asi.backendService.portRanges`                       | Port ranges for service                                              |
 `asi.backendService.loadBalancerIP`                   | LoadBalancer IP for service                                          |
@@ -611,7 +632,9 @@ Parameter                                      | Description                    
 `ac.replicaCount`                             | Adapter Container server (ac) deployment replica count               | 1
 `ac.env.jvmOptions`                           | JVM options for ac                                                   |
 `ac.env.extraEnvs`                            | Provide extra environment variables for AC                           | 
-`ac.frontendService.type`                             | Service type                                                         | `NodePort`
+`ac.frontendService.type`                             | Service type                                                         | `ClusterIP`
+`ac.frontendService.sessionAffinityConfig.timeoutSeconds`  | Session affinity timeout in seconds                                  | 10800
+`ac.frontendService.externalTrafficPolicy`                 | Route external traffic to node-local or cluster-wide endpoints       | `Cluster`
 `ac.frontendService.ports.http.name`                  | Service http port name                                               | `http`
 `ac.frontendService.ports.http.port`                  | Service http port number                                             | 35001
 `ac.frontendService.ports.http.targetPort`            | Service target port number or name on pod                            | `http`
@@ -620,7 +643,10 @@ Parameter                                      | Description                    
 `ac.frontendService.extraPorts`                       | Extra ports for service                                              | 
 `ac.frontendService.loadBalancerIP`                   | LoadBalancer IP for service                                          | 
 `ac.frontendService.annotations`                     | Additional annotations for the ac frontendService                     |
-`ac.backendService.type`                             | Service type                                                         | `NodePort`
+`ac.backendService.type`                              | Service type                                                         | `LoadBalancer`
+`ac.backendService.sessionAffinity`                       | Used to maintain session affinity                                    | `None`
+`ac.backendService.sessionAffinityConfig.timeoutSeconds`  | Session affinity timeout in seconds                                  | 10800
+`ac.backendService.externalTrafficPolicy`                 | Route external traffic to node-local or cluster-wide endpoints       | `Cluster`
 `ac.backendService.ports`                       | Ports for service                                              |  
 `ac.backendService.portRanges`                       | Port ranges for service                                              |
 `ac.backendService.loadBalancerIP`                  | LoadBalancer IP for service                                          |
@@ -672,7 +698,9 @@ Parameter                                      | Description                    
 `api.replicaCount`                             | Liberty API server (API) deployment replica count                    | 1
 `api.env.jvmOptions`                           | JVM options for api (will be deprecated in future release)           |
 `api.env.extraEnvs`                            | Provide extra environment variables for API                          | 
-`api.frontendService.type`                             | Service type                                                         | `NodePort`
+`api.frontendService.type`                             | Service type                                                         | `ClusterIP`
+`api.frontendService.sessionAffinityConfig.timeoutSeconds`  | Session affinity timeout in seconds                                  | 10800
+`api.frontendService.externalTrafficPolicy`                 | Route external traffic to node-local or cluster-wide endpoints       | `Cluster`
 `api.frontendService.ports.http.name`                  | Service http port name                                               | `http`
 `api.frontendService.ports.http.port`                  | Service http port number                                             | 35002
 `api.frontendService.ports.http.targetPort`            | Service target port number or name on pod                            | `http`
@@ -729,12 +757,12 @@ Parameter                                      | Description                    
 `fullnameOverride`                             | Chart resource full name override                                    | 
 `test.image.repository`                        | Repository for docker image used for helm test and cleanup           | 'ibmcom'
 `test.image.name          `                    | helm test and cleanup docker image name                              | `opencontent-common-utils`
-`test.image.tag          `                     | helm test and cleanup docker image tag                               | `1.1.54`
+`test.image.tag          `                     | helm test and cleanup docker image tag                               | `1.1.60`
 `test.image.digest          `                  | helm test and cleanup docker image digest. Takes precedence over tag |
 `test.image.pullPolicy`                        | Pull policy for helm test image repository                           | `IfNotPresent`
 `purge.enabled`                                | Enable external purge job                                            | 'false'
 `purge.image.repository          `             | External purge docker image repository                               | `purge`
-`purge.image.tag          `                    | External purge image tag                                             | `6.1.2.1`
+`purge.image.tag          `                    | External purge image tag                                             | `6.1.2.2`
 `purge.image.digest          `                 | External purge image digest. Takes precedence over tag               |
 `purge.image.pullPolicy`                       | Pull policy for external purge docker image                          | `IfNotPresent`
 `purge.image.pullSecret`                       | Pull secret for repository access                                    | `ibm-entitlement-key`
