@@ -71,6 +71,7 @@ This chart requires a PodSecurityPolicy to be bound to the target namespace prio
 
 This chart optionally defines a custom PodSecurityPolicy which is used to finely control the permissions/capabilities needed to deploy this chart. It is based on the predefined PodSecurityPolicy name: [`ibm-restricted-psp`](https://github.com/IBM/cloud-pak/blob/master/spec/security/psp/ibm-anyuid-psp.yaml) with extra required privileges. You can enable this policy by using the Platform User Interface or configuration file available under pak_extensions/pre-install/ directory
 - From the user interface, you can copy and paste the following snippets to enable the custom PodSecurityPolicy
+Note: For kubernetes version 1.25 or higher apiVersion for the PodSecurityPolicy should be policy/v1
   - Custom PodSecurityPolicy definition:
 
     ```
@@ -280,10 +281,10 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | Parameter                | Description             | Default        |
 | ------------------------ | ----------------------- | -------------- |
 | `image.name` | Provide the value in double quotes | `"cp.icr.io/cp/ibm-pem/pem"` |
-| `image.tag` | Specify the tag name | `"6.2.1.2"` |
+| `image.tag` | Specify the tag name | `"6.2.2"` |
 | `image.pullPolicy` |  | `null` |
 | `image.pullSecret` | Provide the pull secret name | `""` |
-| `arch` |  | `"amd64"` |
+| `arch` | Specify architecture (amd64, s390x) | `"amd64"` |
 | `serviceAccountName` | specify the service account name which has required permissions | `null` |
 | `timezone.configmapname` | specify the timezone configmap | `null` |
 | `volumeClaims.resources.enabled` | if enabled persistent volume will be used | `true` |
@@ -306,7 +307,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `volumeClaims.logs.accessModes` |  | `["ReadWriteMany"]` |
 | `test.image.repository` |  | `"cp.icr.io/cp"` |
 | `test.image.name` |  | `"opencontent-common-utils"` |
-| `test.image.tag` |  | `"1.1.11"` |
+| `test.image.tag` |  | `"1.1.36"` |
 | `test.image.pullPolicy` |  | `"IfNotPresent"` |
 | `dbsetup.enabled` | If it is first installation specify the values true | `false` |
 | `dbsetup.upgrade` | If it is upgrade Specify the values to true | `true` |
@@ -550,7 +551,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.install` |  | `true` |
 | `communitymanager.image.repository` | Specify the repository | `"cp.icr.io/cp/ibm-pem/pem"` |
 | `communitymanager.image.pullPolicy` | Specify te image pull policy | `null` |
-| `communitymanager.image.tag` | Specify the tag name | `"6.2.1.2"` |
+| `communitymanager.image.tag` | Specify the tag name | `"6.2.2"` |
 | `communitymanager.image.pullSecret` | Provide the pull secret name | `null` |
 | `communitymanager.prod.enable` | If you are want to proceed for prod pcm installation then you have to mention it as true or else false | `true` |
 | `communitymanager.prod.setupfile.acceptLicence` | We should make accept-license should be true for pcm installation | `true` |
@@ -988,6 +989,12 @@ Depending on the capacity of the OpenShift worker node and database network conn
 * 2-3 minutes for 'installation against a pre-loaded database' and
 * 10-20 minutes for 'installation against a new release or an older release upgrade'
 
+## Limitations
+Installation of IBM PEM on OpenShift Container Platform does not allow same Java KeyStore (JKS) file names to be used in the values.yaml file for the following properties:
+* db_sslTrustStoreName
+* testmode_db_sslTrustStoreName
+* keystore_filename.
+
 ## Upgrading the Chart
 You would want to upgrade your deployment when you have a new docker image or helm chart verison or a change in configuration, such as, new service ports to be exposed.
 
@@ -1008,17 +1015,27 @@ For product release version upgrade, refer to the product documentation.
 
 ## Post install/upgrade patching the routes (Configure SSL for OpenShift Route)
 This chart supports re-encrypt routes and requires the destination CA certificate to be configured in the route.
-
 After installing/upgrading, you must patch the routes manually for PEM, PR, PP, and API Gateway server with the CA certified TLS certificate. The `routePatch.sh` script allows you to patch all the routes created through the helm install with the certificate information based on the <Release_name>. 
 
-To patch the routes, download the `ibm_cloud_pak/pak_extensions/post-install/routePatch.sh` script file, update the file with the following values and run the script:
-* RELEASE_NAME= #Provide the release name
-* PEM_DEST_CABUNDLE_FN= #Provide the Destination CA certificate name with path for PEM server
-* PR_DEST_CABUNDLE_FN= #Provide the Destination CA certificate name with path for PR server
-* PP_DEST_CABUNDLE_FN= #Provide the Destination CA certificate name with path for PP server
-* AG_DEST_CABUNDLE_FN= #Provide the Destination CA certificate name with path for API Gateway server
+Steps to patch the routes:
+1. Download the `ibm_cloud_pak/pak_extensions/post-install/routePatch.sh` script file.
+2. Update the following properties in the script:
+* RELEASE_NAME= #Provide the release name used during helm install
+* PEM_DEST_CABUNDLE_FN= #Path to the Destination CA certificate for PEM server
+* PR_DEST_CABUNDLE_FN= #Path to the Destination CA certificate for PR server
+* PP_DEST_CABUNDLE_FN= #Path to the Destination CA certificate for PP server
+* AG_DEST_CABUNDLE_FN= #Path to the Destination CA certificate for API Gateway server
 
-The `routePatch.sh` file and all destination CA certificates must have the 755 permission to read and execute the script for patching the routes.
+For example,
+```
+RELEASE_NAME=pem-release
+PEM_DEST_CABUNDLE_FN=/home/vmuser/OcpCerts/Pemapp.crt
+PR_DEST_CABUNDLE_FN=/home/vmuser/OcpCerts/Prapp.cert
+PP_DEST_CABUNDLE_FN=/home/vmuser/OcpCerts/Ppapp.cert
+AG_DEST_CABUNDLE_FN=/home/vmuser/OcpCerts/AgCert.cert
+```
+3. Ensure the routePatch.sh script and all destination CA certificates have the read and execute permissions (755).
+4. Run the script
 
 ## Rollback the Chart
 If the upgraded environment is not working as expected or you made an error while upgrading, you can easily rollback the chart to a previous revision.
@@ -1046,3 +1063,86 @@ Since there are certain kubernetes resources created using the `pre-install` hoo
 * PersistentVolumeClaim if persistence is enabled - <release-name>-logs-pvc #enable logs for migrator and dbutils
 
 Note: You may also consider deleting the secrets and peristent volumes created as part of prerequisites, after creating their backups.
+
+## Changing the system passphrase (Master key regenerator)
+This chart supports changing the system passphrase by regenerating the master key and updating it in the database. When the pod starts, it compares the old passphrase secret value with the system passphrase that is present in the database. If both the system passphrase match, the tool replaces the passphrase present in the database with the new passphrase secret value.
+Once the passphrase is updated in the database, it patches the passphrase secret with the new passphrase secret value and restarts PEM, PR and PP pods if they were running.
+
+1. Create a role for secret and deployment:
+    ```
+    kind: Role
+    apiVersion: rbac.authorization.k8s.io/v1
+    metadata:
+      name: <role name>
+      namespace: <namespace>
+    rules:
+      - verbs: ['get', 'list', 'patch', 'update']
+        apiGroups: ['','batch']
+        resources: ['secrets']
+      - verbs: ['get', 'list', 'patch', 'update']
+        apiGroups: ['apps']
+        resources: ['deployments']
+    ```
+
+2. Create a rolebinding for the above role and the service account:
+    ```
+    kind: RoleBinding
+    apiVersion: rbac.authorization.k8s.io/v1
+    metadata:
+      name: <rolebinding name>
+      namespace: <namespace>
+    subjects:
+      - kind: ServiceAccount
+        name: <service account>
+        namespace: <namespace>
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: <role name>
+    ```
+
+3. Create secret for old and new passphrase.
+Note: The secret created during helm install contains the keys for old and new passphrase. Update the old and new passphrase values for the corresponding secret key.
+
+4. Configure the following values.yaml properties for master key regenerator
+    - Values.license
+    - Values.volumeClaims.resources.subpath.dbdrivers
+    - Values.dbsetup.setupfile.proxy_host
+    - Values.dbsetup.setupfile.proxy_port
+    - Values.dbsetup.setupfile.customer_id
+    - Values.dbsetup.setupfile.db_type
+    - Values.dbsetup.setupfile.ssl_connection
+    - Values.dbsetup.setupfile.db_port
+    - Values.dbsetup.setupfile.db_host
+    - Values.dbsetup.setupfile.db_name
+    - Values.dbsetup.setupfile.db_schema
+    - Values.dbsetup.setupfile.db_user
+    - Values.dbsetup.setupfile.db_password
+    - Values.dbsetup.setupfile.db_driver
+    - Values.dbsetup.setupfile.db_max_pool_size
+    - Values.dbsetup.setupfile.db_min_pool_size
+    - Values.dbsetup.setupfile.db_aged_timeout
+    - Values.dbsetup.setupfile.db_max_idle_time
+    - Values.dbsetup.setupfile.db_sslTrustStoreName
+    - Values.dbsetup.setupfile.db_sslTrustStorePassword
+    - Values.dbsetup.setupfile.testmode_db_port
+    - Values.dbsetup.setupfile.testmode_db_host
+    - Values.dbsetup.setupfile.testmode_db_name
+    - Values.dbsetup.setupfile.testmode_db_schema
+    - Values.dbsetup.setupfile.testmode_db_user
+    - Values.dbsetup.setupfile.testmode_db_password
+    - Values.dbsetup.setupfile.testmode_db_driver
+    - Values.dbsetup.setupfile.testmode_db_max_pool_size
+    - Values.dbsetup.setupfile.testmode_db_min_pool_size
+    - Values.dbsetup.setupfile.testmode_db_aged_timeout
+    - Values.dbsetup.setupfile.testmode_db_max_idle_time
+    - Values.dbsetup.setupfile.testmode_db_sslTrustStoreName
+    - Values.dbsetup.setupfile.testmode_db_sslTrustStorePassword
+    - Values.masterKeyRegenerator.enable
+    - Values.masterKeyRegenerator.passphraseOldSecret
+    - Values.masterKeyRegenerator.passphraseNewSecret
+
+5. Run the following command to run the master key regenerator:
+```
+helm upgrade my-release -f values.yaml ./ibm-pem-standard --timeout 3600s
+```
