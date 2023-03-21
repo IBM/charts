@@ -38,15 +38,15 @@ Kubernetes cluster:
 
 
 
-* [RedHat OpenShift Container Platform](https://docs.openshift.com/container-platform/4.6/release_notes/ocp-4-6-release-notes.html) v4.6 or later (x86_64)
-* [OpenShift SDN in _network policy_ mode](https://docs.openshift.com/container-platform/4.6/networking/openshift_sdn/about-openshift-sdn.html) (Optional) The default installation includes NetworkPolicy resources, these will only be acted upon if the SDN is configured appropriately.
-* [Dynamic Volume Provisioning](https://docs.openshift.com/container-platform/4.6/storage/dynamic-provisioning.html) supporting accessModes ReadWriteOnce (RWO) and ReadWriteMany (RWX).
-* [Jaeger Operator](https://docs.openshift.com/container-platform/4.6/service_mesh/v2x/installing-ossm.html#ossm-install-ossm-operator_installing-ossm) (Recommended) If tests should contribute trace information and Jaeger based reports are required.
+* [RedHat OpenShift Container Platform](https://docs.openshift.com/container-platform/4.8/release_notes/ocp-4-8-release-notes.html) v4.8 or later (x86_64)
+* [OpenShift SDN in _network policy_ mode](https://docs.openshift.com/container-platform/4.8/networking/openshift_sdn/about-openshift-sdn.html) (Optional) The default installation includes NetworkPolicy resources, these will only be acted upon if the SDN is configured appropriately.
+* [Dynamic Volume Provisioning](https://docs.openshift.com/container-platform/4.8/storage/dynamic-provisioning.html) supporting accessModes ReadWriteOnce (RWO) and ReadWriteMany (RWX).
+* [Jaeger Operator](https://docs.openshift.com/container-platform/4.8/service_mesh/v2x/installing-ossm.html#ossm-install-ossm-operator_installing-ossm) (Recommended) If tests should contribute trace information and Jaeger based reports are required.
 
 Installed locally:
 
-* [oc cli](https://docs.openshift.com/container-platform/4.6/cli_reference/openshift_cli/getting-started-cli.html)
-* [helm cli](https://access.redhat.com/documentation/en-us/openshift_container_platform/4.6/html/cli_tools/helm-cli) v3.9.4 or later.
+* [oc cli](https://docs.openshift.com/container-platform/4.8/cli_reference/openshift_cli/getting-started-cli.html)
+* [helm cli](https://docs.openshift.com/container-platform/4.8/applications/working_with_helm_charts/installing-helm.html) v3.10.3 or later.
 
 To install the product you need to access the cluster with cluster administrator privileges.
 
@@ -107,6 +107,32 @@ Configure services to use this SCC.  From the command line, run:
 oc adm policy add-scc-to-group ibm-rtas-restricted system:serviceaccounts:test-system
 ```
 
+## Red Hat OpenShift Sysdig Requirements
+
+IBM Cloud deploys Sysdig into Red Hat OpenShift. The default configuration causes many warnings in the RabbitMQ pod that eventually causes pod restarts.
+
+```console
+2023-02-23 01:55:01.045358+00:00 [warning] <0.710.0> HTTP access denied: user 'guest' - invalid credentials
+2023-02-23 01:55:02.050662+00:00 [warning] <0.711.0> HTTP access denied: user 'guest' - invalid credentials
+```
+
+Fix this by filtering out RabbitMQ:
+
+```bash
+oc edit configmap sysdig-agent -n ibm-observe
+```
+
+Append to dragent.yaml
+
+```
+    use_container_filter: true
+    container_filter:
+      - exclude:
+          kubernetes.pod.label.app.kubernetes.io/name: rabbitmq
+```
+
+This change propagates after a couple of minutes. [Further reading](https://cloud.ibm.com/docs/monitoring?topic=monitoring-change_kube_agent)
+
 
 
 
@@ -114,10 +140,10 @@ oc adm policy add-scc-to-group ibm-rtas-restricted system:serviceaccounts:test-s
 
 For the product to show Service Virtualization usage metrics, User Workload monitoring must be enabled in the cluster.  You should consult the OpenShift documentation for the version of the platform that you are using for details on how to do this.  For example:
 
-### OpenShift 4.6
+### OpenShift 4.8
 
 **Enabling monitoring for user-defined projects** in:
-https://docs.openshift.com/container-platform/4.6/monitoring/enabling-monitoring-for-user-defined-projects.html
+https://docs.openshift.com/container-platform/4.8/monitoring/enabling-monitoring-for-user-defined-projects.html
 
 
 
@@ -178,7 +204,6 @@ The persistent volumes can be expanded by editing the [claim](https://kubernetes
 
 ## Installing the Chart
 
-
 ### Create Namespace
 
 The product requires its own namespace. Create a namespace to install the product into.
@@ -186,7 +211,6 @@ The product requires its own namespace. Create a namespace to install the produc
 ```console
 oc new-project test-system
 ```
-
 
 ### Access to binaries
 
@@ -220,8 +244,6 @@ by a recognized, trusted, CA.
 #### Self Trust
 
 To enable the certificate to be trusted we add the signing CA into a secret so that it can be injected into our trust stores.
-
-
 
 * Verify if an additional CA certificate is required. IBM Cloud uses Lets Encrypt meaning it is already trusted
 
@@ -282,7 +304,7 @@ The value should be used in place of the one shown below.
 
 ```console
 helm repo update
-helm pull --untar ibm-helm/ibm-rtas-prod --version 10.1051.0
+helm pull --untar ibm-helm/ibm-rtas-prod --version 11.1052.0
 
 # update the runAsUser and fsGroup to match scc policy
 sed -i -e "s/runAsUser: 1001/runAsUser: $(oc get project test-system -oyaml \
@@ -356,7 +378,7 @@ cloudctl version
 * Install `oc`
 
 ```bash
-wget https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable-4.6/openshift-client-linux.tar.gz
+wget https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable-4.8/openshift-client-linux.tar.gz
 tar xf openshift-client-linux.tar.gz oc
 mv oc /usr/local/bin/
 oc version
@@ -391,7 +413,7 @@ oc new-project cp
 
 ```bash
 export CASE_NAME=ibm-rtas-case
-export CASE_VERSION=10.1051.0
+export CASE_VERSION=11.1052.0
 export CASE_ARCHIVE=${CASE_NAME}-${CASE_VERSION}.tgz
 export CASE_REMOTE_PATH=https://github.com/IBM/cloud-pak/raw/master/repo/case/${CASE_NAME}/${CASE_VERSION}/${CASE_ARCHIVE}
 export OFFLINEDIR=$HOME/offline
@@ -438,7 +460,7 @@ cloudctl case launch \
   --args "--registry $LOCAL_DOCKER_REGISTRY --inputDir $OFFLINEDIR"
 ```
 
-* Configure the OpenShift cluster where the product is to be installed with a [global pull secret](https://docs.openshift.com/container-platform/4.6/openshift_images/managing_images/using-image-pull-secrets.html#images-update-global-pull-secret_using-image-pull-secrets) to access the images in the registry and the [mirrored location](https://docs.openshift.com/container-platform/4.6/openshift_images/image-configuration.html#images-configuration-registry-mirror_image-configuration) so that they are not pulled from the IBM entitled registry. WARNING: This operation will result in the cluster rebooting all nodes.
+* Configure the OpenShift cluster where the product is to be installed with a [global pull secret](https://docs.openshift.com/container-platform/4.8/openshift_images/managing_images/using-image-pull-secrets.html#images-update-global-pull-secret_using-image-pull-secrets) to access the images in the registry and the [mirrored location](https://docs.openshift.com/container-platform/4.8/openshift_images/image-configuration.html#images-configuration-registry-mirror_image-configuration) so that they are not pulled from the IBM entitled registry. WARNING: This operation will result in the cluster rebooting all nodes.
 
 ```bash
 cloudctl case launch \
@@ -451,12 +473,12 @@ cloudctl case launch \
 
 _Note: the namespace argument is required for legacy reasons, its value can be any namespace that exists_
 
-If your cluster does not use a Machine Config Operator the above step will not update and reboot all nodes. In such cases you should follow [instructions](https://docs.openshift.com/container-platform/4.6/openshift_images/image-configuration.html#images-configuration-registry-mirror_image-configuration) to update `/etc/containers/registries.conf` on all nodes and reboot them.
+If your cluster does not use a Machine Config Operator the above step will not update and reboot all nodes. In such cases you should follow [instructions](https://docs.openshift.com/container-platform/4.8/openshift_images/image-configuration.html#images-configuration-registry-mirror_image-configuration) to update `/etc/containers/registries.conf` on all nodes and reboot them.
 
 * Unpack the product helm chart
 
 ```bash
-tar xf $OFFLINEDIR/charts/ibm-rtas-prod-10.1051.0.tgz
+tar xf $OFFLINEDIR/charts/ibm-rtas-prod-11.1052.0.tgz
 ```
 
 * Continue to install the product as normal but since the global pull secret has been created the pull secret is not required `oc create secret docker-registry cp.icr.io`. Naturally this secret should not be referenced in the helm install `--set global.ibmRtasRegistryPullSecret=cp.icr.io \`.
@@ -465,53 +487,14 @@ tar xf $OFFLINEDIR/charts/ibm-rtas-prod-10.1051.0.tgz
 
 ## Upgrade
 
-The method by which an upgrade is performed depends on the version being upgraded.  See the appropriate section below.
+*NOTE* You may only upgrade from a 10.2.3 or later installation. To upgrade from a version prior to this, please first upgrade to 10.2.3.
 
-### Upgrading from 10.1.3 and later
+### Upgrading from 10.2.3 and later
 
 
 
 Follow the installation instructions [above](#installing-the-chart) but use `helm upgrade` rather than `helm install`.
 
-
-### Upgrading from 10.1, 10.1.1 and 10.1.2
-
-*NOTE* You may only upgrade from a 10.1.x installation. To upgrade from a version prior to this, please first upgrade to 10.1.2.
-
-
-
-Uninstall the old version of product. Note: substitute `{my-rtas}` for the Helm release name used at installation.
-
-```bash
-helm uninstall {my-rtas} -n test-system
-```
-
-Delete the orphaned dynamic workload left in the namespace.
-
-```bash
-oc delete all,cm,secret -lexecution-marker -n test-system
-```
-
-
-Install the product as [above](#installing-the-chart)
-
-Use the scripts in the `files` directory of the chart to merge data into the installation.
-
-```bash
-migrate.sh create-pvcs -n test-system {my-rtas}
-migrate.sh merge-dbs -n test-system {my-rtas}
-```
-
-
-Wait for pods to spin down then back up again.
-
-Confirm that the server has the data that you expect.
-
-You may then remove resources created during the migration using:
-
-```bash
-migrate.sh delete-temp-resources -n test-system {my-rtas}
-```
 
 ## Security Considerations
 
