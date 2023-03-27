@@ -423,7 +423,7 @@ Parameter                                      | Description                    
 `resourcesInit.image.repository`               | Repository for resource init container images                        | cp.icr.io/cp/ibm-b2bi/
 `resourcesInit.image.name`                     | Docker image name                                                    | b2bi-resources
 `resourcesInit.image.tag`                      | Docker image tag                                                     | 6.1.2.2
-`resourcesInit.image.digest`                   | Docker image digest. Takes precedence over tag                       | sha256:4561107cd5762e69e51a78340421ab61c37c28bebd083a584586df46e313c297
+`resourcesInit.image.digest`                   | Docker image digest. Takes precedence over tag                       | sha256:1d9045511c1203e6d6d25ed32c700dfca230076412915857c2c40b1409151b7c
 `resourcesInit.image.pullPolicy`               | Pull policy for repository                                           | `IfNotPresent`
 `resourcesInit.command`                        | Command to be executed in the resource init container                |
 `persistence.enabled`                          | Enable storage access to persistent volumes                          | true
