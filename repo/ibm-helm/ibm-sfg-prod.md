@@ -422,7 +422,7 @@ Parameter                                      | Description                    
 `resourcesInit.image.repository`               | Repository for resource init container images                        | cp.icr.io/cp/ibm-sfg
 `resourcesInit.image.name`                     | Docker image name                                                    | sfg-resources
 `resourcesInit.image.tag`                      | Docker image tag                                                     | 6.1.2.2
-`resourcesInit.image.digest`                   | Docker image digest. Takes precedence over tag                       | sha256:ibm-sfg-case-bundle\charts\ibm-sfg-prod\README.md
+`resourcesInit.image.digest`                   | Docker image digest. Takes precedence over tag                       | sha256:56c9dd804ccdad53cced19188569925760eb6cbe75c63ab08b62816897705c27
 `resourcesInit.image.pullPolicy`               | Pull policy for repository                                           | `IfNotPresent`
 `resourcesInit.command`                        | Command to be executed in the resource init container                |
 `persistence.enabled`                          | Enable storage access to persistent volumes                          | true
