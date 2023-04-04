@@ -31,35 +31,13 @@
 
 4. Secret - A Kubernetes Secret object must be created to store the UrbanCode Deploy server's Codestation authentication token and the password for all keystores used by the product.  The name of the secret you create must be specified in the property 'secret.name' in your values.yaml.
 
-* Through the oc/kubectl CLI, create a Secret object in the target namespace.  Generate the base64 encoded values for the Codestation token and password for all keystores used by the product.
+* Through the oc/kubectl CLI, create a Secret object in the target namespace.
 
+```bash
+oc create secret generic ucd-secrets \
+  --from-literal=cspassword=255b21b7-ca48-4f2e-95c0-048fdbff4197 \
+  --from-literal=keystorepassword=MyKeystorePassword
 ```
-echo -n 255b21b7-ca48-4f2e-95c0-048fdbff4197 | base64
-MjU1YjIxYjctY2E0OC00ZjJlLTk1YzAtMDQ4ZmRiZmY0MTk3
-echo -n 'MyKeystorePassword' | base64
-TXlLZXlzdG9yZVBhc3N3b3Jk
-```
-
-  * Create a file named secret.yaml with the following contents, using your secret name and base64 encoded values.
-
-```
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ucdr-secrets
-type: Opaque
-data:
-  cspassword: MjU1YjIxYjctY2E0OC00ZjJlLTk1YzAtMDQ4ZmRiZmY0MTk3
-  keystorepassword: TXlLZXlzdG9yZVBhc3N3b3Jk
-```
-
-  * Create the Secret using oc apply
-
-```
-oc apply -f ./secret.yaml
-```
-
-  * Delete or shred the secret.yaml file.
 
 5. A PersistentVolume that will hold the conf directory for the UrbanCode Deploy relay is required.  If your cluster supports dynamic volume provisioning you will not need to create a PersistentVolume (PV) or PersistentVolumeClaim (PVC) before installing this chart.  If your cluster does not support dynamic volume provisioning, you will need to either ensure a PV is available or you will need to create one before installing this chart.  You can optionally create the PVC to bind it to a specific PV, or you can let the chart create a PVC and bind to any available PV that meets the required size and storage class.  Sample YAML to create the PV and PVC are provided below.
 
@@ -181,7 +159,7 @@ This chart requires a `SecurityContextConstraints` to be bound to the target nam
       kubernetes.io/description: restricted denies access to all host features and requires
         pods to be run with a UID, and SELinux context that are allocated to the namespace.  This
         is the most restrictive SCC and it is used by default for authenticated users.
-    name: restricted
+    name: ucd-restricted
   priority: null
   readOnlyRootFilesystem: false
   requiredDropCapabilities:
@@ -209,6 +187,10 @@ This chart requires a `SecurityContextConstraints` to be bound to the target nam
 * 200MB of RAM
 * 100 millicores CPU
 
+## Client Data Storage Locations
+
+All client data is stored in the conf persistent volume.  UrbanCode Deploy does not do any active encryption of this data location.  This location should be included in whatever backup plans the user chooses to implement.
+
 ## Installing the Chart
 
 Add the IBM helm chart repository to the local client.
@@ -234,6 +216,10 @@ $ helm install my-ucdr-release ibm-helm/ibm-ucdr-prod --namespace ucdtest --valu
 ## Verifying the Chart
 Check the Resources->Agent Relays page of the UrbanCode Deploy server UI to verify the agent relay has connected successfully.
 
+## Upgrading the Chart
+
+Check [here](https://community.ibm.com/community/user/wasdevops/blogs/laurel-dickson-bull1/2022/07/08/container-upgrade) for information about ugrading the chart.
+
 ## Uninstalling the Chart
 
 To uninstall/delete the `my-ucdr-release` deployment:
@@ -244,7 +230,57 @@ $ helm delete my-ucdr-release
 
 The command removes all the Kubernetes components associated with the chart and deletes the release.
 
+## Disaster Recovery
 
+Backup product data and essential Kubernetes resources so that you can recover your UCD relay instance after a disaster.
+
+### Backup Kubernetes Resources
+
+Backup the Kubernetes resoures required to redeploy the UCD relay after a disaster.  Follow these steps to save the configuration of essential Kubernetes resources.
+
+1. Save Helm values
+   Run the following command to save a local copy of the Helm values file
+```bash
+helm get values <Helm-release-name> --namespace <ucd_namespace> --all >savedHelmValues.yaml
+```
+2. Save secret containing UCD relay keystore passwords
+   Find the value for the Values.secret.name property in the saved Helm values file above.  This is the name of the secret we want to save a local copy of.  Run the following command, replacing **ucdsecrets_name** with the value from the values.secret.name property.
+```bash
+oc get secret <ucdsecrets_name> -n <ucd_namespace> -o yaml > <ucdsecrets_name>.yaml
+```
+3. Save image pull secret
+   Find the value for the Values.image.secret property in the saved Helm values file above.  This is the name of the secret used to pull images from the IBM Entitled Registry.  Run the following command, replacing **ibm-entitlement-key** with the value from the Values.image.secret property.
+```bash
+oc get secret <ibm-entitlement-key> -n <ucd_namespace> -o yaml > <ibm-entitlement-key>.yaml
+```
+
+### Backup Product Data
+
+Backup the conf directory used by the UCD server.  To ensure the most accurate saving of data, no deployments should be active.  Follow these steps to take a backup of the relay.
+
+1. Scale the statefulset resource to 0 to shutdown the UCD relay.
+2. Backup the conf Persistent Volume.
+3. Scale the statefulset resource to 1 to restart the UCD relay.
+
+### Recover from a disaster
+
+If you have successfully backed up the resources and data as described in [Backup Kubernetes Resources](#backup-kubernetes-resources) and [Backup Product Data](#backup-product-data) you can recreate an instance of UCD relay using that data.  Follow these steps to recreate your UCD relay instance.
+
+1. Create a new project/namespace to hold the Kubernetes resources associated with the UCD relay instance.
+2. Create the Kubernetes secret that contains the UCD relay keystore password by running the following command.
+```bash
+oc apply -n <ucd_namespace> -f <ucdsecrets_name>.yaml
+```
+3. Create the image pull secret needed to access images in the IBM Entitled Registry by running the following command.
+```bash
+oc apply -n <ucd_namespace> -f <ibm-entitlement-key>.yaml
+```
+4. Create the conf Persistent Volume and associated Persistent Volume Claim and load the saved conf directory contents into the Persistent Volume.
+5. Create a values.yaml file that contains the properties and values from your savedHelmValues.yaml file.  Be sure that the Values.confVolume.existingClaimName field is set to the Persistent Volume Claim for the new conf Persistent Volume.
+6. Create the new UCD relay instance by running the following command.
+```bash
+helm install my-recovered-release ibm-helm/ibm-ucdr-prod --namespace <ucd_namespace> --values myRecoveredValues.yaml
+```
 ## Configuration
 
 ### Parameters
@@ -264,10 +300,10 @@ The Helm chart has the following values.
 | persistence | enabled | Determines if persistent storage will be used to hold the UCD server appdata directory contents. This should always be true to preserve server data on container restarts. | Default value "true" |
 |             | useDynamicProvisioning | Set to "true" if the cluster supports dynamic storage provisoning | Default value "false" |
 |             | fsGroup | The group ID to use to access persistent volumes | Default value "1001" |
-| confVolume | name | The base name used when the Persistent Volume and/or Persistent Volume Claim for the UCD agent conf directory is created by the chart. | Default value is "conf" |
-|            | existingClaimName | The name of an existing Persistent Volume Claim that references the Persistent Volume that will be used to hold the UCD agent conf directory. |  |
+| confVolume | name | The base name used when the Persistent Volume and/or Persistent Volume Claim for the UCD relay conf directory is created by the chart. | Default value is "conf" |
+|            | existingClaimName | The name of an existing Persistent Volume Claim that references the Persistent Volume that will be used to hold the UCD relay conf directory. |  |
 |            | storageClassName | The name of the storage class to use when persistence.useDynamicProvisioning is set to "true". |  |
-|            | size | Size of the volume to hold the UCD agent conf directory |  |
+|            | size | Size of the volume to hold the UCD relay conf directory |  |
 |              | accessMode | Persistent storage access mode for the ext-lib persistent volume. | ReadWriteOnce |
 | serverHostPort |  | UCD server hostname and WSS port in the form hostname:port. If specifying failover info, separate multiple hostname:port with a comma. For example, ucd1.example.com:7919,ucd2.example.com:7919) |  |
 | secret | name | Kubernetes secret which defines required UCD passwords. | You may leave this blank to use default name of HelmReleaseName-secrets where HelmReleaseName is the name of your Helm Release, otherwise specify the secret name here. |
