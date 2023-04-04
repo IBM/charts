@@ -33,41 +33,17 @@ oc create secret docker-registry ibm-entitlement-key --docker-username=cp --dock
 
 3. Database - UrbanCode Deploy requires a database.  The database may be running in your cluster or on hardware that resides outside of your cluster.  This database  must be configured as described in [Installing the server database](https://www.ibm.com/support/knowledgecenter/SS4GSP_7.1.1/com.ibm.udeploy.install.doc/topics/DBinstall.html) before installing the containerized UrbanCode Deploy server.  The values used to connect to the database are required when installing the UrbanCode Deploy server.  The Apache Derby database type is not supported when running the UrbanCode Deploy server in a Kubernetes cluster.
 
-4. Secret - A Kubernetes Secret object must be created to store the initial UrbanCode Deploy server administrator password, the password used to access the database mentioned above, and the password for all keystores used by the UrbanCode Deploy server.  The name of the secret you create must be specified in the property 'secret.name' in your values.yaml if installing via Helm chart or in the UcdServer custom resource if installing via operator.
+4. Secret - A Kubernetes Secret object must be created to store the initial UrbanCode Deploy server administrator password, the password used to access the database mentioned above, and the password for all keystores used by the UrbanCode Deploy server.  The name of the secret you create must be specified in the property 'secret.name' in your values.yaml.
 
 * Through the oc/kubectl CLI, create a Secret object in the target namespace.
-    Generate the base64 encoded values for the initial UCD admin password, database password, and the password for all keystores used by the product.
+
+```bash
+oc create secret generic ucd-secrets \
+  --from-literal=initpassword=admin \
+  --from-literal=dbpassword=MyDbpassword \
+  --from-literal=keystorepassword=MyKeystorePassword
 
 ```
-echo -n 'admin' | base64
-YWRtaW4=
-echo -n 'MyDbpassword' | base64
-TXlEYnBhc3N3b3Jk
-echo -n 'MyKeystorePassword' | base64
-TXlLZXlzdG9yZVBhc3N3b3Jk
-```
-
-  * Create a file named secret.yaml with the following contents, using your secret name and base64 encoded values.
-
-```
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ucd-secrets
-type: Opaque
-data:
-  initpassword: YWRtaW4=
-  dbpassword: TXlEYnBhc3N3b3Jk
-  keystorepassword: TXlLZXlzdG9yZVBhc3N3b3Jk
-```
-
-  * Create the Secret using oc apply
-
-```
-oc apply -f ./secret.yaml
-```
-
-  * Delete or shred the secret.yaml file.
 
 5. JDBC drivers - A PersistentVolume (PV) that contains the JDBC driver(s) required to connect to the database configured above must be created.  You must either:
 
@@ -245,7 +221,7 @@ This chart requires a `SecurityContextConstraints` to be bound to the target nam
       kubernetes.io/description: restricted denies access to all host features and requires
         pods to be run with a UID, and SELinux context that are allocated to the namespace.  This
         is the most restrictive SCC and it is used by default for authenticated users.
-    name: restricted
+    name: ucd-restricted
   priority: null
   readOnlyRootFilesystem: false
   requiredDropCapabilities:
@@ -271,9 +247,9 @@ This chart requires a `SecurityContextConstraints` to be bound to the target nam
 
 ### Licensing Requirements
 
-The UCD server image will attempt to upload UCD metrics(agent high-water mark) to the license service. Hence this chart requires IBM Licensing operator which is part of IBM Common Services to be installed in the Openshift cluster. Please follow the instructions at https://www.ibm.com/support/knowledgecenter/SSHKN6/installer/landing_installer.html to install IBM Common services.
+The UCD server image will attempt to upload UCD license metrics(agent high-water mark) to the license service. For the upload to be successful, this chart needs IBM Licensing operator (a component of IBM Common Services) to be installed in the Openshift cluster. Please follow these [instructions](https://www.ibm.com/support/knowledgecenter/SSHKN6/installer/landing_installer.html) to install IBM Common services.
 
-Once the common services are installed, IBM Licensing service would be accessible by the UCD server by running OperandRequest to copy the license service secret(ibm-licensing-upload-token secret) and configmap(ibm-licensing-upload-config configmap). Please follow the instructions at https://www.ibm.com/support/knowledgecenter/SSHKN6/installer/3.x.x/bind_info.html#license-bind to copy the secret and configmap into your desired namespace. It is required to run OperandRequest only for the ibm-licensing-operator. Following is an example OperandRequest yaml which was tested with IBM Common Services operator 3.6.3.
+Once the common services are installed, the IBM Licensing service can be made accessible to the UCD server by creating an OperandRequest resource to copy the license service secret(ibm-licensing-upload-token) and configmap(ibm-licensing-upload-config) to the namespace/project the UCD server will be installed in. Click [here](https://www.ibm.com/support/knowledgecenter/SSHKN6/installer/3.x.x/bind_info.html#license-bind) for more information.  It is only required to create an OperandRequest resource with the ibm-licensing-operator information. Following is an example yaml file contents that would create an OperandRequest which was tested with IBM Common services 3.23.0.  Add the following yaml to a file named operandrequest.yaml and then run `oc apply -f ./operandrequest.yaml` in the namespace/project where the UCD server will be installed.
 
 ```yaml
 apiVersion: operator.ibm.com/v1alpha1
@@ -298,6 +274,10 @@ To retrieve license usage data, please follow these [instructions](https://www.i
 
 * 4GB of RAM, plus 4MB of RAM for each agent
 * 2 CPU cores, plus 2 cores for each 500 agents
+
+## Client Data Storage Locations
+
+All client data is stored in either the user specified database or the appdata persistent volume.  UrbanCode Deploy does not do any active encryption of these data locations.  These locations should be included in whatever backup plans the user chooses to implement.
 
 ## Installing the Chart
 
@@ -327,7 +307,7 @@ See the instructions (from NOTES.txt within chart) after the helm installation c
 
 ## Upgrading the Chart
 
-Check [here](https://developer.ibm.com/urbancode/docs/running-urbancode-deploy-container-kubernetes/#upgrading-ucd-chart) for information about ugrading the chart.
+Check [here](https://community.ibm.com/community/user/wasdevops/blogs/laurel-dickson-bull1/2022/07/08/container-upgrade) for information about ugrading the chart.
 
 ## Uninstalling the Chart
 
@@ -339,6 +319,73 @@ $ helm delete my-ucd-release
 
 The command removes all the Kubernetes components associated with the chart and deletes the release.
 
+## Disaster Recovery
+
+Backup product data and essential Kubernetes resources so that you can recover your UCD server instance after a disaster.
+
+### Backup Kubernetes Resources
+
+Backup the Kubernetes resoures required to redeploy the UCD server after a disaster.  Follow these steps to save the configuration of essential Kubernetes resources.
+
+1. Save Helm values
+   Run the following command to save a local copy of the Helm values file
+```bash
+helm get values <Helm-release-name> --namespace <ucd_namespace> --all >savedHelmValues.yaml
+```
+2. Save secret containing UCD server product passwords
+   Find the value for the Values.secret.name property in the saved Helm values file above.  This is the name of the secret we want to save a local copy of.  Run the following command, replacing **ucdsecrets_name** with the value from the values.secret.name property.
+```bash
+oc get secret <ucdsecrets_name> -n <ucd_namespace> -o yaml > <ucdsecrets_name>.yaml
+```
+3. Save image pull secret
+   Find the value for the Values.image.secret property in the saved Helm values file above.  This is the name of the secret used to pull images from the IBM Entitled Registry.  Run the following command, replacing **ibm-entitlement-key** with the value from the Values.image.secret property.
+```bash
+oc get secret <ibm-entitlement-key> -n <ucd_namespace> -o yaml > <ibm-entitlement-key>.yaml
+```
+4. Save ext-lib configmap
+
+   If a configmap was used to load the JDBC driver file into the ext-lib Persistent Volume, you will need to save a local copy of it.
+   Find the value for the Values.extLibVolume.configMapName property in the saved Helm values file above.
+   Run the following command, replacing **configMapName** with the value from the Values.extLibVolume.configMapName property.
+```bash
+oc get secret <configMapName> -n <ucd_namespace> -o yaml > <configMapName>.yaml
+```
+
+### Backup Product Data
+
+Backup the database and appdata directory used by the UCD server.  To ensure the most accurate saving of data, no deployments should be active.  Follow these steps to take a backup of the server.
+
+1. Scale the statefulset resource to 0 to shutdown the UCD server.
+2. Create a full backup of the database.  For instructions on backing up the database, see the documentation from your database vendor.
+3. Backup the appdata Persistent Volume.
+4. Backup the ext-lib Persistent Volume.
+5. Scale the statefulset resource to 1 to restart the UCD server.
+
+### Recover from a disaster
+
+If you have successfully backed up the resources and data as described in [Backup Kubernetes Resources](#backup-kubernetes-resources) and [Backup Product Data](#backup-product-data) you can recreate an instance of UCD server using that data.  Follow these steps to recreate your UCD server instance.
+
+1. Create a new project/namespace to hold the Kubernetes resources associated with the UCD server instance.
+2. Create the Kubernetes secret that contains the UCD server product passwords by running the following command.
+```bash
+oc apply -n <ucd_namespace> -f <ucdsecrets_name>.yaml
+```
+3. Create the image pull secret needed to access images in the IBM Entitled Registry by running the following command.
+```bash
+oc apply -n <ucd_namespace> -f <ibm-entitlement-key>.yaml
+```
+4. If your original UCD server instance used a configMap resource to load the JDBC driver file into the ext-lib Persistent Volume, then recreate that configMap resource by running the following command.
+```bash
+oc apply -n <ucd_namespace> -f <configMapName>.yaml
+```
+Create the ext-lib Persistent Volume that the JDBC driver file will be loaded into.  Also create a Persistent Volume Claim that references the ext-lib Persistent Volume.  If you are not using a configMap to load the JDBC driver file into the ext-lib Persistent Volume, you will need to manually copy the JDBC driver file into the Persistent Volume.
+5. Create the appdata Persistent Volume and associated Persistent Volume Claim and load the saved appdata directory contents into the Persistent Volume.
+6. Follow the directions from your database vendor to create a new database from the backup/clone.
+7. Create a values.yaml file that contains the properties and values from your savedHelmValues.yaml file.  Be sure that the Values.extLibVolume.existingClaimName and Values.appDataVolume.existingClaimName fields are set to the Persistent Volume Claims for the new ext-lib and appdata Persistent Volumes.  Also be sure that the database fields Values.database.* refer to the new database instance created in the step above.
+8. Create the new UCD server instance by running the following command.
+```bash
+helm install my-recovered-release ibm-helm/ibm-ucd-prod --namespace <ucd_namespace> --values myRecoveredValues.yaml
+```
 
 ## Configuration
 
