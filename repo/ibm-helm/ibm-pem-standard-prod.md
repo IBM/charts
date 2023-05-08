@@ -57,7 +57,11 @@ This chart deploys IBM Partner Engagement Manager Standard cluster on a containe
 16. When installing the chart on a database with new image upgrade,
 * ensure that `dbsetup.upgrade` parameter is set to `true`.
 
-17. Apply security context contraints to created service account.
+17. Create service account and apply security context contraints to created service account.
+
+    ```
+     oc create sa <service account name>
+	   ```
 
     ```
      oc adm policy add-scc-to-user ibm-pem-scc system:serviceaccount:<namespace>:<service account name>
@@ -78,9 +82,9 @@ Note: For kubernetes version 1.25 or higher apiVersion for the PodSecurityPolicy
     apiVersion: policy/v1beta1
     kind: PodSecurityPolicy
     metadata:
-      name: "ibm-b2bi-psp"
+      name: "ibm-pem-psp"
       labels:
-        app: "ibm-b2bi-psp"
+        app: "ibm-pem-psp"
 
     spec:
       privileged: false
@@ -145,18 +149,52 @@ Note: For kubernetes version 1.25 or higher apiVersion for the PodSecurityPolicy
     apiVersion: rbac.authorization.k8s.io/v1
     kind: ClusterRole
     metadata:
-      name: "ibm-b2bi-psp"
+      name: "ibm-pem-psp"
       labels:
-        app: "ibm-b2bi-psp"
+        app: "ibm-pem-psp"
     rules:
     - apiGroups:
       - policy
       resourceNames:
-      - "ibm-b2bi-psp"
+      - "ibm-pem-psp"
       resources:
       - podsecuritypolicies
       verbs:
       - use
+  - apiGroups:
+      - ""
+      resources:
+      - secrets
+      verbs:
+      - get
+      - list
+      - patch
+      - update
+  - apiGroups:
+      - apps
+      resources:
+      - deployments
+      verbs:
+      - get
+      - list
+      - patch
+      - update
+    ```
+- Create a rolebinding for the above role and the service account:
+    ```
+    kind: RoleBinding
+    apiVersion: rbac.authorization.k8s.io/v1
+    metadata:
+      name: <rolebinding name>
+      namespace: <namespace>
+    subjects:
+      - kind: ServiceAccount
+        name: <service account>
+        namespace: <namespace>
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: ibm-pem-psp
     ```
 
 ### SecurityContextConstraints Requirements
@@ -171,9 +209,9 @@ This chart optionally defines a custom SecurityContextConstraints (on Red Hat Op
     apiVersion: security.openshift.io/v1
     kind: SecurityContextConstraints
     metadata:
-      name: ibm-b2bi-scc
+      name: ibm-pem-scc
       labels:
-       app: "ibm-b2bi-scc"
+       app: "ibm-pem-scc"
     allowHostDirVolumePlugin: false
     allowHostIPC: false
     allowHostNetwork: false
@@ -242,18 +280,52 @@ This chart optionally defines a custom SecurityContextConstraints (on Red Hat Op
     apiVersion: rbac.authorization.k8s.io/v1
 	kind: ClusterRole
 	metadata:
-     name: "ibm-b2bi-scc"
+     name: "ibm-pem-scc"
      labels:
-      app: "ibm-b2bi-scc"
+      app: "ibm-pem-scc"
 	rules:
 	- apiGroups:
   	  - security.openshift.io
   	  resourceNames:
-      - "ibm-b2bi-scc"
+      - "ibm-pem-scc"
       resources:
       - securitycontextconstraints
       verbs:
       - use
+  - apiGroups:
+      - ""
+      resources:
+      - secrets
+      verbs:
+      - get
+      - list
+      - patch
+      - update
+  - apiGroups:
+      - apps
+      resources:
+      - deployments
+      verbs:
+      - get
+      - list
+      - patch
+      - update
+    ```
+- Create a rolebinding for the above role and the service account:
+    ```
+    kind: RoleBinding
+    apiVersion: rbac.authorization.k8s.io/v1
+    metadata:
+      name: <rolebinding name>
+      namespace: <namespace>
+    subjects:
+      - kind: ServiceAccount
+        name: <service account>
+        namespace: <namespace>
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: ibm-pem-scc
     ```
 
 ## Resources Required
@@ -281,7 +353,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | Parameter                | Description             | Default        |
 | ------------------------ | ----------------------- | -------------- |
 | `image.name` | Provide the value in double quotes | `"cp.icr.io/cp/ibm-pem/pem"` |
-| `image.tag` | Specify the tag name | `"6.2.2"` |
+| `image.tag` | Specify the tag name | `"6.2.2.1"` |
 | `image.pullPolicy` |  | `null` |
 | `image.pullSecret` | Provide the pull secret name | `""` |
 | `arch` | Specify architecture (amd64, s390x) | `"amd64"` |
@@ -307,7 +379,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `volumeClaims.logs.accessModes` |  | `["ReadWriteMany"]` |
 | `test.image.repository` |  | `"cp.icr.io/cp"` |
 | `test.image.name` |  | `"opencontent-common-utils"` |
-| `test.image.tag` |  | `"1.1.36"` |
+| `test.image.tag` |  | `"1.1.60"` |
 | `test.image.pullPolicy` |  | `"IfNotPresent"` |
 | `dbsetup.enabled` | If it is first installation specify the values true | `false` |
 | `dbsetup.upgrade` | If it is upgrade Specify the values to true | `true` |
@@ -551,7 +623,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.install` |  | `true` |
 | `communitymanager.image.repository` | Specify the repository | `"cp.icr.io/cp/ibm-pem/pem"` |
 | `communitymanager.image.pullPolicy` | Specify te image pull policy | `null` |
-| `communitymanager.image.tag` | Specify the tag name | `"6.2.2"` |
+| `communitymanager.image.tag` | Specify the tag name | `"6.2.2.1"` |
 | `communitymanager.image.pullSecret` | Provide the pull secret name | `null` |
 | `communitymanager.prod.enable` | If you are want to proceed for prod pcm installation then you have to mention it as true or else false | `true` |
 | `communitymanager.prod.setupfile.acceptLicence` | We should make accept-license should be true for pcm installation | `true` |
