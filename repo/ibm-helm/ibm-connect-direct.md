@@ -1,8 +1,8 @@
-# IBM Connect Direct for Unix v6.2.0
+# IBM Connect Direct for Unix v6.3.0
 
 ## Introduction
   
-IBM® Connect:Direct® for UNIX links technologies and moves all types of information between networked systems and computers. It manages high-performance transfers by providing such features as automation, reliability, efficient use of resources, application integration, and ease of use. Connect:Direct (C:D) for UNIX offers choices in communications protocols, hardware platforms, and operating systems. It provides the flexibility to move information among mainframe systems, midrange systems, desktop systems, LAN-based workstations and cloud based storage providers (Amazon S3 Object Store for current release). To find out more, see the Knowledge Center for [IBM Connect:Direct](https://www.ibm.com/support/knowledgecenter/SS4PJT_6.2.0/cd_unix_62_welcome.html).
+IBM® Connect:Direct® for UNIX links technologies and moves all types of information between networked systems and computers. It manages high-performance transfers by providing such features as automation, reliability, efficient use of resources, application integration, and ease of use. Connect:Direct (C:D) for UNIX offers choices in communications protocols, hardware platforms, and operating systems. It provides the flexibility to move information among mainframe systems, midrange systems, desktop systems, LAN-based workstations and cloud based storage providers (Amazon S3 Object Store for current release). To find out more, see the Knowledge Center for [IBM Connect:Direct](https://www.ibm.com/support/knowledgecenter/SS4PJT_6.3.0/cd_unix_63_welcome.html).
 
 ## Chart Details
 
@@ -17,7 +17,7 @@ This chart deploys IBM Connect Direct on a container management platform with th
 
 ## Prerequisites
 
-Please refer to [Planning](https://www.ibm.com/docs/en/connect-direct/6.2.0?topic=software-planning) and [Pre-installation tasks](https://www.ibm.com/docs/en/connect-direct/6.2.0?topic=installing-pre-installation-tasks) section in the online Knowledge Center documentation. 
+Please refer to [Planning](https://www.ibm.com/docs/en/connect-direct/6.3.0?topic=software-planning) and [Pre-installation tasks](https://www.ibm.com/docs/en/connect-direct/6.3.0?topic=installing-pre-installation-tasks) section in the online Knowledge Center documentation. 
 
 ### PodSecurityPolicy Requirements
 
@@ -207,27 +207,27 @@ This chart uses the following resources by default:
 ## Agreement to IBM Connect:Direct for Unix License
 
 You must read the IBM Connect:Direct for Unix License agreement terms before installation, using the below link:
-[License](http://www-03.ibm.com/software/sla/sladb.nsf) (L/N:  L-MTAE-C5RR2U)
+[License](http://www-03.ibm.com/software/sla/sladb.nsf) (L/N:  L-FYHF-K7J2TN)
 
 ## Installing the Chart
 
-Please refer [Installing](https://www.ibm.com/docs/en/connect-direct/6.2.0?topic=software-installing) section in the online Knowledge Center documentation.
+Please refer [Installing](https://www.ibm.com/docs/en/connect-direct/6.3.0?topic=software-installing) section in the online Knowledge Center documentation.
 
 ## Configuration
 
-Please refer the [Configuring - Understanding values.yaml](https://www.ibm.com/docs/en/connect-direct/6.2.0?topic=tasks-configuring-understanding-valuesyaml) section in the online Knowledge Center documentation.
+Please refer the [Configuring - Understanding values.yaml](https://www.ibm.com/docs/en/connect-direct/6.3.0?topic=tasks-configuring-understanding-valuesyaml) section in the online Knowledge Center documentation.
 
 ## Verifying the Chart
 
-Please refer the [Validating the Installation](https://www.ibm.com/docs/en/connect-direct/6.2.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
+Please refer the [Validating the Installation](https://www.ibm.com/docs/en/connect-direct/6.3.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
 
 ## Upgrading the Chart
 
-Please refer the [Upgrade - Upgrading a Release](https://www.ibm.com/docs/en/connect-direct/6.2.0?topic=uninstall-upgrade-upgrading-release) section in the online Knowledge Center documentation.
+Please refer the [Upgrade - Upgrading a Release](https://www.ibm.com/docs/en/connect-direct/6.3.0?topic=uninstall-upgrade-upgrading-release) section in the online Knowledge Center documentation.
 
 ## Uninstalling the Chart
 
-Please refer the [Uninstall – Uninstalling a Release](https://www.ibm.com/docs/en/connect-direct/6.2.0?topic=uninstall-uninstalling-release) section in the online Knowledge Center documentation.
+Please refer the [Uninstall – Uninstalling a Release](https://www.ibm.com/docs/en/connect-direct/6.3.0?topic=uninstall-uninstalling-release) section in the online Knowledge Center documentation.
 
 ## Backup & Restore
 
@@ -268,11 +268,11 @@ Restoring the data in new deployment, it can be achieved by following steps
 
 ## Exposing Services
 
-Please refer to [Exposed Services](https://www.ibm.com/docs/en/connect-direct/6.2.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
+Please refer to [Exposed Services](https://www.ibm.com/docs/en/connect-direct/6.3.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
 
 ## DIME and DARE
 
-Please refer to [DIME and DARE Security Considerations](https://www.ibm.com/docs/en/connect-direct/6.2.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
+Please refer to [DIME and DARE Security Considerations](https://www.ibm.com/docs/en/connect-direct/6.3.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
 
 ## Limitations
 
