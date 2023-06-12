@@ -216,6 +216,11 @@ rules:
   As team admin the namespace scoped pre-install script is located at:
   - pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh
   
+### Installing a PodDisruptionBudget
+
+* defaultPodDisruptionBudget.enabled - If true, It will create a pod disruption budget for IBM Sterling Control Center Monitor pods.
+* defaultPodDisruptionBudget.minAvailable - It will specify Minimum number / percentage of pods that should remain scheduled for IBM Sterling Control Center Monitor pod.
+  
 ## Network Policy
 For Certified Container deployments, few default network policies are created out of the box as per mandatory security guidelines. By default all ingress and egress traffic are denied with few additional policies to allow communication within cluster and on ports configured in the helm charts configuration. Additionally custom ingress and egress policies can be configured in values yaml to allow traffic from and to specific external service endpoints.
 
@@ -223,14 +228,14 @@ Note: By default all ingress and egress traffic from or to external services are
 
 Out of the box Ingress policies
 
-. Deny all ingress traffic
-. Allow ingress traffic from all pods in the current namespace in the cluster
-. Allow ingress traffic on the additional configured ports in helm values
+* Deny all ingress traffic
+* Allow ingress traffic from all pods in the current namespace in the cluster
+* Allow ingress traffic on the additional configured ports in helm values
 
 Out of the box Egress policies
 
-. Deny all egress traffic
-. Allow egress traffic within the cluster
+* Deny all egress traffic
+* Allow egress traffic within the cluster
 
 ## Resources Required
 
@@ -258,7 +263,7 @@ Ensure that the chart is downloaded locally and available.
 Run the below command
 
 ```bash
-$ helm install my-release -f values.yaml ibm-sccm-3.0.1.tgz
+$ helm install my-release -f values.yaml ibm-sccm-3.0.2.tgz
 ```
 
 Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 6-7 minutes for Installing Control Center.
@@ -431,7 +436,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-sccm-1.0.11.tgz
+helm upgrade my-release -f values.yaml ibm-sccm-3.0.2.tgz
 ```
 
 ## Rollback the Chart
