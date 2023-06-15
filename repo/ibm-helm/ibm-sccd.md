@@ -1,10 +1,10 @@
-# IBM Sterling Control Center Director V6.2.1.0
+# IBM Sterling Control Center Director V6.3.0.0
 
 ## Introduction
 
-This tool contains IBM Sterling Control Center Director with Red Hat Universal Base Image(UBI). IBM▒ Control Center Director is a centralized monitoring and management system. It gives operations personnel the capability to continuously monitor the status of Configuration Managers, engines, and adapters across the enterprise for the following server types from one central location: IBM Sterling Connect:Direct▒, IBM Sterling Connect:Enterprise▒, IBM Sterling B2B Integrator, IBM Sterling File Gateway, IBM Global High Availability Mailbox, IBM Sterling Connect:Express, IBM QuickFile, IBM MQ Managed File Transfer and Many FTP servers. To find out more, see the Knowledge Center for [IBM Sterling Control Center Director](  https://www.ibm.com/docs/en/control-center/6.2.1.0?topic=sterling-control-center-director-621 ).
+IBM▒ Control Center Director is a centralized monitoring and management system. It gives operations personnel the capability to continuously monitor the status of Configuration Managers, engines, and adapters across the enterprise for the following server types from one central location: IBM Sterling Connect:Direct▒, IBM Sterling Connect:Enterprise▒, IBM Sterling B2B Integrator, IBM Sterling File Gateway, IBM Global High Availability Mailbox, IBM Sterling Connect:Express, IBM QuickFile, IBM MQ Managed File Transfer and Many FTP servers. To find out more, see the Knowledge Center for [IBM Sterling Control Center Director](https://www.ibm.com/docs/en/control-center/6.3.0?topic=630-control-center-director).
 
-## Details
+## Chart Details
 
 This chart deploys IBM Sterling Control Center Director on a container management platform with the following resources deployments
 
@@ -12,195 +12,35 @@ This chart deploys IBM Sterling Control Center Director on a container managemen
 - a configMap `<release-name>-ibm-sccd`. This is used to provide default configuration in scc_config_file.
 - a service `<release-name>-ibm-sccd`. This is used to expose the Control Center Director services for accessing using clients.
 - a service-account `<release-name>-ibm-sccd-serviceaccount`. This service will not be created if `serviceAccount.create` is `false`.
-- a persistence volume claim `<release-name>-ibm-sccd-pvc`.
+- a persistence volume claim `<release-name>-ibm-sccd-pvc-ccm`.
+- a persistence volume claim `<release-name>-ibm-sccd-pvc-ui`.
 
 ## Prerequisites
 
-### Chart Image Bundle (Prereq #1)
+1. Red Hat OpenShift Container Platform Version 4.10.0 or later fixes
+2. Kubernetes version >= 1.23 with beta APIs enabled.
+3. Helm version >= 3.2
+4. Ensure that one of the supported database server (Oracle/DB2/MSSQL) is installed and the database is accessible from inside the cluster.
+5. Ensure that the docker images for IBM Sterling Control Center Director from IBM Entitled Registry are downloaded and pushed to an image registry accessible to the cluster.
+6. Database driver files can be passed using any one of the following ways:
+a. Create a persistent volume with access mode as 'Read Only Many' and place the database driver jar files in the mapped volume location.
+b. Create a wrapper image over existing control center image and add database driver files to that new image and give that path in configuration of control center. Sample Dockerfile content can be found at location ibm_cloud_pak/pak_extensions/pre-install/wrapper/.
+c. Create an image that includes database drivers, specify that image as extra init container and use command to copy drivers to one of shared mapped location so that main container can access those drivers.
 
-Before you install IBM Certified Container Software for IBM Sterling Control Center Director, ensure that the installation files are available on your client system.
-
-#### Downloading the IBM Certified Container Software helm chart from IBM Chart repository
-You can download the IBM CCS for IBM Sterling Control Center Director helm chart from [IBM Public chart repository](https://www.ibm.com/links?url=https://github.com/IBM/charts/tree/master/repo/ibm-helm/ibm-sccd-1.0.9.tgz).
-
-
-####  Downloading the IBM Certified Container Software image from IBM Entitled Registry for AirGap Environment
-You can download the container image from IBM Entitled registry by using either `cloudctl` or `docker/podman` utility.
-
-**1. Downloading the IBM Certified Container Software image using `cloudctl` utility:** 
-- Download latest version of cloudctl CLI from [Cloud Pak CLI](https://www.ibm.com/links?url=https://github.com/IBM/cloud-pak-cli/releases). 
-- Download and extract the CASE bundle file
-```
-cloudctl case save -t 1 --case https://github.com/IBM/cloud-pak/raw/master/repo/case/ibm-sccd/1.0.7/ibm-sccd-1.0.7.tgz --outputdir download_dir/ && tar -xf download_dir/ibm-sccd-1.0.7.tgz
-```
-> **Note**: download_dir is the output directory in which the BM Sterling Control Center Director resources are placed. The output directory is created if it does not exist. You can choose an arbitrary name for --outputdir if required.` 
-
-- Log in to the OCP cluster as cluster-admin role
-```
-oc login <openshift_url> -u <username> -p <password> -n <namespace>
-```
-- Configure the authentication credentials (URL, username, and password) for both your local Docker registry and the IBM Entitled Registry by running the following commands:
-```
-cloudctl case launch \
- --case ibm-sccd \
- --inventory ibmSccd \
- --action configure-creds-airgap \
- --args "--registry cp.icr.io --user cp --pass <entitled_key>" -t 1
-```
-```
-cloudctl case launch \
---case ibm-sccd \
---inventory ibmSccd \
---action configure-creds-airgap \
---args "--registry <LOCAL_DOCKER_REGISTRY_REPOSITORY> --user <username> --pass <password> --inputDir download_dir/" -t 1
-```
-- Configure global image pull secret and imageContentSourcePolicy resource by running the following command:
-```
-cloudctl case launch \
---case ibm-sccd \
---inventory ibmSccd \
---namespace control-center \
---action configure-cluster-airgap \
---args "--registry <LOCAL_DOCKER_REGISTRY_REPOSITORY> --inputDir download_dir/" -t 1 
-```
-- Mirror the images to the Docker registry by running the following command:
-```
-cloudctl case launch \
---case ibm-sccd \
---inventory ibmSccd \
---action mirror-images \
---args "--registry <LOCAL_DOCKER_REGISTRY_REPOSITORY>  --inputDir download_dir/" -t 1 
-```
-- During the helm chart deployment change the value from `false` to `true` for `image.digest.enabled` tag in values.yaml file.
-
-**2. Downloading the IBM Certified Container Software image using `docker/podman` utility:**  
-- Log in to the IBM Entitled registry by running the following command:   
-  * `docker/podman login -u cp -p <entitled_key> cp.icr.io`
-
-- Pull the container image from IBM Entitled registry by running the following command:
-  * `docker/podman pull cp.icr.io/cp/ibm-scc/ibmscc:6.2.1_ifix07`
-
-- Tag and push the container image into local repository by running the following commands: 
-  * `docker/podman tag cp.icr.io/cp/ibm-scc/ibmscc:6.2.1_ifix07 <LOCAL_DOCKER_REGISTRY_REPOSITORY>/ibm-scc/ibmscc:6.2.1_ifix07`
-  * `docker/podman push <LOCAL_DOCKER_REGISTRY_REPOSITORY>/ibm-scc/ibmscc:6.2.1_ifix07`
-
-### Tools (Prereq #2)
-
-To install chart from the command prompt, tools needed are:
-
-- Kubernetes version >= `1.19.0`
-- Helm version >= `3.0`
-- OpenShift version = `4.6`
-- The `kubectl` and `helm` commands available
-- The environment should be configured to connect to the target cluster
-
-
-### Storage (Prereq #3)
-
-- [Persistent Volume](http://kubernetes.io/docs/user-guide/persistent-volumes/) is recommended for storage. It can be created by using a yaml file as the following examples. The `ReadWriteMany` accessmode is recommended for creating persistent volume.
-
-Peristent volume using NFS server
-```
-kind: PersistentVolume
-apiVersion: v1
-metadata:
-  name: <persistent volume name>
-  labels:
-    app.kubernetes.io/name: <persistent volume name>
-    app.kubernetes.io/instance: <release name>
-    app.kubernetes.io/managed-by: <service name>
-    helm.sh/chart: <chart name>
-    release: <release name>
-spec:
-  storageClassName: <storage classname>
-  capacity:
-    storage: <storage size>
-  accessModes:
-    - ReadWriteMany
-  nfs:
-    server: <NFS server IP address>
-    path: <mount path>
-```
-
-Peristent volume using Host Path
-```
-kind: PersistentVolume
-apiVersion: v1
-metadata:
-  name: <persistent volume name>
-  labels:
-    app.kubernetes.io/name: <persistent volume name>
-    app.kubernetes.io/instance: <release name>
-    app.kubernetes.io/managed-by: <service name>
-    helm.sh/chart: <chart name>
-    release: <release name>
-spec:
-  storageClassName: <storage classname>
-  capacity:
-    storage: <storage size>
-  accessModes:
-    - ReadWriteOnce
-  hostPath:
-    path: <mount path>
-```
-
-```
-kubectl create -f <peristentVolume yaml file>
-```
-
-### Secret (Prereq #4)
-
-To separate application secrets from the Helm release. A secret can be preinstalled with the following shape and referenced from the Helm chart with `secret.secretName` value.
-For jre certificates, we need one more secret that will be used for passing certificates to container and it will be eferenced from the Helm chart with `secret.certsSecretName` value.
-
-```
-apiVersion: v1
-kind: Secret
-metadata:
-  name: <secret name>
-type: Opaque
-data:
-  .ccDBPassword: <base64 encoded password>
-  .adminUserId: <base64 encoded user id>
-  .adminUserPassword: <base64 encoded admin password>
-  .trustStorePassword: <base64 encoded password>
-  .keyStorePassword: <base64 encoded password>
-  .emailPassword: <base64 encoded password>
-  .jmsUserId: <base64 encoded user id>
-  .jmsPassword: <base64 encoded password>
-  .userKey: <base64 encoded user key>
-
-```
-
-```
-kubectl create -f <secret yaml file>
-```
-
-> **Tip**: Use `echo -n "<password>" | base64` to encode to base64
-
-The IBM Control Center secret would be created with data described as below: -
-
-|----------------------|-------------------------------------------------------------------------------------------|
-| Parameter            | Description                                                                               |
-|----------------------|-------------------------------------------------------------------------------------------|
-|`.adminUserId`        | Username of Control Center                                                                |
-|`.adminUserPassword`  | Password of user of Control Center                                                        |
-|`.ccDBPassword`       | Password of Database of Control Center                                                    |
-|`.emailPassword`      | Email password of Control Center                                                          |
-|`.jmsPassword`        | JMS user password of Control Center                                                       |
-|`.jmsUserId`          | JMS user ID of Control Center                                                             |
-|`.keyStorePassword`   | Keystore password of Control Center                                                       |
-|`.userKey`  		   | user key for Control Center                                               |
-|`.trustStorePassword` | Truststore password of Control Center                                                     |
-|----------------------|-------------------------------------------------------------------------------------------|
-
-Secret for certificates will be used by following command:
-
+7. Keystore and trust store files can be passed using one of the following ways:
+a. Create a persistent volume with access mode as 'Read Only Many' and place the Key store and trust store files in the mapped volume location.
+b. Key store and trust store files can be specified using kubernetes secrets using following command
 ```
 kubectl create secret generic ibm-sccd-certs --from-file=keystore=<path to keystore file> --from-file=truststore=<path to truststore file>
 ```
 
-> **Note**: You must replace <password> with your own passwords in <secret yaml file> and once secret is created, delete the yaml file for security. The password provided to adminPassword will be set as admin password for user `admin` during configuring Control Center.
+8. Create a persistent volume for mapping configuration and logs of Control Center. Sample file can be found at location ibm_cloud_pak/pak_extensions/pre-install/volumes/
+9. Create a secret with all secure credentials such as database password, keystore, truststore passwords, admin password and user key. Example can be found at ibm_cloud_pak/pak_extensions/pre-install/secret/.
+
+10. Create a secret to pull the image from a private registry or repository using following command
+```
+kubectl create secret docker-registry <name of secret> --docker-server=<your-registry-server> --docker-username=<your-username> --docker-password=<your-password> --docker-email=<your-email>
+```
 
 ### PodSecurityPolicy Requirements
 
@@ -303,55 +143,49 @@ This chart optionally defines a custom SecurityContextConstraints (on Red Hat Op
 * Custom SecurityContextConstraints definition:
 
 ```
-apiVersion: security.openshift.io/v1
-kind: SecurityContextConstraints
-metadata:
-  name: ibm-sccd-scc
-  labels:
-    app: "ibm-sccd-scc"
 allowHostDirVolumePlugin: false
 allowHostIPC: false
 allowHostNetwork: false
 allowHostPID: false
 allowHostPorts: false
-privileged: false
 allowPrivilegeEscalation: true
 allowPrivilegedContainer: false
-allowedCapabilities:
-- FOWNER
-- CHOWN
-- SETGID
-- SETUID
-- DAC_OVERRIDE
-defaultAddCapabilities: []
-defaultAllowPrivilegeEscalation: false
-forbiddenSysctls:
-- "*"
+allowedCapabilities: null
+apiVersion: security.openshift.io/v1
+defaultAddCapabilities: null
 fsGroup:
   type: MustRunAs
   ranges:
   - min: 1
     max: 4294967294
+kind: SecurityContextConstraints
+metadata:
+  name: ibm-sccd-scc 
+  labels:
+    app: "ibm-sccd-scc"
+priority: null
 readOnlyRootFilesystem: false
-requiredDropCapabilities: []
+requiredDropCapabilities:
+- KILL
+- MKNOD
+- SETUID
+- SETGID
 runAsUser:
   type: MustRunAsRange
   uidRangeMin: 1000
   uidRangeMax: 65535
 seLinuxContext:
-  type: RunAsAny
+  type: MustRunAs
 supplementalGroups:
   type: RunAsAny
-  ranges:
-  - min: 1
-    max: 4294967294
+users: []
 volumes:
 - configMap
 - downwardAPI
+- emptyDir
 - persistentVolumeClaim
 - projected
 - secret
-- nfs
 ```
 
 - Custom ClusterRole for the custom SecurityContextConstraints:
@@ -381,6 +215,27 @@ rules:
 
   As team admin the namespace scoped pre-install script is located at:
   - pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh
+  
+### Installing a PodDisruptionBudget
+
+* defaultPodDisruptionBudget.enabled - If true, It will create a pod disruption budget for IBM Sterling Control Center Director pods.
+* defaultPodDisruptionBudget.minAvailable - It will specify Minimum number / percentage of pods that should remain scheduled for IBM Sterling Control Center Director pod.
+  
+## Network Policy
+For Certified Container deployments, few default network policies are created out of the box as per mandatory security guidelines. By default all ingress and egress traffic are denied with few additional policies to allow communication within cluster and on ports configured in the helm charts configuration. Additionally custom ingress and egress policies can be configured in values yaml to allow traffic from and to specific external service endpoints.
+
+Note: By default all ingress and egress traffic from or to external services are denied. You will need to create custom network policies to allow ingress and egress traffic from or to services outside of the cluster like database, MQ, protocol adapter endpoints, any other third party service integration and so on.
+
+Out of the box Ingress policies
+
+* Deny all ingress traffic
+* Allow ingress traffic from all pods in the current namespace in the cluster
+* Allow ingress traffic on the additional configured ports in helm values
+
+Out of the box Egress policies
+
+* Deny all egress traffic
+* Allow egress traffic within the cluster
 
 ## Resources Required
 
@@ -397,37 +252,26 @@ This chart uses the following resources by default:
 You must read the IBM Sterling Control Center License agreement terms before installation, using the below link:
 [License] https://www-40.ibm.com/software/sla/sladb.nsf (L/N: L-KNAN-C6VGE3)
 
-## Installing
+## Installing the Chart
 
-To install IBM Sterling Control Center via Helm command line with the release name e.g. `my-release`.
+Prepare a custom values.yaml file based on the configuration section.
+
+To install the chart with the release name my-release:
+
+Ensure that the chart is downloaded locally and available.
+
+Run the below command
 
 ```bash
-# This below command  will show the repositories
-
-$ helm repo list
-
-# If you do not have the helm repository, add it using the below command
-
-$ helm repo add ibm-sccd-1.0.9.tgz <helm repository>
-
-# This below command will show all the charts related to the repository
-
-$ helm search <helm repository>
-
-# Finally install the respective chart
-
-$ helm install my-release -f values.yaml ibm-sccd-1.0.9.tgz
+$ helm install my-release -f values.yaml ibm-sccd-3.0.2.tgz
 ```
 
-The command deploys ibm-sccd-1.0.9.tgz chart on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured in values.yaml file during installation.
-
-> **Tip**: List all releases using `helm list`
+Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 6-7 minutes for Installing Control Center.
 
 ## Configuration
 
 The following tables lists the configurable parameters of the IBM Control Center Director chart and their default values.
 
-|-------------------------------------------------|-----------------------------------------------------|------------------------------------------|
 | Parameter                                       | Description                                         | Default                                  |
 | ------------------------------------------------| ----------------------------------------------------| -----------------------------------------|
 | `arch`                                          | Node Architecture                                   | `amd64`                                  |
@@ -437,7 +281,9 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `image.imageSecrets`                            | Image pull secrets                                  |                                          |
 | `image.pullPolicy`                              | Image pull policy                                   | `IfNotPresent`                           |
 | `ccArgs.appUserUID`                             | UID for continer user                               |                                          |
-| `ccArgs.appUserGID`                             | GID for container user                              |     									   |
+| `ccArgs.ccInterval`                             | Interval Time between pod restart                   | `2h` 									   |
+| `ccArgs.devEnvDropTables`                       | Flag for dropping table in dev environment          | `false`								   |
+| `ccArgs.enableAutoRebalanceServers`             | Auto rebalancing of monitored servers between EPs   | `true` 								   |
 | `ccArgs.productEntitilement`                    | Product Entitlement 				      			|										   |
 | `ccArgs.dbType`								  | Database Type										|										   |
 | `ccArgs.dbHost`								  | Database Hostname									|										   |
@@ -488,14 +334,14 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `ccArgs.seasPersistentConnection`				  | SEAS Persistent Connection required or not			| `N`									   |
 | `ccArgs.seasSecureProtocol`					  | SEAS Secure Protocol name							|										   |
 | `dashboard.enabled`                             | For making monitoring dashboard enabled             |                                          |
-| `persistentVolumeCCD.enabled`                   | persistent volume for all volumes except user input | `true`                                   |
-| `persistentVolumeCCD.useDynamicProvisioning`    | To use storage classes to dynamically create PV     | `false`                                  |
-| `persistentVolumeCCD.storageClassName`          | Storage class of the PVC                            | `manual`                                 |
-| `persistentVolumeCCD.size`                      | Size of PVC volume                                  | `20Gi`                                    |
-| `persistentVolumeCCD.claimName`                 | Already created PVC name                            |                                          |
-| `persistentVolumeCCD.accessMode`                | PV accessMode                                       | `ReadWriteOnce`                          |
-| `persistentVolumeCCD.selector.label`            | Label name for attaching PV                         |                                          |
-| `persistentVolumeCCD.selector.value`            | Label value for attaching PV                        | `ReadWriteOnce`                          |
+| `persistentVolumeCCM.enabled`                   | persistent volume for all volumes except user input | `true`                                   |
+| `persistentVolumeCCM.useDynamicProvisioning`    | To use storage classes to dynamically create PV     | `false`                                  |
+| `persistentVolumeCCM.storageClassName`          | Storage class of the PVC                            | `manual`                                 |
+| `persistentVolumeCCM.size`                      | Size of PVC volume                                  | `20Gi`                                    |
+| `persistentVolumeCCM.claimName`                 | Already created PVC name                            |                                          |
+| `persistentVolumeCCM.accessMode`                | PV accessMode                                       | `ReadWriteOnce`                          |
+| `persistentVolumeCCM.selector.label`            | Label name for attaching PV                         |                                          |
+| `persistentVolumeCCM.selector.value`            | Label value for attaching PV                        | `ReadWriteOnce`                          |
 | `persistentVolumeUserInputs.enabled`            | persistent volume for user input                    | `true`                                   |
 | `persistentVolumeUserInputs.useDynamicProvisioning`| To use storage classes to dynamically create PV  | `false`                                  |
 | `persistentVolumeUserInputs.storageClassName`   | Storage class of the PVC                            | `manual`                                 |
@@ -506,30 +352,37 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `persistentVolumeUserInputs.selector.value`     | Label value for attaching PV                        | `ReadWriteOnce`                          |
 | `service.type`                                  | Kubernetes service type exposing ports              | `LoadBalancer`                           |
 | `service.loadBalancerIP`                        | For passing load balancer IP                        |                                          |
+| `service.loadBalancerSourceRanges`              | Load Balancer sources                               | `[]`                                     |
 | `service.externalTrafficPolicy`                 | For passing external Traffic Policy                 | `Local`                                  |
 | `service.sessionAffinity`                       | For giving session Affinity                         | `ClientIP`                               |
 | `service.swingConsole.name`                     | Swing Console name                                  | `swing-console`                          |
 | `service.swingConsole.port`                     | Swing Console port number                           | `58080`                                  |
 | `service.swingConsole.protocol`                 | Swing Console Protocol for service                  | `TCP`                                    |
+| `service.swingConsole.allowIngressTraffic`      | Allowing Ingress traffic for Swing Console          | `true`                                   |
 | `service.webConsole.name`                       | Web Console name                                    | `web-console`                            |
 | `service.webConsole.port`                       | Web Console port number                             | `58082`                                  |
 | `service.webConsole.protocol`                   | Web Console Protocol for service                    | `TCP`                                    |
+| `service.webConsole.allowIngressTraffic`        | Allowing Ingress traffic for Web Console            | `true`                                   |
 | `service.swingConsoleSecure.name`               | Secure Swing Console Port name                      | `swing-console-secure`                   |
 | `service.swingConsoleSecure.port`               | Secure Swing Console port number                    | `58081`                                  |
 | `service.swingConsoleSecure.protocol`           | Secure Swing Console Protocol for service           | `TCP`                                    |
+| `service.swingConsoleSecure.allowIngressTraffic`| Allowing Ingress traffic for Secure Swing Console   | `true`                                   |
 | `service.webConsoleSecure.name`                 | Secure Web Console name                             | `web-console-secure`                     |
 | `service.webConsoleSecure.port`                 | Secure Web Console port number                      | `58083`                                  |
 | `service.webConsoleSecure.protocol`             | Secure Web Console Protocol for service             | `TCP`                                    |
+| `service.webConsoleSecure.allowIngressTraffic`  | Allowing Ingress traffic for Secure Web Console     | `true`                                   |
 | `service.externalIP`                            | External IP for service discovery                   |                                          |
+| `storageSecurity.fsGroup`                       | Used for controlling access to block storage        |                                          |
+| `storageSecurity.supplementalGroups`            | Groups IDs are used for controlling access          | `[]`                                     |
 | `secret.secretName`                             | Secret name for Secure Parameters                   |                                          |
 | `secret.certsSecretName`                        | Secret name for certificates                        |                                          |
 | `resources.limits.cpu`                          | Container CPU limit                                 | `3000m`                                  |
 | `resources.limits.memory`                       | Container memory limit                              | `8Gi`                                    |
 | `resources.requests.cpu`                        | Container CPU requested                             | `1500m`                                  |
 | `resources.requests.memory`                     | Container Memory requested                          | `4Gi`                                    |
-| `initResources.limits.cpu`                      | Container CPU limit                                 | `500m`                                  |
-| `initResources.limits.memory`                   | Container memory limit                              | `2Gi`                                    |
-| `initResources.requests.cpu`                    | Container CPU requested                             | `250m`                                  |
+| `initResources.limits.cpu`                      | Container CPU limit                                 | `250m`                                   |
+| `initResources.limits.memory`                   | Container memory limit                              | `1Gi`                                    |
+| `initResources.requests.cpu`                    | Container CPU requested                             | `250m`                                   |
 | `initResources.requests.memory`                 | Container Memory requested                          | `1Gi`                                    |
 | `serviceAccount.create`                         | Enable/disable service account creation             | `true`                                   |
 | `serviceAccount.name`                           | Name of Service Account to use  for container       |                                          |
@@ -543,28 +396,34 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `autoscaling.minReplicas`                       | minimum pod replica                                 | `1`                                      |
 | `autoscaling.maxReplicas`                       | Maximum pod replica                                 | `2`                                      |
 | `autoscaling.targetCPUUtilizationPercentage`    | Traget CPU Utilization                              | `60`                                     |
-| `livenessProbe.initialDelaySeconds`             | Initial delays for liveness                         | `170`                                    |
-| `livenessProbe.timeoutSeconds`                  | Timeout for liveness                                | `30`                                     |
-| `livenessProbe.periodSeconds`                   | Time period for liveness                            | `60`                                     |
-| `readinessProbe.initialDelaySeconds`            | Initial delays for readiness                        | `160`                                    |
-| `readinessProbe.timeoutSeconds`                 | Timeout for readiness                               | `5`                                      |
-| `readinessProbe.periodSeconds`                  | Time period for readiness                           | `60`                                     |
+| `autoscaling.targetMemoryUtilizationPercentage` | Traget Memory Utilization                           | `60`                                     |
+| `livenessProbe.initialDelaySeconds`             | Initial delays for liveness                         | `175`                                    |
+| `livenessProbe.timeoutSeconds`                  | Timeout for liveness                                | `45'                                     |
+| `livenessProbe.periodSeconds`                   | Time period for liveness                            | `120`                                    |
+| `readinessProbe.initialDelaySeconds`            | Initial delays for readiness                        | `175`                                    |
+| `readinessProbe.timeoutSeconds`                 | Timeout for readiness                               | `15`                                     |
+| `readinessProbe.periodSeconds`                  | Time period for readiness                           | `120`                                    |
+| `networkPolicy.egress`                          | Network Policy egress rules                         | `{}`                                     |
 | `route.enabled`                                 | Route for OpenShift Enabled/Disabled                | `false`                                  |
+| `debugScripts`                                  | This flag is used for debugging and troubleshooting | `false`                                  |
+| `extraInitContainers.name`                      | This will be used as name of init container         | `copy-resources`                         |
+| `extraInitContainers.repository`                | Image respository for init container                | ``                                       |
+| `extraInitContainers.tag`                       | Image respository tag for init container            | ``                                       |
+| `extraInitContainers.imageSecrets`              | Image secrets for init container                    | ``                                       |
+| `extraInitContainers.pullPolicy`                | Image pull policy used for init container           | `Always`                                 |
+| `extraInitContainers.command`                   | command used for running init container             | ``                                       |
+| `extraInitContainers.digest.enabled`            | Flag for using digest for images of init container  | `false`                                  |
+| `extraInitContainers.digest.value`              | Image digest value used for init container          | ``                                       |
+| `defaultPodDisruptionBudget.enabled`            | This flag will be used to enable or disable         | `false`                                  |
+| `defaultPodDisruptionBudget.minAvailable`       | Minimum replicas required for pod disruption budget | `0`                                      |
+| `ingress.enabled`       	                      | Flag to eanble or disable ingress                   | `false`                                  |
+| `ingress.host`                                  | Ingress hostname                                    |                                          |
+| `ingress.controller`                            | Ingress controller name                             |                                          |
+| `ingress.annotations`                           | annotation for ingress resource                     | `[]`                                     |
+| `ingress.tls.enabled`                           | TLS is enabled or disabled for ingress resource     | `false`                                  |
+| `ingress.tls.secretName`                        | TLS secret name if enabled                          |                                          |
 
 Specify each parameter in values.yaml to `helm install`. For example,
-
-```bash
-helm install my-release \
-  -f values.yaml \
-  ibm-sccd-1.0.9.tgz
-```
-
-Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. You can create a copy of values.yaml file e.g. my-values.yaml and edit the values that you need to override. Use the my-values.yaml file for installation. For example,
-
-```bash
-helm install <release-name> -f my-values.yaml ibm-sccd-1.0.9.tgz
-```
-> **Tip**: You can use the default [values.yaml](values.yaml)
 
 ## Affinity
 
@@ -595,7 +454,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-sccd-1.0.9.tgz
+helm upgrade my-release -f values.yaml ibm-sccd-3.0.2.tgz
 ```
 
 ## Rollback the Chart
@@ -604,8 +463,9 @@ What if we notice that we made a mistake after upgrading or upgraded environment
 
 1. Run the following command to rollback your deployments to previous version.
 
-```
+```bash
 helm rollback my-release --recreate-pods
+```
 
 2. After executing the rollback command to check is the history of a release. We only need to provide the release name `my-release`.
 
@@ -619,20 +479,13 @@ To uninstall the `my-release`
 
 ```bash
 $ helm uninstall my-release
-
-## Uninstalling the Chart
-
-To uninstall/delete the `my-release`
-
-```bash
-$ helm uninstall my-release
 ```
 
 The command removes all the Kubernetes components associated with the chart and deletes the release. Since there are certain kubernetes resources created as pre-requisite for chart, helm uninstall command will not delete them . You need to manually delete the following resources.
 
 1. The persistence volume
 
-2. The secret
+2. The secrets
 
 ## Backup & Restore
 
@@ -666,9 +519,11 @@ Restoring the data in new deployment, it can be achieved by following steps
 
 ## Exposing Services
 
-This chart creates a service of `ClusterIP` for communication within the cluster. This type can be changed while installing chart using `service.type` key defined in values.yaml. There are two ports where IBM Control Center Director processes run. Swing Console Port (58080), Web Console Port(58082) whose values can be updated during chart installation using `service.swingConsole.port`, `service.webConsole.port`.
+This chart creates a service of `LoadBalancer` for communication within the cluster. This type can be changed while installing chart using `service.type` key defined in values.yaml. There are two ports where IBM Control Center Director processes run. Swing Console Port (58080), Web Console Port(58082) whose values can be updated during chart installation using `service.swingConsole.port`, `service.webConsole.port`.
 
 IBM Control Center Director services for API and file transfer can be accessed using LoadBalancer external IP and mapped ports. If external LoadBalancer is not present then refer to Master node IP for communication.
+
+Use `networkPolicy` to control traffic flow at the port level.
 
 > **Note**: `NodePort` service type is not recommended. It exposes additional security concerns and are hard to manage from both an application and networking infrastructure perspective.
 
@@ -676,7 +531,7 @@ IBM Control Center Director services for API and file transfer can be accessed u
 
 1. All sensitive application data at rest is stored in binary format so user cannot decrypt it. This chart does not support Encryption of user data at rest by default. Administrator can configure storage encryption to encrypt all data at rest.
 
-2. Data in motion is enncrypted using transport layer security(TLS 1.2). For more information pls see product [Knowledge center link]( https://www.ibm.com/docs/en/control-center/6.2.1.0?topic=sterling-control-center-director-621 )
+2. Data in motion is encrypted using transport layer security(TLS 1.2). For more information please see product [Knowledge center link](https://www.ibm.com/docs/en/control-center/6.3.0?topic=630-control-center-director)
 
 ## Limitations
 
