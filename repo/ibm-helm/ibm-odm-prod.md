@@ -4,7 +4,7 @@ The [IBM® Operational Decision Manager](https://www.ibm.com/products/operationa
 
 ## Introduction
 
-ODM is a tool for capturing, automating, and governing repeatable business decisions. You identify situations about your business and then automate the actions to take as a result of the insight you gained about your policies and customers. For more information, see [ODM in knowledge center](https://www.ibm.com/docs/en/odm/8.11.1).
+ODM is a tool for capturing, automating, and governing repeatable business decisions. You identify situations about your business and then automate the actions to take as a result of the insight you gained about your policies and customers. For more information, see [ODM in knowledge center](https://www.ibm.com/docs/en/odm/8.12.0).
 
 **Table of Content**
 
@@ -61,7 +61,7 @@ The following architectures are supported:
           --from-literal=db-password=<password>
   ```
 
-  For details, refer to [Configuring the database](https://www.ibm.com/docs/en/odm/8.11.1?topic=production-configuring-database).
+  For details, refer to [Configuring the database](https://www.ibm.com/docs/en/odm/8.12.0?topic=production-configuring-database).
 
 Ensure you have a good understanding of the underlying concepts and technologies:
 - Docker, container
@@ -78,7 +78,7 @@ The following instructions should be executed as namespace administrator.
 1. Add the public IBM Helm charts repository
 
     ```console
-    helm repo add ibm-charts-entitled https://raw.githubusercontent.com/IBM/charts/master/repo/entitled
+    helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm
     helm repo update
     ```
 
@@ -86,8 +86,8 @@ The following instructions should be executed as namespace administrator.
 
     ```console
     helm search repo ibm-odm-prod
-    NAME                  	CHART VERSION	APP VERSION	DESCRIPTION                     
-    ibm-charts-entitled/ibm-odm-prod	22.1.0       	8.11.0.1   	IBM Operational Decision Manager
+    NAME                    CHART VERSION	APP VERSION	DESCRIPTION                     
+    ibm-helm/ibm-odm-prod	  23.1.0       	8.12.0.0   	IBM Operational Decision Manager  License By in...
     ```
 
 3. Install the chart
@@ -101,7 +101,7 @@ The following instructions should be executed as namespace administrator.
       --set license=true \
       --set usersPassword=my-password \
       --set internalDatabase.secretCredentials=my-odm-db-secret \
-      ibm-charts-entitled/ibm-odm-prod
+      ibm-helm/ibm-odm-prod
     ```
 
     > Note: In OpenShift, you must set the following parameters `--set customization.runAsUser=''`. Refer to [Required Parameters](#required-parameters) for more information.
@@ -113,7 +113,7 @@ The release is an instance of the `ibm-odm-prod` chart: all the ODM components a
 
 - Review the [product license](LICENSES/LICENSE-EN) and set `license=true` to accept the license agreement.
 
-- If you want to use the default user access, you **must** define a password to be used by the default users like *odmAdmin* by setting the parameter `usersPassword`. Refer to [Configuring user access](https://www.ibm.com/docs/en/odm/8.11.1?topic=production-configuring-user-access) to provide customized user access.
+- If you want to use the default user access, you **must** define a password to be used by the default users like *odmAdmin* by setting the parameter `usersPassword`. Refer to [Configuring user access](https://www.ibm.com/docs/en/odm/8.12.0?topic=production-configuring-user-access) to provide customized user access.
 
 - Specify the name of the secret, created in [Prerequisites](#prerequisites) section, as the value for the parameters `internalDatabase.secretCredentials` or `externalDatabase.secretCredentials`, depending on the type of database you use.
 
@@ -124,12 +124,12 @@ The release is an instance of the `ibm-odm-prod` chart: all the ODM components a
     --set usersPassword=my-password \
     --set internalDatabase.secretCredentials=my-odm-db-secret \
     --set customization.runAsUser='' \
-    ibm-charts-entitled/ibm-odm-prod
+    ibm-helm/ibm-odm-prod
   ```
   > **Note**: Similarly, if you use the internal database, `internalDatabase.runAsUser` should be set empty.
   For more information, refer to the [Red Hat OpenShift SecurityContextConstraints Requirements](#red-hat-openshift-securitycontextconstraints-requirements) section.
 
-Refer to the [Configuration](#configuration) section for advanced configuration. You can find the default values of all parameters in the [ODM for production configuration parameters](https://www.ibm.com/docs/en/odm/8.11.1?topic=reference-odm-production-configuration-parameters).
+Refer to the [Configuration](#configuration) section for advanced configuration. You can find the default values of all parameters in the [ODM for production configuration parameters](https://www.ibm.com/docs/en/odm/8.12.0?topic=reference-odm-production-configuration-parameters).
 
 ### Using helm template
 
@@ -141,13 +141,13 @@ $ helm install my-odm-prod-release \
   --set internalDatabase.databaseName=my-db \
   --set internalDatabase.secretCredentials=my-odm-db-secret \
   --validate \
-  ibm-charts-entitled/ibm-odm-prod > my-values.yaml
+  ibm-helm/ibm-odm-prod > my-values.yaml
 $ kubectl apply -f my-values.yaml
 ```
 
 ### Verifying the Chart
 
-Navigate to your release and view the service details. For details, refer to [Completing post-deployment tasks](https://www.ibm.com/docs/en/odm/8.11.1?topic=production-completing-post-deployment-tasks).
+Navigate to your release and view the service details. For details, refer to [Completing post-deployment tasks](https://www.ibm.com/docs/en/odm/8.12.0?topic=production-completing-post-deployment-tasks).
 
 ### Getting started with business rules
 
@@ -307,7 +307,7 @@ On-premise storage options supported for all architectures:
     --set license=true \
     --set internalDatabase.secretCredentials=my-odm-db-secret \
     --set serviceAccountName=ibm-odm-prod-service-account \
-    ibm-charts-entitled/ibm-odm-prod
+    ibm-helm/ibm-odm-prod
   ```
 
 ### PodSecurityPolicy Requirements
@@ -456,21 +456,21 @@ On-premise storage options supported for all architectures:
 
 ## Configuration
 
-- To use the default user access, you **must** define a password to be used by the default users like *odmAdmin* by setting the parameter `usersPassword`. If you want to provide customized user access, read [Configuring user access](https://www.ibm.com/docs/en/odm/8.11.1?topic=production-configuring-user-access).
+- To use the default user access, you **must** define a password to be used by the default users like *odmAdmin* by setting the parameter `usersPassword`. If you want to provide customized user access, read [Configuring user access](https://www.ibm.com/docs/en/odm/8.12.0?topic=production-configuring-user-access).
 
-- If you want to use a custom security certificate, read [Defining the security certificate](https://www.ibm.com/docs/en/odm/8.11.1?topic=production-defining-security-certificate)
+- If you want to use a custom security certificate, read [Defining the security certificate](https://www.ibm.com/docs/en/odm/8.12.0?topic=production-defining-security-certificate)
 
-- If you want to create your own decision services from scratch, you need to install Rule Designer from the [Eclipse Marketplace](https://marketplace.eclipse.org/content/ibm-operational-decision-manager-developers-v-811x-rule-designer).
+- If you want to create your own decision services from scratch, you need to install Rule Designer from the [Eclipse Marketplace](https://marketplace.eclipse.org/content/ibm-operational-decision-manager-developers-v-812x-rule-designer).
 
-You can find all configuration settings in the topic [Customizing ODM for production](https://www.ibm.com/docs/en/odm/8.11.1?topic=production-customizing-odm). For more details, check out the list of available [ODM for production configuration parameters](https://www.ibm.com/docs/en/odm/8.11.1?topic=reference-odm-production-configuration-parameters).
+You can find all configuration settings in the topic [Customizing ODM for production](https://www.ibm.com/docs/en/odm/8.12.0?topic=production-customizing-odm). For more details, check out the list of available [ODM for production configuration parameters](https://www.ibm.com/docs/en/odm/8.12.0?topic=reference-odm-production-configuration-parameters).
 
 ## Limitations
 
 The following ODM on premises features are not supported:
-[Features not included](https://www.ibm.com/docs/en/odm/8.11.1?topic=kubernetes-features-not-included-in-odm-certified)
+[Features not included](https://www.ibm.com/docs/en/odm/8.12.0?topic=kubernetes-features-not-included-in-odm-certified)
 
 ## Documentation
 
-See [ODM on Certified Kubernetes in knowledge center](https://www.ibm.com/docs/en/odm/8.11.1?topic=operational-decision-manager-certified-kubernetes-8111).
+See [ODM on Certified Kubernetes in knowledge center](https://www.ibm.com/docs/en/odm/8.12.0?topic=operational-decision-manager-certified-kubernetes-8120).
 
 You can find step-by-step guides on how to deploy an Operational Decision Manager (ODM) instance on different platforms (Amazon Elastic Kubernetes Service (EKS), Google Kubernetes Engine (GKE) and Azure kubernetes Service (AKS)) and configure ODM with custom SSO like Okta, in the [DecisionsDev/odm-docker-kubernetes](https://github.com/DecisionsDev/odm-docker-kubernetes/blob/master/README.md) repository.
