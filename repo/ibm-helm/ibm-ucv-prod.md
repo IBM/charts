@@ -105,23 +105,38 @@ This chart also defines a custom SecurityContextConstraints which can be used to
     ```
     apiVersion: security.openshift.io/v1
     kind: SecurityContextConstraints
+    allowPrivilegedContainer: false
+    allowHostDirVolumePlugin: false
+    allowHostIPC: false
+    allowHostNetwork: false
+    allowHostPID: false
+    allowHostPorts: false
     metadata:
       name: ibm-ucv-prod-scc
     readOnlyRootFilesystem: false
+    allowHostPID: false
     allowedCapabilities:
     - CHOWN
     - DAC_OVERRIDE
     - SETGID
     - SETUID
     - NET_BIND_SERVICE
-    seLinux:
-      type: RunAsAny
     supplementalGroups:
-      type: RunAsAny
+      type: MustRunAs
+      ranges:
+      - max: 65535
+    min: 1
     runAsUser:
-      type: RunAsAny
+      type: MustRunAsRange
+    seLinuxContext:
+      type: MustRunAs
+    seLinux:
+      type: MustRunAs
     fsGroup:
-      rule: RunAsAny
+      type: MustRunAs
+      ranges:
+      - max: 65535
+        min: 1
     volumes:
     - configMap
     - secret
