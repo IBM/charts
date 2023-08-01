@@ -1,4 +1,4 @@
-# IBM Sterling File Gateway Enterprise Edition v6.1.2.2
+# IBM Sterling File Gateway Enterprise Edition v6.1.2.3
 ## Introduction
 
 IBM Sterling File Gateway lets organizations transfer files between partners by using different protocols, conventions for naming files, and file formats. A scalable and security-enabled gateway, Sterling File Gateway enables companies to consolidate all their internet-based file transfers on a single edge gateway, which helps secure your B2B collaboration network and the data flowing through it. To find out more, see [IBM Sterling File Gateway](https://www.ibm.com/products/file-gateway) on IBM Marketplace.
@@ -406,7 +406,7 @@ Parameter                                      | Description                    
 `global.license`                               | Accept B2BI/SFG license                                              | `false`
 `global.licenseType`                           | Specify the license edition as per license agreement.                | prod
 `global.image.repository`                      | Repository for B2B docker images                                     | 
-`global.image.tag          `                   | Docker image tag                                                     | `6.1.2.2`
+`global.image.tag          `                   | Docker image tag                                                     | `6.1.2.3`
 `global.image.digest          `                | Docker image digest. Takes precedence over tag                       | 
 `global.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `global.image.pullSecret `         			   | Pull secret for repository access                                    | `ibm-entitlement-key`
@@ -421,7 +421,7 @@ Parameter                                      | Description                    
 `resourcesInit.enabled`                        | Enable resource init containers                                      | false
 `resourcesInit.image.repository`               | Repository for resource init container images                        | cp.icr.io/cp/ibm-sfg
 `resourcesInit.image.name`                     | Docker image name                                                    | sfg-resources
-`resourcesInit.image.tag`                      | Docker image tag                                                     | 6.1.2.2
+`resourcesInit.image.tag`                      | Docker image tag                                                     | 6.1.2.3
 `resourcesInit.image.digest`                   | Docker image digest. Takes precedence over tag                       | sha256:56c9dd804ccdad53cced19188569925760eb6cbe75c63ab08b62816897705c27
 `resourcesInit.image.pullPolicy`               | Pull policy for repository                                           | `IfNotPresent`
 `resourcesInit.command`                        | Command to be executed in the resource init container                |
@@ -461,10 +461,11 @@ Parameter                                      | Description                    
 `dataSetup.enabled`                            | Enable database setup job execution                                  | true
 `dataSetup.upgrade`                            | Upgrade an older release                                             | false
 `dataSetup.image.repository`                 | DB setup container image repository                                   | 
-`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.1.2.2`
+`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.1.2.3`
 `dataSetup.image.digest'                      | Docker image digest. Takes precedence over tag                       |
 `dataSetup.image.pullPolicy`                 | Pull policy for repository                                           | `IfNotPresent`
 `dataSetup.image.pullSecret`         		  | Pull secret for repository access                                    |  `ibm-entitlement-key` 
+`dataSetup.extraLabels`                        | Extra labels                                                         |
 `env.tz`                                       | Timezone for application runtime                                     | `UTC`
 `env.upgradeCompatibilityVerified`             | Indicate release upgrade compatibility verification done             | `false`
 `env.debugMode`                                | To view debug logs during pod startup                                | `false`
@@ -563,6 +564,7 @@ name	                                         |
 `asi.frontendService.ports.restHttpAdapter.protocol`              | Service port connection protocol                                   | `TCP`
 `asi.frontendService.extraPorts`                       | Extra ports for service                                              |
 `asi.frontendService.loadBalancerIP`                   | LoadBalancer IP for service                                          |
+`asi.frontendService.loadBalancerSourceRanges`        | LoadBalancer IP Ranges for service                                          |
 `asi.frontendService.annotations`                      | Additional annotations for the asi frontendService                   |
 `asi.backendService.type`                             | Service type                                                         | `LoadBalancer`
 `asi.backendService.sessionAffinity`                       | Used to maintain session affinity                                    | `None`
@@ -571,6 +573,7 @@ name	                                         |
 `asi.backendService.ports`                       | Ports for service                                              |  
 `asi.backendService.portRanges`                       | Port ranges for service                                              |
 `asi.backendService.loadBalancerIP`                   | LoadBalancer IP for service                                          |
+`asi.backendService.loadBalancerSourceRanges`        | LoadBalancer IP Ranges for service                                          |
 `asi.backendService.annotations`                      | Additional annotations for the asi backendService                    |
 `asi.livenessProbe.initialDelaySeconds`        | Livenessprobe initial delay in seconds                               | 60
 `asi.livenessProbe.timeoutSeconds`             | Livenessprobe timeout in seconds                                     | 30
@@ -641,6 +644,7 @@ name	                                         |
 `ac.frontendService.ports.http.protocol`              | Service port connection protocol                                     | `TCP`
 `ac.frontendService.extraPorts`                       | Extra ports for service                                              | 
 `ac.frontendService.loadBalancerIP`                   | LoadBalancer IP for service                                          | 
+`ac.frontendService.loadBalancerSourceRanges`        | LoadBalancer IP Ranges for service                                          |
 `ac.frontendService.annotations`                     | Additional annotations for the ac frontendService                     |
 `ac.backendService.type`                              | Service type                                                         | `LoadBalancer`
 `ac.backendService.sessionAffinity`                       | Used to maintain session affinity                                    | `None`
@@ -649,6 +653,7 @@ name	                                         |
 `ac.backendService.ports`                       | Ports for service                                              |  
 `ac.backendService.portRanges`                       | Port ranges for service                                              |
 `ac.backendService.loadBalancerIP`                  | LoadBalancer IP for service                                          |
+`ac.backendService.loadBalancerSourceRanges`        | LoadBalancer IP Ranges for service                                          | 
 `ac.backendService.annotations`                     | Additional annotations for the ac backendService                     |
 `ac.livenessProbe.initialDelaySeconds`        | Livenessprobe initial delay in seconds                               | 60
 `ac.livenessProbe.timeoutSeconds`             | Livenessprobe timeout in seconds                                     | 5
@@ -712,6 +717,7 @@ name	                                         |
 `api.frontendService.ports.https.protocol`             | Service port connection protocol                                     | `TCP`
 `api.frontendService.extraPorts`                       | Extra ports for service                                              | 
 `api.frontendService.loadBalancerIP`                   | LoadBalancer IP for service                                          |
+`api.frontendService.loadBalancerSourceRanges`        | LoadBalancer IP Ranges for service                                          |
 `api.frontendService.annotations`                      | Additional annotations for the api frontendService                   |
 `api.livenessProbe.initialDelaySeconds`        | Livenessprobe initial delay in seconds                               | 60
 `api.livenessProbe.timeoutSeconds`             | Livenessprobe timeout in seconds                                     | 5
@@ -759,12 +765,14 @@ name	                                         |
 `test.image.tag          `                     | helm test and cleanup docker image tag                               | `1.1.60`
 `test.image.digest          `                  | helm test and cleanup docker image digest. Takes precedence over tag |
 `test.image.pullPolicy`                        | Pull policy for helm test image repository                           | `IfNotPresent`
+`test.extraLabels`                            | Extra labels                                                         |
 `purge.enabled`                                | Enable external purge job                                            | 'false'
 `purge.image.repository          `             | External purge docker image repository                               | `purge`
-`purge.image.tag          `                    | External purge image tag                                             | `6.1.2.2`
+`purge.image.tag          `                    | External purge image tag                                             | `6.1.2.3`
 `purge.image.digest          `                 | External purge image digest. Takes precedence over tag               |
 `purge.image.pullPolicy`                       | Pull policy for external purge docker image                          | `IfNotPresent`
 `purge.image.pullSecret`                       | Pull secret for repository access                                    | `ibm-entitlement-key`
+`purge.extraLabels`                            | Extra labels                                                         |
 `purge.schedule`                               | External purge job creation and execution schedule. Its a Cron format string such as 1 * * * * or 
 @hourly as schedule day/time. Please refer [Kubernetes documentation](https://kubernetes.io/docs/tasks/job/automated-tasks-with-cron-jobs/#schedule)  for further details on Cron string for schedule. Please specify the schedule value in quotes    | 
 `purge.startingDeadlineSeconds`                | Deadline in seconds for starting the job if it misses its scheduled time for any reason | 
