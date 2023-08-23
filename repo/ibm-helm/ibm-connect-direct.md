@@ -2,7 +2,7 @@
 
 ## Introduction
   
-IBM® Connect:Direct® for UNIX links technologies and moves all types of information between networked systems and computers. It manages high-performance transfers by providing such features as automation, reliability, efficient use of resources, application integration, and ease of use. Connect:Direct (C:D) for UNIX offers choices in communications protocols, hardware platforms, and operating systems. It provides the flexibility to move information among mainframe systems, midrange systems, desktop systems, LAN-based workstations and cloud based storage providers (Amazon S3 Object Store for current release). To find out more, see the Knowledge Center for [IBM Connect:Direct](https://www.ibm.com/support/knowledgecenter/SS4PJT_6.3.0/cd_unix_63_welcome.html).
+IBM® Connect:Direct® for UNIX links technologies and moves all types of information between networked systems and computers. It manages high-performance transfers by providing such features as automation, reliability, efficient use of resources, application integration, and ease of use. Connect:Direct (C:D) for UNIX offers choices in communications protocols, hardware platforms, and operating systems. It provides the flexibility to move information among mainframe systems, midrange systems, desktop systems, LAN-based workstations and cloud based storage providers (Amazon S3 Object Store for current release). To find out more, see the Knowledge Center for [IBM Connect:Direct for UNIX](https://www.ibm.com/docs/en/connect-direct/6.3.0?topic=sterling-connectdirect-unix-v63).
 
 ## Chart Details
 
@@ -17,7 +17,7 @@ This chart deploys IBM Connect Direct on a container management platform with th
 
 ## Prerequisites
 
-Please refer to [Planning](https://www.ibm.com/docs/en/connect-direct/6.3.0?topic=software-planning) and [Pre-installation tasks](https://www.ibm.com/docs/en/connect-direct/6.3.0?topic=installing-pre-installation-tasks) section in the online Knowledge Center documentation. 
+Please refer to [Planning](https://www.ibm.com/docs/en/connect-direct/6.3.0?topic=software-planning) section in the online Knowledge Center documentation. 
 
 ### PodSecurityPolicy Requirements
 
