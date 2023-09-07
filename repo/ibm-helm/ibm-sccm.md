@@ -46,7 +46,7 @@ kubectl create secret docker-registry <name of secret> --docker-server=<your-reg
 
 This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy.
 
-* Predefined  PodSecurityPolicy name: [`ibm-privileged-psp`](https://ibm.biz/cpkspec-psp)
+* Predefined  PodSecurityPolicy name: [`ibm-sccm-psp`](https://ibm.biz/cpkspec-psp)
 
 This chart optionally defines a custom PodSecurityPolicy which is used to finely control the permissions/capabilities needed to deploy this chart. It is based on the predefined PodSecurityPolicy name: [`ibm-restricted-psp`](https://github.com/IBM/cloud-pak/blob/master/spec/security/psp/ibm-restricted-psp.yaml) with extra required privileges. You can enable this policy by using the Platform User Interface or configuration file available under pak_extensions/pre-install/ directory
 
@@ -136,7 +136,7 @@ rules:
 
 ### SecurityContextConstraints Requirements
 
-* Predefined SecurityContextConstraints name: [`ibm-privileged-scc`](https://ibm.biz/cpkspec-scc)
+* Predefined SecurityContextConstraints name: [`ibm-sccm-scc`](https://ibm.biz/cpkspec-scc)
 
 This chart optionally defines a custom SecurityContextConstraints (on Red Hat OpenShift Container Platform) which is used to finely control the permissions/capabilities needed to deploy this chart.  It is based on the predefined SecurityContextConstraint name: [`ibm-restricted-scc`](https://github.com/IBM/cloud-pak/blob/master/spec/security/scc/ibm-restricted-scc.yaml) with extra required privileges.
 
@@ -272,7 +272,6 @@ Depending on the capacity of the kubernetes worker node and database network con
 
 The following tables lists the configurable parameters of the IBM Control Center Monitor chart and their default values.
 
-|-------------------------------------------------|-----------------------------------------------------|------------------------------------------|
 | Parameter                                       | Description                                         | Default                                  |
 | ------------------------------------------------| ----------------------------------------------------| -----------------------------------------|
 | `arch`                                          | Node Architecture                                   | `amd64`                                  |
@@ -282,7 +281,10 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `image.imageSecrets`                            | Image pull secrets                                  |                                          |
 | `image.pullPolicy`                              | Image pull policy                                   | `IfNotPresent`                           |
 | `ccArgs.appUserUID`                             | UID for continer user                               |                                          |
-| `ccArgs.appUserGID`                             | GID for container user                              |     									   |
+| `ccArgs.ccInterval`                             | Interval Time between pod restart                   | `2h` 									   |
+| `ccArgs.devEnvDropTables`                       | Flag for dropping table in dev environment          | `false`								   |
+| `ccArgs.enableAutoRebalanceServers`             | Auto rebalancing of monitored servers between EPs   | `true` 								   |
+| `ccArgs.engineNamePrefix`                       | Engine Name Prefix for EPs                          | `CCenter`                                |
 | `ccArgs.productEntitilement`                    | Product Entitlement 				      			|										   |
 | `ccArgs.dbType`								  | Database Type										|										   |
 | `ccArgs.dbHost`								  | Database Hostname									|										   |
@@ -303,6 +305,7 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `ccArgs.emailUser`							  |	Email username										|										   |
 | `ccArgs.emailRespond`							  | Responding email address							| `noone@anywhere`	                       |
 | `ccArgs.ccAdminEmailAddress`					  | Admin Email Address									| `noone@anywhere`						   |
+| `ccArgs.smtpTLSEnabled`                         | Secure TLS is enabled or Not                        |`true`                                    |
 | `ccArgs.oracleRacOrScan`						  | Oracle is Single Client Access Name or not			|										   |
 | `ccArgs.jmsEnable`							  | JMS enables or not									|										   |
 | `ccArgs.jmsType`								  | JMS type											|										   |
@@ -351,21 +354,28 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `persistentVolumeUserInputs.selector.value`     | Label value for attaching PV                        | `ReadWriteOnce`                          |
 | `service.type`                                  | Kubernetes service type exposing ports              | `LoadBalancer`                           |
 | `service.loadBalancerIP`                        | For passing load balancer IP                        |                                          |
+| `service.loadBalancerSourceRanges`              | Load Balancer sources                               | `[]`                                     |
 | `service.externalTrafficPolicy`                 | For passing external Traffic Policy                 | `Local`                                  |
 | `service.sessionAffinity`                       | For giving session Affinity                         | `ClientIP`                               |
 | `service.swingConsole.name`                     | Swing Console name                                  | `swing-console`                          |
 | `service.swingConsole.port`                     | Swing Console port number                           | `58080`                                  |
 | `service.swingConsole.protocol`                 | Swing Console Protocol for service                  | `TCP`                                    |
+| `service.swingConsole.allowIngressTraffic`      | Allowing Ingress traffic for Swing Console          | `true`                                   |
 | `service.webConsole.name`                       | Web Console name                                    | `web-console`                            |
 | `service.webConsole.port`                       | Web Console port number                             | `58082`                                  |
 | `service.webConsole.protocol`                   | Web Console Protocol for service                    | `TCP`                                    |
+| `service.webConsole.allowIngressTraffic`        | Allowing Ingress traffic for Web Console            | `true`                                   |
 | `service.swingConsoleSecure.name`               | Secure Swing Console Port name                      | `swing-console-secure`                   |
 | `service.swingConsoleSecure.port`               | Secure Swing Console port number                    | `58081`                                  |
 | `service.swingConsoleSecure.protocol`           | Secure Swing Console Protocol for service           | `TCP`                                    |
+| `service.swingConsoleSecure.allowIngressTraffic`| Allowing Ingress traffic for Secure Swing Console   | `true`                                   |
 | `service.webConsoleSecure.name`                 | Secure Web Console name                             | `web-console-secure`                     |
 | `service.webConsoleSecure.port`                 | Secure Web Console port number                      | `58083`                                  |
 | `service.webConsoleSecure.protocol`             | Secure Web Console Protocol for service             | `TCP`                                    |
+| `service.webConsoleSecure.allowIngressTraffic`  | Allowing Ingress traffic for Secure Web Console     | `true`                                   |
 | `service.externalIP`                            | External IP for service discovery                   |                                          |
+| `storageSecurity.fsGroup`                       | Used for controlling access to block storage        |                                          |
+| `storageSecurity.supplementalGroups`            | Groups IDs are used for controlling access          | `[]`                                     |
 | `secret.secretName`                             | Secret name for Secure Parameters                   |                                          |
 | `secret.certsSecretName`                        | Secret name for certificates                        |                                          |
 | `resources.limits.cpu`                          | Container CPU limit                                 | `3000m`                                  |
@@ -388,12 +398,14 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `autoscaling.minReplicas`                       | minimum pod replica                                 | `1`                                      |
 | `autoscaling.maxReplicas`                       | Maximum pod replica                                 | `2`                                      |
 | `autoscaling.targetCPUUtilizationPercentage`    | Traget CPU Utilization                              | `60`                                     |
+| `autoscaling.targetMemoryUtilizationPercentage` | Traget Memory Utilization                           | `60`                                     |
 | `livenessProbe.initialDelaySeconds`             | Initial delays for liveness                         | `175`                                    |
 | `livenessProbe.timeoutSeconds`                  | Timeout for liveness                                | `45'                                     |
 | `livenessProbe.periodSeconds`                   | Time period for liveness                            | `120`                                    |
 | `readinessProbe.initialDelaySeconds`            | Initial delays for readiness                        | `175`                                    |
 | `readinessProbe.timeoutSeconds`                 | Timeout for readiness                               | `15`                                     |
 | `readinessProbe.periodSeconds`                  | Time period for readiness                           | `120`                                    |
+| `networkPolicy.egress`                          | Network Policy egress rules                         | `{}`                                     |
 | `route.enabled`                                 | Route for OpenShift Enabled/Disabled                | `false`                                  |
 | `debugScripts`                                  | This flag is used for debugging and troubleshooting | `false`                                  |
 | `extraInitContainers.name`                      | This will be used as name of init container         | `copy-resources`                         |
@@ -404,6 +416,15 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `extraInitContainers.command`                   | command used for running init container             | ``                                       |
 | `extraInitContainers.digest.enabled`            | Flag for using digest for images of init container  | `false`                                  |
 | `extraInitContainers.digest.value`              | Image digest value used for init container          | ``                                       |
+| `extraInitContainers.userInput.enabled`         | user input should be shared volume or not           | `false`                                  |
+| `defaultPodDisruptionBudget.enabled`            | This flag will be used to enable or disable         | `false`                                  |
+| `defaultPodDisruptionBudget.minAvailable`       | Minimum replicas required for pod disruption budget | `0`                                      |
+| `ingress.enabled`       	                      | Flag to eanble or disable ingress                   | `false`                                  |
+| `ingress.host`                                  | Ingress hostname                                    |                                          |
+| `ingress.controller`                            | Ingress controller name                             |                                          |
+| `ingress.annotations`                           | annotation for ingress resource                     | `[]`                                     |
+| `ingress.tls.enabled`                           | TLS is enabled or disabled for ingress resource     | `false`                                  |
+| `ingress.tls.secretName`                        | TLS secret name if enabled                          |                                          |
 
 Specify each parameter in values.yaml to `helm install`. For example,
 
