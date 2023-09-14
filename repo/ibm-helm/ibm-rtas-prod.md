@@ -38,22 +38,22 @@ Kubernetes cluster:
 
 
 
-* [RedHat OpenShift Container Platform](https://docs.openshift.com/container-platform/4.11/release_notes/ocp-4-11-release-notes.html) v4.11 or later (x86_64)
-* [OpenShift SDN in _network policy_ mode](https://docs.openshift.com/container-platform/4.11/networking/openshift_sdn/about-openshift-sdn.html) (Optional) The default installation includes NetworkPolicy resources, these will only be acted upon if the SDN is configured appropriately.
-* [Dynamic Volume Provisioning](https://docs.openshift.com/container-platform/4.11/storage/dynamic-provisioning.html) supporting accessModes ReadWriteOnce (RWO) and ReadWriteMany (RWX).
-* [Jaeger Operator](https://docs.openshift.com/container-platform/4.11/service_mesh/v2x/installing-ossm.html#ossm-install-ossm-operator_installing-ossm) (Optional) If tests should contribute trace information and Jaeger based reports are required.
+* [RedHat OpenShift Container Platform](https://docs.openshift.com/container-platform/4.12/release_notes/ocp-4-12-release-notes.html) v4.12 or later (x86_64)
+* [OpenShift SDN in _network policy_ mode](https://docs.openshift.com/container-platform/4.12/networking/openshift_sdn/about-openshift-sdn.html) (Optional) The default installation includes NetworkPolicy resources, these will only be acted upon if the SDN is configured appropriately.
+* [Dynamic Volume Provisioning](https://docs.openshift.com/container-platform/4.12/storage/dynamic-provisioning.html) supporting accessModes ReadWriteOnce (RWO) and ReadWriteMany (RWX).
+* [Jaeger Operator](https://docs.openshift.com/container-platform/4.12/service_mesh/v2x/installing-ossm.html#ossm-install-ossm-operator_installing-ossm) (Optional) If tests should contribute trace information and Jaeger based reports are required.
 
 Installed locally:
 
-* [oc cli](https://docs.openshift.com/container-platform/4.11/cli_reference/openshift_cli/getting-started-cli.html)
-* [helm cli](https://docs.openshift.com/container-platform/4.11/applications/working_with_helm_charts/installing-helm.html) v3.11.1 or later.
+* [oc cli](https://docs.openshift.com/container-platform/4.12/cli_reference/openshift_cli/getting-started-cli.html)
+* [helm cli](https://docs.openshift.com/container-platform/4.12/applications/working_with_helm_charts/installing-helm.html) v3.11.1 or later.
 
 To install the product you need to access the cluster with cluster administrator privileges.
 
 
 ## Red Hat OpenShift SecurityContextConstraints Requirements
 
-The product is compatible with the `restricted` and `restricted-v2` [SecurityContextConstraint](https://docs.openshift.com/container-platform/4.11/authentication/managing-security-context-constraints.html#default-sccs_configuring-internal-oauth).
+The product is compatible with the `restricted` and `restricted-v2` [SecurityContextConstraint](https://docs.openshift.com/container-platform/4.12/authentication/managing-security-context-constraints.html#default-sccs_configuring-internal-oauth).
 
 If you would prefer to use the custom ibm-rtas-restricted SCC, please do the following before installation:
 
@@ -140,10 +140,10 @@ This change propagates after a couple of minutes. [Further reading](https://clou
 
 For the product to show Service Virtualization usage metrics, User Workload monitoring must be enabled in the cluster.  You should consult the OpenShift documentation for the version of the platform that you are using for details on how to do this.  For example:
 
-### OpenShift 4.11
+### OpenShift 4.12
 
 **Enabling monitoring for user-defined projects** in:
-https://docs.openshift.com/container-platform/4.11/monitoring/enabling-monitoring-for-user-defined-projects.html
+https://docs.openshift.com/container-platform/4.12/monitoring/enabling-monitoring-for-user-defined-projects.html
 
 
 
@@ -304,7 +304,7 @@ The value should be used in place of the one shown below.
 
 ```console
 helm repo update
-helm pull --untar ibm-helm/ibm-rtas-prod --version 12.1053.0
+helm pull --untar ibm-helm/ibm-rtas-prod --version 13.1054.0
 
 # update the runAsUser and fsGroup to match scc policy
 sed -i -e "s/runAsUser: 1001/runAsUser: $(oc get project test-system -oyaml \
@@ -378,7 +378,7 @@ cloudctl version
 * Install `oc`
 
 ```bash
-wget https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable-4.11/openshift-client-linux.tar.gz
+wget https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable-4.12/openshift-client-linux.tar.gz
 tar xf openshift-client-linux.tar.gz oc
 mv oc /usr/local/bin/
 oc version
@@ -413,7 +413,7 @@ oc new-project cp
 
 ```bash
 export CASE_NAME=ibm-rtas-case
-export CASE_VERSION=12.1053.0
+export CASE_VERSION=13.1054.0
 export CASE_ARCHIVE=${CASE_NAME}-${CASE_VERSION}.tgz
 export CASE_REMOTE_PATH=https://github.com/IBM/cloud-pak/raw/master/repo/case/${CASE_NAME}/${CASE_VERSION}/${CASE_ARCHIVE}
 export OFFLINEDIR=$HOME/offline
@@ -460,7 +460,7 @@ cloudctl case launch \
   --args "--registry $LOCAL_DOCKER_REGISTRY --inputDir $OFFLINEDIR"
 ```
 
-* Configure the OpenShift cluster where the product is to be installed with a [global pull secret](https://docs.openshift.com/container-platform/4.11/openshift_images/managing_images/using-image-pull-secrets.html#images-update-global-pull-secret_using-image-pull-secrets) to access the images in the registry and the [mirrored location](https://docs.openshift.com/container-platform/4.11/openshift_images/image-configuration.html#images-configuration-registry-mirror_image-configuration) so that they are not pulled from the IBM entitled registry. WARNING: This operation will result in the cluster rebooting all nodes.
+* Configure the OpenShift cluster where the product is to be installed with a [global pull secret](https://docs.openshift.com/container-platform/4.12/openshift_images/managing_images/using-image-pull-secrets.html#images-update-global-pull-secret_using-image-pull-secrets) to access the images in the registry and the [mirrored location](https://docs.openshift.com/container-platform/4.12/openshift_images/image-configuration.html#images-configuration-registry-mirror_image-configuration) so that they are not pulled from the IBM entitled registry. WARNING: This operation will result in the cluster rebooting all nodes.
 
 ```bash
 cloudctl case launch \
@@ -473,12 +473,12 @@ cloudctl case launch \
 
 _Note: the namespace argument is required for legacy reasons, its value can be any namespace that exists_
 
-If your cluster does not use a Machine Config Operator the above step will not update and reboot all nodes. In such cases you should follow [instructions](https://docs.openshift.com/container-platform/4.11/openshift_images/image-configuration.html#images-configuration-registry-mirror_image-configuration) to update `/etc/containers/registries.conf` on all nodes and reboot them.
+If your cluster does not use a Machine Config Operator the above step will not update and reboot all nodes. In such cases you should follow [instructions](https://docs.openshift.com/container-platform/4.12/openshift_images/image-configuration.html#images-configuration-registry-mirror_image-configuration) to update `/etc/containers/registries.conf` on all nodes and reboot them.
 
 * Unpack the product helm chart
 
 ```bash
-tar xf $OFFLINEDIR/charts/ibm-rtas-prod-12.1053.0.tgz
+tar xf $OFFLINEDIR/charts/ibm-rtas-prod-13.1054.0.tgz
 ```
 
 * Continue to install the product as normal but since the global pull secret has been created the pull secret is not required `oc create secret docker-registry cp.icr.io`. Naturally this secret should not be referenced in the helm install `--set global.ibmRtasRegistryPullSecret=cp.icr.io \`.
@@ -587,7 +587,7 @@ The defaults shown are not appropriate on OpenShift clusters. The `values-opensh
 
 | Parameter                                      | Description | Default |
 |------------------------------------------------|-------------|---------|
-| `gateway.allowedOrigin`                   | A comma separated list of allowed origins for CORS. For example: `*.domain.com,*.test.com,10.10.*.*`  | Empty |
+| `gateway.allowedOrigin`                   | A comma separated list of allowed origins for CORS. For example `*.domain.com,*.test.com,10.10.*.*`  | Empty |
 | `global.ibmRtasCertSecretName`                     | The name of the secret containers use to verify trust of the ingress domain when loopback occurs | ingress |
 | `global.ibmRtasCertSecretOptional`                 | If the ingress domain certificate is signed by a globally trusted CA, skip use of the secret | false |
 | `global.ibmRtasRegistryPullSecret`                    | The name of the secret used to pull images from the Entitlement Registry. | REQUIRED |
@@ -600,6 +600,7 @@ The defaults shown are not appropriate on OpenShift clusters. The `values-opensh
 | `global.persistence.rwxStorageClass`           | For environments that do not provide default StorageClasses that support ReadWriteMany (RWX) accessMode, this value must be set to the name of a suitable StorageClass that has been provisioned to support ReadWriteMany access | REQUIRED |
 | `global.rationalLicenseKeyServer`              | Where floating licenses are hosted to entitle use of the product. For example `@ip-address` | '' |
 | `clusterDomain`                                | The DNS name of the Kubernetes cluster if the default is overridden. | cluster.local |
+| `postgresql.migrate.enabled`                   | Enable Postgresql version migration on start. Migration can be disabled to avoid an unnecessary image pull when migration has already been performed or a fresh install. | true |
 | `execution.ingress.hostPattern`                | Pattern used to generate hostnames so that running assets may be accessed via ingress. | '' |
 | `execution.intercepts.clusterRole.create`      | When `network.policy` is disabled, NodePorts can be used to enable access to running assets like virtual services | true |
 | `execution.priorityClassName`                  | The products dynamic workload pods will have this priorityClass | '' |
@@ -620,13 +621,15 @@ The defaults shown are not appropriate on OpenShift clusters. The `values-opensh
 Remove the product. Note: substitute `{my-rtas}` for the Helm release name used at installation.
 
 ```bash
+# ensure clean termination of pods by removing them before secrets,configmaps,pvcs
+oc delete statefulset,deployment,replicaset,job,pod --all -n test-system
 helm uninstall {my-rtas} -n test-system
 ```
 
 Delete the orphaned dynamic workload left in the namespace.
 
 ```bash
-oc delete all,cm,secret -lapp.kubernetes.io/managed-by={my-rtas}.test-system -n test-system
+oc delete service,cm,secret -lapp.kubernetes.io/managed-by={my-rtas}.test-system -n test-system
 ```
 
 The claims and persistent volumes that contain user data are not automatically be deleted. If you re-install the product these resources will be re-used if present.
