@@ -284,7 +284,7 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `ccArgs.ccInterval`                             | Interval Time between pod restart                   | `2h` 									   |
 | `ccArgs.devEnvDropTables`                       | Flag for dropping table in dev environment          | `false`								   |
 | `ccArgs.enableAutoRebalanceServers`             | Auto rebalancing of monitored servers between EPs   | `true` 								   |
-| `ccArgs.engineNamePrefix`                       | Engine Name Prefix for EPs                          | `CCenter`                                |
+| `ccArgs.engineNamePrefix`                       | Engine Name Prefix for EPs                          |                                                                          |
 | `ccArgs.productEntitilement`                    | Product Entitlement 				      			|										   |
 | `ccArgs.dbType`								  | Database Type										|										   |
 | `ccArgs.dbHost`								  | Database Hostname									|										   |
@@ -406,6 +406,7 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `readinessProbe.timeoutSeconds`                 | Timeout for readiness                               | `15`                                     |
 | `readinessProbe.periodSeconds`                  | Time period for readiness                           | `120`                                    |
 | `networkPolicy.egress`                          | Network Policy egress rules                         | `{}`                                     |
+| `networkPolicy.ingress`                         | Network Policy ingress rules                        | `{}`                                     |
 | `route.enabled`                                 | Route for OpenShift Enabled/Disabled                | `false`                                  |
 | `debugScripts`                                  | This flag is used for debugging and troubleshooting | `false`                                  |
 | `extraInitContainers.name`                      | This will be used as name of init container         | `copy-resources`                         |
