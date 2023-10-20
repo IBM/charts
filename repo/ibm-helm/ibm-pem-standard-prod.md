@@ -353,7 +353,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | Parameter                | Description             | Default        |
 | ------------------------ | ----------------------- | -------------- |
 | `image.name` | Provide the value in double quotes | `"cp.icr.io/cp/ibm-pem/pem"` |
-| `image.tag` | Specify the tag name | `"6.2.2.1.1"` |
+| `image.tag` | Specify the tag name | `"6.2.2.1.2"` |
 | `image.pullPolicy` |  | `null` |
 | `image.pullSecret` | Provide the pull secret name | `""` |
 | `arch` | Specify architecture (amd64, s390x) | `"amd64"` |
@@ -623,9 +623,10 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.install` |  | `true` |
 | `communitymanager.image.repository` | Specify the repository | `"cp.icr.io/cp/ibm-pem/pem"` |
 | `communitymanager.image.pullPolicy` | Specify te image pull policy | `null` |
-| `communitymanager.image.tag` | Specify the tag name | `"6.2.2.1.1"` |
+| `communitymanager.image.tag` | Specify the tag name | `"6.2.2.1.2"` |
 | `communitymanager.image.pullSecret` | Provide the pull secret name | `null` |
 | `communitymanager.prod.enable` | If you are want to proceed for prod pcm installation then you have to mention it as true or else false | `true` |
+| `communitymanager.prod.setupfile.time_zone` | Specify the timezone EX:America/New_York (Country/city) | `null` |
 | `communitymanager.prod.setupfile.acceptLicence` | We should make accept-license should be true for pcm installation | `true` |
 | `communitymanager.prod.setupfile.cm.color` | This will enable the black theme in UI, PCM colores. red, green, grey, yellow, black | `"black"` |
 | `communitymanager.prod.setupfile.cm.cmks` | Provide the password secret | `null` |
@@ -837,6 +838,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.prod.archive.capacity` |  | `"100Mi"` |
 | `communitymanager.prod.archive.storageclass` |  | `"slow"` |
 | `communitymanager.nonprod.enable` | set to true to deploy non prod pcm | `false` |
+| `communitymanager.nonprod.setupfile.time_zone` | Specify the timezone EX:America/New_York (Country/city) | `null` |
 | `communitymanager.nonprod.setupfile.acceptLicence` | We should make accept-license should be true for pcm installation | `true` |
 | `communitymanager.nonprod.setupfile.cm.color` | This will enable the black theme in UI, PCM colores. red, green, grey, yellow, black | `"black"` |
 | `communitymanager.nonprod.setupfile.cm.cmks` | Provide the password secret | `null` |
