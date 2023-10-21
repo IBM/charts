@@ -176,6 +176,8 @@ runAsUser:
   uidRangeMax: 65535
 seLinuxContext:
   type: MustRunAs
+seccompProfiles:
+- runtime/default
 supplementalGroups:
   type: RunAsAny
 users: []
@@ -263,7 +265,7 @@ Ensure that the chart is downloaded locally and available.
 Run the below command
 
 ```bash
-$ helm install my-release -f values.yaml ibm-sccm-3.0.2.tgz
+$ helm install my-release -f values.yaml ibm-sccm-3.0.5.tgz
 ```
 
 Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 6-7 minutes for Installing Control Center.
@@ -281,65 +283,65 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `image.imageSecrets`                            | Image pull secrets                                  |                                          |
 | `image.pullPolicy`                              | Image pull policy                                   | `IfNotPresent`                           |
 | `ccArgs.appUserUID`                             | UID for continer user                               |                                          |
-| `ccArgs.ccInterval`                             | Interval Time between pod restart                   | `2h` 									   |
-| `ccArgs.devEnvDropTables`                       | Flag for dropping table in dev environment          | `false`								   |
-| `ccArgs.enableAutoRebalanceServers`             | Auto rebalancing of monitored servers between EPs   | `true` 								   |
-| `ccArgs.engineNamePrefix`                       | Engine Name Prefix for EPs                          |                                                                          |
-| `ccArgs.productEntitilement`                    | Product Entitlement 				      			|										   |
-| `ccArgs.dbType`								  | Database Type										|										   |
-| `ccArgs.dbHost`								  | Database Hostname									|										   |
-| `ccArgs.dbPort`								  | Database Port number								|										   |
-| `ccArgs.dbUser`								  | Database Username									|										   |
-| `ccArgs.dbName`								  | Database name										|     									   |
-| `ccArgs.dbLoc`								  | Database localization								| `none`								   |
-| `ccArgs.dbInit`								  | Database Initialization	Flag						| `true`								   |
-| `ccArgs.dbPartition`							  | Database Partitioning Flag  						| `false`								   |
-| `ccArgs.dbDrivers`							  | Database drivers									| 										   |
-| `ccArgs.mssqlGlobal`							  | Database Globalization Flag							| `false`								   |
-| `ccArgs.weblistenAddress`						  | Web Listen Address									| `0.0.0.0.`							   |
-| `ccArgs.webHost`								  | Web Hostname										|										   |
-| `ccArgs.autoStopJavaWebAppServer`				  | Auto stop Java web server							| `true`								   |
-| `ccArgs.eventRepositoryAuth`					  | Event Repository Autentication						| `false`								   |
-| `ccArgs.emailHostname`						  | Email hostname										| `localhost`							   |
-| `ccArgs.emailPort`							  | Email Port number									| `25`									   |
-| `ccArgs.emailUser`							  |	Email username										|										   |
-| `ccArgs.emailRespond`							  | Responding email address							| `noone@anywhere`	                       |
-| `ccArgs.ccAdminEmailAddress`					  | Admin Email Address									| `noone@anywhere`						   |
+| `ccArgs.ccInterval`                             | Interval Time between pod restart                   | `2h`                                     |
+| `ccArgs.devEnvDropTables`                       | Flag for dropping table in dev environment          | `false`                                  |
+| `ccArgs.enableAutoRebalanceServers`             | Auto rebalancing of monitored servers between EPs   | `true`                                   |
+| `ccArgs.engineNamePrefix`                       | Engine Name Prefix for EPs                          |                                          |
+| `ccArgs.productEntitilement`                    | Product Entitlement                                 |                                          |
+| `ccArgs.dbType`                                 | Database Type                                       |                                          |
+| `ccArgs.dbHost`                                 | Database Hostname                                   |                                          |
+| `ccArgs.dbPort`                                 | Database Port number                                |                                          |
+| `ccArgs.dbUser`                                 | Database Username                                   |                                          |
+| `ccArgs.dbName`                                 | Database name                                       |                                          |
+| `ccArgs.dbLoc`                                  | Database localization                               | `none`                                   |            
+| `ccArgs.dbInit`                                 | Database Initialization Flag                        | `true`                                   |
+| `ccArgs.dbPartition`                            | Database Partitioning Flag                          | `false`                                  |
+| `ccArgs.dbDrivers`                              | Database drivers                                    |                                          |
+| `ccArgs.mssqlGlobal`                            | Database Globalization Flag                         | `false`                                  |
+| `ccArgs.weblistenAddress`                       | Web Listen Address                                  | `0.0.0.0.`                               |
+| `ccArgs.webHost`                                | Web Hostname                                        |                                          |
+| `ccArgs.autoStopJavaWebAppServer`               | Auto stop Java web server                           | `true`                                   |
+| `ccArgs.eventRepositoryAuth`                    | Event Repository Autentication                      | `false`                                  |
+| `ccArgs.emailHostname`                          | Email hostname                                      | `localhost`                              |
+| `ccArgs.emailPort`                              | Email Port number                                   | `25`                                     |
+| `ccArgs.emailUser`                              | Email username                                      |                                          |
+| `ccArgs.emailRespond`                           | Responding email address                            | `noone@anywhere`                         |
+| `ccArgs.ccAdminEmailAddress`                    | Admin Email Address                                 | `noone@anywhere`                         |
 | `ccArgs.smtpTLSEnabled`                         | Secure TLS is enabled or Not                        |`true`                                    |
-| `ccArgs.oracleRacOrScan`						  | Oracle is Single Client Access Name or not			|										   |
-| `ccArgs.jmsEnable`							  | JMS enables or not									|										   |
-| `ccArgs.jmsType`								  | JMS type											|										   |
-| `ccArgs.jmsHost`								  | JMS Host name										|										   |
-| `ccArgs.jmsPort`								  | JMS Port number										|										   |
-| `ccArgs.jmsQueueManager`						  | JMS Queue Manager									| 										   |
-| `ccArgs.jmsChannel`							  | JMS Channel name									|										   |
-| `ccArgs.jmsSubject`							  | JMS Subject name									|										   |
-| `ccArgs.jmsTopic`								  | JMS Topic name										| 										   |
-| `ccArgs.jmsEmbedBroker`						  | JMS Embed Broker									|										   |
-| `ccArgs.jmsDataDirectory`						  | JMS Data Directory									|										   |
-| `ccArgs.jmsTimeToLive`						  | JMS Time to live									|										   |
-| `ccArgs.jmsRetries`							  | JMS time to live									|										   |
-| `ccArgs.jmsRetryWait`							  | JMS retry wait										|										   |
-| `ccArgs.jmsBrokerName`						  | JMS Broker Name										|										   |
-| `ccArgs.dbSSL`								  | Database SSL Enabled								|										   |
-| `ccArgs.keyStore`								  | Keystore file path									|										   |
-| `ccArgs.trustStore`							  | Truststore file path								|										   |
-| `ccArgs.adminEmailAddress`					  | Admin Email Address									|										   |
-| `ccArgs.keyAlias`								  | Key Alias name										|										   |
-| `ccArgs.packagePath`							  | Package Path										|										   |
-| `ccArgs.seasPrimaryAddress`					  |	SEAS Primary Address								|										   |
-| `ccArgs.seasPrimaryPort`						  |	SEAS Primary Port number							|										   |
-| `ccArgs.seasAlternativeAddress`				  | SEAS Alternative Address							| 										   |
-| `ccArgs.seasAlternativePort`					  | SEAS Alternative Port number						|										   |
-| `ccArgs.seasSecureConnection`					  | SEAS Secure Connection required or not				| `N`									   |
-| `ccArgs.seasProfileName`						  | SEAS Profile Name									|										   |
-| `ccArgs.seasPersistentConnection`				  | SEAS Persistent Connection required or not			| `N`									   |
-| `ccArgs.seasSecureProtocol`					  | SEAS Secure Protocol name							|										   |
+| `ccArgs.oracleRacOrScan`                        | Oracle is Single Client Access Name or not          |                                          |
+| `ccArgs.jmsEnable`                              | JMS enables or not                                  |                                          |
+| `ccArgs.jmsType`                                | JMS type                                            |                                          |
+| `ccArgs.jmsHost`                                | JMS Host name                                       |                                          |
+| `ccArgs.jmsPort`                                | JMS Port number                                     |                                          |
+| `ccArgs.jmsQueueManager`                        | JMS Queue Manager                                   |                                          |
+| `ccArgs.jmsChannel`                             | JMS Channel name                                    |                                          |
+| `ccArgs.jmsSubject`                             | JMS Subject name                                    |                                          |
+| `ccArgs.jmsTopic`                               | JMS Topic name                                      |                                          |
+| `ccArgs.jmsEmbedBroker`                         | JMS Embed Broker                                    |                                          |
+| `ccArgs.jmsDataDirectory`                       | JMS Data Directory                                  |                                          |
+| `ccArgs.jmsTimeToLive`                          | JMS Time to live                                    |                                          |
+| `ccArgs.jmsRetries`                             | JMS time to live                                    |                                          |
+| `ccArgs.jmsRetryWait`                           | JMS retry wait                                      |                                          |
+| `ccArgs.jmsBrokerName`                          | JMS Broker Name                                     |                                          |
+| `ccArgs.dbSSL`                                  | Database SSL Enabled                                |                                          |
+| `ccArgs.keyStore`                               | Keystore file path                                  |                                          |
+| `ccArgs.trustStore`                             | Truststore file path                                |                                          |
+| `ccArgs.adminEmailAddress`                      | Admin Email Address                                 |                                          |
+| `ccArgs.keyAlias`                               | Key Alias name                                      |                                          |
+| `ccArgs.packagePath`                            | Package Path                                        |                                          |
+| `ccArgs.seasPrimaryAddress`                     | SEAS Primary Address                                |                                          |
+| `ccArgs.seasPrimaryPort`                        | SEAS Primary Port number                            |                                          |
+| `ccArgs.seasAlternativeAddress`                 | SEAS Alternative Address                            |                                          |
+| `ccArgs.seasAlternativePort`                    | SEAS Alternative Port number                        |                                          |
+| `ccArgs.seasSecureConnection`                   | SEAS Secure Connection required or not              | `N`                                      |
+| `ccArgs.seasProfileName`                        | SEAS Profile Name                                   |                                          |
+| `ccArgs.seasPersistentConnection`               | SEAS Persistent Connection required or not          | `N`                                      |
+| `ccArgs.seasSecureProtocol`                     | SEAS Secure Protocol name                           |                                          |
 | `dashboard.enabled`                             | For making monitoring dashboard enabled             |                                          |
 | `persistentVolumeCCM.enabled`                   | persistent volume for all volumes except user input | `true`                                   |
 | `persistentVolumeCCM.useDynamicProvisioning`    | To use storage classes to dynamically create PV     | `false`                                  |
 | `persistentVolumeCCM.storageClassName`          | Storage class of the PVC                            | `manual`                                 |
-| `persistentVolumeCCM.size`                      | Size of PVC volume                                  | `20Gi`                                    |
+| `persistentVolumeCCM.size`                      | Size of PVC volume                                  | `20Gi`                                   |
 | `persistentVolumeCCM.claimName`                 | Already created PVC name                            |                                          |
 | `persistentVolumeCCM.accessMode`                | PV accessMode                                       | `ReadWriteOnce`                          |
 | `persistentVolumeCCM.selector.label`            | Label name for attaching PV                         |                                          |
@@ -408,6 +410,8 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `networkPolicy.egress`                          | Network Policy egress rules                         | `{}`                                     |
 | `networkPolicy.ingress`                         | Network Policy ingress rules                        | `{}`                                     |
 | `route.enabled`                                 | Route for OpenShift Enabled/Disabled                | `false`                                  |
+| `secComp.type`                                  | seccomp profile type                                | `RuntimeDefault`                         |
+| `secComp.profile`                               | seccomp profile filepath                            | ``                                       |
 | `debugScripts`                                  | This flag is used for debugging and troubleshooting | `false`                                  |
 | `extraInitContainers.name`                      | This will be used as name of init container         | `copy-resources`                         |
 | `extraInitContainers.repository`                | Image respository for init container                | ``                                       |
@@ -420,7 +424,7 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `extraInitContainers.userInput.enabled`         | user input should be shared volume or not           | `false`                                  |
 | `defaultPodDisruptionBudget.enabled`            | This flag will be used to enable or disable         | `false`                                  |
 | `defaultPodDisruptionBudget.minAvailable`       | Minimum replicas required for pod disruption budget | `0`                                      |
-| `ingress.enabled`       	                      | Flag to eanble or disable ingress                   | `false`                                  |
+| `ingress.enabled`                               | Flag to eanble or disable ingress                   | `false`                                  |
 | `ingress.host`                                  | Ingress hostname                                    |                                          |
 | `ingress.controller`                            | Ingress controller name                             |                                          |
 | `ingress.annotations`                           | annotation for ingress resource                     | `[]`                                     |
@@ -458,7 +462,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-sccm-3.0.2.tgz
+helm upgrade my-release -f values.yaml ibm-sccm-3.0.5.tgz
 ```
 
 ## Rollback the Chart
