@@ -85,104 +85,6 @@ When you install the IBM Cloud Object Storage plug-in Helm chart, the following 
     ```
 
 
-### PodSecurityPolicy Requirements
-This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
-
-The predefined PodSecurityPolicy name: [`ibm-privileged-psp`](https://ibm.biz/cpkspec-psp) has been verified for this chart, if your target namespace is bound to this PodSecurityPolicy you can proceed to install the chart.
-
-The custom **PodSecurityPolicy**  can be used to finely control the permissions/capabilities needed to deploy this chart.
-
-- From the user interface, you can copy and paste the following snippets to enable the custom PodSecurityPolicy
-
-  - Custom PodSecurityPolicy definition:
-    ```
-    apiVersion: policy/v1beta1
-    kind: PodSecurityPolicy
-    metadata:
-      name: ibm-object-storage-plugin-psp
-    spec:
-      allowPrivilegeEscalation: false
-      requiredDropCapabilities:
-      - ALL
-      hostNetwork: true
-      volumes:
-      - 'hostPath'
-      - 'secret'
-      seLinux:
-        rule: RunAsAny
-      supplementalGroups:
-        rule: MustRunAs
-        ranges:
-          - min: 1
-            max: 65535
-      runAsUser:
-        rule: RunAsAny
-      fsGroup:
-        rule: MustRunAs
-        ranges:
-          - min: 1
-            max: 65535
-    ```
-  1. Create a Kubernetes namespace where you want to install the IBM Cloud Object Storage plug-in.
-      ```
-      kubectl create namespace <namespace_name>
-      ```
-
-  2. Create the pod security policy in your cluster.
-      ```
-      kubectl apply -f podsecuritypolicy.yaml
-      ```
-
-  3. Custom ClusterRole for the custom PodSecurityPolicy:
-
-     Create a cluster role for your pod security policy.
-
-     1. Open your preferred editor and add the following configuration.
-
-         ```
-         kind: ClusterRole
-         apiVersion: rbac.authorization.k8s.io/v1
-         metadata:
-           name: ibmcloud-object-storage-plugin-psp-user
-         rules:
-           - apiGroups: ['policy']
-             resources: ['podsecuritypolicies']
-             verbs:     ['use']
-             resourceNames:
-             - ibm-object-storage-plugin-psp
-         ```
-     2. Create the cluster role in your cluster.
-         ```
-         kubectl apply -f custerrole.yaml
-         ```
-
-  4. Create a role binding for your pod security policy to scope this policy to the namespace that you created earlier.
-      1. Open your preferred editor and add the following configuration.
-         ```
-         apiVersion: rbac.authorization.k8s.io/v1
-         kind: RoleBinding
-         metadata:
-             name: ibmcloud-object-storage-plugin-psp-user
-             namespace: <namespace>
-         roleRef:
-             apiGroup: rbac.authorization.k8s.io
-             kind: ClusterRole
-             name: ibmcloud-object-storage-plugin-psp-user
-         subjects:
-           - kind: ServiceAccount
-             name: ibmcloud-object-storage-plugin
-             namespace: <namespace>
-           - kind: ServiceAccount
-             name: ibmcloud-object-storage-driver
-             namespace: <namespace>
-         ```
-
-      2. Create the role binding in your cluster.
-         ```
-         kubectl apply -f clusterrolebinding.yaml
-         ```
-
-
 ### Permissions
 To install the Helm chart in your cluster, you must have the **Administrator** platform role.
 
@@ -317,7 +219,7 @@ Install the IBM Cloud Object Storage plug-in with a Helm chart to set up pre-def
     Example: Install chart from helm registry, with bucket access policy feature enabled (for regions other than eu-fr2)
 
     ```
-     helm ibmc install ibm-object-storage-plugin ibm-charts/ibm-object-storage-plugin --set license=true --set bucketAccessPolicy=true
+     helm ibmc install ibm-object-storage-plugin ibm-helm/ibm-object-storage-plugin --set license=true --set bucketAccessPolicy=true
     ```
 8. Go to **Limit secret access**
 
