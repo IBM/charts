@@ -26,11 +26,11 @@ This chart deploys Transformation Extender Advanced on a container management pl
 
 1. Redhat Openshift Container Platform version 4.10, 4.11, or 4.12 or Kubernetes Cluster version 1.23 to 1.26 is available.
 2. Ensure that all images are downloaded from the IBM Entitled Registry and pushed to an image registry accessible by the cluster.  See [Downloading Artifacts](https://www.ibm.com/docs/en/stea/10.0?topic=images-downloading-artifacts) for more details.
-3. [Download the helm chart](https://www.ibm.com/docs/en/stea/10.0?topic=artifacts-downloading-certified-container) from the IBM Charts repository and Extract to a working directory.
+3. [Download the helm chart](https://www.ibm.com/docs/en/stea/10.0?topic=da-downloading-certified-container-helm-charts-from-chart-repository) from the IBM Charts repository and Extract to a working directory.
 4. If integrating ITXA with B2BI, it is recommended to install ITXA and B2BI in the same namespace.  If not you will need to duplicate the Persistent Volume (PV) and create separate Persistent Volume Claims (PVCs) in each namespace.
-5. Create the ITXA PVC using the sample [Persistent Volume Claim yaml](#install-persistent-related-objects-in-openshift) below.  This should automatically create the PV and bind the PVC to it.  The storage class you use must support ReadWriteMany (RWX) Storage since the volume will be shared between the ITXA and B2BI Pods.
+5. The ITXA PVC is automatically created for you based on settings in values.yaml under global.persistence section. If you enable dynamic provisioning, the PV will also be created for you at deployment time. If you disable dynamic provisioning, you need to create PV using the sample  [Persistent Volume yaml](#install-persistent-related-objects-in-openshift) below. The storage class you use must support ReadWriteMany (RWX) Storage since the volume will be shared between the ITXA and B2BI Pods.
 6. Determine Subdomain for your cluster using the info from [Identify Sub Domain Name of your cluster](#Identify-Sub-Domain-Name-of-your-cluster) below.  This info will be needed later in values.yaml.
-7. Create The following Kubernetes Secrets per [the instructions below](#install-Persistent-related-objects-in-openshift): itxa-secrets, tls-itxa-secret, itxa-ingress-secret and itxa-user-secret.
+7. Create The following Kubernetes Secrets per [the instructions below](#install-Persistent-related-objects-in-openshift): itxa-db-secret, tls-itxa-secret, itxa-ingress-secret and itxa-user-secret.
 8. Create Role, RBAC, Pod Security Policy, Cluster Role, Cluster Rolebinding, and Security Context Constraint [using sample yamls below](#PodSecurityPolicy-Requirements) -
     **Red Hat OpenShift SecurityContextConstraints Requirements** and **PodSecurityPolicy Requirements**
 9. Configure the proper JDBC driver to match the Database you are using.  For detailed instructions see [Specifying the proper database driver](#specifying-the-proper-database-driver) below.
@@ -38,6 +38,7 @@ This chart deploys Transformation Extender Advanced on a container management pl
     1.  Set License to true.
     2.  Add proper images and tags and pull secret for your repo.
     3.  Add proper secret names to match the secrets you created.
+    4.  Update the itxauiserver.ingress.host to match the appname and subdomain you determined in step 6 above.
 11.  User 1001 must have access to the NFS volume mounted via the PVC.  How you do this varies depending on what storage provider you are using.  In some cases you can do it directly from the NFS share, in other cases you may need to mount the PVC via a container running as root and run:
         - `chown -R 1001 /[mounted dir]`
         - `chgrp -R 0 /[mounted dir]`
@@ -64,8 +65,8 @@ itxadatasetup:
     hc: true
 ```	
 
-Then run helm install pointing to the values.yaml you've been editing.  
-e.g. `helm install <releasename> -f <directorylocation>/values.yaml --timeout 3600 --debug`.  
+Then run helm install pointing to the values.yaml you've been editing. For example to use the values.yaml and helm charts in the default ibm-itxa-prod directory run:  
+`helm install <releasename> -f ibm-itxa-prod/values.yaml ./ibm-itxa-prod --timeout 3600s --debug`.  
 
 This will initialize the Database with the proper tables.  This can take several minutes to an hour depending on database latency and resources.
 
@@ -77,11 +78,12 @@ This will initialize the Database with the proper tables.  This can take several
     enabled: true
    itxadbinit:
     enabled: false
-    ```
+   ```
 	
-	Then, run `helm install <releasename> -f <directorylocation>/values.yaml --timeout 3600 --debug`
+Then, run  `helm upgrade` with the same command line you ran for helm install above.
 	
-   Verify the ITXA UI pod comes up and you can connect to it via `https://[hostname]/spe/myspe` with ID "admin" and the password you specified in the parameter `adminPassword` of `itxa-user-secret.yaml` file .
+   Verify the ITXA UI pod comes up and you can connect to it via `https://[hostname]/spe/myspe` with ID "admin" and the password you specified in the parameter `adminPassword` of `itxa-user-secret.yaml` file.
+   Hostname should match the app and subdomain name you determined above.  For example `https://itxa.mycluster.mydomain.com`
 
 
 ## Detailed Instructions
@@ -115,10 +117,10 @@ Also the rwx permissions are 770.
 
 - Steps to find Sub Domain Name. 
   You would need this information when you need to provide a hostname to provide to ingress and in sign-in certificates.
-  Taking an example of a cluster web console URL - `https://console-openshift-console.apps.somename.os.mycompany.com`
+  Taking an example of a cluster web console URL - `https://console-openshift-console.somename.os.mycompany.com`
   1. Identify the cluster name in the console URL, for eg somename is the cluster name.
   2. Identify the base domain which is placed after the cluster name. In above the base domain is os.mycompany.com.
-  3. So sub domain name is derived as - apps.<cluster name>.<base domain> i.e. apps.somename.os.mycompany.com
+  3. So sub domain name is derived as - app.<cluster name>.<base domain> i.e. apps.somename.os.mycompany.com
 
 # Install Persistent related objects in Openshift
 
@@ -127,25 +129,10 @@ Also the rwx permissions are 770.
 
 1. Download the charts from IBM site.
 2. Create a storage class and persistent volume with access mode as 'Read write many' with minimum 12GB space.
-- Create persistent volume claim , itxa_pvc.yaml file as below -
-```
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: itxa-nfs-claim
-spec:
-  accessModes:
-  - ReadWriteMany
-  resources:
-    requests:
-      storage: 5Gi
-  storageClassName: <storage class name>
-```
-`oc create -f itxa_pvc.yaml`
 
 - Create persistent volume, itxa_pv.yaml file as below -
 
-```
+```yaml
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -168,7 +155,7 @@ spec:
 
 - Create a Storage class, file itxa_sc.yaml as below -
 
-```
+```yaml
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
@@ -183,12 +170,12 @@ volumeBindingMode: Immediate
 
 `oc create -f itxa_sc.yaml`
 
-* Create a Database secret, file itxa-secrets.yaml as below -
-```
+* Create a Database secret, file itxa-db-secret.yaml as below -
+```yaml
 apiVersion: v1
 kind: Secret
 metadata:
-  name: itxa-secrets
+  name: itxa-db-secret
 type: Opaque
 stringData:
   dbUser: xxxx
@@ -197,10 +184,10 @@ stringData:
   databaseName: dbname
   dbPort: "50000"
 ```
-`oc create -f itxa-secrets.yaml`
+`oc create -f itxa-db-secret.yaml`
 
 3. Create a secret tls-itxa-secret.yaml with a password for Liberty Keystore pkcs12.
-```
+```yaml
 apiVersion: v1
 kind: Secret
 metadata:
@@ -210,7 +197,7 @@ stringData:
   tlskeystorepassword: [tlskeystore password]
 ```
 `oc create -f tls-itxa-secret.yaml`
-Password can be anything, it will be used by Libterty for keystore access.
+Password can be anything, it will be used by Liberty for keystore access.
 You will need to mention this secret name in Values.global.tlskeystoresecret field.
 
 4. If you choose to create a self signed certificate for ingress, please follow below steps. 
@@ -222,7 +209,7 @@ You will need to mention this secret name in Values.global.tlskeystoresecret fie
   Pleae note the ingress host should end in the subdomain name of your machine.
  
   cmd - 
-  `openssl req -x509 -nodes -days 365 -newkey ./ingress.key -out ingress.crt -subj "/CN=[ingress_host]/O=[ingress_host]"`
+  `openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout ./ingress.key -out ./ingress.crt -subj "/CN=[ingress_host]/O=[ingress_host]"`
   
   cmd - 
   `oc create secret tls itxa-ingress-secret --key ingress.key --cert ingress.crt`
@@ -246,14 +233,13 @@ For **production environments** it is strongly recommended to obtain a CA certif
         e.g. itxauiserver.image.tag: 10.0.1.3-x86_64
     3. Set the ingress host
         * Note: The ingress host should end in same subdomain as the cluster node.
-    4. Check global.persistence.claims.name “itxa-nfs-claim” matches with name given in pvc.yaml.
-    5. Check the ingress tls secret name is set correctly as per cert created above, in place of itxauiserver.ingress.ssl.secretname
+    4. Check the ingress tls secret name is set correctly as per cert created above, in place of itxauiserver.ingress.ssl.secretname
 
 ### Steps to set a default Password
 1. Before installing ITXA UI Server create a secret file `itxa-user-secret.yaml`.
 
   Example: Replace <ADMIN_USER_PASSWORD> with password
-  ```
+  ```yaml
   apiVersion: v1
   kind: Secret
   metadata:
@@ -309,7 +295,7 @@ helm install initdb --values=values.yaml --set global.install.itxadbinit.enabled
 5. Similarly to install ITXA UI Application run below command
 
 ```
-helm install my-release [chartpath] --timeout 3600 --set global.license=true, global.install.itxaUI.enabled=true, global.install.itxadbinit.enabled=false
+helm install my-release [chartpath] --timeout 3600s --set global.license=true, global.install.itxaUI.enabled=true, global.install.itxadbinit.enabled=false
 ```
 helm install itxaui --values=values.yaml --set global.install.itxaUI.enabled=true ibm-itxa-prod-1.0.0.tgz
 
@@ -347,14 +333,12 @@ ITXA UI Login - https://[hostname]/spe/myspe
 
 ## PodSecurityPolicy Requirements
 
-In case you need a PodSecurityPolicy to be bound to the target namespace follow below steps. Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you:
-
-- ICPv3.1 - Predefined PodSecurityPolicy name: [`default`](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.0/manage_cluster/enable_pod_security.html)
-- ICPv3.1.1 - Predefined PodSecurityPolicy name: [`ibm-anyuid-psp`](https://ibm.biz/cpkspec-psp)
+With Kubernetes v1.25, the Pod Security Policy (PSP) API has been removed and replaced with Pod Security Admission (PSA) contoller. Kubernetes PSA conroller enforces predefined Pod Security levels at the namespace level. The Kubernetes Pod Security Standards defines three different levels: privileged, baseline, and restricted. Refer to Kubernetes [Pod Security Standards] ( https://kubernetes.io/docs/concepts/security/pod-security-standards/) documentation for more details. For users upgrading from older Kubernetes version to v1.25 or higher, refer to Kubernetes Migrate from PSP documentation to help with migrating from PodSecurityPolicies to the built-in Pod Security Admission controller.
+For users continuing on older Kubernetes versions (<1.25) and using PodSecurityPolicies, choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you. Below is an optional custom PSP definition based on the IBM restricted PSP.
 
 - Custom PodSecurityPolicy definition:
 
-```
+```yaml
 apiVersion: apps/v1
 kind: PodSecurityPolicy
 metadata:
@@ -407,7 +391,7 @@ oc create -f itxa_psp.yaml
 
 - Custom ClusterRole and RoleBinding definitions:
 
-```
+```yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -453,7 +437,7 @@ The Helm chart is verified with the predefined `SecurityContextConstraints` name
 Run the following command to bind this predefined scc `anyuid` to the ServiceAccount <serviceaccount> on target namespace as <namespace>.
 
 ```
-oc adm policy add-scc-to-user anyuid system:serviceaccount:<namespace>:<serviceaccount>
+oc adm policy add-scc-to-user anyuid system:serviceaccount:[namespace]:[serviceaccount]
 	
 ```
 
@@ -510,7 +494,7 @@ priority: 0
 
 To create a custom `SecurityContextConstraints`, create a yaml file with the custom `SecurityContextConstraints` definition and run the following command:
 
-```sh
+```
 kubectl create -f <custom-scc.yaml>
 ```
 
@@ -550,9 +534,9 @@ This will create the required database tables and factory data in the database.
 
 
 1. Create db2 database user.
-2. Add following properties in `itxa-secrets.yaml` file.
+2. Add following properties in `itxa-db-secret.yaml` file.
 
-```
+```yaml
 apiVersion: v1
 kind: Secret
 metadata:
@@ -571,7 +555,7 @@ stringData:
 
 3.  Create secret using following command
     ```
-    oc create -f itxa-secrets.yaml
+    oc create -f itxa-db-secret.yaml
     ```
 
 #### Once secret is created using above steps, make following changes in `values.yaml` file in order to install new database.
@@ -688,7 +672,7 @@ section "Affinity and Tolerations". |
 `global.license`                                  | Set the value to true in order to accept the application license | false
 `global.image.repository`                      | Registry for ITXA images                               |Entitled Repo- cp.icr.io/ibm-itxa, OpenShift Container Platform Internal Repo for default namespace - image-registry.openshift-image-registry.svc:5000/default
 `global.image.pullsecret`                      | Used in imagePullSecrets of Pods, please see above - Pre-requisite steps .. Option 1 and 2 |
-`global.appSecret`                             | ITXA secret name                                                      | `itxa-secrets`
+`global.appSecret`                             | ITXA DB Secret Name.  Used to store DB connection info  | `itxa-db-secret`
 `global.tlskeystoresecret`                     | ITXA TLS Keystore Secret for Liberty keystore password pkcs12     | `tls-store-secret`
 `global.persistence.claims.name`               | Persistent volume name                                               | `itxa-nfs-claim`
 `global.persistence.securityContext.fsGroup`   | File system group id to access the persistent volume                 | 0
