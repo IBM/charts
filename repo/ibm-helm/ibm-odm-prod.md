@@ -136,9 +136,10 @@ Refer to the [Configuration](#configuration) section for advanced configuration.
 If you plan on using `helm template` command for ODM installation, add the `--validate` flag to validate your manifests against your Kubernetes cluster:
 
 ```console
-$ helm install my-odm-prod-release \
+$ helm template my-odm-prod-release \
   --set license=true \
   --set internalDatabase.databaseName=my-db \
+  --set usersPassword=my-password \
   --set internalDatabase.secretCredentials=my-odm-db-secret \
   --validate \
   ibm-helm/ibm-odm-prod > my-values.yaml
@@ -307,6 +308,7 @@ On-premise storage options supported for all architectures:
     --set license=true \
     --set internalDatabase.secretCredentials=my-odm-db-secret \
     --set serviceAccountName=ibm-odm-prod-service-account \
+    --set usersPassword=my-password \
     ibm-helm/ibm-odm-prod
   ```
 
