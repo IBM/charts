@@ -25,7 +25,7 @@ Ensure you have the following setup available:
 
 The installation environment has the following prerequisites:
 
-- Kubernetes platform versions 1.21 to 1.28 supporting RedHat UBI Linux-based containers.
+- Kubernetes platform versions 1.23 to 1.28 supporting RedHat UBI Linux-based containers.
 - A namespace dedicated for use by IBM Event Streams.
 - A storage class that supports block storage on the cluster.
 
