@@ -1,13 +1,13 @@
-# IBM UrbanCode Deploy - Helm Chart
+# IBM DevOps Deploy - Helm Chart
 
 ## Introduction
 
-[IBM UrbanCode Deploy](https://www.ibm.com/cloud/urbancode/deploy) is a tool for automating application deployments through your environments. It is designed to facilitate rapid feedback and continuous delivery in agile development while providing the audit trails, versioning and approvals needed in production.
+[IBM DevOps Deploy](https://www.ibm.com/cloud/urbancode/deploy) is a tool for automating application deployments through your environments. It is designed to facilitate rapid feedback and continuous delivery in agile development while providing the audit trails, versioning and approvals needed in production.
 
 ## Chart Details
 
-* This chart deploys a single server instance of IBM UrbanCode Deploy that may be scaled to multiple instances.
-* The Persistent Volume access modes ReadWriteOnce (RWO) and ReadWriteMany (RWX) are both supported for use with IBM UrbanCode Deploy server.  However, ReadWriteMany is required to successfully scale to more than one replica/instance of the server.
+* This chart deploys a single server instance of IBM DevOps Deploy that may be scaled to multiple instances.
+* The Persistent Volume access modes ReadWriteOnce (RWO) and ReadWriteMany (RWX) are both supported for use with IBM DevOps Deploy server.  However, ReadWriteMany is required to successfully scale to more than one replica/instance of the server.
 * Includes two statefulSet workload objects, one for server instances and one for distributed front end instances, and corresponding services for them.
 * Support has been validated on OpenShift clusters running onPrem, in IBM Satellite, and IBM ROKS.
 
@@ -20,20 +20,20 @@
     * [x86_64](https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/stable/openshift-client-linux.tar.gz)
   * [Install and setup the Helm 3 CLI](https://helm.sh/docs/intro/install/).
 
-2. Image and Helm Chart - The UCD server image and helm chart can be accessed via the Entitled Registry and public Helm repository.
-  * The public Helm chart repository can be accessed at https://github.com/IBM/charts/tree/master/repo/ibm-helm and directions for accessing the UrbanCode Deploy server chart will be discussed later in this README.
+2. Image and Helm Chart - The DevOps Deploy server image and helm chart can be accessed via the Entitled Registry and public Helm repository.
+  * The public Helm chart repository can be accessed at https://github.com/IBM/charts/tree/master/repo/ibm-helm and directions for accessing the DevOps Deploy server chart will be discussed later in this README.
   * Get a key to the entitled registry
     * Log in to [MyIBM Container Software Library](https://myibm.ibm.com/products-services/containerlibrary) with the IBMid and password that are associated with the entitled software.
     * In the Entitlement keys section, select Copy key to copy the entitlement key to the clipboard.
-    * An imagePullSecret must be created to be able to authenticate and pull images from the Entitled Registry.  If the secret is named ibm-entitlement-key it will be used as the default pull secret, no value needs to be specified in the image.secret field.  Once this secret has been created you will specify the secret name as the value for the image.secret parameter in the values.yaml you provide to 'helm install ...'  Note: Secrets are namespace scoped, so they must be created in every namespace you plan to install UCD into.  Following is an example command to create an imagePullSecret named 'ibm-entitlement-key'.
+    * An imagePullSecret must be created to be able to authenticate and pull images from the Entitled Registry.  If the secret is named ibm-entitlement-key it will be used as the default pull secret, no value needs to be specified in the image.secret field.  Once this secret has been created you will specify the secret name as the value for the image.secret parameter in the values.yaml you provide to 'helm install ...'  Note: Secrets are namespace scoped, so they must be created in every namespace you plan to install DevOps Deploy into.  Following is an example command to create an imagePullSecret named 'ibm-entitlement-key'.
 
 ```
 oc create secret docker-registry ibm-entitlement-key --docker-username=cp --docker-password=<EntitlementKey> --docker-server=cp.icr.io
 ```
 
-3. Database - UrbanCode Deploy requires a database.  The database may be running in your cluster or on hardware that resides outside of your cluster.  This database  must be configured as described in [Installing the server database](https://www.ibm.com/support/knowledgecenter/SS4GSP_7.1.1/com.ibm.udeploy.install.doc/topics/DBinstall.html) before installing the containerized UrbanCode Deploy server.  The values used to connect to the database are required when installing the UrbanCode Deploy server.  The Apache Derby database type is not supported when running the UrbanCode Deploy server in a Kubernetes cluster.
+3. Database - DevOps Deploy requires a database.  The database may be running in your cluster or on hardware that resides outside of your cluster.  This database  must be configured as described in [Installing the server database](https://www.ibm.com/support/knowledgecenter/SS4GSP_7.1.1/com.ibm.udeploy.install.doc/topics/DBinstall.html) before installing the containerized DevOps Deploy server.  The values used to connect to the database are required when installing the DevOps Deploy server.  The Apache Derby database type is not supported when running the DevOps Deploy server in a Kubernetes cluster.
 
-4. Secret - A Kubernetes Secret object must be created to store the initial UrbanCode Deploy server administrator password, the password used to access the database mentioned above, and the password for all keystores used by the UrbanCode Deploy server.  The name of the secret you create must be specified in the property 'secret.name' in your values.yaml.
+4. Secret - A Kubernetes Secret object must be created to store the initial DevOps Deploy server administrator password, the password used to access the database mentioned above, and the password for all keystores used by the DevOps Deploy server.  The name of the secret you create must be specified in the property 'secret.name' in your values.yaml.
 
 * Through the oc/kubectl CLI, create a Secret object in the target namespace.
 
@@ -102,7 +102,7 @@ data:
 ```
   * Note the script must be named `script.sh`.
 
-6. A PersistentVolume that will hold the appdata directory for the UrbanCode Deploy server is required.  If your cluster supports dynamic volume provisioning you will not need to manually create a PersistentVolume (PV) or PersistentVolumeClaim (PVC) before installing this chart.  If your cluster does not support dynamic volume provisioing, you will need to either ensure a PV is available or you will need to create one before installing this chart.  You can optionally create the PVC to bind it to a specific PV, or you can let the chart create a PVC and bind to any available PV that meets the required size and storage class.  Sample YAML to create the PV and PVC are provided below.
+6. A PersistentVolume that will hold the appdata directory for the DevOps Deploy server is required.  If your cluster supports dynamic volume provisioning you will not need to manually create a PersistentVolume (PV) or PersistentVolumeClaim (PVC) before installing this chart.  If your cluster does not support dynamic volume provisioing, you will need to either ensure a PV is available or you will need to create one before installing this chart.  You can optionally create the PVC to bind it to a specific PV, or you can let the chart create a PVC and bind to any available PV that meets the required size and storage class.  Sample YAML to create the PV and PVC are provided below.
 
 ```
 apiVersion: v1
@@ -135,15 +135,15 @@ spec:
     matchLabels:
       volume: ucd-appdata-vol
 ```
-  * The following storage options have been tested with IBM UrbanCode Deploy
+  * The following storage options have been tested with IBM DevOps Deploy
 
     * IBM Block Storage supports the ReadWriteOnce access mode.  ReadWriteMany is not supported.
 
     * IBM File Storage supports ReadWriteMany which is required for Distributed Front End(DFE).
 
-  * IBM UrbanCode Deploy requires non-root access to persistent storage. When using IBM File Storage you need to either use one of the IBM provided “gid” file storage classes (ie. ibmc-file-gold-gid) with default group ID 65531 or create your own customized storage class to specify a different group ID. See the information at https://cloud.ibm.com/docs/containers?topic=containers-cs_storage_nonroot for more details.  Once you know the correct group ID, set the persistence.fsGroup property in the values.yaml to that group ID.
+  * IBM DevOps Deploy requires non-root access to persistent storage. When using IBM File Storage you need to either use one of the IBM provided “gid” file storage classes (ie. ibmc-file-gold-gid) with default group ID 65531 or create your own customized storage class to specify a different group ID. See the information at https://cloud.ibm.com/docs/containers?topic=containers-cs_storage_nonroot for more details.  Once you know the correct group ID, set the persistence.fsGroup property in the values.yaml to that group ID.
 
-7.  If a route or ingress is used to access the WSS port of the UrbanCode Deploy server from an UrbanCode Deploy agent, then port 443 should be specified along with the configured URL to access the proper service port defined for the UrbanCode Deploy Server.
+7.  If a route or ingress is used to access the WSS port of the DevOps Deploy server from an DevOps Deploy agent, then port 443 should be specified along with the configured URL to access the proper service port defined for the DevOps Deploy Server.
 
 ### PodSecurityPolicy Requirements
 
@@ -247,9 +247,9 @@ This chart requires a `SecurityContextConstraints` to be bound to the target nam
 
 ### Licensing Requirements
 
-The UCD server image will attempt to upload UCD license metrics(agent high-water mark) to the license service. For the upload to be successful, this chart needs IBM Licensing operator (a component of IBM Common Services) to be installed in the Openshift cluster. Please follow these [instructions](https://www.ibm.com/support/knowledgecenter/SSHKN6/installer/landing_installer.html) to install IBM Common services.
+The DevOps Deploy server image will attempt to upload DevOps Deploy license metrics(agent high-water mark) to the license service. For the upload to be successful, this chart needs IBM Licensing operator (a component of IBM Common Services) to be installed in the Openshift cluster. Please follow these [instructions](https://www.ibm.com/support/knowledgecenter/SSHKN6/installer/landing_installer.html) to install IBM Common services.
 
-Once the common services are installed, the IBM Licensing service can be made accessible to the UCD server by creating an OperandRequest resource to copy the license service secret(ibm-licensing-upload-token) and configmap(ibm-licensing-upload-config) to the namespace/project the UCD server will be installed in. Click [here](https://www.ibm.com/support/knowledgecenter/SSHKN6/installer/3.x.x/bind_info.html#license-bind) for more information.  It is only required to create an OperandRequest resource with the ibm-licensing-operator information. Following is an example yaml file contents that would create an OperandRequest which was tested with IBM Common services 3.23.0.  Add the following yaml to a file named operandrequest.yaml and then run `oc apply -f ./operandrequest.yaml` in the namespace/project where the UCD server will be installed.
+Once the common services are installed, the IBM Licensing service can be made accessible to the DevOps Deploy server by creating an OperandRequest resource to copy the license service secret(ibm-licensing-upload-token) and configmap(ibm-licensing-upload-config) to the namespace/project the DevOps Deploy server will be installed in. Click [here](https://www.ibm.com/support/knowledgecenter/SSHKN6/installer/3.x.x/bind_info.html#license-bind) for more information.  It is only required to create an OperandRequest resource with the ibm-licensing-operator information. Following is an example yaml file contents that would create an OperandRequest which was tested with IBM Common services 3.23.0.  Add the following yaml to a file named operandrequest.yaml and then run `oc apply -f ./operandrequest.yaml` in the namespace/project where the DevOps Deploy server will be installed.
 
 ```yaml
 apiVersion: operator.ibm.com/v1alpha1
@@ -277,7 +277,7 @@ To retrieve license usage data, please follow these [instructions](https://www.i
 
 ## Client Data Storage Locations
 
-All client data is stored in either the user specified database or the appdata persistent volume.  UrbanCode Deploy does not do any active encryption of these data locations.  These locations should be included in whatever backup plans the user chooses to implement.
+All client data is stored in either the user specified database or the appdata persistent volume.  DevOps Deploy does not do any active encryption of these data locations.  These locations should be included in whatever backup plans the user chooses to implement.
 
 ## Installing the Chart
 
@@ -291,7 +291,7 @@ Get a copy of the values.yaml file from the helm chart so you can update it with
 $ helm inspect values ibm-helm/ibm-ucd-prod > myvalues.yaml
 ```
 
-Edit the file myvalues.yaml to specify the parameter values to use when installing the UCD server instance.  The [configuration](#Configuration) section lists the parameter values that can be set.
+Edit the file myvalues.yaml to specify the parameter values to use when installing the DevOps Deploy server instance.  The [configuration](#Configuration) section lists the parameter values that can be set.
 
 To install the chart into namespace 'ucdtest' with the release name `my-ucd-release` and use the values from myvalues.yaml:
 
@@ -321,18 +321,18 @@ The command removes all the Kubernetes components associated with the chart and 
 
 ## Disaster Recovery
 
-Backup product data and essential Kubernetes resources so that you can recover your UCD server instance after a disaster.
+Backup product data and essential Kubernetes resources so that you can recover your DevOps Deploy server instance after a disaster.
 
 ### Backup Kubernetes Resources
 
-Backup the Kubernetes resoures required to redeploy the UCD server after a disaster.  Follow these steps to save the configuration of essential Kubernetes resources.
+Backup the Kubernetes resoures required to redeploy the DevOps Deploy server after a disaster.  Follow these steps to save the configuration of essential Kubernetes resources.
 
 1. Save Helm values
    Run the following command to save a local copy of the Helm values file
 ```bash
 helm get values <Helm-release-name> --namespace <ucd_namespace> --all >savedHelmValues.yaml
 ```
-2. Save secret containing UCD server product passwords
+2. Save secret containing DevOps Deploy server product passwords
    Find the value for the Values.secret.name property in the saved Helm values file above.  This is the name of the secret we want to save a local copy of.  Run the following command, replacing **ucdsecrets_name** with the value from the values.secret.name property.
 ```bash
 oc get secret <ucdsecrets_name> -n <ucd_namespace> -o yaml > <ucdsecrets_name>.yaml
@@ -353,20 +353,20 @@ oc get secret <configMapName> -n <ucd_namespace> -o yaml > <configMapName>.yaml
 
 ### Backup Product Data
 
-Backup the database and appdata directory used by the UCD server.  To ensure the most accurate saving of data, no deployments should be active.  Follow these steps to take a backup of the server.
+Backup the database and appdata directory used by the DevOps Deploy server.  To ensure the most accurate saving of data, no deployments should be active.  Follow these steps to take a backup of the server.
 
-1. Scale the statefulset resource to 0 to shutdown the UCD server.
+1. Scale the statefulset resource to 0 to shutdown the DevOps Deploy server.
 2. Create a full backup of the database.  For instructions on backing up the database, see the documentation from your database vendor.
 3. Backup the appdata Persistent Volume.
 4. Backup the ext-lib Persistent Volume.
-5. Scale the statefulset resource to 1 to restart the UCD server.
+5. Scale the statefulset resource to 1 to restart the DevOps Deploy server.
 
 ### Recover from a disaster
 
-If you have successfully backed up the resources and data as described in [Backup Kubernetes Resources](#backup-kubernetes-resources) and [Backup Product Data](#backup-product-data) you can recreate an instance of UCD server using that data.  Follow these steps to recreate your UCD server instance.
+If you have successfully backed up the resources and data as described in [Backup Kubernetes Resources](#backup-kubernetes-resources) and [Backup Product Data](#backup-product-data) you can recreate an instance of DevOps Deploy server using that data.  Follow these steps to recreate your DevOps Deploy server instance.
 
-1. Create a new project/namespace to hold the Kubernetes resources associated with the UCD server instance.
-2. Create the Kubernetes secret that contains the UCD server product passwords by running the following command.
+1. Create a new project/namespace to hold the Kubernetes resources associated with the DevOps Deploy server instance.
+2. Create the Kubernetes secret that contains the DevOps Deploy server product passwords by running the following command.
 ```bash
 oc apply -n <ucd_namespace> -f <ucdsecrets_name>.yaml
 ```
@@ -374,7 +374,7 @@ oc apply -n <ucd_namespace> -f <ucdsecrets_name>.yaml
 ```bash
 oc apply -n <ucd_namespace> -f <ibm-entitlement-key>.yaml
 ```
-4. If your original UCD server instance used a configMap resource to load the JDBC driver file into the ext-lib Persistent Volume, then recreate that configMap resource by running the following command.
+4. If your original DevOps Deploy server instance used a configMap resource to load the JDBC driver file into the ext-lib Persistent Volume, then recreate that configMap resource by running the following command.
 ```bash
 oc apply -n <ucd_namespace> -f <configMapName>.yaml
 ```
@@ -382,7 +382,7 @@ Create the ext-lib Persistent Volume that the JDBC driver file will be loaded in
 5. Create the appdata Persistent Volume and associated Persistent Volume Claim and load the saved appdata directory contents into the Persistent Volume.
 6. Follow the directions from your database vendor to create a new database from the backup/clone.
 7. Create a values.yaml file that contains the properties and values from your savedHelmValues.yaml file.  Be sure that the Values.extLibVolume.existingClaimName and Values.appDataVolume.existingClaimName fields are set to the Persistent Volume Claims for the new ext-lib and appdata Persistent Volumes.  Also be sure that the database fields Values.database.* refer to the new database instance created in the step above.
-8. Create the new UCD server instance by running the following command.
+8. Create the new DevOps Deploy server instance by running the following command.
 ```bash
 helm install my-recovered-release ibm-helm/ibm-ucd-prod --namespace <ucd_namespace> --values myRecoveredValues.yaml
 ```
@@ -397,40 +397,40 @@ The Helm chart has the following values.
 
 | Qualifier | Parameter  | Definition | Allowed Value |
 |---|---|---|---|
-| version |  | UrbanCode Deploy product version |  |
-| replicas | server | Number of UCD server replicas | Non-zero number of replicas.  Defaults to 1 |
+| version |  | DevOps Deploy product version |  |
+| replicas | server | Number of DevOps Deploy server replicas | Non-zero number of replicas.  Defaults to 1 |
 |          | dfe | Number of DFE replicas | Number of Distributed Front End replicas.  Defaults to 0 |
 | image | pullPolicy | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to Always |
 |       | secret |  An image pull secret used to authenticate with the image registry | Empty (default) if no authentication is required to access the image registry. |
 | service | type | Specify type of service | Valid options are ClusterIP, NodePort and LoadBalancer (for clusters that support LoadBalancer). Default is ClusterIP |
-| database | type | The type of database UCD will connect to | Valid values are db2, mysql, oracle, and sqlserver |
+| database | type | The type of database DevOps Deploy will connect to | Valid values are db2, mysql, oracle, and sqlserver |
 |          | name | The name of the database to use |  |
 |          | hostname | The hostname/IP of the database server | |
 |          | port | The database port to connect to | |
 |          | username | The user to access the database with | |
-|          | jdbcConnUrl | The JDBC Connection URL used to connect to the database used by the UCD server. This value is normally constructed using the database type and other database field values, but must be specified here when using Oracle RAC/ORAAS or SQL Server with Integrated Security. | |
-| secureConnections  | required | Specify whether UCD server connections are required to be secure | Default value is "true" |
-| secret | name | Kubernetes secret which defines required UCD passwords. | You may leave this blank to use default name of HelmReleaseName-secrets where HelmReleaseName is the name of your Helm Release, otherwise specify the secret name here. |
+|          | jdbcConnUrl | The JDBC Connection URL used to connect to the database used by the DevOps Deploy server. This value is normally constructed using the database type and other database field values, but must be specified here when using Oracle RAC/ORAAS or SQL Server with Integrated Security. | |
+| secureConnections  | required | Specify whether DevOps Deploy server connections are required to be secure | Default value is "true" |
+| secret | name | Kubernetes secret which defines required DevOps Deploy passwords. | You may leave this blank to use default name of HelmReleaseName-secrets where HelmReleaseName is the name of your Helm Release, otherwise specify the secret name here. |
 | license | accept | Set to true to indicate you have read and agree to license agreements : http://www-03.ibm.com/software/sla/sladb.nsf/searchlis/?searchview&searchorder=4&searchmax=0&query=(urbancode+deploy) | false |
-|  | serverURL | Information required to connect to the UCD license server. | Empty (default) to begin a 60-day evaluation license period.|
-| persistence | enabled | Determines if persistent storage will be used to hold the UCD server appdata directory contents. This should always be true to preserve server data on container restarts. | Default value "true" |
+|  | serverURL | Information required to connect to the DevOps Deploy license server. | Empty (default) to begin a 60-day evaluation license period.|
+| persistence | enabled | Determines if persistent storage will be used to hold the DevOps Deploy server appdata directory contents. This should always be true to preserve server data on container restarts. | Default value "true" |
 |             | useDynamicProvisioning | Set to "true" if the cluster supports dynamic storage provisoning | Default value "false" |
 |             | fsGroup | The group ID to use to access persistent volumes | Default value "1001" |
 | extLibVolume | name | The base name used when the Persistent Volume and/or Persistent Volume Claim for the extlib directory is created by the chart. | Default value is "ext-lib" |
 |              | storageClassName | The name of the storage class to use when persistence.useDynamicProvisioning is set to "true". |  |
 |              | size | Size of the volume used to hold the JDBC driver .jar files |  |
-|              | existingClaimName | Persistent volume claim name for the volume that contains the JDBC driver file(s) used to connect to the UCD database. |  |
-|              | configMapName | Name of an existing ConfigMap which contains a script named script.sh. This script is run before UrbanCode Deploy server installation and is useful for copying database driver .jars to the ext-lib persistent volume. |  |
+|              | existingClaimName | Persistent volume claim name for the volume that contains the JDBC driver file(s) used to connect to the DevOps Deploy database. |  |
+|              | configMapName | Name of an existing ConfigMap which contains a script named script.sh. This script is run before DevOps Deploy server installation and is useful for copying database driver .jars to the ext-lib persistent volume. |  |
 |              | accessMode | Persistent storage access mode for the ext-lib persistent volume. | ReadWriteOnce |
-| appDataVolume | name | The base name used when the Persistent Volume and/or Persistent Volume Claim for the UCD server appdata directory is created by the chart. | Default value is "appdata" |
-|               | existingClaimName | The name of an existing Persistent Volume Claim that references the Persistent Volume that will be used to hold the UCD server appdata directory. |  |
+| appDataVolume | name | The base name used when the Persistent Volume and/or Persistent Volume Claim for the DevOps Deploy server appdata directory is created by the chart. | Default value is "appdata" |
+|               | existingClaimName | The name of an existing Persistent Volume Claim that references the Persistent Volume that will be used to hold the DevOps Deploy server appdata directory. |  |
 |               | storageClassName | The name of the storage class to use when persistence.useDynamicProvisioning is set to "true". |  |
-|               | size | Size of the volume to hold the UCD server appdata directory |  |
+|               | size | Size of the volume to hold the DevOps Deploy server appdata directory |  |
 |              | accessMode | Persistent storage access mode for the appdata persistent volume. | ReadWriteOnce |
-| ingress | host | Host name used to access the UCD server UI. Leave blank on OpenShift to create default route. |  |
-|               | dfehost | Host name used to access the UCD server distributed front end (DFE) UI. Leave blank on OpenShift to create default route. |  |
-|               | wsshost | Host name used to access the UCD server WSS port. Leave blank on OpenShift to create default route. |  |
-|               | jmshost | Host name used to access the UCD server JMS port. Leave blank on OpenShift to create default route. |  |
+| ingress | host | Host name used to access the DevOps Deploy server UI. Leave blank on OpenShift to create default route. |  |
+|               | dfehost | Host name used to access the DevOps Deploy server distributed front end (DFE) UI. Leave blank on OpenShift to create default route. |  |
+|               | wsshost | Host name used to access the DevOps Deploy server WSS port. Leave blank on OpenShift to create default route. |  |
+|               | jmshost | Host name used to access the DevOps Deploy server JMS port. Leave blank on OpenShift to create default route. |  |
 | resources | constraints.enabled | Specifies whether the resource constraints specified in this helm chart are enabled.   | true (default) or false  |
 |           | limits.cpu  | Describes the maximum amount of CPU allowed | Default is 4000m. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu)  |
 |           | limits.memory | Describes the maximum amount of memory allowed | Default is 8Gi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
@@ -448,4 +448,4 @@ See the Prerequisites section of this page for storage information.
 
 ## Limitations
 
-The Apache Derby database type is not supported when running the UrbanCode Deploy server in a Kubernetes cluster. This is because the containerized version is running in UCD HA mode, which does not support Derby.
+The Apache Derby database type is not supported when running the DevOps Deploy server in a Kubernetes cluster. This is because the containerized version is running in DevOps Deploy HA mode, which does not support Derby.
