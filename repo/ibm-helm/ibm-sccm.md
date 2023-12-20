@@ -1,8 +1,8 @@
-# IBM Sterling Control Center Monitor V6.3.0.0
+# IBM Sterling Control Center Monitor V6.3.1.0
 
 ## Introduction
 
-IBM▒ Control Center Monitor is a centralized monitoring and management system. It gives operations personnel the capability to continuously monitor the status of Configuration Managers, engines, and adapters across the enterprise for the following server types from one central location: IBM Sterling Connect:Direct▒, IBM Sterling Connect:Enterprise▒, IBM Sterling B2B Integrator, IBM Sterling File Gateway, IBM Global High Availability Mailbox, IBM Sterling Connect:Express, IBM QuickFile, IBM MQ Managed File Transfer and Many FTP servers. To find out more, see the Knowledge Center for [IBM Sterling Control Center Monitor](  https://www.ibm.com/docs/en/control-center/6.3.0?topic=sterling-control-center-monitor-630 ).
+IBM▒ Control Center Monitor is a centralized monitoring and management system. It gives operations personnel the capability to continuously monitor the status of Configuration Managers, engines, and adapters across the enterprise for the following server types from one central location: IBM Sterling Connect:Direct▒, IBM Sterling Connect:Enterprise▒, IBM Sterling B2B Integrator, IBM Sterling File Gateway, IBM Global High Availability Mailbox, IBM Sterling Connect:Express, IBM QuickFile, IBM MQ Managed File Transfer and Many FTP servers. To find out more, see the Knowledge Center for [IBM Sterling Control Center Monitor](  https://www.ibm.com/docs/en/control-center/6.3.1?topic=sterling-control-center-monitor-631 ).
 
 ## Chart Details
 
@@ -63,7 +63,7 @@ metadata:
     app: "ibm-sccm-psp"
 spec:
   privileged: false
-  allowPrivilegeEscalation: true
+  allowPrivilegeEscalation: false
   hostPID: false
   hostIPC: false
   hostNetwork: false
@@ -252,7 +252,7 @@ This chart uses the following resources by default:
 ## Agreement to IBM Control Center License
 
 You must read the IBM Sterling Control Center License agreement terms before installation, using the below link:
-[License] https://www-40.ibm.com/software/sla/sladb.nsf (L/N: L-KNAN-C6VGE3)
+[License](https://www.ibm.com/support/customer/csol/terms/?id=L-QZDV-G39NEP&lc=en#detail-document) (L/N: L-QZDV-G39NEP)
 
 ## Installing the Chart
 
@@ -265,7 +265,7 @@ Ensure that the chart is downloaded locally and available.
 Run the below command
 
 ```bash
-$ helm install my-release -f values.yaml ibm-sccm-3.0.7.tgz
+$ helm install my-release -f values.yaml ibm-sccm-3.1.0.tgz
 ```
 
 Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 6-7 minutes for Installing Control Center.
@@ -412,6 +412,7 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `route.enabled`                                 | Route for OpenShift Enabled/Disabled                | `false`                                  |
 | `secComp.type`                                  | seccomp profile type                                | `RuntimeDefault`                         |
 | `secComp.profile`                               | seccomp profile filepath                            | ``                                       |
+| `timeZone`                                      | This flag is used for setting TimeZone of container | `Asia/Calcutta`                          |
 | `debugScripts`                                  | This flag is used for debugging and troubleshooting | `false`                                  |
 | `extraInitContainers.name`                      | This will be used as name of init container         | `copy-resources`                         |
 | `extraInitContainers.repository`                | Image respository for init container                | ``                                       |
@@ -462,7 +463,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-sccm-3.0.7.tgz
+helm upgrade my-release -f values.yaml ibm-sccm-3.1.0.tgz
 ```
 
 Refer [RELEASENOTES.md](RELEASENOTES.md) for Fix history.
@@ -541,12 +542,21 @@ Use `networkPolicy` to control traffic flow at the port level.
 
 1. All sensitive application data at rest is stored in binary format so user cannot decrypt it. This chart does not support Encryption of user data at rest by default. Administrator can configure storage encryption to encrypt all data at rest.
 
-2. Data in motion is encrypted using transport layer security(TLS 1.2). For more information please see product [Knowledge center link]( https://www.ibm.com/docs/en/control-center/6.3.0?topic=sterling-control-center-monitor-630 )
+2. Data in motion is encrypted using transport layer security(TLS 1.2). For more information please see product [Knowledge center link]( https://www.ibm.com/docs/en/control-center/6.3.1?topic=sterling-control-center-monitor-631 )
+
+## Storage
+
+IBM Sterling Control Center Helm chart supports both dynamic and pre-created persistent storage.
+
+* Either use storage class for dynamic provisioning or pre-create Persistent Volume
+* To retain the data stored on Persistent Volume, the storage class should have reclaim policy as `Retain`
+* The default access mode is set to `ReadWriteOnce`
 
 ## Limitations
 
-- Dynamic Volume Provisioning is supported for all volumes except user_inputs. Users must manually create Persistent Volume for user_inputs.
 - High availability and scalability are supported in traditional way of Control Center deployment using Kubernetes load balancer service.
-- IBM Control Center Monitor chart supports only amd64 architecture.
+- IBM Control Center Monitor chart supports only amd64,ppc64le architecture.
 
+## Documentation
 
+[IBM Sterling Control Center](https://www.ibm.com/docs/en/control-center/6.3.1?topic=sterling-control-center-monitor-631)
