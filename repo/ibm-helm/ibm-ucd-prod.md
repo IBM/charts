@@ -145,57 +145,6 @@ spec:
 
 7.  If a route or ingress is used to access the WSS port of the DevOps Deploy server from an DevOps Deploy agent, then port 443 should be specified along with the configured URL to access the proper service port defined for the DevOps Deploy Server.
 
-### PodSecurityPolicy Requirements
-
-If you are running on OpenShift, skip this section and continue to the [SecurityContextConstraints Requirements](#securitycontextconstraints-requirements) section below.
-
-This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you.
-
-The predefined PodSecurityPolicy named [`ibm-restricted-psp`](https://ibm.biz/cpkspec-psp) has been verified for this chart, if your target namespace is bound to this PodSecurityPolicy you can proceed to install the chart.
-
-  * Custom PodSecurityPolicy definition:
-    ```
-    apiVersion: extensions/v1beta1
-    kind: PodSecurityPolicy
-    metadata:
-      annotations:
-        kubernetes.io/description: "This policy is based on the most restrictive policy,
-        requiring pods to run with a non-root UID, and preventing pods from accessing the host."
-        seccomp.security.alpha.kubernetes.io/allowedProfileNames: docker/default
-        seccomp.security.alpha.kubernetes.io/defaultProfileName: docker/default
-      name: ibm-ucd-prod-psp
-    spec:
-      allowPrivilegeEscalation: false
-      forbiddenSysctls:
-      - '*'
-      fsGroup:
-        ranges:
-        - max: 65535
-          min: 1
-        rule: MustRunAs
-      hostNetwork: false
-      hostPID: false
-      hostIPC: false
-      requiredDropCapabilities:
-      - ALL
-      runAsUser:
-        rule: MustRunAsNonRoot
-      seLinux:
-        rule: RunAsAny
-      supplementalGroups:
-        ranges:
-        - max: 65535
-          min: 1
-        rule: MustRunAs
-      volumes:
-      - configMap
-      - emptyDir
-      - projected
-      - secret
-      - downwardAPI
-      - persistentVolumeClaim
-    ```
-
 ### SecurityContextConstraints Requirements
 
 This chart requires a `SecurityContextConstraints` to be bound to the target namespace prior to installation.  The default `SecurityContextConstraints` named restricted has been verified for this chart, if your target namespace is bound to this `SecurityContextConstraints` resource you can proceed to install the chart.
