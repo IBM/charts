@@ -23,17 +23,17 @@ Workers will only be considered eligible for an update if all workers in all oth
 ## Update Process
 When `tugboat-updater` updates a worker it performs the following actions:
 1. Cordons the worker
-  - Equivalent of `kubectl cordon NODE_NAME` (applies the `node.kubernetes.io/unschedulable` taint)
+    - Equivalent of `kubectl cordon NODE_NAME` (applies the `node.kubernetes.io/unschedulable` taint)
 1. Drains the worker
-  - Equivalent of `kubectl drain NODE_NAME` (removes all pods from the node using the [Eviction API](https://kubernetes.io/docs/concepts/scheduling-eviction/api-eviction/))
+    - Equivalent of `kubectl drain NODE_NAME` (removes all pods from the node using the [Eviction API](https://kubernetes.io/docs/concepts/scheduling-eviction/api-eviction/))
 1. (If Classic) Updates the worker
-  - Calls the Container Service API `/v1/clusters/{idOrName}/workers/{workerId}`
+    - Calls the Container Service API `/v1/clusters/{idOrName}/workers/{workerId}`
 1. (If Classic) Reloads the worker
-  - Calls the Container Service API `/v1/clusters/{idOrName}/workers/{workerId}`
+    - Calls the Container Service API `/v1/clusters/{idOrName}/workers/{workerId}`
 1. (If VPC) Replaces the worker
-  - Calls the Container Service API `/v2/vpc/replaceWorker`
+    - Calls the Container Service API `/v2/vpc/replaceWorker`
 1. (If Classic) Wait for the reload to complete then Uncordon the worker
-  - Equivalent of `kubectl uncordon NODE_NAME` (Removes the `node.kubernetes.io/unschedulable` taint)
+    - Equivalent of `kubectl uncordon NODE_NAME` (Removes the `node.kubernetes.io/unschedulable` taint)
 
 ## Usage
 
