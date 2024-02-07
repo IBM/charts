@@ -1,0 +1,287 @@
+# Default values for chart.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+image:
+  endpoint: us.icr.io
+  repository: armada-master/tugboat-updater
+  pullPolicy: Always
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+port: 9021
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # Image pull secrets to include in the service account
+  imagePullSecrets: []
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+clusterRole:
+  # Specifies whether a cluster role should be created
+  create: true
+  # Annotations to add to the cluster role
+  annotations: {}
+  # The name of the cluster role to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: "node-drainer"
+
+clusterRoleBinding:
+  # Specifies whether a cluster role binding should be created
+  create: true
+  # Annotations to add to the cluster role binding
+  annotations: {}
+  # The name of the cluster role binding to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: "node-drainer"
+
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  fsGroup: 2000
+
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 2000
+  runAsGroup: 2000
+
+args:
+  - "-config=/etc/config/general-config.yaml"
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: metrics
+  initialDelaySeconds: 300
+  failureThreshold: 5
+#readinessProbe:
+  # httpGet:
+  #   path: /
+  #   port: http
+
+# Additional volumes on the output Deployment definition.
+volumes:
+- name: config-volume
+  configMap:
+    name: tugboat-updater-config
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts: 
+- name: config-volume
+  mountPath: "/etc/config"
+  readOnly: true
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Additional environment variables for the plugins sidecar
+env:
+  - name: NODE_IP
+    valueFrom:
+      fieldRef:
+        fieldPath: status.hostIP
+  - name: CLUSTER_ID
+    value: "<< CLUSTER_ID >>"
+  - name: REGION
+    value: "<< REGION >>"
+
+## The names of secrets in the same kubernetes namespace which contain values to be added to the environment
+## Each entry should contain a name key, and can optionally specify whether the secret must be defined with an optional key.
+## Name is templated.
+envFromSecrets:
+- name: tugboat-updater-secret
+  optional: true
+
+## The names of conifgmaps in the same kubernetes namespace which contain values to be added to the environment
+## Each entry should contain a name key, and can optionally specify whether the configmap must be defined with an optional key.
+## Name is templated.
+## ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.23/#configmapenvsource-v1-core
+envFromConfigMaps: []
+## - name: configmap-name
+##   optional: true
+
+
+configmap:
+  # Specifies whether a configmap holding the updater config should be created
+  create: true
+  # The name of the configmap to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: "tugboat-updater-config"
+
+tugboatUpdaterConfig:
+  # # Example tugboat-updater configuration. This configuration aims to demonstrate
+  # # and explain possible configuration options.
+
+  # # The configuration file may contain environment variables references in the format
+  # # ${ENV_VAR} or $ENV_VAR which will be expanded when the configuration is processed.
+  # # The `$$` character sequence can be used to escape a `$` and prevent environment
+  # # variable expansion. For example the string '$$1' will result in '$1' in the
+  # # post-processed configuration. As a result of the env processing the NUL character
+  # # (char code 0) is disallowed in the configuration.
+
+  # groups:
+  #   - name: database # Name of the node group, used in metrics and logs
+  #     worker_pools:
+  #       # Select the ibm cloud worker pools that will be included in this group
+  #       - name: etcd          # worker pools can be selected by name
+  #       - name_re: .*_etcd_.* # or by regex match on worker pool names
+
+  #     # update_limit defines how many nodes can be unhealthy at the same time
+  #     # The updater will not action any additional nodes if `update_limit` nodes are
+  #     # unhealthy or currently being updated.
+  #     update_limit: 1
+
+  #     # update_rate defines the minimum time in seconds between each node selection.
+  #     # The updater will not select additional nodes to update faster than this rate,
+  #     # regardless of update_limit nodes will node be actioned faster than 1 node per `update_rate`
+  #     update_rate: 3600
+
+  #     # node_priority_query is an optional metrics query that will be used to set the priority
+  #     # order of nodes during selection. The query allows for templating Node information using
+  #     # go text/template syntax templating. Data provided to the template is an updater.CombinedNode struct
+  #     node_priority_query: "(2*sum(etcd_server_is_leader{hostname=\"{{.Node.IP}}\"} == 1)) or (count(etcd_server_is_leader{hostname=\"{{.Node.IP}}\"} == 0)) or (absent(sum(etcd_server_is_leader{hostname=\"{{.Node.IP}}\"})) - 1)"
+
+  #     # require_priority defines whether a failure to perform the node_priority_query
+  #     # should be treated as an error. The default is to treat node_priority_query as a hint
+  #     # and ignore querying errors. Set this to true if strict ordering of nodes,
+  #     # defined by node_priority_query, is required.
+  #     require_priority: true
+
+  #     # Gate configurations allows defining a set of metrics queries that can prevent the updater from continuing.
+  #     # When using the prometheus metrics querier each query must return some data for the gate to be satisfied.
+  #     # This works the same way that an alert definition works in prometheus. Gates allow for defining a query, 
+  #     # a timeout, and a testing frequency. The query will be run once per testing frequency and the gate will "fail"
+  #     # if the query does not produce a result before the defined timeout
+
+  #     # pre_select_gates define the gates that run at the time the updater selects a node. If any of these gates fails the
+  #     # updater will operate as though no workers could be selected in it's current interation and no further action will be
+  #     # taken. This gate will not generate an error as it only prevents worker selection
+  #     pre_select_gates:
+  #       # test_freq defines the rate at which the updater runs each gates query
+  #       test_freq: 120
+  #       gates:
+  #         - name: "etcd server count" # gate name for use in metrics and logs
+  #           # query is go text/template style query that is executed against the updater.CombinedNode in question before 
+  #           # being executed by the metrics querier interface
+  #           query: ""
+  #           # The time to wait for a query to succeed, the number of queries will depend on the defined testing frequency
+  #           timeout: 1800
+
+  #     # pre_action_gates define gates that prevent the updater from proceeding with a worker update after the worker has been
+  #     # selected. These gates are executed after the change has been approved by the change management interface, but before any 
+  #     # action is taken on the node (cordoning). If these gates fail the worker update is considered to have failed and the updater
+  #     # will treat the worker accordingly.
+  #     pre_action_gates:
+  #       test_freq: 120
+  #       gates:
+  #         - name: "etcd server count"
+  #           query: ""
+  #           timeout: 1800
+
+  #     # windows represents the maintenance window configuration for this specific group.
+  #     # This group will only be actioned in the overlap of this window configuration and the overall 
+  #     # maintenance window configuration defined in `maintenance_windows`. See the maintenance_windows
+  #     # section for more details on window definitions.
+  #     windows:
+  #       - weekday: 1
+  #         start_hour: 14
+  #         end_hour: 21
+
+  # maintenance_windows:
+  #   # An empty set of windows is treated as all hours of every day.
+  #   # To allow updates at any time this section or the `windows` field can be omitted entirely.
+  #   # Windows can be set as a list of week day with a start and end hour
+  #   # start hour is inclusive and end hour is exclusive. See tugboat-updater/utils/utils.go
+  #   # for more documentation on windows
+  #   windows: []
+  #   # Windows can be changed from those set above based on cluster metadata. Overlays can be defined that will
+  #   # overwrite the above configuration if fields from the `metadata` section match the prometheus-style matchers
+  #   # defined for each overlay
+  #   overlays:
+  #     # Multiple overlays can be defined and the first matching overlay will be used
+  #     - matchers: ["carrier_region=~\"(jp-tok|ap-north|jp-osa)\""]
+  #       overlay:
+  #         - week_day: 0
+  #           start_hour: 0
+  #           end_hour: 24
+  #         - week_day: 1
+  #           start_hour: 8
+  #           end_hour: 24
+  #         - week_day: 2
+  #           start_hour: 8
+  #           end_hour: 24
+  #         - week_day: 3
+  #           start_hour: 8
+  #           end_hour: 24
+  #         - week_day: 4
+  #           start_hour: 8
+  #           end_hour: 24
+  #         - week_day: 5
+  #           start_hour: 8
+  #           end_hour: 24
+  #         - week_day: 6
+  #           start_hour: 0
+  #           end_hour: 24
+
+  # execution_env represents information about the environment that the updater is operating in
+  # currently only the IP of the node the updater is running on is needed. This is used by the
+  # updater for prioritizing nodes and avoiding excessively draining itself off of nodes that are being updated,
+  execution_env:
+    node_ip: "${NODE_IP}"
+
+  external_services:
+    # Interactions with the IBM Cloud API are required to update/reload/replace workers
+    # so the iks external service configuration is always required.
+    iks:
+      api_key: "${IBMCLOUD_APIKEY}"
+      cluster_id: "${CLUSTER_ID}"
+      # region should be set to the region the cluster resides in. It is used to set the IKS regional api.
+      # If set to an empty string or an unknown region the IKS global api will be used.
+      region: "${REGION}"  
+      # iks_endpoint allows overwriting the region defined IKS endpoint
+      # iks_endpoint: "https://us-south.private.containers.cloud.ibm.com"
+      # iam_endpoint allows overwriting the region defined IAM endpoint
+      # iam_endpoint: "https://test.iam.cloud.ibm.com"    
+
+    # prometheus:
+    #   # url of the prometheus api endpoint
+    #   url: "http://${NODE_IP}:30794/prometheus"
+
+  # # metadata is user-defined key-value pairs that can be used in matchers and templates in
+  # # other locations throughout the config.
+  # metadata:
+  #   cluster_id: "${CLUSTER_ID}"
+  #   cluster_name: "${CLUSTER_NAME}"
+  #   cluster_type: "${CLUSTER_TYPE}"
+  #   region: "${REGION}"
