@@ -98,7 +98,7 @@ This change propagates after a couple of minutes. [Further reading](https://clou
 ### Local Machine
 
 * [oc](https://docs.openshift.com/container-platform/4.13/cli_reference/openshift_cli/getting-started-cli.html)
-* [helm v3.12.3 or later](https://docs.openshift.com/container-platform/4.13/applications/working_with_helm_charts/installing-helm.html)
+* [helm v3.14.2 or later](https://docs.openshift.com/container-platform/4.13/applications/working_with_helm_charts/installing-helm.html)
 
 ### Storage
 
@@ -129,7 +129,7 @@ The pod [`fsGroup`](https://kubernetes.io/docs/tasks/configure-pod-container/sec
 Fetch chart for install:
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-prod --version 11.0.0
+helm pull --untar ibm-helm/ibm-devops-prod --version 11.0.1
 cd ibm-devops-prod
 ```
 
@@ -366,4 +366,3 @@ This methods should also be used when restoring a backup made where different se
 * It is not currently possible to edit test assets. This must be done in DevOps Test Workbench.
 * In each namespace, only one instance of the product can be installed.
 * The replica count configuration enables a maximum of 50 active concurrent users. This configuration can not be changed.
-
