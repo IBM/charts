@@ -96,7 +96,7 @@ This chart requires a `SecurityContextConstraints` to be bound to the target nam
   allowHostNetwork: false
   allowHostPID: false
   allowHostPorts: false
-  allowPrivilegeEscalation: true
+  allowPrivilegeEscalation: false
   allowPrivilegedContainer: false
   allowedCapabilities: null
   defaultAddCapabilities: null
@@ -111,10 +111,7 @@ This chart requires a `SecurityContextConstraints` to be bound to the target nam
   priority: null
   readOnlyRootFilesystem: false
   requiredDropCapabilities:
-  - KILL
-  - MKNOD
-  - SETUID
-  - SETGID
+  - ALL
   runAsUser:
     type: MustRunAsRange
   seLinuxContext:
@@ -241,9 +238,9 @@ The Helm chart has the following values.
 |---|---|---|---|
 | version |  | DevOps Deploy relay product vesion |  |
 | replicas | relay | Number of DevOps Deploy relay replicas | Non-zero number of replicas.  Defaults to 1 |
-| image | pullPolicy | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to Always |
+| image | pullPolicy | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to IfNotPresent |
 |       | secret |  An image pull secret used to authenticate with the image registry | Empty (default) if no authentication is required to access the image registry. |
-| license | accept | Set to true to indicate you have read and agree to license agreements : http://www-03.ibm.com/software/sla/sladb.nsf/searchlis/?searchview&searchorder=4&searchmax=0&query=(urbancode+deploy) | false |
+| license | accept | Set to true to indicate you have read and agree to license agreements : https://ibm.biz/devops-deploy-license | false |
 | service | type | Specify type of service | Valid options are ClusterIP, NodePort and LoadBalancer (for clusters that support LoadBalancer). Default is ClusterIP |
 | persistence | enabled | Determines if persistent storage will be used to hold the DevOps Deploy server appdata directory contents. This should always be true to preserve server data on container restarts. | Default value "true" |
 |             | useDynamicProvisioning | Set to "true" if the cluster supports dynamic storage provisoning | Default value "false" |

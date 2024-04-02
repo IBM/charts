@@ -159,7 +159,7 @@ This chart requires a `SecurityContextConstraints` to be bound to the target nam
   allowHostNetwork: false
   allowHostPID: false
   allowHostPorts: false
-  allowPrivilegeEscalation: true
+  allowPrivilegeEscalation: false
   allowPrivilegedContainer: false
   allowedCapabilities: null
   defaultAddCapabilities: null
@@ -174,10 +174,7 @@ This chart requires a `SecurityContextConstraints` to be bound to the target nam
   priority: null
   readOnlyRootFilesystem: false
   requiredDropCapabilities:
-  - KILL
-  - MKNOD
-  - SETUID
-  - SETGID
+  - ALL
   runAsUser:
     type: MustRunAsRange
   seLinuxContext:
@@ -349,7 +346,7 @@ The Helm chart has the following values.
 | version |  | DevOps Deploy product version |  |
 | replicas | server | Number of DevOps Deploy server replicas | Non-zero number of replicas.  Defaults to 1 |
 |          | dfe | Number of DFE replicas | Number of Distributed Front End replicas.  Defaults to 0 |
-| image | pullPolicy | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to Always |
+| image | pullPolicy | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to IfNotPresent |
 |       | secret |  An image pull secret used to authenticate with the image registry | Empty (default) if no authentication is required to access the image registry. |
 | service | type | Specify type of service | Valid options are ClusterIP, NodePort and LoadBalancer (for clusters that support LoadBalancer). Default is ClusterIP |
 | database | type | The type of database DevOps Deploy will connect to | Valid values are db2, mysql, oracle, and sqlserver |
@@ -360,7 +357,7 @@ The Helm chart has the following values.
 |          | jdbcConnUrl | The JDBC Connection URL used to connect to the database used by the DevOps Deploy server. This value is normally constructed using the database type and other database field values, but must be specified here when using Oracle RAC/ORAAS or SQL Server with Integrated Security. | |
 | secureConnections  | required | Specify whether DevOps Deploy server connections are required to be secure | Default value is "true" |
 | secret | name | Kubernetes secret which defines required DevOps Deploy passwords. | You may leave this blank to use default name of HelmReleaseName-secrets where HelmReleaseName is the name of your Helm Release, otherwise specify the secret name here. |
-| license | accept | Set to true to indicate you have read and agree to license agreements : http://www-03.ibm.com/software/sla/sladb.nsf/searchlis/?searchview&searchorder=4&searchmax=0&query=(urbancode+deploy) | false |
+| license | accept | Set to true to indicate you have read and agree to license agreements : https://ibm.biz/devops-deploy-license | false |
 |  | serverURL | Information required to connect to the DevOps Deploy license server. | Empty (default) to begin a 60-day evaluation license period.|
 | persistence | enabled | Determines if persistent storage will be used to hold the DevOps Deploy server appdata directory contents. This should always be true to preserve server data on container restarts. | Default value "true" |
 |             | useDynamicProvisioning | Set to "true" if the cluster supports dynamic storage provisoning | Default value "false" |
