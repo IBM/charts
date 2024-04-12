@@ -6,7 +6,7 @@ Helm Chart for IBM Sterling Transformation Extender for Red Hat Openshift
 
 IBM Sterling Transformation Extender (ITX) for Red Hat OpenShift is a containerized distribution of the translation engine exposing a set of REST API endpoints that you can invoke to run ITX maps. Another name for IBM Sterling Transformation Extender for Red Hat OpenShift is ITX Runtime Server. Maps are designed using ITX Design Studio and compiled for the Linux 64 platform. ITX Design Studio is a component separate from ITX Runtime Server. It must be installed and run locally on a Windows host. When you obtain access to the ITX Runtime Server component, you will be provided with instructions explaining how to obtain the ITX Design Studio component as well.
 
-For additional high-level overview of the ITX Runtime Server product, please refer to this [support page](https://www.ibm.com/support/pages/node/7068837).
+For additional high-level overview of the ITX Runtime Server product, please refer to this [support page](https://www.ibm.com/support/pages/node/6829855).
 
 # Chart Details
 
