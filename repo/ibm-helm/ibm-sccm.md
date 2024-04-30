@@ -44,87 +44,106 @@ kubectl create secret docker-registry <name of secret> --docker-server=<your-reg
 
 ### PodSecurityPolicy Requirements
 
-This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy.
+With Kubernetes v1.25, Pod Security Policy (PSP) API has been removed and replaced with Pod Security Admission (PSA) contoller. Kubernetes PSA conroller enforces predefined Pod Security levels at the namespace level. The Kubernetes Pod Security Standards defines three different levels: privileged, baseline, and restricted. Refer to Kubernetes [`Pod Security Standards`] (https://kubernetes.io/docs/concepts/security/pod-security-standards/) documentation for more details. This chart is compatible with the restricted security level. 
 
-* Predefined  PodSecurityPolicy name: [`ibm-sccm-psp`](https://ibm.biz/cpkspec-psp)
+For users upgrading from older Kubernetes version to v1.25 or higher, refer to Kubernetes [`Migrate from PSP`](https://kubernetes.io/docs/tasks/configure-pod-container/migrate-from-psp/) documentation to help with migrating from PodSecurityPolicies to the built-in Pod Security Admission controller.
 
-This chart optionally defines a custom PodSecurityPolicy which is used to finely control the permissions/capabilities needed to deploy this chart. It is based on the predefined PodSecurityPolicy name: [`ibm-restricted-psp`](https://github.com/IBM/cloud-pak/blob/master/spec/security/psp/ibm-restricted-psp.yaml) with extra required privileges. You can enable this policy by using the Platform User Interface or configuration file available under pak_extensions/pre-install/ directory
+For users continuing on older Kubernetes versions (<1.25) and using PodSecurityPolicies, choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you. This chart is compatible with most restrictive policies.
+Below is an optional custom PSP definition based on the IBM restricted PSP.
 
-- From the user interface, you can copy and paste the following snippets to enable the custom PodSecurityPolicy
+* Predefined PodSecurityPolicy name: [`ibm-restricted-psp`](https://ibm.biz/cpkspec-psp)
+ 
+- From the user interface or command line, you can copy and paste the following snippets to create and enable the below custom PodSecurityPolicy based on IBM restricted PSP.
+	- Custom PodSecurityPolicy definition:
 
-* Custom PodSecurityPolicy definition:
+	```
+	apiVersion: policy/v1beta1
+	kind: PodSecurityPolicy
+	metadata:
+	  name: ibm-sccm-psp
+	  labels:
+	    app: "ibm-sccm-psp"
+	spec:
+	  privileged: false
+	  allowPrivilegeEscalation: false
+	  hostPID: false
+	  hostIPC: false
+	  hostNetwork: false
+	  allowedCapabilities:
+	  requiredDropCapabilities:
+	  - ALL
+	  allowedHostPaths:
+	  runAsUser:
+	    rule: MustRunAsNonRoot
+	  runAsGroup:
+	    rule: MustRunAs
+	    ranges:
+	    - min: 1
+              max: 4294967294
+	  seLinux:
+	    rule: RunAsAny
+	  supplementalGroups:
+	    rule: MustRunAs
+	    ranges:
+	    - min: 1
+	      max: 4294967294
+	  fsGroup:
+	    rule: MustRunAs
+	    ranges:
+	    - min: 1
+	      max: 4294967294
+	  volumes:
+	  - configMap
+	  - emptyDir
+	  - projected
+	  - secret
+	  - downwardAPI
+	  - persistentVolumeClaim
+	  - nfs
+	  forbiddenSysctls:
+	  - "*"
+	```
 
-```
-apiVersion: policy/v1beta1
-kind: PodSecurityPolicy
-metadata:
-  name: ibm-sccm-psp
-  labels:
-    app: "ibm-sccm-psp"
-spec:
-  privileged: false
-  allowPrivilegeEscalation: false
-  hostPID: false
-  hostIPC: false
-  hostNetwork: false
-  requiredDropCapabilities:
-  allowedCapabilities:
-  - CHOWN
-  - SETGID
-  - SETUID
-  - DAC_OVERRIDE
-  - FOWNER
-  allowedHostPaths:
-  runAsUser:
-    rule: MustRunAsNonRoot
-  runAsGroup:
-    rule: MustRunAs
-    ranges:
-    - min: 1
-      max: 4294967294
-  seLinux:
-    rule: RunAsAny
-  supplementalGroups:
-    rule: MustRunAs
-    ranges:
-    - min: 1
-      max: 4294967294
-  fsGroup:
-    rule: MustRunAs
-    ranges:
-    - min: 1
-      max: 4294967294
-  volumes:
-  - configMap
-  - emptyDir
-  - projected
-  - secret
-  - downwardAPI
-  - persistentVolumeClaim
-  - nfs
-  forbiddenSysctls:
-  - "*"
-```
+	- Custom ClusterRole for the custom PodSecurityPolicy:
 
-- Custom ClusterRole for the custom PodSecurityPolicy:
+	```
+	apiVersion: rbac.authorization.k8s.io/v1
+	kind: ClusterRole
+	metadata:
+	  name: "ibm-sccm-psp"
+	  labels:
+	    app: "ibm-sccm-psp"
+	rules:
+	- apiGroups:
+	  - policy
+	  resourceNames:
+	  - ibm-sccm-psp
+	  resources:
+	  - podsecuritypolicies
+	  verbs:
+	  - use
+	```
+	
+	- Custom Role binding for the custom PodSecurityPolicy:
+	
+	```
+	apiVersion: rbac.authorization.k8s.io/v1beta1
+	kind: RoleBinding
+	metadata:
+	  name: "ibm-sccm-psp"
+	  labels:
+	    app: "ibm-sccm-psp"
+	roleRef:
+	  apiGroup: rbac.authorization.k8s.io
+	  kind: ClusterRole
+	  name: "ibm-sccm-psp"
+	subjects:
+	- apiGroup: rbac.authorization.k8s.io
+	  kind: Group
+	  name: system:serviceaccounts
+	  namespace: {{ NAMESPACE }}
+	```
 
-```
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: "ibm-sccm-psp"
-  labels:
-    app: "ibm-sccm-psp"
-rules:
-- apiGroups:
-  - policy
-  resourceNames:
-  - ibm-sccm-psp
-  resources:
-  - podsecuritypolicies
-  verbs:
-  - use
-```
 
 - From the command line, you can run the setup scripts included under pak_extensions (untar the downloaded archive to extract the pak_extensions directory)
 
@@ -136,79 +155,108 @@ rules:
 
 ### SecurityContextConstraints Requirements
 
-* Predefined SecurityContextConstraints name: [`ibm-sccm-scc`](https://ibm.biz/cpkspec-scc)
+Red Hat OpenShift provides a pre-defined or default set of SecurityContextConstraints (SCC). These SCCs are used to control permissions for pods. These permissions include actions that a pod can perform and what resources it can access. You can use SCCs to define a set of conditions that a pod must run with to be accepted into the system. Refer to OpenShift [`Managing Security Context Constraints`](https://docs.openshift.com/container-platform/4.11/authentication/managing-security-context-constraints.html#default-sccs_configuring-internal-oauth) documentation for more details on the default SCCs. This chart is compatible with **nonroot-v2** (added in OpenShift v4.11) default SCCs and does not require a custom SCC to be defined explicity.
 
-This chart optionally defines a custom SecurityContextConstraints (on Red Hat OpenShift Container Platform) which is used to finely control the permissions/capabilities needed to deploy this chart.  It is based on the predefined SecurityContextConstraint name: [`ibm-restricted-scc`](https://github.com/IBM/cloud-pak/blob/master/spec/security/scc/ibm-restricted-scc.yaml) with extra required privileges.
+For OpenShift, choose either a predefined SCC or have your cluster administrator create a custom SCC for you as per the security profile and policies adopted for all OpenShift deployments. This chart is compatible with most restrictive security context constraints.
+Below is an optional custom SCC definition based on the IBM restricted SCC.
 
-* Custom SecurityContextConstraints definition:
+* Predefined SecurityContextConstraints name: [`ibm-restricted-scc`](https://ibm.biz/cpkspec-scc)
 
-```
-allowHostDirVolumePlugin: false
-allowHostIPC: false
-allowHostNetwork: false
-allowHostPID: false
-allowHostPorts: false
-allowPrivilegeEscalation: false
-allowPrivilegedContainer: false
-allowedCapabilities: null
-apiVersion: security.openshift.io/v1
-defaultAddCapabilities: null
-fsGroup:
-  type: MustRunAs
-  ranges:
-  - min: 1
-    max: 4294967294
-kind: SecurityContextConstraints
-metadata:
-  name: ibm-sccm-scc 
-  labels:
-    app: "ibm-sccm-scc"
-priority: null
-readOnlyRootFilesystem: false
-requiredDropCapabilities:
-- KILL
-- MKNOD
-- SETUID
-- SETGID
-runAsUser:
-  type: MustRunAsRange
-  uidRangeMin: 1000
-  uidRangeMax: 65535
-seLinuxContext:
-  type: MustRunAs
-seccompProfiles:
-- runtime/default
-supplementalGroups:
-  type: RunAsAny
-users: []
-volumes:
-- configMap
-- downwardAPI
-- emptyDir
-- persistentVolumeClaim
-- projected
-- secret
-```
+- From the user interface or command line, you can copy and paste the following snippets to create and enable the below custom SCC based on IBM restricted SCC.
 
-- Custom ClusterRole for the custom SecurityContextConstraints:
+	- Custom SecurityContextConstraints definition:
 
-```
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: "ibm-sccm-scc"
-  labels:
-    app: "ibm-sccm-scc"
-rules:
-- apiGroups:
-  - security.openshift.io
-  resourceNames:
-  - ibm-sccm-scc
-  resources:
-  - securitycontextconstraints
-  verbs:
-  - use
-```
+	```
+	apiVersion: security.openshift.io/v1
+	kind: SecurityContextConstraints
+	metadata:
+	  name: ibm-sccm-scc 
+	  labels:
+	    app: "ibm-sccm-scc"
+		app.kubernetes.io/instance: "ibm-sccm"
+		app.kubernetes.io/managed-by: "ibm-sccm"
+		app.kubernetes.io/name: "ibm-sccm"
+	allowHostDirVolumePlugin: false
+	allowHostIPC: false
+	allowHostNetwork: false
+	allowHostPID: false
+	allowHostPorts: false
+	allowPrivilegeEscalation: false
+	allowPrivilegedContainer: false
+	allowedCapabilities:
+	defaultAddCapabilities: null
+	fsGroup:
+	  type: MustRunAs
+	  ranges:
+	  - min: 1
+	    max: 4294967294
+	priority: 0
+	readOnlyRootFilesystem: false
+	requiredDropCapabilities:
+	- ALL
+	runAsUser:
+	  type: MustRunAsRange
+	  uidRangeMin: 1
+	  uidRangeMax: 4294967294
+	seLinuxContext:
+	  type: MustRunAs
+	seccompProfiles:
+	- runtime/default
+	supplementalGroups:
+          type: MustRunAs
+          ranges:
+          - min: 1
+            max: 4294967294
+	users: []
+	volumes:
+	- configMap
+	- downwardAPI
+	- emptyDir
+	- persistentVolumeClaim
+	- projected
+	- secret
+	- nfs
+	```
+
+	- Custom ClusterRole for the custom SecurityContextConstraints:
+
+	```
+	apiVersion: rbac.authorization.k8s.io/v1
+	kind: ClusterRole
+	metadata:
+	  name: "ibm-sccm-scc"
+	  labels:
+		app: "ibm-sccm-scc"
+	rules:
+	- apiGroups:
+	  - security.openshift.io
+	  resourceNames:
+	  - ibm-sccm-scc
+	  resources:
+	  - securitycontextconstraints
+	  verbs:
+	  - use
+	```
+
+	- Custom Role binding for the custom SecurityContextConstraints:
+
+	```	
+	apiVersion: rbac.authorization.k8s.io/v1
+	kind: ClusterRoleBinding
+	metadata:
+	  name: "ibm-sccm-scc"
+	  labels:
+		app: "ibm-sccm-scc"
+	roleRef:
+	  apiGroup: rbac.authorization.k8s.io
+	  kind: ClusterRole
+	  name: "ibm-sccm-scc"
+	subjects:
+	- apiGroup: rbac.authorization.k8s.io
+	  kind: Group
+	  name: system:serviceaccounts
+	  namespace: {{ NAMESPACE }}
+	```
 
 - From the command line, you can run the setup scripts included under pak_extensions (untar the downloaded archive to extract the pak_extensions directory)
 
@@ -217,6 +265,9 @@ rules:
 
   As team admin the namespace scoped pre-install script is located at:
   - pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh
+ 
+  As team admin the namespace scoped pre-install script for adding **nonroot-v2** is located at:
+  - pre-install/namespaceAdministration/addNonrootSCCNamespacePrereqs.sh
   
 ### Installing a PodDisruptionBudget
 
@@ -265,7 +316,7 @@ Ensure that the chart is downloaded locally and available.
 Run the below command
 
 ```bash
-$ helm install my-release -f values.yaml ibm-sccm-3.0.8.tgz
+$ helm install my-release -f values.yaml ibm-sccm-3.0.9.tgz
 ```
 
 Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 6-7 minutes for Installing Control Center.
@@ -463,7 +514,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-sccm-3.0.8.tgz
+helm upgrade my-release -f values.yaml ibm-sccm-3.0.9.tgz
 ```
 
 Refer [RELEASENOTES.md](RELEASENOTES.md) for Fix history.
