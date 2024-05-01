@@ -1,8 +1,8 @@
-# IBM Sterling Control Center Monitor V6.3.0.0
+# IBM Sterling Control Center Monitor V6.3.1.0
 
 ## Introduction
 
-IBM▒ Control Center Monitor is a centralized monitoring and management system. It gives operations personnel the capability to continuously monitor the status of Configuration Managers, engines, and adapters across the enterprise for the following server types from one central location: IBM Sterling Connect:Direct▒, IBM Sterling Connect:Enterprise▒, IBM Sterling B2B Integrator, IBM Sterling File Gateway, IBM Global High Availability Mailbox, IBM Sterling Connect:Express, IBM QuickFile, IBM MQ Managed File Transfer and Many FTP servers. To find out more, see the Knowledge Center for [IBM Sterling Control Center Monitor](  https://www.ibm.com/docs/en/control-center/6.3.0?topic=sterling-control-center-monitor-630 ).
+IBM▒ Control Center Monitor is a centralized monitoring and management system. It gives operations personnel the capability to continuously monitor the status of Configuration Managers, engines, and adapters across the enterprise for the following server types from one central location: IBM Sterling Connect:Direct▒, IBM Sterling Connect:Enterprise▒, IBM Sterling B2B Integrator, IBM Sterling File Gateway, IBM Global High Availability Mailbox, IBM Sterling Connect:Express, IBM QuickFile, IBM MQ Managed File Transfer and Many FTP servers. To find out more, see the Knowledge Center for [IBM Sterling Control Center Monitor](  https://www.ibm.com/docs/en/control-center/6.3.1?topic=sterling-control-center-monitor-631 ).
 
 ## Chart Details
 
@@ -17,7 +17,7 @@ This chart deploys IBM Sterling Control Center Monitor on a container management
 
 ## Prerequisites
 
-1. Red Hat OpenShift Container Platform Version 4.10.0 or later fixes
+1. Red Hat OpenShift Container Platform Version 4.11.0 or later fixes
 2. Kubernetes version >= 1.23 with beta APIs enabled.
 3. Helm version >= 3.2
 4. Ensure that one of the supported database server (Oracle/DB2/MSSQL) is installed and the database is accessible from inside the cluster.
@@ -303,7 +303,7 @@ This chart uses the following resources by default:
 ## Agreement to IBM Control Center License
 
 You must read the IBM Sterling Control Center License agreement terms before installation, using the below link:
-[License](https://www.ibm.com/support/customer/csol/terms/?id=L-KNAN-CDGF8Z&lc=en#detail-document) (L/N: L-KNAN-CDGF8Z)
+[License](https://www.ibm.com/support/customer/csol/terms/?id=L-QZDV-G39NEP&lc=en#detail-document) (L/N: L-QZDV-G39NEP)
 
 ## Installing the Chart
 
@@ -316,7 +316,7 @@ Ensure that the chart is downloaded locally and available.
 Run the below command
 
 ```bash
-$ helm install my-release -f values.yaml ibm-sccm-3.0.9.tgz
+$ helm install my-release -f values.yaml ibm-sccm-3.1.2.tgz
 ```
 
 Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 6-7 minutes for Installing Control Center.
@@ -514,7 +514,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-sccm-3.0.9.tgz
+helm upgrade my-release -f values.yaml ibm-sccm-3.1.2.tgz
 ```
 
 Refer [RELEASENOTES.md](RELEASENOTES.md) for Fix history.
@@ -593,7 +593,8 @@ Use `networkPolicy` to control traffic flow at the port level.
 
 1. All sensitive application data at rest is stored in binary format so user cannot decrypt it. This chart does not support Encryption of user data at rest by default. Administrator can configure storage encryption to encrypt all data at rest.
 
-2. Data in motion is encrypted using transport layer security(TLS 1.2). For more information please see product [Knowledge center link]( https://www.ibm.com/docs/en/control-center/6.3.0?topic=sterling-control-center-monitor-630 )
+2. Data in motion is encrypted using transport layer security(TLS 1.2). For more information please see product [Knowledge center link]( https://www.ibm.com/docs/en/control-center/6.3.1?topic=sterling-control-center-monitor-631 )
+
 
 ## Storage
 
@@ -610,4 +611,4 @@ IBM Sterling Control Center Helm chart supports both dynamic and pre-created per
 
 ## Documentation
 
-[IBM Sterling Control Center](https://www.ibm.com/docs/en/control-center/6.3.0?topic=sterling-control-center-monitor-630)
+[IBM Sterling Control Center](https://www.ibm.com/docs/en/control-center/6.3.1?topic=sterling-control-center-monitor-631)
