@@ -13,7 +13,7 @@
 
 ## Prerequisites
 
-1. Kubernetes 1.19.0+; kubectl and oc CLI; Helm 3;
+1. Kubernetes 1.19.0+/OpenShift 4.6.0+; kubectl and oc CLI; Helm 3;
   * Install and setup oc/kubectl CLI depending on your architecture.
     * [ppc64le](https://mirror.openshift.com/pub/openshift-v4/ppc64le/clients/ocp/stable/openshift-client-linux.tar.gz)
     * [s390x](https://mirror.openshift.com/pub/openshift-v4/s390x/clients/ocp/stable/openshift-client-linux.tar.gz)
@@ -61,6 +61,7 @@ spec:
     storage: 100Mi
   accessModes:
     - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
   nfs:
     server: 192.168.1.17
     path: /volume1/k8/ucd-ext-lib
@@ -104,6 +105,8 @@ data:
 
 6. A PersistentVolume that will hold the appdata directory for the DevOps Deploy server is required.  If your cluster supports dynamic volume provisioning you will not need to manually create a PersistentVolume (PV) or PersistentVolumeClaim (PVC) before installing this chart.  If your cluster does not support dynamic volume provisioing, you will need to either ensure a PV is available or you will need to create one before installing this chart.  You can optionally create the PVC to bind it to a specific PV, or you can let the chart create a PVC and bind to any available PV that meets the required size and storage class.  Sample YAML to create the PV and PVC are provided below.
 
+  * Ensure that the spec.persistentVolumeReclaimPolicy parameter is set to Retain on the application data persistent volume. By default, the value is Delete for dynamically created persistent volumes. Setting the value to Retain ensures that the persistent volume is not freed or deleted if its associated persistent volume claim is deleted.
+
 ```
 apiVersion: v1
 kind: PersistentVolume
@@ -116,6 +119,7 @@ spec:
     storage: 20Gi
   accessModes:
     - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
   nfs:
     server: 192.168.1.17
     path: /volume1/k8/ucd-appdata
@@ -135,6 +139,7 @@ spec:
     matchLabels:
       volume: ucd-appdata-vol
 ```
+
   * The following storage options have been tested with IBM DevOps Deploy
 
     * IBM Block Storage supports the ReadWriteOnce access mode.  ReadWriteMany is not supported.
@@ -193,28 +198,17 @@ This chart requires a `SecurityContextConstraints` to be bound to the target nam
 
 ### Licensing Requirements
 
-The DevOps Deploy server image will attempt to upload DevOps Deploy license metrics(agent high-water mark) to the license service. For the upload to be successful, this chart needs IBM Licensing operator (a component of IBM Common Services) to be installed in the Openshift cluster. Please follow these [instructions](https://www.ibm.com/support/knowledgecenter/SSHKN6/installer/landing_installer.html) to install IBM Common services.
+The DevOps Deploy server image will attempt to upload DevOps Deploy license metrics(agent high-water mark) to the IBM Lcense service. For the upload to be successful, this chart needs IBM Licensing operator (a component of IBM Foundational/Common Services) to be installed in the Openshift cluster. Please follow these [instructions](https://www.ibm.com/docs/en/cloud-paks/foundational-services/4.6?topic=service-installing-license) to install IBM License service.
 
-Once the common services are installed, the IBM Licensing service can be made accessible to the DevOps Deploy server by creating an OperandRequest resource to copy the license service secret(ibm-licensing-upload-token) and configmap(ibm-licensing-upload-config) to the namespace/project the DevOps Deploy server will be installed in. Click [here](https://www.ibm.com/support/knowledgecenter/SSHKN6/installer/3.x.x/bind_info.html#license-bind) for more information.  It is only required to create an OperandRequest resource with the ibm-licensing-operator information. Following is an example yaml file contents that would create an OperandRequest which was tested with IBM Common services 3.23.0.  Add the following yaml to a file named operandrequest.yaml and then run `oc apply -f ./operandrequest.yaml` in the namespace/project where the DevOps Deploy server will be installed.
+Once the IBM License service is installed, you need to copy the license service upload secret(ibm-licensing-upload-token) and configmap(ibm-licensing-upload-config) to the namespace/project the DevOps Deploy server will be installed in. Be sure that the current namespace/project is the one that DevOps Deploy will be installed into, before running the following commands.
 
-```yaml
-apiVersion: operator.ibm.com/v1alpha1
-kind: OperandRequest
-metadata:
-  name: ibm-licensing-request
-spec:
-  requests:
-  - operands:
-      - name: ibm-licensing-operator
-        bindings:
-          public-api-upload:
-            secret: ibm-licensing-upload-token
-            configmap: ibm-licensing-upload-config
-    registry: common-service
-    registryNamespace: ibm-common-services
-    description: "Requesting the Licensing Service"
+```bash
+oc get secret ibm-licensing-upload-token -n ibm-licensing -o yaml | sed 's/^.*namespace: ibm-licensing.*$//' | oc create -f -
+oc get configMap ibm-licensing-upload-config -n ibm-licensing -o yaml | sed 's/^.*namespace: ibm-licensing.*$//' | oc create -f -
+
 ```
-To retrieve license usage data, please follow these [instructions](https://www.ibm.com/docs/en/cloud-paks/cp-integration/2021.1?topic=service-retrieving-license-usage-data).
+
+Once the Deploy server has started emitting license metrics to the IBM License service (this can take up to 24 hours), you can retrieve license usage data by following these [instructions](https://www.ibm.com/docs/en/cloud-paks/foundational-services/4.6?topic=data-per-cluster-from-license-service).
 
 ## Resources Required
 
