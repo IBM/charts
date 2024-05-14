@@ -11,7 +11,7 @@
 
 ## Prerequisites
 
-1. Kubernetes 1.19.0+; kubectl and oc CLI; Helm 3;
+1. Kubernetes 1.19.0+/OpenShift 4.6.0+; kubectl and oc CLI; Helm 3;
   * Install and setup oc/kubectl CLI depending on your architecture.
     * [ppc64le](https://mirror.openshift.com/pub/openshift-v4/ppc64le/clients/ocp/stable/openshift-client-linux.tar.gz)
     * [s390x](https://mirror.openshift.com/pub/openshift-v4/s390x/clients/ocp/stable/openshift-client-linux.tar.gz)
@@ -39,7 +39,7 @@ oc create secret generic ucd-secrets \
   --from-literal=keystorepassword=MyKeystorePassword
 ```
 
-5. A PersistentVolume that will hold the conf directory for the DevOps Deploy relay is required.  If your cluster supports dynamic volume provisioning you will not need to create a PersistentVolume (PV) or PersistentVolumeClaim (PVC) before installing this chart.  If your cluster does not support dynamic volume provisioning, you will need to either ensure a PV is available or you will need to create one before installing this chart.  You can optionally create the PVC to bind it to a specific PV, or you can let the chart create a PVC and bind to any available PV that meets the required size and storage class.  Sample YAML to create the PV and PVC are provided below.
+5. A PersistentVolume that will hold the conf directory for the DevOps Deploy relay is required.  If your cluster supports dynamic volume provisioning you will not need to create a PersistentVolume (PV) or PersistentVolumeClaim (PVC) before installing this chart.  If your cluster does not support dynamic volume provisioning, you will need to either ensure a PV is available or you will need to create one before installing this chart.  You can optionally create the PVC to bind it to a specific PV, or you can let the chart create a PVC and bind to any available PV that meets the required size and storage class.  Sample YAML to create the PV and PVC are provided below.  Ensure that the spec.persistentVolumeReclaimPolicy parameter is set to Retain on the conf directory persistent volume. By default, the value is Delete for dynamically created persistent volumes. Setting the value to Retain ensures that the persistent volume is not freed or deleted if its associated persistent volume claim is deleted.
 
 ```
 apiVersion: v1
@@ -53,6 +53,7 @@ spec:
     storage: 10Mi
   accessModes:
     - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
   nfs:
     server: 192.168.1.17
     path: /volume1/k8/ucdr-conf
@@ -241,7 +242,7 @@ The Helm chart has the following values.
 | image | pullPolicy | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to IfNotPresent |
 |       | secret |  An image pull secret used to authenticate with the image registry | Empty (default) if no authentication is required to access the image registry. |
 | license | accept | Set to true to indicate you have read and agree to license agreements : https://ibm.biz/devops-deploy-license | false |
-| service | type | Specify type of service | Valid options are ClusterIP, NodePort and LoadBalancer (for clusters that support LoadBalancer). Default is ClusterIP |
+| service | type | Specify type of service | Valid options are ClusterIP, NodePort and LoadBalancer (for clusters that support LoadBalancer). Default is LoadBalancer |
 | persistence | enabled | Determines if persistent storage will be used to hold the DevOps Deploy server appdata directory contents. This should always be true to preserve server data on container restarts. | Default value "true" |
 |             | useDynamicProvisioning | Set to "true" if the cluster supports dynamic storage provisoning | Default value "false" |
 |             | fsGroup | The group ID to use to access persistent volumes | Default value "1001" |
