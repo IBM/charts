@@ -316,7 +316,7 @@ Ensure that the chart is downloaded locally and available.
 Run the below command
 
 ```bash
-$ helm install my-release -f values.yaml ibm-sccm-3.1.2.tgz
+$ helm install my-release -f values.yaml ibm-sccm-3.1.3.tgz
 ```
 
 Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 6-7 minutes for Installing Control Center.
@@ -482,6 +482,7 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `ingress.annotations`                           | annotation for ingress resource                     | `[]`                                     |
 | `ingress.tls.enabled`                           | TLS is enabled or disabled for ingress resource     | `false`                                  |
 | `ingress.tls.secretName`                        | TLS secret name if enabled                          |                                          |
+| `consoleLogEnabled`                             | To enable engine logs to redirect to console        | `false`                                  |
 
 Specify each parameter in values.yaml to `helm install`. For example,
 
@@ -514,7 +515,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-sccm-3.1.2.tgz
+helm upgrade my-release -f values.yaml ibm-sccm-3.1.3.gz
 ```
 
 Refer [RELEASENOTES.md](RELEASENOTES.md) for Fix history.
