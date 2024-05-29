@@ -1,5 +1,5 @@
 ## Introduction
-Event Endpoint Management provides the capability to describe and catalog your Kafka topics as event sources, and to share the details of the topics with application developers.
+IBM Event Endpoint Management provides the capability to describe and catalog your Kafka topics as event sources, and to share the details of the topics with application developers.
 
 ## Chart Details
 Application developers can discover the event source and configure their applications to subscribe to the stream of events, providing self-service access to the message content from the event stream.
@@ -12,7 +12,7 @@ Before installing IBM Event Endpoint Management, ensure you create a secret call
 
 `kubectl create secret docker-registry ibm-entitlement-key --docker-username=cp --docker-password=<your-entitlement-key> --docker-server=cp.icr.io -n <target-namespace>`
 
-It is recommended to install Cert Manager before the installation of IBM Event Endpoint Management. This will facilitate the handling of certificates for secure communication in the product.
+It is strongly recommended to install the IBM Certificate Manager before the installation of IBM Event Endpoint Management. This will facilitate the handling of certificates for secure communication in the product.
 
 ### Resources Required
 IBM Event Endpoint Management resource requirements depend on several factors. For information about minimum resource requirements, see the [IBM Event Endpoint Management documentation](https://ibm.biz/eem-documentation).

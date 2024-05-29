@@ -1,6 +1,6 @@
 ## Introduction
-Event Endpoint Management provides the capability to describe and catalog your Kafka topics as event sources, and to share the details of the topics with application developers.
-Installing Event Endpoint Management requires the installation of multiple Helm charts, this is the first of those charts.  For more information see the [documentation](https://ibm.biz/eem-documentation).
+IBM Event Endpoint Management provides the capability to describe and catalog your Kafka topics as event sources, and to share the details of the topics with application developers.
+Installing IBM Event Endpoint Management requires the installation of multiple Helm charts, this is the first of those charts.  For more information see the [documentation](https://ibm.biz/eem-documentation).
 
 ## Chart Details
 This chart deploys the Custom Resource Definitions (CRDs) required by the IBM Event Endpoint Management operator.
