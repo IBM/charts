@@ -1,4 +1,4 @@
-# IBM Sterling File Gateway Enterprise Edition v6.2.0.1
+# IBM Sterling File Gateway Enterprise Edition v6.2.0.2
 ## Introduction
 
 IBM Sterling File Gateway lets organizations transfer files between partners by using different protocols, conventions for naming files, and file formats. A scalable and security-enabled gateway, Sterling File Gateway enables companies to consolidate all their internet-based file transfers on a single edge gateway, which helps secure your B2B collaboration network and the data flowing through it. To find out more, see [IBM Sterling File Gateway](https://www.ibm.com/products/file-gateway) on IBM Marketplace.
@@ -19,12 +19,12 @@ Services
 ## Prerequisites
 
 1. Red Hat OpenShift Container Platform 
-   Version 4.13.0 or later fixes
    Version 4.14.0 or later fixes
+   Version 4.15.0 or later fixes
 
-2. Kubernetes version >= 1.26 and <= 1.28
+2. Kubernetes version >= 1.27 and <= 1.29
 
-3. Helm version >= 3.13.x
+3. Helm version >= 3.14.x
 
 4. Ensure that the docker images for IBM Sterling File Gateway Enterprise Edition from IBM Entitled Registry are downloaded and pushed to an image registry accessible to the cluster.
 
@@ -379,7 +379,7 @@ Parameter                                      | Description                    
 `global.license`                               | Accept B2BI/SFG license                                              | `false`
 `global.licenseType`                           | Specify the license edition as per license agreement.                | prod
 `global.image.repository`                      | Repository for B2B docker images                                     | 
-`global.image.tag          `                   | Docker image tag                                                     | `6.2.0.1`
+`global.image.tag          `                   | Docker image tag                                                     | `6.2.0.2`
 `global.image.digest          `                | Docker image digest. Takes precedence over tag                       | 
 `global.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `global.image.pullSecret `         			   | Pull secret for repository access                                    | `ibm-entitlement-key`
@@ -433,7 +433,7 @@ Parameter                                      | Description                    
 `dataSetup.enabled`                            | Enable database setup job execution                                  | true
 `dataSetup.upgrade`                            | Upgrade an older release                                             | false
 `dataSetup.image.repository`                 | DB setup container image repository                                   | 
-`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.2.0.1`
+`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.2.0.2`
 `dataSetup.image.digest'                      | Docker image digest. Takes precedence over tag                       |
 `dataSetup.image.pullPolicy`                 | Pull policy for repository                                           | `IfNotPresent`
 `dataSetup.image.pullSecret`         		  | Pull secret for repository access                                    |  `ibm-entitlement-key` 
@@ -602,15 +602,15 @@ name	                                         |
 `asi.livenessProbe.initialDelaySeconds`        | Livenessprobe initial delay in seconds                               | 60
 `asi.livenessProbe.timeoutSeconds`             | Livenessprobe timeout in seconds                                     | 30
 `asi.livenessProbe.periodSeconds`              | Livenessprobe interval in seconds                                    | 60
-`asi.readinessProbe.initialDelaySeconds`       | ReadinessProbe initial delay in seconds                              | 60
+`asi.readinessProbe.initialDelaySeconds`       | ReadinessProbe initial delay in seconds                              | 30
 `asi.readinessProbe.timeoutSeconds`            | ReadinessProbe timeout in seconds                                    | 5
 `asi.readinessProbe.periodSeconds`             | ReadinessProbe interval in seconds                                   | 60
 `asi.readinessProbe.command`                   | ReadinessProbe command to be executed                                |
 `asi.readinessProbe.arg`                       | ReadinessProbe command arguments                                     |
-`asi.startupProbe.initialDelaySeconds`         | StartupProbe initial delay in seconds                                | 120
+`asi.startupProbe.initialDelaySeconds`         | StartupProbe initial delay in seconds                                | 300
 `asi.startupProbe.timeoutSeconds`              | StartupProbe timeout in seconds                                      | 30
 `asi.startupProbe.periodSeconds`               | StartupProbe interval in seconds                                     | 60
-`asi.startupProbe.failureThreshold`            | StartupProbe failure threshold                                       | 3
+`asi.startupProbe.failureThreshold`            | StartupProbe failure threshold                                       | 6
 `asi.internalAccess.enableHttps`               | Enable https for internal traffic                                    | true
 `asi.internalAccess.enableHttps.httpsPort`     | Application internal https port                                      | 
 `asi.internalAccess.tlsSecretName`             | Application tls secret name for internal traffic                     |   
@@ -791,7 +791,7 @@ name	                                         |
 `test.extraLabels`                            | Extra labels                                                          |
 `purge.enabled`                                | Enable external purge job                                            | 'false'
 `purge.image.repository          `             | External purge docker image repository                               | `purge`
-`purge.image.tag          `                    | External purge image tag                                             | `6.2.0.1`
+`purge.image.tag          `                    | External purge image tag                                             | `6.2.0.2`
 `purge.image.digest          `                 | External purge image digest. Takes precedence over tag               |
 `purge.image.pullPolicy`                       | Pull policy for external purge docker image                          | `IfNotPresent`
 `purge.image.pullSecret`                       | Pull secret for repository access                                    | `ibm-entitlement-key`
