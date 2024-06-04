@@ -483,10 +483,6 @@ oc patch configs.imageregistry.operator.openshift.io/cluster \
 
 ## Using the airgap scripts to create image registry and mirror images once bastion host and cluster are ready
 
-References -
-https://github.ibm.com/CloudPakOpenContent/cloud-pak-launch-cli
-https://github.ibm.com/IBMPrivateCloud/cloud-pak-airgap-cli
-
 1. Follow the instructions as below to create mirror registry and mirror images
 
     i. download case from cloud-pak repo
