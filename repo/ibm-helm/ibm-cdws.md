@@ -82,7 +82,7 @@ Ensure that the chart is downloaded locally and available.
 Run the below command
 
 ```bash
-$ helm install my-release -f values.yaml ibm-cdws-1.0.0.tgz
+$ helm install my-release -f values.yaml ibm-cdws-1.0.1.tgz
 ```
 
 Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 2-3 minutes for Installing Web Services.
@@ -101,21 +101,22 @@ The following tables lists the configurable parameters of the IBM Connect:Direct
 | `image.pullPolicy`                              | Image pull policy                                   | `IfNotPresent`                           |
 | `cdwsParams.certificateLabel`                   | Certificate label for CA-signed Certificate/Self-signed certificate |                                          |
 | `cdwsParams.certificateExpiryTime`              | Self-signed certificate - Enter the certificate expiration time in days |                                          |
-| `cdwsParams.commonName`                   	  | Self-signed certificate - Identifies the host name associated with the certificate |                                          |
-| `cdwsParams.organization`                   	  | Self-signed certificate - The legal name of your organization. This should not be abbreviated and should include suffixes such as Inc, Corp, or LLC. |                                          |
-| `cdwsParams.locality`                   		  | Self-signed certificate - The city where your organization is located. |                                          |
-| `cdwsParams.state`                   			  | Self-signed certificate - The state/region where your organization is located. |                                          |
-| `cdwsParams.country`                   		  | Self-signed certificate - The two-letter ISO code for the country where your organization is location. |                                          |
-| `cdwsParams.emailId`                   		  | Self-signed certificate - An email address used to contact your organization. |                                          |
+| `cdwsParams.commonName`                         | Self-signed certificate - Identifies the host name associated with the certificate |                                          |
+| `cdwsParams.organization`                       | Self-signed certificate - The legal name of your organization. This should not be abbreviated and should include suffixes such as Inc, Corp, or LLC. |                                          |
+| `cdwsParams.locality`                           | Self-signed certificate - The city where your organization is located. |                                          |
+| `cdwsParams.state`                              | Self-signed certificate - The state/region where your organization is located. |                                          |
+| `cdwsParams.country`                            | Self-signed certificate - The two-letter ISO code for the country where your organization is location. |                                          |
+| `cdwsParams.emailId`                            | Self-signed certificate - An email address used to contact your organization. |                                          |
 | `cdwsParams.dnsName`                            | Self-signed certificate - Identifies the domain name associated with the certificate. |                                          |
-| `cdwsParams.ipAddress`                   		  | Self-signed certificate - Identifies the IP Address associated with the certificate. |                                          |
+| `cdwsParams.ipAddress`                          | Self-signed certificate - Identifies the IP Address associated with the certificate. |                                          |
+| `cdwsParams.restOnly`                           | To enable RESTful API interface only when set to yes| `no`                                     |
 | `dashboard.enabled`                             | For making monitoring dashboard enabled             |                                          |
 | `service.type`                                  | Kubernetes service type exposing ports              | `LoadBalancer`                           |
 | `service.loadBalancerIP`                        | For passing load balancer IP                        |                                          |
 | `service.loadBalancerSourceRanges`              | Load Balancer sources                               | `[]`                                     |
 | `service.externalTrafficPolicy`                 | For passing external Traffic Policy                 | `Local`                                  |
 | `service.sessionAffinity`                       | For giving session Affinity                         | `ClientIP`                               |
-| `service.port`                       			  | Web Console port number                             | `9443`                                   |
+| `service.port`                                  | Web Console port number                             | `9443`                                   |
 | `service.webConsoleName`                        | Web Console name                                    | `cdws-web-console`                       |
 | `service.protocol`                              | Web Console Protocol for service                    | `TCP`                                    |
 | `service.allowIngressTraffic`                   | Allowing Ingress traffic for Web Console            | `true`                                   |
@@ -204,7 +205,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-cdws-1.0.0.tgz
+helm upgrade my-release -f values.yaml ibm-cdws-1.0.1.tgz
 ```
 
 Refer [RELEASENOTES.md](RELEASENOTES.md) for Fix history.
