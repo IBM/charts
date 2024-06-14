@@ -1,12 +1,12 @@
-# IBM Event Streams Operator
+# Event Streams operator
 
 The Event Streams operator installs, configures, and manages instances of Event Streams on your Kubernetes cluster.
 
-Built on Apache Kafka®, [IBM Event Streams](https://ibm.github.io/event-streams/) is a high-throughput, fault-tolerant, event streaming platform that helps you build intelligent, responsive, event-driven applications.
+Built on Apache Kafka®, [Event Streams](https://ibm.github.io/event-automation/es/about/overview/) is a high-throughput, fault-tolerant, event streaming platform that helps you build intelligent, responsive, event-driven applications.
 
 ## Introduction
 
-This chart deploys the IBM Event Streams operator.
+This chart deploys the Event Streams operator.
 
 ## Chart Details
 
@@ -25,15 +25,15 @@ Ensure you have the following setup available:
 
 The installation environment has the following prerequisites:
 
-- Kubernetes platform versions 1.23 to 1.28 supporting RedHat UBI Linux-based containers.
-- A namespace dedicated for use by IBM Event Streams.
+- Kubernetes platform versions >=1.25 supporting RedHat UBI Linux-based containers.
+- A namespace dedicated for use by Event Streams.
 - A storage class that supports block storage on the cluster.
 
-**Note:** Do not use this chart to install the IBM Event Streams operator on clusters that have other Cloud Pak for Integration components installed.
+**Note:** Do not use this chart to install the Event Streams operator on clusters that have other Cloud Pak for Integration components installed.
 
 ## Installing the Chart
 
-### Installing the Operator
+### Installing the operator
 
 To install the operator, run the following command:
 
@@ -91,4 +91,6 @@ helm uninstall <release-name>
 
 ## Documentation
 
-Find out more about [IBM Event Streams](https://ibm.github.io/event-streams/about/overview/).
+Find out more about [Event Streams](https://ibm.github.io/event-automation/es/about/overview/).
+
+See [sample configurations](https://github.com/IBM/ibm-event-automation/tree/main/event-streams/cr-examples/eventstreams/kubernetes) for installing Event Streams on Kubernetes platforms other than OpenShift.
