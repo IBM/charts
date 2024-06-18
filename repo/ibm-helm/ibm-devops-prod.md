@@ -129,7 +129,7 @@ The pod [`fsGroup`](https://kubernetes.io/docs/tasks/configure-pod-container/sec
 Fetch chart for install:
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-prod --version 11.0.1
+helm pull --untar ibm-helm/ibm-devops-prod --version 11.0.2
 cd ibm-devops-prod
 ```
 
@@ -200,7 +200,19 @@ helm upgrade --install $HELM_NAME . -n $NAMESPACE \
 
 ## Upgrade
 
-Only upgrading from v10.5.3 and v10.5.4 as supported - for older versions first upgrade to these later versions.
+Only upgrading from v10.5.3 and v10.5.4 is supported - for older versions first upgrade to these later versions.
+
+Before performing your upgrade RabbitMQ flags must be enabled on a running install:
+
+```bash
+oc exec -n $NAMESPACE $HELM_NAME-rabbitmq-0 -- rabbitmqctl enable_feature_flag all
+```
+
+If you are restoring from a quiesced snapshot, meaning no instance is running, you can instead delete the RabbitMQ data before installing:
+
+```bash
+oc delete pvc -n $NAMESPACE data-$HELM_NAME-rabbitmq-0 
+```
 
 Before performing your upgrade backup your user data.
 
