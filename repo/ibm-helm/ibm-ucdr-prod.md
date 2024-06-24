@@ -237,10 +237,10 @@ The Helm chart has the following values.
 
 | Qualifier | Parameter  | Definition | Allowed Value |
 |---|---|---|---|
-| version |  | DevOps Deploy relay product vesion |  |
+| version |  | DevOps Deploy relay product vesion | Defaults to latest product version |
 | replicas | relay | Number of DevOps Deploy relay replicas | Non-zero number of replicas.  Defaults to 1 |
 | image | pullPolicy | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to IfNotPresent |
-|       | secret |  An image pull secret used to authenticate with the image registry | Empty (default) if no authentication is required to access the image registry. |
+|       | secret |  An image pull secret used to authenticate with the image registry | If no value is specified we will look for a pull secret named ibm-entitlement-key. |
 | license | accept | Set to true to indicate you have read and agree to license agreements : https://ibm.biz/devops-deploy-license | false |
 | service | type | Specify type of service | Valid options are ClusterIP, NodePort and LoadBalancer (for clusters that support LoadBalancer). Default is LoadBalancer |
 | persistence | enabled | Determines if persistent storage will be used to hold the DevOps Deploy server appdata directory contents. This should always be true to preserve server data on container restarts. | Default value "true" |
@@ -248,7 +248,7 @@ The Helm chart has the following values.
 |             | fsGroup | The group ID to use to access persistent volumes | Default value "1001" |
 | confVolume | name | The base name used when the Persistent Volume and/or Persistent Volume Claim for the DevOps Deploy relay conf directory is created by the chart. | Default value is "conf" |
 |            | existingClaimName | The name of an existing Persistent Volume Claim that references the Persistent Volume that will be used to hold the DevOps Deploy relay conf directory. |  |
-|            | storageClassName | The name of the storage class to use when persistence.useDynamicProvisioning is set to "true". |  |
+|            | storageClassName | The name of the storage class to use when persistence.useDynamicProvisioning is set to "true" and existingClaimName is empty. |  |
 |            | size | Size of the volume to hold the DevOps Deploy relay conf directory |  |
 |              | accessMode | Persistent storage access mode for the ext-lib persistent volume. | ReadWriteOnce |
 | serverHostPort |  | DevOps Deploy server hostname and WSS port in the form hostname:port. If specifying failover info, separate multiple hostname:port with a comma. For example, ucd1.example.com:7919,ucd2.example.com:7919) |  |
@@ -263,8 +263,10 @@ The Helm chart has the following values.
 | resources | constraints.enabled | Specifies whether the resource constraints specified in this helm chart are enabled.   | false (default) or true  |
 |           | limits.cpu  | Describes the maximum amount of CPU allowed | Default is 4000m. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu)  |
 |           | limits.memory | Describes the maximum amount of memory allowed | Default is 4Gi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
+|           | limits.ephemeral-storage | Describes the maximum amount of ephemeral storage allowed | Default is 2Gi. See Kubernetes - [ephemeral storage](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#setting-requests-and-limits-for-local-ephemeral-storage) |
 |           | requests.cpu  | Describes the minimum amount of CPU required - if not specified will default to limit (if specified) or otherwise implementation-defined value. | Default is 100m. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu) |
-|           | requests.memory | Describes the minimum amount of memory required If not specified, the memory amount will default to the limit (if specified) or the implementation-defined value | Default is 200Mi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
+|           | requests.memory | Describes the minimum amount of memory required. If not specified, the memory amount will default to the limit (if specified) or the implementation-defined value | Default is 200Mi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
+|           | requests.ephemeral-storage | Describes the minimum amount of ephemeral storage required. If not specified, the amount will default to the limit (if specified) or the implementation-defined value  | Default is 500Mi. See Kubernetes - [ephemeral storage](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#setting-requests-and-limits-for-local-ephemeral-storage) |
 
 ## Scaling
 To increase or decrease the number of DevOps Deploy Agent Relay instances/replicas issue the following command:

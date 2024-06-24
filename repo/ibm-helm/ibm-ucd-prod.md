@@ -337,18 +337,18 @@ The Helm chart has the following values.
 
 | Qualifier | Parameter  | Definition | Allowed Value |
 |---|---|---|---|
-| version |  | DevOps Deploy product version |  |
+| version |  | DevOps Deploy product version | Defaults to latest product version |
 | replicas | server | Number of DevOps Deploy server replicas | Non-zero number of replicas.  Defaults to 1 |
 |          | dfe | Number of DFE replicas | Number of Distributed Front End replicas.  Defaults to 0 |
 | image | pullPolicy | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to IfNotPresent |
-|       | secret |  An image pull secret used to authenticate with the image registry | Empty (default) if no authentication is required to access the image registry. |
+|       | secret |  An image pull secret used to authenticate with the image registry | If no value is specified we will look for a pull secret named ibm-entitlement-key. |
 | service | type | Specify type of service | Valid options are ClusterIP, NodePort and LoadBalancer (for clusters that support LoadBalancer). Default is ClusterIP |
 | database | type | The type of database DevOps Deploy will connect to | Valid values are db2, mysql, oracle, and sqlserver |
 |          | name | The name of the database to use |  |
 |          | hostname | The hostname/IP of the database server | |
 |          | port | The database port to connect to | |
 |          | username | The user to access the database with | |
-|          | jdbcConnUrl | The JDBC Connection URL used to connect to the database used by the DevOps Deploy server. This value is normally constructed using the database type and other database field values, but must be specified here when using Oracle RAC/ORAAS or SQL Server with Integrated Security. | |
+|          | jdbcConnUrl | The JDBC Connection URL used to connect to the database used by the DevOps Deploy server. This value is normally constructed using the database type and other database field values, but must be specified here when using Oracle RAC/ORAAS or SQL Server with Integrated Security.  If a value is specified here, the other database properties are ignored.| |
 | secureConnections  | required | Specify whether DevOps Deploy server connections are required to be secure | Default value is "true" |
 | secret | name | Kubernetes secret which defines required DevOps Deploy passwords. | You may leave this blank to use default name of HelmReleaseName-secrets where HelmReleaseName is the name of your Helm Release, otherwise specify the secret name here. |
 | license | accept | Set to true to indicate you have read and agree to license agreements : https://ibm.biz/devops-deploy-license | false |
@@ -357,14 +357,14 @@ The Helm chart has the following values.
 |             | useDynamicProvisioning | Set to "true" if the cluster supports dynamic storage provisoning | Default value "false" |
 |             | fsGroup | The group ID to use to access persistent volumes | Default value "1001" |
 | extLibVolume | name | The base name used when the Persistent Volume and/or Persistent Volume Claim for the extlib directory is created by the chart. | Default value is "ext-lib" |
-|              | storageClassName | The name of the storage class to use when persistence.useDynamicProvisioning is set to "true". |  |
+|              | storageClassName | The name of the storage class to use when persistence.useDynamicProvisioning is set to "true" and existingClaimName is empty. |  |
 |              | size | Size of the volume used to hold the JDBC driver .jar files |  |
 |              | existingClaimName | Persistent volume claim name for the volume that contains the JDBC driver file(s) used to connect to the DevOps Deploy database. |  |
-|              | configMapName | Name of an existing ConfigMap which contains a script named script.sh. This script is run before DevOps Deploy server installation and is useful for copying database driver .jars to the ext-lib persistent volume. |  |
+|              | configMapName | Name of an existing ConfigMap which contains a script named script.sh. This script is run during DevOps Deploy server initialization and is useful for copying database driver .jars to the ext-lib persistent volume. |  |
 |              | accessMode | Persistent storage access mode for the ext-lib persistent volume. | ReadWriteOnce |
 | appDataVolume | name | The base name used when the Persistent Volume and/or Persistent Volume Claim for the DevOps Deploy server appdata directory is created by the chart. | Default value is "appdata" |
 |               | existingClaimName | The name of an existing Persistent Volume Claim that references the Persistent Volume that will be used to hold the DevOps Deploy server appdata directory. |  |
-|               | storageClassName | The name of the storage class to use when persistence.useDynamicProvisioning is set to "true". |  |
+|               | storageClassName | The name of the storage class to use when persistence.useDynamicProvisioning is set to "true" and existingClaimName is empty. |  |
 |               | size | Size of the volume to hold the DevOps Deploy server appdata directory |  |
 |              | accessMode | Persistent storage access mode for the appdata persistent volume. | ReadWriteOnce |
 | ingress | host | Host name used to access the DevOps Deploy server UI. Leave blank on OpenShift to create default route. |  |
@@ -374,13 +374,15 @@ The Helm chart has the following values.
 | resources | constraints.enabled | Specifies whether the resource constraints specified in this helm chart are enabled.   | true (default) or false  |
 |           | limits.cpu  | Describes the maximum amount of CPU allowed | Default is 4000m. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu)  |
 |           | limits.memory | Describes the maximum amount of memory allowed | Default is 8Gi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
+|           | limits.ephemeral-storage | Describes the maximum amount of ephemeral storage allowed | Default is 2Gi. See Kubernetes - [ephemeral storage](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#setting-requests-and-limits-for-local-ephemeral-storage) |
 |           | requests.cpu  | Describes the minimum amount of CPU required - if not specified will default to limit (if specified) or otherwise implementation-defined value. | Default is 200m. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu) |
-|           | requests.memory | Describes the minimum amount of memory required If not specified, the memory amount will default to the limit (if specified) or the implementation-defined value | Default is 600Mi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
-|      readinessProbe     | initialDelaySeconds | Number of seconds after the container has started before the readiness probe is initiated | Default is 30 |
+|           | requests.memory | Describes the minimum amount of memory required. If not specified, the memory amount will default to the limit (if specified) or the implementation-defined value | Default is 600Mi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
+|           | requests.ephemeral-storage | Describes the minimum amount of ephemeral storage required. If not specified, the amount will default to the limit (if specified) or the implementation-defined value  | Default is 500Mi. See Kubernetes - [ephemeral storage](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#setting-requests-and-limits-for-local-ephemeral-storage) |
+| readinessProbe | initialDelaySeconds | Number of seconds after the container has started before the readiness probe is initiated | Default is 30 |
 |           | periodSeconds | How often (in seconds) to perform the readiness probe | Default is 30 |
 |           | failureThreshold | When a Pod starts and the probe fails, Kubernetes will try this number times before giving up. In the case of the readiness probe, the Pod will be marked Unready. | Default is 10 |
-|      livenessProbe     | initialDelaySeconds | Number of seconds after the container has started before the liveness probe is initiated | Default is 300 |
-|           | periodSeconds | How often (in seconds) to perform the liveness probe | Default is 300 |
+| livenessProbe | initialDelaySeconds | Number of seconds after the container has started before the liveness probe is initiated | Default is 179 |
+|           | periodSeconds | How often (in seconds) to perform the liveness probe | Default is 800 |
 |           | failureThreshold | When a Pod starts and the probe fails, Kubernetes will try this number times before giving up. Giving up in the case of the liveness probe means restarting the Pod. | Default is 3 |
 
 ## Storage
