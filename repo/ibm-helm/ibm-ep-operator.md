@@ -19,7 +19,7 @@ You must also ensure you create a secret called `ibm-entitlement-key` in the nam
 
 `kubectl create secret docker-registry ibm-entitlement-key --docker-username=cp --docker-password=<your-entitlement-key> --docker-server=cp.icr.io -n <target-namespace>`
 
-It is strongly recommended to install Cert Manager before the installation of IBM Event Processing. This will facilitate the handling of certificates for secure communication in the product.
+It is strongly recommended to install community cert-manager before the installation of IBM Event Processing. This will facilitate the handling of certificates for secure communication in the product.
 
 ### Resources Required
 IBM Event Processing resource requirements depend on several factors. For information about minimum resource requirements, see the [IBM Event Processing documentation](https://ibm.biz/ep-documentation).
