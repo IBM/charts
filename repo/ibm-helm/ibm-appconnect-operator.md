@@ -11,7 +11,7 @@ This chart deploys a App Connect Operator Deployment into a namespace. The App C
 ## Prerequisites
 
 - Helm v3
-- Kubernetes cluster (>=1.25.0 < 1.30.0)
+- Kubernetes cluster '>=1.25.0 < 1.30.0'
 
 ## Resources Required
 
