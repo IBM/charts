@@ -12,7 +12,7 @@ Before installing IBM Event Endpoint Management, ensure you create a secret call
 
 `kubectl create secret docker-registry ibm-entitlement-key --docker-username=cp --docker-password=<your-entitlement-key> --docker-server=cp.icr.io -n <target-namespace>`
 
-It is strongly recommended to install the IBM Certificate Manager before the installation of IBM Event Endpoint Management. This will facilitate the handling of certificates for secure communication in the product.
+It is strongly recommended to install the community cert-manager before the installation of IBM Event Endpoint Management. This will facilitate the handling of certificates for secure communication in the product.
 
 ### Resources Required
 IBM Event Endpoint Management resource requirements depend on several factors. For information about minimum resource requirements, see the [IBM Event Endpoint Management documentation](https://ibm.biz/eem-documentation).
