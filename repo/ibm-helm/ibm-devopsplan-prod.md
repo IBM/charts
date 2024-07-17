@@ -41,6 +41,16 @@
 
      - DevOps Plan requires a PostgreSQL database to create TeamSpace and Applications. The PostgreSQL database may be running in your cluster or on hardware that resides outside of your cluster. The values used to connect to the database are required when installing the DevOps Plan. The DevOps Plan helm chart provides the PostgreSQL database by default settings. You can disable it and use your own PostgreSQL database.
 
+     - If you already installed with internal PostgreSQL database, and you plan to upgrade with latest release version, then you need to set the internal PostgreSQL database password during helm upgrade. Get the password for internal PostgreSQL database by running this command:
+        ```bash
+        export POSTGRES_PASSWORD=$(kubectl get secret --namespace devopsplan ibm-devopsplan-ibm-devopsplan-prod-db-secret -o jsonpath="{.data.tenant-datastore-password}" | base64 -d)
+        ```
+       Set the password during the upgrade:
+        ```bash
+        --set spring.datastore.password=$POSTGRES_PASSWORD \
+        --set tenant.datastore.password=$POSTGRES_PASSWORD
+        ```
+
 4. Persistent Volumes
 
      - Persistent Volumes that will hold the devopsplan data, config, share and logs folders for the DevOps Plan are required. If your cluster supports default StoreageClass (SC) and dynamic volume provisioning, you will not need to create a SC and PersistentVolume (PV) before installing DevOps Plan. If your cluster does not support default SC and dynamic volume provisioning, you will need to either ensure a SC and PV is available or disable the persistent volume by setting *persistence.enabled* to *false* before installing DevOps Plan.
@@ -85,6 +95,14 @@ Add the DevOps Plan helm chart repository to the local client.
   ```
   $ helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm/
   ```
+Tip: You can list all supported Helm chart version and Application versions for the DevOps Plan using:
+
+  ```
+  $ helm repo update
+  $ helm search repo ibm-helm/ibm-devopsplan
+  ```
+
+You can see the list of the **ibm-helm/ibm-devopsplan-prod** Helm chart and DevOps Plan release versions. The Helm install will install the latest stable release version, unless you specify **--version [CHART VERSION]** to the helm install command.
 
 Get the _default_ `openshift-cluster-dns-name` and set it in the *global.domain* during the install:
 
@@ -98,10 +116,13 @@ Get the _default_ `openshift-cluster-dns-name` and set it in the *global.domain*
 
   ```bash
   helm install ibm-devopsplan ibm-helm/ibm-devopsplan-prod \
+    --version [CHART VERSION] \
     --namespace devopsplan \
     --set global.imagePullSecret=ibm-entitlement-key \
     --set global.domain=[openshift-cluster-dns-name]
   ```
+
+  If you plan to install the latest version of the DevOps Plan, then you don't need to add **--version [CHART VERSION]**.
 
   If you plan to use external PostgreSQL database, refer to [Installing DevOps Plan with External Database and Optional email server settings](https://www.ibm.com/docs/devops-plan/3.0.0?topic=gsdphc-installing-devops-plan-external-databases-optional-email-server-settings).
 
@@ -125,7 +146,7 @@ Get the _default_ `openshift-cluster-dns-name` and set it in the *global.domain*
 1. Get a copy of the values.yaml file from the helm chart so you can update it with values used by the install.
 
   ```
-  $ helm inspect values ibm-helm/ibm-devopsplan-prod > myvalues.yaml
+  $ helm inspect values ibm-helm/ibm-devopsplan-prod  --version [CHART VERSION] > myvalues.yaml
   ```
 
 2. Edit the file myvalues.yaml to specify the parameter values to use when installing the DevOps Plan instance. The **Configuration** section lists the parameter values that can be set.
@@ -134,11 +155,14 @@ Get the _default_ `openshift-cluster-dns-name` and set it in the *global.domain*
 
   ```bash
   helm install ibm-devopsplan ibm-helm/ibm-devopsplan-prod \
+    --version [CHART VERSION]
     --namespace devopsplan \
     --values myvalues.yaml
   ```
 
 Tip: List all releases using *helm list*.
+
+If you plan to install the latest version of the DevOps Plan, then you don't need to add **--version [CHART VERSION]**.
 
 ## **Uninstalling the Chart**
 
