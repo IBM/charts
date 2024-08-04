@@ -20,8 +20,8 @@ This chart deploys IBM Connect:Direct Web Services on a container management pla
 
 ## Prerequisites
 
-1. Red Hat OpenShift Container Platform Version should be 4.14
-2. Kubernetes version >= 1.27 and <1.28.
+1. Red Hat OpenShift Container Platform Version should be >= 4.14 and <= 4.16
+2. Kubernetes version >= 1.27 and < 1.30.
 3. Helm version >= 3.2
 4. Ensure that the docker images for IBM Connect:Direct Web Services from IBM Entitled Registry are downloaded and pushed to an image registry accessible to the cluster.
 5. Create a persistent volume for mapping configuration and logs of Connect:Direct Web Services. Sample file can be found at location ibm_cloud_pak/pak_extensions/pre-install/volumes/
@@ -82,7 +82,7 @@ Ensure that the chart is downloaded locally and available.
 Run the below command
 
 ```bash
-$ helm install my-release -f values.yaml ibm-cdws-1.0.1.tgz
+$ helm install my-release -f values.yaml ibm-cdws-1.0.2.tgz
 ```
 
 Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 2-3 minutes for Installing Web Services.
@@ -173,6 +173,8 @@ The following tables lists the configurable parameters of the IBM Connect:Direct
 | `ingress.annotations`                           | annotation for ingress resource                     | `[]`                                     |
 | `ingress.tls.enabled`                           | TLS is enabled or disabled for ingress resource     | `false`                                  |
 | `ingress.tls.secretName`                        | TLS secret name if enabled                          |                                          |
+| `hostAliases.enabled`                           | Enable hostname and IP mapping for DNS resolution   | `false`                                  |
+| `hostAliases.hostEntries`                       | For providing IP and hostname mapping               | `[]`
 
 Specify each parameter in values.yaml to `helm install`. For example,
 
@@ -205,7 +207,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-cdws-1.0.1.tgz
+helm upgrade my-release -f values.yaml ibm-cdws-1.0.2.tgz
 ```
 
 Refer [RELEASENOTES.md](RELEASENOTES.md) for Fix history.
