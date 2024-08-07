@@ -17,8 +17,8 @@ This chart deploys IBM Sterling Control Center Monitor on a container management
 
 ## Prerequisites
 
-1. Red Hat OpenShift Container Platform Version 4.11.0 or later fixes
-2. Kubernetes version >= 1.23 with beta APIs enabled.
+1. Red Hat OpenShift Container Platform Version 4.14.0 or later fixes
+2. Kubernetes version >= 1.27 with beta APIs enabled.
 3. Helm version >= 3.2
 4. Ensure that one of the supported database server (Oracle/DB2/MSSQL) is installed and the database is accessible from inside the cluster.
 5. Ensure that the docker images for IBM Sterling Control Center Monitor from IBM Entitled Registry are downloaded and pushed to an image registry accessible to the cluster.
@@ -46,7 +46,7 @@ kubectl create secret docker-registry <name of secret> --docker-server=<your-reg
 
 With Kubernetes v1.25, Pod Security Policy (PSP) API has been removed and replaced with Pod Security Admission (PSA) contoller. Kubernetes PSA conroller enforces predefined Pod Security levels at the namespace level. The Kubernetes Pod Security Standards defines three different levels: privileged, baseline, and restricted. Refer to Kubernetes [`Pod Security Standards`] (https://kubernetes.io/docs/concepts/security/pod-security-standards/) documentation for more details. This chart is compatible with the restricted security level. 
 
-For users upgrading from older Kubernetes version to v1.25 or higher, refer to Kubernetes [`Migrate from PSP`](https://kubernetes.io/docs/tasks/configure-pod-container/migrate-from-psp/) documentation to help with migrating from PodSecurityPolicies to the built-in Pod Security Admission controller.
+For users upgrading from older Kubernetes version to v1.27 or higher, refer to Kubernetes [`Migrate from PSP`](https://kubernetes.io/docs/tasks/configure-pod-container/migrate-from-psp/) documentation to help with migrating from PodSecurityPolicies to the built-in Pod Security Admission controller.
 
 For users continuing on older Kubernetes versions (<1.25) and using PodSecurityPolicies, choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you. This chart is compatible with most restrictive policies.
 Below is an optional custom PSP definition based on the IBM restricted PSP.
@@ -316,7 +316,7 @@ Ensure that the chart is downloaded locally and available.
 Run the below command
 
 ```bash
-$ helm install my-release -f values.yaml ibm-sccm-3.1.3.tgz
+$ helm install my-release -f values.yaml ibm-sccm-3.1.4.tgz
 ```
 
 Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 6-7 minutes for Installing Control Center.
@@ -515,7 +515,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-sccm-3.1.3.gz
+helm upgrade my-release -f values.yaml ibm-sccm-3.1.4.gz
 ```
 
 Refer [RELEASENOTES.md](RELEASENOTES.md) for Fix history.
