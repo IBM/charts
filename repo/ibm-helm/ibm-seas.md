@@ -1,4 +1,4 @@
-# IBM Sterling External Authentication Server v6.1.0.0
+# IBM Sterling External Authentication Server v6.1.0.1
 
 ## Introduction
 
