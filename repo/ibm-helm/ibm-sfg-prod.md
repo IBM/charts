@@ -1,4 +1,4 @@
-# IBM Sterling File Gateway Enterprise Edition v6.2.0.2
+# IBM Sterling File Gateway Enterprise Edition v6.2.0.3
 ## Introduction
 
 IBM Sterling File Gateway lets organizations transfer files between partners by using different protocols, conventions for naming files, and file formats. A scalable and security-enabled gateway, Sterling File Gateway enables companies to consolidate all their internet-based file transfers on a single edge gateway, which helps secure your B2B collaboration network and the data flowing through it. To find out more, see [IBM Sterling File Gateway](https://www.ibm.com/products/file-gateway) on IBM Marketplace.
@@ -21,10 +21,11 @@ Services
 1. Red Hat OpenShift Container Platform 
    Version 4.14.0 or later fixes
    Version 4.15.0 or later fixes
+   Version 4.16.0 or later fixes
 
-2. Kubernetes version >= 1.27 and <= 1.29
+2. Kubernetes version >= 1.28 and <= 1.30
 
-3. Helm version >= 3.14.x
+3. Helm version >= 3.15.x
 
 4. Ensure that the docker images for IBM Sterling File Gateway Enterprise Edition from IBM Entitled Registry are downloaded and pushed to an image registry accessible to the cluster.
 
@@ -36,7 +37,7 @@ Services
   a. For using init container for resources when `resourcesInit.enabled` is `true`, create an init container image bundled with the required external resource artifacts and configure the image details in the `resourcesInit.image` section.
   b. For using persistent volume for resources when `appResourcesPVC.enabled` is `true`, create a persistent volume for application resources with access mode as 'Read Only Many' and place the required external resource artifacts in the mapped volume location.
 
-8. When `logs.enableAppLogOnConsole` is `false`, create a persistent volume for application logs with access mode as 'Read Write Many'.
+8. When `appLogsPVC.enabled` is `true`, create a persistent volume for application logs with access mode as 'Read Write Many'.
 
 9. When `appDocumentsPVC.enabled` is `true`, create a persistent volume for application document storage with access mode as 'Read Write Many'.
 
@@ -379,7 +380,7 @@ Parameter                                      | Description                    
 `global.license`                               | Accept B2BI/SFG license                                              | `false`
 `global.licenseType`                           | Specify the license edition as per license agreement.                | prod
 `global.image.repository`                      | Repository for B2B docker images                                     | 
-`global.image.tag          `                   | Docker image tag                                                     | `6.2.0.2`
+`global.image.tag          `                   | Docker image tag                                                     | `6.2.0.3`
 `global.image.digest          `                | Docker image digest. Takes precedence over tag                       | 
 `global.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `global.image.pullSecret `         			   | Pull secret for repository access                                    | `ibm-entitlement-key`
@@ -406,6 +407,7 @@ Parameter                                      | Description                    
 `appResourcesPVC.accessMode`                   | Resources persistent volume access mode                              | `ReadOnlyMany`
 `appResourcesPVC.size`                         | Resources persistent volume storage size                             | 100 Mi
 `appResourcesPVC.preDefinedResourcePVCName`    | Predefined resources persistent volume name                          | 
+`appLogsPVC.enabled`                           | Enable Application logs storage                                  | true 
 `appLogsPVC.storageClassName`                  | Logs persistent volume storage class name                            | ``
 `appLogsPVC.selector.label`                    | Logs persistent volume selector label                                | `intent`
 `appLogsPVC.selector.value`                    | Logs persistent volume selector value                                | `logs`
@@ -433,7 +435,7 @@ Parameter                                      | Description                    
 `dataSetup.enabled`                            | Enable database setup job execution                                  | true
 `dataSetup.upgrade`                            | Upgrade an older release                                             | false
 `dataSetup.image.repository`                 | DB setup container image repository                                   | 
-`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.2.0.2`
+`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.2.0.3`
 `dataSetup.image.digest'                      | Docker image digest. Takes precedence over tag                       |
 `dataSetup.image.pullPolicy`                 | Pull policy for repository                                           | `IfNotPresent`
 `dataSetup.image.pullSecret`         		  | Pull secret for repository access                                    |  `ibm-entitlement-key` 
@@ -785,13 +787,13 @@ name	                                         |
 `nameOverride`                                 | Chart resource short name override                                   | 
 `fullnameOverride`                             | Chart resource full name override                                    | 
 `test.image.repository`                        | Repository for docker image used for helm test and cleanup           | 'ibmcom/opencontent-common-utils'
-`test.image.tag          `                     | helm test and cleanup docker image tag                               | `1.1.65`
+`test.image.tag          `                     | helm test and cleanup docker image tag                               | `1.1.66`
 `test.image.digest          `                  | helm test and cleanup docker image digest. Takes precedence over tag |
 `test.image.pullPolicy`                        | Pull policy for helm test image repository                           | `IfNotPresent`
 `test.extraLabels`                            | Extra labels                                                          |
 `purge.enabled`                                | Enable external purge job                                            | 'false'
 `purge.image.repository          `             | External purge docker image repository                               | `purge`
-`purge.image.tag          `                    | External purge image tag                                             | `6.2.0.2`
+`purge.image.tag          `                    | External purge image tag                                             | `6.2.0.3`
 `purge.image.digest          `                 | External purge image digest. Takes precedence over tag               |
 `purge.image.pullPolicy`                       | Pull policy for external purge docker image                          | `IfNotPresent`
 `purge.image.pullSecret`                       | Pull secret for repository access                                    | `ibm-entitlement-key`
@@ -897,7 +899,7 @@ To uninstall/delete the `my-release` deployment run the command:
 Since there are certain kubernetes resources created using the `pre-install` hook, helm delete command will try to delete them as a post delete activity. In case it fails to do so, you need to manually delete the following resources created by the chart:
 * ConfigMap - <release name>-sfg-config
 * PersistentVolumeClaim if persistence is enabled - <release name>-sfg-resources-pvc
-* PersistentVolumeClaim if persistence is enabled and enableAppLogOnConsole is disabled - <release name>-sfg-logs-pvc
+* PersistentVolumeClaim if persistence is enabled and appLogsPVC is enabled - <release name>-sfg-logs-pvc
 
 Note: You may also consider deleting the secrets and peristent volumes created as part of prerequisites, after creating their backups.
 
