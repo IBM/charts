@@ -6,10 +6,10 @@ IBM DevOps Test Hub brings together test data, test environments, and test runs 
 
 ### Resources Required
 
-* [RedHat OpenShift Container Platform](https://docs.openshift.com/container-platform/4.13/release_notes/ocp-4-13-release-notes.html) v4.13 or later (x86_64)
-* [OpenShift SDN in _network policy_ mode](https://docs.openshift.com/container-platform/4.13/networking/openshift_sdn/about-openshift-sdn.html) (Optional) The default installation includes NetworkPolicy resources, these will only be acted upon if the SDN is configured appropriately.
-* [Dynamic Volume Provisioning](https://docs.openshift.com/container-platform/4.13/storage/dynamic-provisioning.html) supporting accessModes ReadWriteOnce (RWO) and ReadWriteMany (RWX).
-* [Jaeger Operator](https://docs.openshift.com/container-platform/4.13/service_mesh/v2x/installing-ossm.html#ossm-install-ossm-operator_installing-ossm) (Optional) If tests should contribute trace information and Jaeger based reports are required.
+* [RedHat OpenShift Container Platform](https://docs.openshift.com/container-platform/4.14/release_notes/ocp-4-14-release-notes.html) v4.14 or later (x86_64)
+* [OpenShift SDN in _network policy_ mode](https://docs.openshift.com/container-platform/4.14/networking/openshift_sdn/about-openshift-sdn.html) (Optional) The default installation includes NetworkPolicy resources, these will only be acted upon if the SDN is configured appropriately.
+* [Dynamic Volume Provisioning](https://docs.openshift.com/container-platform/4.14/storage/dynamic-provisioning.html) supporting accessModes ReadWriteOnce (RWO) and ReadWriteMany (RWX).
+* [Jaeger Operator](https://docs.openshift.com/container-platform/4.14/service_mesh/v2x/installing-ossm.html#ossm-install-ossm-operator_installing-ossm) (Optional) If tests should contribute trace information and Jaeger based reports are required.
 
 
 
@@ -25,7 +25,7 @@ To install the product you will need cluster administrator privileges.
 
 ## Red Hat OpenShift SecurityContextConstraints Requirements
 
-The product is compatible with the `restricted` and `restricted-v2` [SecurityContextConstraint](https://docs.openshift.com/container-platform/4.13/authentication/managing-security-context-constraints.html#default-sccs_configuring-internal-oauth).
+The product is compatible with the `restricted` and `restricted-v2` [SecurityContextConstraint](https://docs.openshift.com/container-platform/4.14/authentication/managing-security-context-constraints.html#default-sccs_configuring-internal-oauth).
 
 If you would prefer to use the custom ibm-devops-restricted SCC, please do the following before installation:
 
@@ -97,8 +97,8 @@ This change propagates after a couple of minutes. [Further reading](https://clou
 
 ### Local Machine
 
-* [oc](https://docs.openshift.com/container-platform/4.13/cli_reference/openshift_cli/getting-started-cli.html)
-* [helm v3.14.2 or later](https://docs.openshift.com/container-platform/4.13/applications/working_with_helm_charts/installing-helm.html)
+* [oc](https://docs.openshift.com/container-platform/4.14/cli_reference/openshift_cli/getting-started-cli.html)
+* [helm v3.15.2 or later](https://docs.openshift.com/container-platform/4.14/applications/working_with_helm_charts/installing-helm.html)
 
 ### Storage
 
@@ -129,10 +129,9 @@ The pod [`fsGroup`](https://kubernetes.io/docs/tasks/configure-pod-container/sec
 Fetch chart for install:
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-prod --version 11.0.2
+helm pull --untar ibm-helm/ibm-devops-prod --version 11.0.3
 cd ibm-devops-prod
 ```
-
 
 
 
@@ -200,7 +199,7 @@ helm upgrade --install $HELM_NAME . -n $NAMESPACE \
 
 ## Upgrade
 
-Only upgrading from v10.5.3 and v10.5.4 is supported - for older versions first upgrade to these later versions.
+Upgrading from releases prior to v10.5.3 is not support - for older versions first upgrade to an intermediate release.
 
 Before performing your upgrade RabbitMQ flags must be enabled on a running install:
 
@@ -228,6 +227,99 @@ oc delete deployments,statefulsets -lapp.kubernetes.io/managed-by=Helm,app.kuber
   --set postgresql.migrate.enabled=true \
 ```
 
+
+## Backup
+
+### Velero
+
+Install [velero v14.0.1 or later](https://velero.io/docs/v1.14/basic-install/) and place on your PATH.
+
+
+
+#### [S3](https://github.com/vmware-tanzu/velero-plugin-for-aws)
+
+Prepare the cluster to use CSI Snapshots by installing the [CSI Snapshotter](https://github.com/kubernetes-csi/external-snapshotter?tab=readme-ov-file#usage).
+
+Provision S3 storage with your cloud provider. As an example we'll use [MinIO](https://min.io/).
+
+To use velero with S3 storage, the AWS storage plugin must be used with a `credentials` file in the following form:
+
+```text
+[default]
+aws_access_key_id = ACCESS_KEY_ID
+aws_secret_access_key = SECRET_ACCESS_KEY
+```
+
+Install velero using the AWS plugin and CSI feature:
+
+```bash
+S3_IP=127.0.0.1
+REGION=minio
+BUCKET_NAME=$NAMESPACE
+velero install \
+    --provider aws \
+    --features=EnableCSI \
+    --plugins=velero/velero-plugin-for-aws:v1.10.1 \
+    --bucket "$BUCKET_NAME" \
+    --secret-file ./credentials \
+    --snapshot-location-config region=$REGION \
+    --backup-location-config region=$REGION,s3ForcePathStyle="true",s3Url=https://${S3_IP}:9000 \
+    --use-node-agent \
+    --wait
+```
+
+
+
+Once velero install is complete, confirmed pods are running by using:
+
+```bash
+oc get pod -n velero
+```
+
+Backups with velero can now be created including targeted namespaces and _only_ persistent volumes:
+
+```bash
+BACKUP_NAME=$NAMESPACE
+velero backup create $BACKUP_NAME --include-namespaces $NAMESPACE --snapshot-move-data --include-resources pvc,pv
+```
+
+Backup progress is monitored using:
+
+```bash
+velero backup describe $BACKUP_NAME --details
+```
+
+To restore a backup into a empty cluster - where a disaster scenario has occurred:
+
+```bash
+velero restore create --from-backup $BACKUP_NAME
+```
+
+Restore progress is monitored using:
+
+```bash
+velero restore describe $BACKUP_NAME --details
+```
+
+When restore of pvc's is complete, continue to install the product.
+
+
+#### Data Migration
+
+RabbitMQ will not run when migrating data to a different namespace. To enable re-initialization during install either:
+
+- Skip the backup of RabbitMQ data: [`velero.io/exclude-from-backup=true`](https://velero.io/docs/v1.14/resource-filtering/#veleroioexclude-from-backuptrue)
+
+```bash
+oc label pvc -n $NAMESPACE data-$HELM_NAME-rabbitmq-0 velero.io/exclude-from-backup=true
+```
+
+- Delete the data post restore:
+
+```bash
+oc delete pvc -n $NAMESPACE data-$HELM_NAME-rabbitmq-0
+```
+
 ## Verification
 
 You can verify that the environment has completed startup with:
@@ -239,6 +331,7 @@ All the pods should change to a status of either Running or Complete.
 bash lib/test/helm-diag.sh $HELM_NAME -n $NAMESPACE
 ```
 ## Uninstall
+
 
 Delete the dynamic workload in the namespace:
 ```bash
@@ -302,7 +395,7 @@ oc create secret generic -n $NAMESPACE ingress --from-file=ca.crt=ca.crt
 ```
 Then use the additional helm value an install:
 ```bash
-  --set ingress.create.selfSigned=true \
+  --set ingress.cert.selfSigned=true \
 ```
 
 ### Trust of external self signed endpoints
@@ -344,7 +437,7 @@ In the default configuration, no egress rules are created to restrict the endpoi
 
 Data should be secured at rest. It is necessary to ensure that encryption at rest is enabled. Typically, encryption at rest is required for installation of OpenShift Container Platform. It is important to implement some form of cluster wide passive encryption. Please refer to the following document for guidance:
 
-https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/8/html-single/security_hardening/index
+https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/8/html-single/security_hardening/index
 
 ### Dynamic workload
 
@@ -373,6 +466,7 @@ This methods should also be used when restoring a backup made where different se
 ## Limitations
 
 * Users are required to perform backups of their data by snapshotting all persistent volume claims.
+
 * `helm rollback` is not currently supported. Move back to a previous release by restoring a backup taken before the upgrade.
 * `helm upgrade` is only supported for specific versions. See [Upgrade](#upgrade) for details.
 * It is not currently possible to edit test assets. This must be done in DevOps Test Workbench.
