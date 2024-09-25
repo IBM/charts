@@ -316,7 +316,7 @@ Ensure that the chart is downloaded locally and available.
 Run the below command
 
 ```bash
-$ helm install my-release -f values.yaml ibm-sccm-3.1.7.tgz
+$ helm install my-release -f values.yaml ibm-sccm-3.1.8.tgz
 ```
 
 Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 6-7 minutes for Installing Control Center.
@@ -515,7 +515,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-sccm-3.1.7.gz
+helm upgrade my-release -f values.yaml ibm-sccm-3.1.8.gz
 ```
 
 Refer [RELEASENOTES.md](RELEASENOTES.md) for Fix history.
