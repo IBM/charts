@@ -1,8 +1,8 @@
-# IBM Sterling Secure Proxy Perimeter Server v6.1.0.0
+# IBM Sterling Secure Proxy Perimeter Server v6.2.0.0
 
 ## Introduction
   
-A perimeter server is used by Sterling Secure Proxy to manage inbound and outbound TCP communication. This software tool enables you to manage the communications flow between outer layers of your network and the TCP-based transport adapters. Perimeter servers can be used to restrict areas where TCP connections are initiated from more secure areas to less secure areas. To find out more, see the Knowledge Center for [IBM Sterling Secure Proxy Perimeter Server](https://www.ibm.com/docs/en/secure-proxy/6.1.0).
+A perimeter server is used by Sterling Secure Proxy to manage inbound and outbound TCP communication. This software tool enables you to manage the communications flow between outer layers of your network and the TCP-based transport adapters. Perimeter servers can be used to restrict areas where TCP connections are initiated from more secure areas to less secure areas. To find out more, see the Knowledge Center for [IBM Sterling Secure Proxy Perimeter Server](https://www.ibm.com/docs/en/secure-proxy/6.2.0).
 
 
 ## Chart Details
@@ -17,7 +17,7 @@ This chart deploys IBM Sterling Secure Proxy Perimeter Server on a container man
 
 ## Prerequisites
 
-Please refer to [Planning](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=software-planning) and [Pre-installation tasks](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=installing-pre-installation-tasks) section in the online Knowledge Center documentation. 
+Please refer to [Planning](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=software-planning) and [Pre-installation tasks](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=installing-pre-installation-tasks) section in the online Knowledge Center documentation. 
 
 ### SecurityContextConstraints Requirements
 
@@ -94,47 +94,139 @@ volumes:
   - chmod +x pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh
   - pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh <Namespace/Project>
   
+### PodSecurityPolicy Requirements
+
+In Kubernetes the Pod Security Policy (PSP) control is implemented as optional (but recommended). [Click here](https://kubernetes.io/docs/concepts/security/pod-security-policy/) for more information on Pod Security Policy. Based on your organization security policy, you may need to decide the pod security policy for your Kubernetes cluster. The IBM Sterling Secure Proxy PS chart defines a custom Pod Security Policy which is the minimum set of permissions/ capabilities needed to deploy this chart and the Sterling Secure Proxy PS container to function properly. This is the recommended PSP for this chart and it can be created on the cluster by cluster administrator. The PSP and cluster role for this chart is defined below. The cluster administrator can either use the snippets given below or the scripts provided in the Helm chart to create the PSP, cluster role and tie it to the namespace where deployment will be performed. In both the cases, same PSP and cluster role will be created. It is recommended to use the scripts in the Helm chart so that required PSP and cluster role is created without any issue.
+
+* Custom PodSecurityPolicy definition:  
+
+```
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: ibm-ssp-ps-psp
+  labels:
+    app: "ibm-ssp-ps-psp"
+spec:
+  privileged: false
+  allowPrivilegeEscalation: true
+  hostPID: false
+  hostIPC: false
+  hostNetwork: false
+  requiredDropCapabilities:
+  - KILL
+  - MKNOD
+  - SETFCAP
+  - FSETID
+  - NET_BIND_SERVICE
+  - SYS_CHROOT
+  - SETPCAP
+  - NET_RAW
+  allowedCapabilities:
+  - DAC_OVERRIDE
+  - FOWNER
+  allowedHostPaths:
+  runAsUser:
+    rule: MustRunAsNonRoot
+  runAsGroup:
+    rule: MustRunAs
+    ranges:
+    - min: 1
+      max: 4294967294
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: MustRunAs
+    ranges:
+    - min: 1
+      max: 4294967294
+  fsGroup:
+    rule: MustRunAs
+    ranges:
+    - min: 1
+      max: 4294967294
+  volumes:
+  - configMap
+  - emptyDir
+  - projected
+  - secret
+  - downwardAPI
+  - persistentVolumeClaim
+  - nfs
+  forbiddenSysctls:
+  - '*'
+```
+
+- Custom ClusterRole for the custom PodSecurityPolicy:
+
+```
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: "ibm-ssp-ps-psp"
+  labels:
+    app: "ibm-ssp-ps-psp"
+rules:
+- apiGroups:
+  - policy
+  resourceNames:
+  - ibm-ssp-ps-psp
+  resources:
+  - podsecuritypolicies
+  verbs:
+  - use
+```
+
+- From the command line, you can run the setup scripts included under pak_extensions (untar the downloaded archive to extract the pak_extensions directory)
+
+  As a cluster admin the pre-install script is located at:
+  - chmod +x  pre-install/clusterAdministration/createSecurityClusterPrereqs.sh
+  - pre-install/clusterAdministration/createSecurityClusterPrereqs.sh
+
+  As team admin the namespace scoped pre-install script is located at:
+  - chmod +x  pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh 
+  - pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh <Namespace/Project>
 
 ## Resources Required
 
-Please refer [Verification of system requirements](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=planning-verification-system-requirements) section in the online Knowledge Center documentation.
+Please refer [Verification of system requirements](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=planning-verification-system-requirements) section in the online Knowledge Center documentation.
 
 ## Agreement to IBM SSP License
 
 You must read the IBM Sterling Secure Proxy License agreement terms before installation, using the below link:
-[License] http://www-03.ibm.com/software/sla/sladb.nsf (L/N: L-NKDT-7M46YH)
+[License] http://www-03.ibm.com/software/sla/sladb.nsf (L/N: L-SLRC-WFGR28)
 
 ## Installing the Chart
 
-Please refer [Installing](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=installing-sterling-secure-proxy-using-helm-chart) section in the online Knowledge Center documentation.
+Please refer [Installing](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=installing-sterling-secure-proxy-using-helm-chart) section in the online Knowledge Center documentation.
 
 ## Configuration
 
-Please refer the [Configuring - Understanding values.yaml](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=tasks-configuring-understanding-valuesyaml) section in the online Knowledge Center documentation.
+Please refer the [Configuring - Understanding values.yaml](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=tasks-configuring-understanding-valuesyaml) section in the online Knowledge Center documentation.
 
 ## Verifying the Chart
 
-Please refer the [Validating the Installation](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
+Please refer the [Validating the Installation](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
 
 ## Upgrading the Chart
 
-Please refer the [Upgrade - Upgrading a Release](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=uninstall-upgrading-release) section in the online Knowledge Center documentation.
+Please refer the [Upgrade - Upgrading a Release](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=uninstall-upgrading-release) section in the online Knowledge Center documentation.
 
 ## Rollback the Chart
 
-Please refer the [Rollback - Recovering a Failure](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=uninstall-rollback-recovering-failure) section in the online Knowledge Center documentation.
+Please refer the [Rollback - Recovering a Failure](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=uninstall-rollback-recovering-failure) section in the online Knowledge Center documentation.
 
 ## Uninstalling the Chart
 
-Please refer the [Uninstall – Uninstalling a Release](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=uninstall-uninstalling-release) section in the online Knowledge Center documentation.
+Please refer the [Uninstall – Uninstalling a Release](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=uninstall-uninstalling-release) section in the online Knowledge Center documentation.
 
 ## Exposing Services
 
-Please refer to [Exposed Services](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
+Please refer to [Exposed Services](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
 
 ## DIME and DARE
 
-Please refer to [DIME and DARE Security Considerations](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
+Please refer to [DIME and DARE Security Considerations](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
 
 ## Limitations
 
