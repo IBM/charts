@@ -1,10 +1,10 @@
 
-IBM Transformation Extender Advanced v10.0.1.9
+IBM Transformation Extender Advanced v10.0.1.10
 
 ## What's New
 
-ITXA 10.0.1.9 Certified Container release.
-See IBM ITXA Documentation for a full list of [what's new in ITXA 10.0.1.9.](https://www.ibm.com/docs/en/stea/10.0?topic=welcome-whats-new-in-version-10018)
+ITXA 10.0.1.10 Certified Container release.
+See IBM ITXA Documentation for a full list of [what's new in ITXA 10.0.1.10.](https://www.ibm.com/docs/en/stea/10.0?topic=welcome-whats-new-in-version-10018)
 
 ## Introduction
 [IBM Transformation Extender Advanced (ITXA)](https://www.ibm.com/docs/en/stea/10.0) includes support for Enveloping, De-enveloping, and processing of Standards based documents.  This includes validation and acknowledgement generation.  It also supports tranformation via either the IBM Transformation Extender (ITX) or Sterling B2BI Integrator core engines.  ITXA can also leverage the ITX Financial Payment, Supply Chain, or HealthCare packs to support industry specific standards.
@@ -17,7 +17,7 @@ This chart deploys Transformation Extender Advanced on a container management pl
 * Create a deployment `<release name>-ibm-itxa-prod-itxadatasetup`. It is used for performing Database Initialization Job for ITXA that is required to deploy and run the ITXA application.
 * Create a service `<release name>-ibm-itxa-prod-itxauiserver`. This service is used to access the ITXA application server using a consistent IP address.
 * Create a ConfigMap `itxa-config`. This is used to provide ITXA configuration.
-* service-account will be created if value is provided for .Values.global.serviceAccountName. This service will not be created if .Values.global.serviceAccountName is blank.
+* service-account will be created if the parameter `.Values.global.serviceAccount.create` is set to true.  The service account will be created with name provided in the parameter `.Values.global.serviceAccount.name`. If the parameter `.Values.global.serviceAccount.create` is set to false, the service account will not be created and you have to specify already created service account in the parameter `.Values.global.serviceAccount.name`. If not specified the service account name, then service account `default` will be used.
 
 **Note** : `<release name>` refers to the name of the helm release and `<server name>` refers to the app server name.
 
@@ -26,7 +26,7 @@ This chart deploys Transformation Extender Advanced on a container management pl
 
 Note: The steps below are for a new install.  To upgrade from a previous non-containerized install or containerized deployment of ITXA, see [Upgrading the Chart](#upgrading-the-chart) below.
 
-1. Redhat Openshift Container Platform version 4.10, 4.11, or 4.12 or Kubernetes Cluster version 1.23 to 1.26 is available.
+1. Redhat Openshift Container Platform version 4.13, 4.14 and 4.15 or Kubernetes Cluster version 1.26 to 1.28 is available.
 2. Ensure that all images are downloaded from the IBM Entitled Registry and pushed to an image registry accessible by the cluster.  See [Downloading Artifacts](https://www.ibm.com/docs/en/stea/10.0?topic=images-downloading-artifacts) for more details.
 3. [Download the helm chart](https://www.ibm.com/docs/en/stea/10.0?topic=da-downloading-certified-container-helm-charts-from-chart-repository) from the IBM Charts repository and Extract to a working directory.
 4. If integrating ITXA with B2BI, it is recommended to install ITXA and B2BI in the same namespace.  If not you will need to duplicate the Persistent Volume (PV) and create separate Persistent Volume Claims (PVCs) in each namespace.
@@ -48,14 +48,17 @@ Note: The steps below are for a new install.  To upgrade from a previous non-con
 
 12. If user needs to install any of the packs, refer the section below [Adding ITXA Packs](#adding-itxa-packs) to modify the itxa-init-db image, add the packs, and push the new image to your repo. Once db init image is modified with packs, edit values.yaml as shown below.  If you are not installing or upgrading any packs, you must still complete this step to do DB setup, just leave all deployPacks settings set to false.
 
+After modifying itxa-init-db image, you can install dbinit and UI server at the same time as follows.
+
+### Install ITXA dbinit and UI Server at the same time
 Set itxadbinit to true. 
-Set the itxaUI to false
+Set the itxaUI to true
 Set the packs to true under deployPacks for any pack you want to install or upgrade.
 
 ```
  install:
   itxaUI:
-    enabled: false
+    enabled: true
   itxadbinit:
     enabled: true
 	
@@ -70,17 +73,7 @@ itxadatasetup:
 Then run helm install pointing to the values.yaml you've been editing. For example to use the values.yaml and helm charts in the default ibm-itxa-prod directory run:  
 `helm install <releasename> -f ibm-itxa-prod/values.yaml ./ibm-itxa-prod --timeout 3600s --debug`.  
 
-This will initialize the Database with the proper tables.  This can take several minutes to an hour depending on database latency and resources.
-
-13. Once complete, modify values.yaml to disable itxadbinit and enable itxaUI and install the ITXA UI per below. 
-
-   ```
-   install:
-   itxaUI:
-    enabled: true
-   itxadbinit:
-    enabled: false
-   ```
+This will initialize the Database with the proper tables.  This can take several minutes to an hour depending on database latency and resources. This will also install the ITXA UI.
 	
 Then, run  `helm upgrade` with the same command line you ran for helm install above.
 	
@@ -269,39 +262,20 @@ For **production environments** it is strongly recommended to obtain a CA certif
 ### To install the chart with the release name `my-release` via cmd line:
 
 1. Ensure that the chart is downloaded locally by following the instructions given [here.](https://www.ibm.com/support/knowledgecenter/SS4QMC_10.0.0/installation/ITXARHOC_downloadHelmchart.html)
-2. Set up which application you need to install.
-   Decide which application you need to install and set the 'enabled' flag to true for it, in the values.yaml file.
-   Preferred way is to install one application at a time. Hence you will need to disable the flag for the application once already installed.
-
-```
- install:
-  itxaUI:
-    enabled: false
-  itxadbinit:
-    enabled: false
-```
-
-3. Check the settings are good in values.yaml by simulating the install chart.
+2. Check the settings are good in values.yaml by simulating the install chart.
    cmd - helm template --name=my-release [chartpath]
    This should give you all kubernetes objects which would be getting deployed on Openshift.
    This cmd won't actually install kubernetes objects.
-4. To run Database Initialization script run below command
+
+3. You can install ITXA initdb and UI application at the same time by setting the 'enabled' flag to 'true' for that applications. You can also install the application one by one by setting the 'enabled' flag to 'true' for specific application.
+   
+4. To install initdb and UI Application at the same time, run below command
 
 ```
-helm install my-release [chartpath] --timeout 3600 --set global.license=true, global.install.itxaUI.enabled=false, global.install.itxadbinit.enabled=true
+helm install my-release [chartpath] --timeout 3600 --set global.license=true, global.install.itxaUI.enabled=true, global.install.itxadbinit.enabled=true
 ```
-For example:
-helm install initdb --values=values.yaml --set global.install.itxadbinit.enabled=true ibm-itxa-prod-1.0.2.tgz
 
-
-5. Similarly to install ITXA UI Application run below command
-
-```
-helm install my-release [chartpath] --timeout 3600s --set global.license=true, global.install.itxaUI.enabled=true, global.install.itxadbinit.enabled=false
-```
-helm install itxaui --values=values.yaml --set global.install.itxaUI.enabled=true ibm-itxa-prod-1.0.2.tgz
-
-6. Test the health of the pods -
+5. Test the health of the pods -
 
 Depending on the capacity of the kubernetes worker node and database connectivity, the whole deploy process can take on average
 
@@ -602,14 +576,14 @@ If you are on 10.0.1.7 and earlier version of non-containerized ITXA :
 
 1.  Make a backup of the database so it can be rolled back if issues occur.
 2.  Follow Steps 1-11 in the [Quick Start Checklist](#quickstart-checklist) above.  When filling out the itxa-db-secret in step 7, make sure to use the same schema, credentials and connection info as your current ITXA database including admin user password in itxa-user-secret file. 
-3.  As part of upgrade, you need to use new ITX pack version supported by ITXA 10.0.1.9. Follow the instructions in Step 12 as listed and create a new dbinit image including new packs.  
+3.  As part of upgrade, you need to use new ITX pack version supported by ITXA 10.0.1.10. Follow the instructions in Step 12 as listed and create a new dbinit image including new packs.  
 4.  Continue with Step 13 after dbinit is done to deploy the ITXA UI.
 
-If you are already on 10.0.1.9 non-containerized ITXA : 
+If you are already on 10.0.1.10 non-containerized ITXA : 
 
 1. Make a backup of the database. 
 2. Follow Steps 1-11 in the [Quick Start Checklist](#quickstart-checklist) above.  When filling out the itxa-db-secret in step 7, make sure to use the same schema, credentials and connection info as your current ITXA database including admin user password in itxa-user-secret file. 
-3. As you are already on 10.0.1.9, you don't need to deploy dbinit and directly proceed to deploy ITXA UI by setting `itxadatasetup.loadFactoryData` parameter  to `donotinstall` or blank,  and set  `itxadatasetup.deployPacks` parameter to true for packs visibility in UI as per entitlement. 
+3. As you are already on 10.0.1.10, you don't need to deploy dbinit and directly proceed to deploy ITXA UI by setting `itxadatasetup.loadFactoryData` parameter  to `donotinstall` or blank,  and set  `itxadatasetup.deployPacks` parameter to true for packs visibility in UI as per entitlement. 
 
 
 ### Upgrading the chart to apply config changes or new ITXA patched images without updating the version of ITXA.
@@ -702,7 +676,7 @@ section "Affinity and Tolerations". |
 `global.persistence.securityContext.fsGroup`   | File system group id to access the persistent volume                 | 0
 `global.persistence.securityContext.supplementalGroup`| Supplemental group id to access the persistent volume          | 0
 `global.database.dbvendor`                     | DB Vendor DB2/Oracle                                                 | DB2
-`global.database.schema`                       | Database schema name.For Db2 it is defaulted as `global.database.dbname` and for Oracle it is defaulted as `global.serviceAccountName`                    | Service account name                                                 |
+`global.database.schema`                       | Database schema name.For Db2 it is defaulted as `global.database.dbname` and for Oracle it is defaulted as `global.serviceAccount.name`                    | Service account name                                                 |
 `global.arch`                                  | Architecture affinity while scheduling pods                          | amd64: `2 - No preference`, ppc64le: `2 - No preference`
 `global.install.itxaUI.enabled`          | Install ITXA UI Server                                                 |
 `global.install.itxadbinit.enabled`         | Run Database Initialization Job                                                |
@@ -963,4 +937,4 @@ Create Busybox deployment and set proper access on ITXA file share.
 
 ## Resources Required
 
-Openshift Cluster v4.12 or v4.13
+Openshift Cluster v4.13, v4.14 or v4.15
