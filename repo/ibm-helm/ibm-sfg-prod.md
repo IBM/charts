@@ -1,4 +1,4 @@
-# IBM Sterling File Gateway Enterprise Edition v6.1.2.5_1
+# IBM Sterling File Gateway Enterprise Edition v6.1.2.6
 ## Introduction
 
 IBM Sterling File Gateway lets organizations transfer files between partners by using different protocols, conventions for naming files, and file formats. A scalable and security-enabled gateway, Sterling File Gateway enables companies to consolidate all their internet-based file transfers on a single edge gateway, which helps secure your B2B collaboration network and the data flowing through it. To find out more, see [IBM Sterling File Gateway](https://www.ibm.com/products/file-gateway) on IBM Marketplace.
@@ -19,12 +19,13 @@ Services
 ## Prerequisites
 
 1. Red Hat OpenShift Container Platform 
-   Version 4.13.0 or later fixes
    Version 4.14.0 or later fixes
+   Version 4.15.0 or later fixes
+   Version 4.16.0 or later fixes
+   
+2. Kubernetes version >= 1.28 and <= 1.30
 
-2. Kubernetes version >= 1.26 and <= 1.28
-
-3. Helm version >= 3.13.x
+3. Helm version >= 3.16.x
 
 4. Ensure that the docker images for IBM Sterling File Gateway Enterprise Edition from IBM Entitled Registry are downloaded and pushed to an image registry accessible to the cluster.
 
@@ -405,7 +406,7 @@ Parameter                                      | Description                    
 `global.license`                               | Accept B2BI/SFG license                                              | `false`
 `global.licenseType`                           | Specify the license edition as per license agreement.                | prod
 `global.image.repository`                      | Repository for B2B docker images                                     | 
-`global.image.tag          `                   | Docker image tag                                                     | `6.1.2.5_1`
+`global.image.tag          `                   | Docker image tag                                                     | `6.1.2.6`
 `global.image.digest          `                | Docker image digest. Takes precedence over tag                       | 
 `global.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `global.image.pullSecret `         			   | Pull secret for repository access                                    | `ibm-entitlement-key`
@@ -420,8 +421,8 @@ Parameter                                      | Description                    
 `resourcesInit.enabled`                        | Enable resource init containers                                      | false
 `resourcesInit.image.repository`               | Repository for resource init container images                        | cp.icr.io/cp/ibm-sfg
 `resourcesInit.image.name`                     | Docker image name                                                    | sfg-resources
-`resourcesInit.image.tag`                      | Docker image tag                                                     | 6.1.2.5_1
-`resourcesInit.image.digest`                   | Docker image digest. Takes precedence over tag                       | sha256:9fbcfff023063378496f146a9b47ab94379c4b43173aab8c77d91d4266aa950b
+`resourcesInit.image.tag`                      | Docker image tag                                                     | 6.1.2.6
+`resourcesInit.image.digest`                   | Docker image digest. Takes precedence over tag                       | sha256:396db3c3afdd10ba321cf5535a802f2ad504426e16c8bfdbeb716d74671ee834
 `resourcesInit.image.pullPolicy`               | Pull policy for repository                                           | `IfNotPresent`
 `resourcesInit.command`                        | Command to be executed in the resource init container                |
 `persistence.enabled`                          | Enable storage access to persistent volumes                          | true
@@ -460,7 +461,7 @@ Parameter                                      | Description                    
 `dataSetup.enabled`                            | Enable database setup job execution                                  | true
 `dataSetup.upgrade`                            | Upgrade an older release                                             | false
 `dataSetup.image.repository`                 | DB setup container image repository                                   | 
-`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.1.2.5_1`
+`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.1.2.6`
 `dataSetup.image.digest'                      | Docker image digest. Takes precedence over tag                       |
 `dataSetup.image.pullPolicy`                 | Pull policy for repository                                           | `IfNotPresent`
 `dataSetup.image.pullSecret`         		  | Pull secret for repository access                                    |  `ibm-entitlement-key` 
@@ -767,13 +768,13 @@ name	                                         |
 `fullnameOverride`                             | Chart resource full name override                                    | 
 `test.image.repository`                        | Repository for docker image used for helm test and cleanup           | 'ibmcom'
 `test.image.name          `                    | helm test and cleanup docker image name                              | `opencontent-common-utils`
-`test.image.tag          `                     | helm test and cleanup docker image tag                               | `1.1.60`
+`test.image.tag          `                     | helm test and cleanup docker image tag                               | `1.1.67`
 `test.image.digest          `                  | helm test and cleanup docker image digest. Takes precedence over tag |
 `test.image.pullPolicy`                        | Pull policy for helm test image repository                           | `IfNotPresent`
 `test.extraLabels`                            | Extra labels                                                         |
 `purge.enabled`                                | Enable external purge job                                            | 'false'
 `purge.image.repository          `             | External purge docker image repository                               | `purge`
-`purge.image.tag          `                    | External purge image tag                                             | `6.1.2.5_1`
+`purge.image.tag          `                    | External purge image tag                                             | `6.1.2.6`
 `purge.image.digest          `                 | External purge image digest. Takes precedence over tag               |
 `purge.image.pullPolicy`                       | Pull policy for external purge docker image                          | `IfNotPresent`
 `purge.image.pullSecret`                       | Pull secret for repository access                                    | `ibm-entitlement-key`
