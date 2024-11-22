@@ -39,6 +39,8 @@ oc create secret generic ucd-secrets \
   --from-literal=keystorepassword=MyKeystorePassword
 ```
 
+**NOTE:** If you need to change the keystorepassword after the initial agent relay deployment, follow the instructions shown here: [Changing Password For Keystore File](#changing-password-for-keystore-file).
+
 5. A PersistentVolume that will hold the conf directory for the DevOps Deploy relay is required.  If your cluster supports dynamic volume provisioning you will not need to create a PersistentVolume (PV) or PersistentVolumeClaim (PVC) before installing this chart.  If your cluster does not support dynamic volume provisioning, you will need to either ensure a PV is available or you will need to create one before installing this chart.  You can optionally create the PVC to bind it to a specific PV, or you can let the chart create a PVC and bind to any available PV that meets the required size and storage class.  Sample YAML to create the PV and PVC are provided below.  Ensure that the spec.persistentVolumeReclaimPolicy parameter is set to Retain on the conf directory persistent volume. By default, the value is Delete for dynamically created persistent volumes. Setting the value to Retain ensures that the persistent volume is not freed or deleted if its associated persistent volume claim is deleted.
 
 ```
@@ -175,6 +177,20 @@ $ helm delete my-ucdr-release
 ```
 
 The command removes all the Kubernetes components associated with the chart and deletes the release.
+
+## Changing Password For Keystore File
+
+To change the password used by the DevOps Deploy Agent Relay keystore file, follow these steps:
+
+1. Scale the statefulset resource to 0 to shutdown the DevOps Deploy Agent Relay.
+
+2. Update the Kubernetes secret used to define the agent relay passwords to set the **keystorepassword** to the new value.
+
+3. **IMPORTANT:** Update the Kubernetes secret used to define the agent relay passwords to set the **previouskeystorepassword** to the existing keystore password being used.
+
+4. Scale the statefulset resource to 1 to restart the DevOps Deploy Agent Relay.
+
+5. When the Agent Relay is restarted, the keystore passwords will be updated to the new value during pod initialization.
 
 ## Disaster Recovery
 
