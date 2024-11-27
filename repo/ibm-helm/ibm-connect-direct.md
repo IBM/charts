@@ -2,7 +2,7 @@
 
 ## Introduction
   
-IBM® Connect:Direct® for UNIX links technologies and moves all types of information between networked systems and computers. It manages high-performance transfers by providing such features as automation, reliability, efficient use of resources, application integration, and ease of use. Connect:Direct (C:D) for UNIX offers choices in communications protocols, hardware platforms, and operating systems. It provides the flexibility to move information among mainframe systems, midrange systems, desktop systems, LAN-based workstations and cloud based storage providers (Amazon S3 Object Store for current release). To find out more, see the Knowledge Center for [IBM Connect:Direct for UNIX](https://www.ibm.com/docs/en/connect-direct/6.4.0?topic=sterling-connectdirect-unix-v64).
+IBM® Connect:Direct® for UNIX links technologies and moves all types of information between networked systems and computers. It manages high-performance transfers by providing such features as automation, reliability, efficient use of resources, application integration, and ease of use. Connect:Direct (C:D) for UNIX offers choices in communications protocols, hardware platforms, and operating systems. It provides the flexibility to move information among mainframe systems, midrange systems, desktop systems, LAN-based workstations and cloud based storage providers (Amazon S3 Object Store for current release). To find out more, see the Knowledge Center for [IBM Connect:Direct for UNIX](https://www.ibm.com/docs/en/connect-direct/6.4.0?topic=overview-what-is-connectdirect).
 
 ## Chart Details
 
@@ -19,181 +19,9 @@ This chart deploys IBM Connect Direct on a container management platform with th
 
 Please refer to [Planning](https://www.ibm.com/docs/en/connect-direct/6.4.0?topic=software-planning) section in the online Knowledge Center documentation. 
 
-### PodSecurityPolicy Requirements
+### Pod Security Standard and Security Context Constraints Requirements
 
-In Kubernetes the Pod Security Policy (PSP) control is implemented as optional (but recommended). Click here for more information on Pod Security Policy. Based on your organization security policy, you may need to decide the pod security policy for your Kubernetes cluster. The IBM Connect Direct for UNIX chart defines a custom Pod Security Policy which is the minimum set of permissions/ capabilities needed to deploy this chart and the Connect Direct for Unix container to function properly. This is the recommended PSP for this chart and it can be created on the cluster by cluster administrator. The PSP and cluster role for this chart is defined below. The cluster administrator can either use the snippets given below or the scripts provided in the Helm chart to create the PSP, cluster role and tie it to the namespace where deployment will be performed. In both the cases, same PSP and cluster role will be created. It is recommended to use the scripts in the Helm chart so that required PSP and cluster role is created without any issue.
-
-* Custom PodSecurityPolicy definition:
-```
-apiVersion: policy/v1beta1
-kind: PodSecurityPolicy
-metadata:
-  name: ibm-connect-direct-psp
-  labels:
-    app: "ibm-connect-direct-psp"
-spec:
-  privileged: false
-  allowPrivilegeEscalation: true
-  hostPID: false
-  hostIPC: false
-  hostNetwork: false
-  requiredDropCapabilities:
-  allowedCapabilities:
-  - CHOWN
-  - SETGID
-  - SETUID
-  - DAC_OVERRIDE
-  - FOWNER
-  - AUDIT_WRITE
-  - SYS_CHROOT
-  allowedHostPaths:
-  runAsUser:
-    rule: MustRunAsNonRoot
-  runAsGroup:
-    rule: MustRunAs
-    ranges:
-    - min: 1
-      max: 4294967294
-  seLinux:
-    rule: RunAsAny
-  supplementalGroups:
-    rule: MustRunAs
-    ranges:
-    - min: 1
-      max: 4294967294
-  fsGroup:
-    rule: MustRunAs
-    ranges:
-    - min: 1
-      max: 4294967294
-  volumes:
-  - configMap
-  - emptyDir
-  - projected
-  - secret
-  - downwardAPI
-  - persistentVolumeClaim
-  - nfs
-  forbiddenSysctls:
-  - '*'
-```
-
-- Custom ClusterRole for the custom PodSecurityPolicy:
-
-```
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: "ibm-connect-direct-psp"
-  labels:
-    app: "ibm-connect-direct-psp"
-rules:
-- apiGroups:
-  - policy
-  resourceNames:
-  - ibm-connect-direct-psp
-  resources:
-  - podsecuritypolicies
-  verbs:
-  - use
-```
-- From the command line, you can run the setup scripts included under pak_extensions (untar the downloaded archive to extract the pak_extensions directory)
-
-  As a cluster admin the pre-install script is located at:
-  - pre-install/clusterAdministration/createSecurityClusterPrereqs.sh
-
-  As team admin the namespace scoped pre-install script is located at:
-  - pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh <NAMESPACE>
-
-### SecurityContextConstraints Requirements
-
-The IBM Connect:Direct for Unix chart requires an SecurityContextConstraints (SCC) to be tied to the target namespace prior to deployment.
-Based on your organization security policy, you may need to decide the security context constraints for your OpenShift cluster.
-This chart has been verified on privileged SCC which comes with Redhat OpenShift. For more info, please refer this link. This chart defines a custom SCC which is the minimum set of permissions/capabilities needed to deploy this chart and the Connect Direct for Unix container to function properly. It is based on the predefined restricted SCC with extra required privileges. This is the recommended SCC for this chart and it can be created on the cluster by cluster administrator. The SCC and cluster role for this chart is defined below. The cluster administrator can either use the snippets given below or the scripts provided in the Helm chart to create the SCC, cluster role and tie it to the project where deployment will be performed. In both the cases, same SCC and cluster role will be created. It is recommended to use the scripts in the Helm chart so that required SCC and cluster role is created without any issue.
-
-* Custom SecurityContextConstraints definition:
-
-```
-apiVersion: security.openshift.io/v1
-kind: SecurityContextConstraints
-metadata:
-  name: ibm-connect-direct-scc
-  labels:
-    app: "ibm-connect-direct-scc"
-allowHostDirVolumePlugin: false
-allowHostIPC: false
-allowHostNetwork: false
-allowHostPID: false
-allowHostPorts: false
-privileged: false
-allowPrivilegedContainer: false
-allowPrivilegeEscalation: true
-allowedCapabilities:
-- FOWNER
-- CHOWN
-- SETGID
-- SETUID
-- DAC_OVERRIDE
-- AUDIT_WRITE
-- SYS_CHROOT
-defaultAddCapabilities: []
-defaultAllowPrivilegeEscalation: false
-forbiddenSysctls:
-- "*"
-fsGroup:
-  type: MustRunAs
-  ranges:
-  - min: 1
-    max: 4294967294
-readOnlyRootFilesystem: false
-requiredDropCapabilities: 
-- ALL
-runAsUser:
-  type: MustRunAsNonRoot
-seLinuxContext:
-  type: MustRunAs
-supplementalGroups:
-  type: MustRunAs
-  ranges:
-  - min: 1
-    max: 4294967294
-volumes:
-- configMap
-- downwardAPI
-- persistentVolumeClaim
-- projected
-- secret
-- nfs
-priority: 0
-```
-
-- Custom ClusterRole for the custom SecurityContextConstraints:
-
-```
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: "ibm-connect-direct-scc"
-  labels:
-    app: "ibm-connect-direct-scc"
-rules:
-- apiGroups:
-  - security.openshift.io
-  resourceNames:
-  - ibm-connect-direct-scc
-  resources:
-  - securitycontextconstraints
-  verbs:
-  - use
-```
-
-- From the command line, you can run the setup scripts included under pak_extensions (untar the downloaded archive to extract the pak_extensions directory)
-
-  As a cluster admin the pre-install script is located at:
-  - pre-install/clusterAdministration/createSecurityClusterPrereqs.sh
-
-  As team admin the namespace scoped pre-install script is located at:
-  - pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh <NAMESPACE>
+Please refer to [PSS and SCC](https://www.ibm.com/docs/en/connect-direct/6.4.0?topic=software-installing#concept_t5n_rvx_lkb__title__1) section in the online Knowledge Center documentation.
 
 ## Resources Required
 
@@ -203,6 +31,8 @@ This chart uses the following resources by default:
 * 1 GB Disk space
 * 500m CPU
 * 2000MB Memory
+
+Please refer [Requirements](https://www.ibm.com/docs/en/connect-direct/6.4.0?topic=software-planning#concept_ylx_4wm_lkb__section_kt3_n1m_gxb__title__1) section in the online Knowledge Center documentation. 
 
 ## Agreement to IBM Connect:Direct for Unix License
 
