@@ -6,10 +6,10 @@ IBM DevOps Test Hub brings together test data, test environments, and test runs 
 
 ### Resources Required
 
-* [RedHat OpenShift Container Platform](https://docs.openshift.com/container-platform/4.14/release_notes/ocp-4-14-release-notes.html) v4.14 or later (x86_64)
-* [OpenShift SDN in _network policy_ mode](https://docs.openshift.com/container-platform/4.14/networking/openshift_sdn/about-openshift-sdn.html) (Optional) The default installation includes NetworkPolicy resources, these will only be acted upon if the SDN is configured appropriately.
-* [Dynamic Volume Provisioning](https://docs.openshift.com/container-platform/4.14/storage/dynamic-provisioning.html) supporting accessModes ReadWriteOnce (RWO) and ReadWriteMany (RWX).
-* [Jaeger Operator](https://docs.openshift.com/container-platform/4.14/service_mesh/v2x/installing-ossm.html#ossm-install-ossm-operator_installing-ossm) (Optional) If tests should contribute trace information and Jaeger based reports are required.
+* [RedHat OpenShift Container Platform](https://docs.openshift.com/container-platform/4.15/release_notes/ocp-4-15-release-notes.html) v4.15 or later (x86_64)
+* [OpenShift SDN in _network policy_ mode](https://docs.openshift.com/container-platform/4.15/networking/openshift_sdn/about-openshift-sdn.html) (Optional) The default installation includes NetworkPolicy resources, these will only be acted upon if the SDN is configured appropriately.
+* [Dynamic Volume Provisioning](https://docs.openshift.com/container-platform/4.15/storage/dynamic-provisioning.html) supporting accessModes ReadWriteOnce (RWO) and ReadWriteMany (RWX).
+* [Jaeger Operator](https://docs.openshift.com/container-platform/4.15/service_mesh/v2x/installing-ossm.html#ossm-install-ossm-operator_installing-ossm) (Optional) If tests should contribute trace information and Jaeger based reports are required.
 
 
 
@@ -25,7 +25,7 @@ To install the product you will need cluster administrator privileges.
 
 ## Red Hat OpenShift SecurityContextConstraints Requirements
 
-The product is compatible with the `restricted` and `restricted-v2` [SecurityContextConstraint](https://docs.openshift.com/container-platform/4.14/authentication/managing-security-context-constraints.html#default-sccs_configuring-internal-oauth).
+The product is compatible with the `restricted` and `restricted-v2` [SecurityContextConstraint](https://docs.openshift.com/container-platform/4.15/authentication/managing-security-context-constraints.html#default-sccs_configuring-internal-oauth).
 
 If you would prefer to use the custom ibm-devops-restricted SCC, please do the following before installation:
 
@@ -97,8 +97,8 @@ This change propagates after a couple of minutes. [Further reading](https://clou
 
 ### Local Machine
 
-* [oc](https://docs.openshift.com/container-platform/4.14/cli_reference/openshift_cli/getting-started-cli.html)
-* [helm v3.15.2 or later](https://docs.openshift.com/container-platform/4.14/applications/working_with_helm_charts/installing-helm.html)
+* [oc](https://docs.openshift.com/container-platform/4.15/cli_reference/openshift_cli/getting-started-cli.html)
+* [helm v3.15.2 or later](https://docs.openshift.com/container-platform/4.15/applications/working_with_helm_charts/installing-helm.html)
 
 ### Storage
 
@@ -129,7 +129,7 @@ The pod [`fsGroup`](https://kubernetes.io/docs/tasks/configure-pod-container/sec
 Fetch chart for install:
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-prod --version 11.0.3
+helm pull --untar ibm-helm/ibm-devops-prod --version 11.0.4
 cd ibm-devops-prod
 ```
 
@@ -199,33 +199,27 @@ helm upgrade --install $HELM_NAME . -n $NAMESPACE \
 
 ## Upgrade
 
-Upgrading from releases prior to v10.5.3 is not support - for older versions first upgrade to an intermediate release.
+Upgrading from releases prior to v11.0.3 is not support - for older versions first upgrade to an intermediate release.
 
 Before performing your upgrade RabbitMQ flags must be enabled on a running install:
 
 ```bash
 oc exec -n $NAMESPACE $HELM_NAME-rabbitmq-0 -- rabbitmqctl enable_feature_flag all
+
 ```
 
 If you are restoring from a quiesced snapshot, meaning no instance is running, you can instead delete the RabbitMQ data before installing:
 
 ```bash
-oc delete pvc -n $NAMESPACE data-$HELM_NAME-rabbitmq-0 
+oc delete pvc -n $NAMESPACE data-$HELM_NAME-rabbitmq-0
+
 ```
 
 Before performing your upgrade backup your user data.
 
 
+Install the product as [above](#chart).
 
-Upgrade the product as [above](#chart), however:
-* Before running helm upgrade:
-```bash
-oc delete deployments,statefulsets -lapp.kubernetes.io/managed-by=Helm,app.kubernetes.io/instance=$HELM_NAME -n $NAMESPACE
-```
-* When upgrading from v10.5.3 specify the additional helm value:
-```bash
-  --set postgresql.migrate.enabled=true \
-```
 
 
 ## Backup
@@ -472,3 +466,4 @@ This methods should also be used when restoring a backup made where different se
 * It is not currently possible to edit test assets. This must be done in DevOps Test Workbench.
 * In each namespace, only one instance of the product can be installed.
 * The replica count configuration enables a maximum of 50 active concurrent users. This configuration can not be changed.
+
