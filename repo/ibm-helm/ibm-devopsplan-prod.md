@@ -2,24 +2,24 @@
 
 ## **Introduction**
 
-[DevOps Plan](httpsibmibm.com/docs/en/devops-plan/3.0.0) is a change management software platform for enterprise level scaling, process customization, and control to accelerate project delivery and increase developer productivity.
+[DevOps Plan](https://ibm.com/docs/en/devops-plan/3.0.2) is a change management software platform for enterprise level scaling, process customization, and control to accelerate project delivery and increase developer productivity.
 
 ## **Chart Details**
 - This chart deploys a single instance of DevOps Plan that may be scaled to multiple instances.
 
 ## **Product Documentation**
 
-- [DevOps Plan Product Documentation](https://ibm.com/docs/en/devops-plan/3.0.0)
+- [DevOps Plan Product Documentation](https://ibm.com/docs/en/devops-plan/3.0.2)
 
 ## **Prerequisites**
 
 1. Kubernetes 1.16.0+, OpenShift CLI (oc), and Helm 3.
 
-    * [Install and setup kubectl CLI](https://kubernetes.io/docs/tasks/tools/).
+    * [Install and set up kubectl CLI](https://kubernetes.io/docs/tasks/tools/).
 
-    * [Install and setup OpenShift CLI](https://docs.openshift.com/container-platform/4.14/cli_reference/openshift_cli/getting-started-cli.html)
+    * [Install and set up OpenShift CLI](https://docs.openshift.com/container-platform/4.17/cli_reference/openshift_cli/getting-started-cli.html)
 
-    * [Install and setup the Helm 3 CLI](https://helm.sh/docs/intro/install/).
+    * [Install and set up the Helm 3 CLI](https://helm.sh/docs/intro/install/).
 
 2. Image and Helm Chart - The DevOps Plan images, and helm chart can be accessed via the Entitled Registry and public Helm repository.
 
@@ -27,7 +27,7 @@
     * Get a key to the entitled registry
       * Log in to [MyIBM Container Software Library](https://myibm.ibm.com/products-services/containerlibrary) with the IBMid and password that are associated with the entitled software.
       * In the Entitlement keys section, select Copy key to copy the entitlement key to the clipboard.
-      * An imagePullSecret must be created to be able to authenticate and pull images from the Entitled Registry.  If the secret is named ibm-entitlement-key it will be used as the default pull secret, no value needs to be specified in the global.imagePullSecret field.  Once this secret has been created you will specify the secret name as the value for the global.imagePullSecret parameter in the values.yaml you provide to 'helm install ...'  Note: Secrets are namespace scoped, so they must be created in every namespace you plan to install DevOps Plan into.  Following is an example command to create an imagePullSecret named 'ibm-entitlement-key'.
+      * An imagePullSecret must be created to be able to authenticate and pull images from the Entitled Registry.  If the secret is named ibm-entitlement-key it will be used as the default pull secret, no value needs to be specified in the global.imagePullSecret field.  Once this secret has been created you will specify the secret name as the value for the global.imagePullSecret parameter in the values.yaml you provide to 'helm install ...'  Note: Secrets are namespace scoped, so they must be created in every namespace you plan to install DevOps Plan into.  Following is an example command to create an imagePullSecret named 'ibm-entitlement-key'. 
 
       ```
       oc create secret docker-registry ibm-entitlement-key \
@@ -41,14 +41,13 @@
 
      - DevOps Plan requires a PostgreSQL database to create TeamSpace and Applications. The PostgreSQL database may be running in your cluster or on hardware that resides outside of your cluster. The values used to connect to the database are required when installing the DevOps Plan. The DevOps Plan helm chart provides the PostgreSQL database by default settings. You can disable it and use your own PostgreSQL database.
      
-     - If you already installed with internal PostgreSQL database, and you plan to upgrade with latest release version, then you need to set the internal PostgreSQL database password during helm upgrade. Get the password for internal PostgreSQL database by running this command:
+     - If you already installed with the internal PostgreSQL database, and you plan to upgrade with the latest release version without deleting the PostgreSQL PVC, then you need to get the existing password before uninstall/upgrade and set it during *helm upgrade --install*. Get the password for internal PostgreSQL database by running this command when namespace is set to *devopsplan*:
         ```bash
-        export POSTGRES_PASSWORD=$(kubectl get secret --namespace devopsplan ibm-devopsplan-ibm-devopsplan-prod-db-secret -o jsonpath="{.data.tenant-datastore-password}" | base64 -d)
+        export POSTGRES_PASSWORD=$(kubectl get secret --namespace devopsplan ibm-devopsplan-postgresql -o jsonpath="{.data.tenant-datastore-password}" | base64 -d)
         ```
-       Set the password during the upgrade:
+       Set the password during the helm upgrade --install:
         ```bash
-        --set spring.datastore.password=$POSTGRES_PASSWORD \
-        --set tenant.datastore.password=$POSTGRES_PASSWORD
+        --set postgresql.existingPassword=$POSTGRES_PASSWORD
         ```
 
 4. Persistent Volumes
@@ -57,7 +56,7 @@
 
      - DevOps Plan requires non-root access to persistent storage. When using IBM File Storage, you need to either use the IBM provided "gid" File storage class with default group ID 65531 or create your own customized storage class to specify a different group ID. Please follow the instructions at https://cloud.ibm.com/docs/containers?topic=containers-cs_storage_nonroot for more details.
 
-     - The DevOps Plan persistent volumes has been tested with default StorageClass "ibmc-block-gold" for the persistence volume with no sharing the data, persistence.ccm.storageClass=ibmc-file-gold-gid for the persistence volume with sharing the data and securityContext.fsGroup=65531. The default setting for the StorageClass and fsGroup shown as below and you can updated based on your cluster environment.
+     - The DevOps Plan persistent volumes has been tested with default StorageClass "ibmc-block-gold" for the persistence volume with no sharing the data, persistence.ccm.storageClass=ibmc-file-gold-gid for the persistence volume with sharing the data and securityContext.fsGroup=65531. The default setting for the StorageClass and fsGroup shown below and you can update based on your cluster environment.
 
         ```bash
         persistence:
@@ -69,7 +68,15 @@
         ```
 5. Keycloak Single Sign On feature.
 
-    - The helm chart enables the Keycloak Single Sign On feature installed with helm chart. You can disable the Keycloak installed with the helm chart and using an external Keycloak instance installed outside of the helm chart.
+    - The helm chart enables the Keycloak Single Sign On feature installed with the helm chart. You can disable the Keycloak installed with the helm chart and use an external Keycloak instance installed outside of the helm chart.
+
+    - If you already installed with the internal Keycloak, and you plan to upgrade with the latest release version without deleting the Keycloak PVC, then you need to get the existing password before uninstall/upgrade and set it during *helm upgrade --install*. Get the password for internal Keycloak by running this command when namespace is set to *devopsplan*:
+        ```bash
+        export KEYCLOAK_PASSWORD=$(kubectl get secret --namespace devopsplan ibm-devopsplan-keycloak -o jsonpath="{.data.keycloak-password}" | base64 -d)
+        ```
+       Set the password during the helm upgrade --install:
+        ```bash
+        --set keycloak.existingPassword=$KEYCLOAK_PASSWORD
 
 6. Licensing Requirements
 
@@ -125,9 +132,9 @@ Get the _default_ `openshift-cluster-dns-name` and set it in the *global.domain*
 
   If you plan to install the latest version of the DevOps Plan, then you don't need to add **--version [CHART VERSION]**.
 
-  If you plan to use external PostgreSQL database, refer to [Installing DevOps Plan with External Database and Optional email server settings](https://www.ibm.com/docs/devops-plan/3.0.0?topic=gsdphc-installing-devops-plan-external-databases-optional-email-server-settings).
+  If you plan to use external PostgreSQL database, refer to [Installing DevOps Plan with External Database and Optional email server settings](https://www.ibm.com/docs/devops-plan/3.0.2?topic=gsdphc-installing-devops-plan-external-databases-optional-email-server-settings).
 
-  If you plan to use External Keycloak, refer to [Installing DevOps Plan with External Keycloak Single Sign On feature](https://www.ibm.com/docs/en/devops-plan/3.0.0?topic=openshift-enabling-devops-plan-keycloak-single-sign-feature).
+  If you plan to use External Keycloak, refer to [Installing DevOps Plan with External Keycloak Single Sign On feature](https://www.ibm.com/docs/en/devops-plan/3.0.2?topic=openshift-enabling-devops-plan-keycloak-single-sign-feature).
 
   When providing your own cluster if the default storage class does not support the ReadWriteMany (RWX) accessMode or it does not support Storage Class ibmc-file-gold-gid, then an alternative class must be specified using the following additional helm values:
 
@@ -137,9 +144,11 @@ Get the _default_ `openshift-cluster-dns-name` and set it in the *global.domain*
     --set securityContext.fsGroup=65531
   ```
 
-2. Start Keycloak home page by using https://ibm-devopsplan-keycloak.[openshift-cluster-dns-name]/ and trust keycloak certificate (Username: *admin* and Password: *admin*).
+2. Run *helm status devopsplan -n devopsplan* to retrieve the username and password for the Opensearch Dashboard, Keycloak, and PostgreSQL.
 
-3. Start the DevOps Plan home page in your browser by using https://ibm-devopsplan.[openshift-cluster-dns-name]
+3. Start the Keycloak home page by using https://ibm-devopsplan-keycloak.[openshift-cluster-dns-name] and trust the keycloak certificate.
+
+4. Start the DevOps Plan home page in your browser by using https://ibm-devopsplan.[openshift-cluster-dns-name]
 
 
 ### **Install with Customize parameters settings**
@@ -196,12 +205,6 @@ spring:
     username: [DATABASE_USERNAME]
     password: [DATABASE_PASSWORD]
 
-## Email server settings (0ptional)
-  mail:
-    host: [MAIL_SERVER]
-    port: [MAIL_PORT]    username: [YOUR_MAIL_USERNAME]
-    password: [YOUR_MAIL_PASSWORD]
-
 ## Tenant datastore settings (Only PostgreSQL)
 tenant:
   datastore:
@@ -210,18 +213,24 @@ tenant:
     username: [DATABASE_USERNAME]
     password: [DATABASE_PASSWORD]
 
-## The email has to delivered from (optional)
-  email:
-    fromaddress: [FROM_EMAIL_ADDRESS]
-
 postgresql:
-  enabled: false
+  enabled: false 
+
+## SMTP settings (Optional)
+global:
+  platform:
+    smtp:
+      sender: [SENDER_EMAIL_ADDRESS]
+      host: [SMTP_SERVER]
+      port: [SMTP_PORT]
+      username: [SMTP_USERNAME]
+      password: [SMTP_PASSWORD]
 ```
 
 2. Add -f devopsplan.yaml to *helm install* or *helm upgrade* command.
 
 ## **Installing DevOps Plan with External Keycloak Single Sign On feature**
-The helm chart enables the Keycloak Single Sign On feature installed with helm chart. You can disable the Keycloak installed with the helm chart and using an external Keycloak instance installed outside of the helm chart.
+The helm chart enables the Keycloak Single Sign On feature installed with the helm chart. You can disable the Keycloak installed with the helm chart and use an external Keycloak instance installed outside of the helm chart.
 
 1. Setting up keycloak-json configmap for keycloak.json file
       - Create a new folder named *path/to/your/keycloak* that contains the *keycloak.json* file for installing configuring Keycloak on ibm-devopsplan pod container:
@@ -268,7 +277,7 @@ Follow these instructions to install SSL certificates in the devopsplan containe
     ```bash
     $ kubectl create cm keystore-file --from-file /path/to/your/keystore/keystore.p12 --namespace [namespace_name]
     ```
-  3. Check configMap *keystore-file* is created and it has the *keystore.p12* file contains from */path/to/your/keystore/* path.
+  3. Check configMap *keystore-file* is created and it contains the *keystore.p12* file from */path/to/your/keystore/* path.
 
     ```bash
     $ kubectl get cm keystore-file -o yaml --namespace [namespace_name]
@@ -293,74 +302,79 @@ The Helm chart has the following values that can be overridden using the *--set 
 
 | **Parameter** | **Description** | **Default value** |
 | --- | --- | --- |
-| **global.imagePullSecret** | Your own secret with your credentials to IBM's docker repository. Required when deploying Helm Chart in your own cluster. | "" |
+| **global.imagePullSecret** | Your own secret with your credentials to IBM's docker repository. | "" |
 | **global.imageRegistry** |  DevOps Plan docker image registry. | cp.icr.io |
-| **global.licenseMetric** | DevOps Plan license metrice for concurrent user. | false |
-| **replicaCount** | Number of replicas to deploy instance of DevOps Plan service. | 1 |
+| **global.licenseMetric** | DevOps Plan license metrice for concurrent users. | false |
+| **global.passwordSeed** | PasswordSeed for the Keycloak and PostgreSQL password | "" |
+| **replicaCount** | Number of replicas to deploy instances of DevOps Plan service. | 1 |
 | **image.repository** | DevOps Plan docker Image repository path. | cp/devops-plan/devopsplan |
 | **image.tag** | DevOps Plan Image tag or image digest. | See values.yaml |
 | **image.pullPolicy** | DevOps Plan image pull policy.Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent |
 | **hostname** | DevOps Plan Docker Container hostname. | devopsplan |
-| **timeZone** | DevOps Plan server Time Zone. It can set based on list of supported time zones and abbreviations.| EST5EDT |
+| **timeZone** | DevOps Plan server Time Zone. It can be set based on a list of supported timezones and abbreviations.| EST5EDT |
 | **serverQualifiedUrlPath** | If defined, it overrides the mapping URL in DevOps Plan server application.properties file.<br>Example: "https://[MAPPING_NAME].com" | "" |
 | **service.type** | Service type. It can be set to ClusterIP, LoadBalancer or NodePort | ClusterIP |
 | **service.exposePort** | Service expose port  | "" |
 | **ingress.enabled** | Ingress service. Accepted values are:<br> - *true* to enable the ingress service.<br> - *false* to disable the ingress service.| true |
 | **ingress.type** | Ingress service type.. Accepted values are: nginx, route, mapping| route |
 | **hosts** | List of hosts for the ingress. | devopsplan.ibm.com |
+| **swagger.enabled** | This parameter enables or disables Swagger UI visibility. Accepted values are:<br>- *true* to enable Swagger UI visibility.<br>- *false* to disable Swagger UI visibility. | false |
 
 ### Parameters for creating TeamSpace and Applications
-The PostgreSQL database requires to create TeamSpace and Applications. The helm chart is installed with internal PostgreSQL database by default. If you plan to install/upgrade the helm charts with external database, then you need to set the *postgresql.enabled* to *false* and set the *spring.datastore* and *tenant.datastore* configuration settings based on your external database parameters. PostgreSQL database is supported database for release 3.0.0.
+The PostgreSQL database requires to create TeamSpace and Applications. The helm chart is installed with the internal PostgreSQL database by default. If you plan to install/upgrade the helm charts with an external database, then you need to set the *postgresql.enabled* to *false* and set the *spring.datastore* and *tenant.datastore* configuration settings based on your external database parameters. PostgreSQL database is supported for release 3.0.2.
 
 | **Parameter** | **Description** | **Default value** |
 | --- | --- | --- |
 | **spring.datastore.url** | postgresql JDBC URL with format *jdbc:postgresql://[host_address]:[port_number]/[database_name].* | jdbc:postgresql://devopsplan-postgresql:5432/postgres |
 | **spring.datastore.username** | postgresql database username | postgres |
 | **spring.datastore.password** | postgresql database password | See values.yaml |
-| **tenant.datastore.vendor** | Tenant database vendor. The current supported database PostgreSQL. * | PostgreSQL |
+| **tenant.datastore.vendor** | Tenant database vendor. The current supported database is PostgreSQL. * | PostgreSQL |
 | **tenant.datastore.server** | Tenant database server | devopsplan-postgresql |
 | **tenant.datastore.dbname** | Tenant database name | postgres |
 | **tenant.datastore.username** | Tenant database username | postgres |
 | **tenant.datastore.password** | Tenant database password | See values.yaml |
-| **tenant.registration.code** | Tenant generate registration codes. Accepted values are:<br>- *NONE* no verification needed. Any verification code is ignored.<br>- *PROVIDED* the use the code supplied by the registration API call .<br>- *GENERATED* the server generates a random code (default 6 alphanumeric characters). | NONE |
-| **tenant.email.fromaddress** | The email address has to delivered from on-boarding process | "" |
+| **tenant.registration.code** | Tenant generate registration codes. Accepted values are:<br>- *NONE* no verification needed. Any verification code is ignored.<br>- *PROVIDED* the code supplied by the registration API call .<br>- *GENERATED* the server generates a random code (default 6 alphanumeric characters). | NONE |
 
-### Mail Server Parameters
+### SMTP Server Parameters
 
 | **Parameter** | **Description** | **Default value** |
 | --- | --- | --- |
-| **spring.mail.host** | Mail server host  | "" |
-| **spring.mail.port** | Mail server port number | "" |
-| **spring.mail.username** | Mail server username | "" |
-| **spring.mail.password** | Mail server password | "" |
+| **global.platform.smtp.host** | SMTP server host  | "" |
+| **global.platform.smtp.port** | SMTP server port number | "" |
+| **global.platform.smtp.username** | SMTP server username | "" |
+| **global.platform.smtp.password** | SMTP server password | "" |
+| **global.platform.smtp.sender** | The SMTP sender email address has to delivered from on-boarding process | "" |
+| **global.platform.smtp.startTLS** | This parameter sets the mail server to secure protocol using TLS or SSL. Accepted values are:<br>- *true* to set secure protocol using TLS or SSL.<br>- *false* to set unsecure protocol | false |
+| **global.platform.smtp.smtps** | This parameter sets the mail server protocol. Accepted values are:<br>- *true* to set smtps protocol.<br>- *false* to set smtp protocol. | false |
 
 
 ### Analytics Parameters
-The helm chart installs Analytics feature on a separate pod by default. you can disabled/enabled the Analytics feature service by setting *analytics.service* to *false/true*. 
+The helm chart installs the Analytics feature on a separate pod by default. you can disabled/enabled the Analytics feature service by setting *analytics.service* to *false/true*. 
 
 | **Parameter** | **Description** | **Default value** |
 | --- | --- | --- |
-| **analytics.service** | This parameter enables or disable Analytics service. Accepted values are:<br>- *true* to enable Analytics service.<br>- *false* to disable Analytics service.<br>This parameter is needed if you plan to use Analytics features for the DevOps Plan. | true |
+| **analytics.service** | This parameter enables or disables Analytics service. Accepted values are:<br>- *true* to enable Analytics service.<br>- *false* to disable Analytics service.<br>This parameter is needed if you plan to use Analytics features for the DevOps Plan. | true |
 | **analytics.type** | Analytics service type  | LoadBalancer |
 | **analytics.exposePort** | Analytics service port  | "" |
 | **analytics.urlMapping** | URL mapping. <br>- The mapping URL format should be *https:[mapping-name].com*.  | "" |
 | **analytics.replicaCount** | Number of replica Analytics Pods. This parameter is needed if analytics.service *=true.* | 1 |
 | **analytics.image.repository** | Analytics docker Image repository path. This parameter is needed if analytics.service *=true.* | cp/devops-plan/devopsplan-analytics |
-| **analytics.image.tag** | Analytics Image tag. This parameter is needed if *analytics.service=true.* | 3.0.0 |
+| **analytics.image.tag** | Analytics Image tag. This parameter is needed if *analytics.service=true.* | 3.0.2 |
 | **analytics.image.pullPolicy** | Analytics image pull policy. This parameter is needed if *analytics.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **analytics.hostname** | Analytics hostname | analytics |
 
 ### PostgreSQL Database Parameters
-The helm chart is installed with internal postgresql database by default.
+The helm chart is installed with the internal postgresql database by default.
 
 | **Parameter** | **Description** | **Default value** |
 | --- | --- | --- |
-| **postgresql.enabled** | This parameter enables or disable devopsplan-postgresql database service. Accepted values are:<br>- *true* to enable postgresql database service.<br>- *false* to disable postgresql database service. | true |
+| **postgresql.enabled** | This parameter enables or disables devopsplan-postgresql database service. Accepted values are:<br>- *true* to enable postgresql database service.<br>- *false* to disable postgresql database service. | true |
 | **postgresql.repository** | Postgresql database docker Image repository path. This parameter is needed if *postgresql.enabled=true.* | cp/devops-plan/devopsplan-postgresql |
-| **postgresql.tag** | Postgresql database Image tag.This parameter is needed if *postgresql.enabled=true.* | 3.0.0 |
+| **postgresql.tag** | Postgresql database Image tag.This parameter is needed if *postgresql.enabled=true.* | 3.0.2 |
 | **postgresql.pullPolicy** | Postgresql database image pull policy.This parameter is needed if *postgresql.enabled=true*Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent |
  **postgresql.service.type** | postgresql service type  | LoadBalancer |
 | **postgresql.service.exposePort** | postgresql service port  | "" |
+| **postgresql.existingPassword** | postgresql existing password. It is needed if you uninstall and install the devopsplan without deleting the PostgreSQL PVC, then you need to set *postgresql.existingPassword* to the existing password before uninstalling. | "" |
 
 ### Dashboard Parameters
 The dashboards analytics configuration setting options set by default for dashboard properties using Nginx, Opensearch and Opensearch-dashboards in Helm chart. It is strongly recommended to not modify the default values as shown in the below table. 
@@ -369,60 +383,60 @@ The dashboards analytics configuration setting options set by default for dashbo
 | --- | --- | --- |
 | **analyticsUserName** | Analytics UserName| SYSTEM_ANALYTICS1 |
 | **analyticsBootstrapData** | Set number of the days of analytics data | 90 |
-| **nginx.service** | This parameter enables or disable Nginx service. Accepted values are:<br>- *true* to enable Ngnix service.<br>- *false* to disable Nginx service.<br>This parameter is needed if you plan to use Dashboard features for the Business Analytics. | true |
+| **nginx.service** | This parameter enables or disables Nginx service. Accepted values are:<br>- *true* to enable Nginx service.<br>- *false* to disable Nginx service.<br>This parameter is needed if you plan to use Dashboard features for the Business Analytics. | true |
 | **nginx.type** | Nginx service type  | LoadBalancer |
 | **nginx.exposePort** | Nginx service port  | "" |
 | **nginx.urlMapping** | URL mapping. <br>- The mapping URL format should be *https:[mapping-name].com*.  | "" |
 | **nginx.replicaCount** | Number of replica nginx Pods. This parameter is needed if nginx.service *=true.* | 1 |
 | **nginx.image.repository** | Nginx docker Image repository path. This parameter is needed if nginx.service *=true.* | cp/devops-plan/devopsplan-nginx |
-| **nginx.image.tag** | Nginx Image tag. This parameter is needed if *nginx.service=true.* | 2.2.2 |
+| **nginx.image.tag** | Nginx Image tag. This parameter is needed if *nginx.service=true.* | 3.0.2 |
 | **nginx.image.pullPolicy** | Nginx image pull policy. This parameter is needed if *nginx.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **nginx.hostname** | Nginx hostname | nginx |
-| **dashboards.service** | This parameter enables or disable dashboards service. Accepted values are:<br>- *true* to enable Ngnix service.<br>- *false* to disable dashboards service.<br>This parameter is needed if you plan to use Dashboard features for Business Analytics. | true |
+| **dashboards.service** | This parameter enables or disables dashboards service. Accepted values are:<br>- *true* to enable Nginx service.<br>- *false* to disable dashboards service.<br>This parameter is needed if you plan to use Dashboard features for Business Analytics. | true |
 | **dashboards.replicaCount** | Number of replica dashboards Pods. This parameter is needed if dashboards.service *=true.* | 1 |
 | **dashboards.image.repository** | Opensearch-dashboards docker Image repository path. This parameter is needed if dashboards.service *=true.* | cp/devops-plan/devopsplan-dashboards |
-| **dashboards.image.tag** | Opensearch-dashboards Image tag. This parameter is needed if *dashboards.service=true.* | 3.0.0 |
+| **dashboards.image.tag** | Opensearch-dashboards Image tag. This parameter is needed if *dashboards.service=true.* | 3.0.2 |
 | **dashboards.image.pullPolicy** | Opensearch-dashboards image pull policy. This parameter is needed if *dashboards.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **dashboards.hostname** | Dashboards hostname | dashboards |
 | **dashboards.username** | Opensearch Dashboards username | "admin" |
 | **dashboards.password** | Opensearch Dashboards password | "admin" |
-| **logstash.service** | This parameter enables or disable devopsplan-logstash service. Accepted values are:<br>- *true* to enable Ngnix service.<br>- *false* to disable devopsplan-logstash service.<br>This parameter is needed if you plan to use Dashboard features for Business Analytics. | true |
+| **logstash.service** | This parameter enables or disables devopsplan-logstash service. Accepted values are:<br>- *true* to enable Nginx service.<br>- *false* to disable devopsplan-logstash service.<br>This parameter is needed if you plan to use Dashboard features for Business Analytics. | true |
 | **logstash.replicaCount** | Number of replica devopsplan-logstash pods. This parameter is needed if logstash.service *=true.* | 1 |
 | **logstash.image.repository** | logstash docker Image repository path. This parameter is needed if logstash.service *=true.* | cp/devops-plan/devopsplan-logstash |
-| **logstash.image.tag** | devopsplan-logstash Image tag. This parameter is needed if *logstas.service=true.* | 3.0.0 |
+| **logstash.image.tag** | devopsplan-logstash Image tag. This parameter is needed if *logstas.service=true.* | 3.0.2 |
 | **logstash.image.pullPolicy** | Opensearch-logstash image pull policy. This parameter is needed if *logstas.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **logstash.port** | logstash port | 5011 |
 | **logstash.username** | logstash username | "logstash" |
 | **logstash.password** | logstash password | "logstash" |
-| **opensearch.service** | This parameter enables or disable opensearch service. Accepted values are:<br>- *true* to enable Ngnix service.<br>- *false* to disable opensearch service.<br>This parameter is needed if you plan to use Dashboard features for Business Analytics. | true |
+| **opensearch.service** | This parameter enables or disables opensearch service. Accepted values are:<br>- *true* to enable Nginx service.<br>- *false* to disable opensearch service.<br>This parameter is needed if you plan to use Dashboard features for Business Analytics. | true |
 | **opensearch.replicaCount** | Number of replica opensearch pods. This parameter is needed if opensearch.service *=true.* | 1 |
 | **opensearch.image.repository** | Opensearch docker Image repository path. This parameter is needed if opensearch.service *=true.* | cp/devops-plan/devopsplan-opensearch |
-| **opensearch.image.tag** | Opensearch Image tag. This parameter is needed if *opensearch.service=true.* | 3.0.0 |
+| **opensearch.image.tag** | Opensearch Image tag. This parameter is needed if *opensearch.service=true.* | 3.0.2 |
 | **opensearch.image.pullPolicy** | Opensearch image pull policy. This parameter is needed if *opensearch.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **opensearch.hostname** | Opensearch hostname | opensearch |
 | **opensearch.hash** | Opensearch password hash | "" |
 | **opensearch.discoveryType** | Eleasticsearch discoveryType  | single-node |
 
 ### Single-Sign-On (Keycloak) functionality Parameters
-Single-Sign-On functionality by default is sets to disable. If the admin plan to enable the Single-Sign-On functionality, then it need to modify the default values as shown in the below table. Refer to [Enabling the DevOps Plan Keycloak Single Sign On feature]() for more information.
+Single-Sign-On functionality by default is set to disable. If the admin plans to enable the Single-Sign-On functionality, then it need to modify the default values as shown in the below table. Refer to [Enabling the DevOps Plan Keycloak Single Sign On feature]() for more information.
 
 | **Parameter** | **Description** | **Default value** |
 | --- | --- | --- |
-| **keycloak.enabled** | This parameter enables or disable Single-Sign-On (Keycloak)  service. Accepted values are:<br>- *true* to enable Single-Sign-On service.<br>- *false* to disable Single-Sign-On service.<br>This parameter is needed if you plan to use Single-Sign-On feature. | false |
-| **keycloak.service.enabled** | This parameter enables or disable Keycloak service in Helm Chart for Single-Sign-On service. Accepted values are:<br>- *true* to enable Keycloak service.<br>- *false* to disable Keycloak service.<br>This parameter is needed if you plan to use Single-Sign-On feature and deploy Keycloak with Helm chart. | false |
+| **keycloak.enabled** | This parameter enables or disables Single-Sign-On (Keycloak)  service. Accepted values are:<br>- *true* to enable Single-Sign-On service.<br>- *false* to disable Single-Sign-On service.<br>This parameter is needed if you plan to use Single-Sign-On feature. | false |
+| **keycloak.service.enabled** | This parameter enables or disables Keycloak service in Helm Chart for Single-Sign-On service. Accepted values are:<br>- *true* to enable Keycloak service.<br>- *false* to disable Keycloak service.<br>This parameter is needed if you plan to use Single-Sign-On feature and deploy Keycloak with Helm chart. | false |
 | **keycloak.service.replicaCount** | Number of replica keycloak Pods. This parameter is needed if *keycloak.service.enabled=true*. | 1 |
 | **keycloak.service.image.repository** | keycloak docker Image repository path. This parameter is needed if *keycloak.service.enabled=true*. | cp/devops-plan/devopsplan-keycloak |
-| **keycloak.service.image.tag** | Keycloak Image tag. This parameter is needed if *keycloak.service.enabled=true*. | 3.0.0 |
+| **keycloak.service.image.tag** | Keycloak Image tag. This parameter is needed if *keycloak.service.enabled=true*. | 3.0.2 |
 | **keycloak.service.image.pullPolicy** | Keycloak image pull policy. This parameter is needed if *keycloak.service.enabled=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent |
 | **keycloak.service.hostname** | Keycloak hostname. | keycloak |
 | **keycloak.service.type** | Keycloak service type. | ClusterIP |
 | **keycloak.service.exposePort** | Keycloak service port. | "" |
 | **keycloak.service.ipAddress** | Cluster IP address or Hostname. | "" |
 | **keycloak.service.tls.enabled** | Enable installing Keycloak tls certificate and private key files. Accepted values are:<br>- *true* to enable installing tls files <br>- *false* to disable installing tls files. | true |
-| **keycloak.service.tls.configMapName** | This is configMap file name that contains the tls certificate and tls private key files. This parameter is needed if keycloak.service.enabled *=true.* | keycloak-tls |
+| **keycloak.service.tls.configMapName** | This is the configMap file name that contains the tls certificate and tls private key files. This parameter is needed if keycloak.service.enabled *=true.* | keycloak-tls |
 | **keycloak.service.importRealm.enabled** | Enable importing Keycloak realm configuration file. Accepted values are:<br>- *true* to enable importing  Keycloak realm configuration file<br>- *false* to disable importing Keycloak realm configuration file. | false |
-| **keycloak.service.importRealm.fileName** | This is configMap file name that contains the realm configuration file. This parameter is needed if keycloak.service.enabled *=true.*  and *keycloak.service.importRealm.enabled*| realm.json |
-| **keycloak.service.configMapName.fileName** | This is configMap file name that contains the realm configuration file. This parameter is needed if keycloak.service.enabled *=true.* and *keycloak.service.importRealm.enabled* | realm-json |
+| **keycloak.service.importRealm.fileName** | This is the configMap file name that contains the realm configuration file. This parameter is needed if keycloak.service.enabled *=true.*  and *keycloak.service.importRealm.enabled*| realm.json |
+| **keycloak.service.configMapName.fileName** | This is the configMap file name that contains the realm configuration file. This parameter is needed if keycloak.service.enabled *=true.* and *keycloak.service.importRealm.enabled* | realm-json |
 | **keycloak.username** | Keycloak Administration Console username. | admin |
 | **keycloak.password** | Keycloak Administration Console password. | admin |
 | **keycloak.realmName** | The Realm name. | "CCM" |
@@ -430,17 +444,17 @@ Single-Sign-On functionality by default is sets to disable. If the admin plan to
 | **keycloak.dashboardsClientSecret** | The secret for the dashboards-client. | "58846041-eb1e-46d8-bac4-b2ba541ff491" |
 | **keycloak.urlMapping** | Keycloak URL | "" |
 | **keycloak.jsonFile.enabled** | Enable installing keycloak.json file to the DevOps Plan servers /config folder.  Accepted values are:<br>- *true* to enable installing keycloak.json file <br>- *false* to disable installing keycloak.json file. | false |
-| **keycloak.jsonFile.configMapName** | This is configMap file name that contains the keycloak.json file. This parameter is needed if keycloak.jsonFile.enabled *=true.* | keycloak-json |
+| **keycloak.jsonFile.configMapName** | This is the configMap file name that contains the keycloak.json file. This parameter is needed if keycloak.jsonFile.enabled *=true.* | keycloak-json |
 
 ### SSL Parameters
-You need to set the ssl parmeters in order to install SSL certificates.
+You need to set the ssl parameters  in order to install SSL certificates.
 
 | **Parameter** | **Description** | **Default value** |
 | --- | --- | --- |
 | **ssl.enabled** | Enable installing SSL certificate.Accepted values are:<br>- *true* to enable installing SSL certificate <br>- *false* to disable installing SSL certificate. | false |
 | **ssl.password** | Keystore password. This parameter is needed if ssl.enabled *=true.* | "" |
 | **ssl.keyAlias** | keystore alias. | 1 |
-| **ssl.configMapName** | This is configMap file name that contains the SSL certificate keystore.p12 file.This parameter is needed if ssl.enabled *=true.* | keystore-file |
+| **ssl.configMapName** | This is the configMap file name that contains the SSL certificate keystore.p12 file.This parameter is needed if ssl.enabled *=true.* | keystore-file |
 
 ### Liveness & Readiness Parameters
 
@@ -519,7 +533,7 @@ The helm chart set to enable by default the persistent volumes (PVs) and persist
 | **persistence.ccm.logs.size** | Persistence Volume size. This parameter is needed if persistence.enabled =true and persistence.ccm.enabled=true. | 2Gi |
 | **persistence.ccm.logs.reclaimPolicy** | Persistence Volume reclaim policy. This parameter is needed if persistence.enabled =true and persistence.ccm.enabled=true. | Retain |
 | **persistence.ccm.logs.existingClaim** | Persistence Volume existing claim. This parameter is needed if persistence.enabled =true and persistence.ccm.enabled=true. | "" |
-| **persistence.annotations** | If defined, it set the annotations for PVC. This parameter is needed if persistence.enabled =true. | "" |
+| **persistence.annotations** | If defined, It sets the annotations for PVC. This parameter is needed if persistence.enabled =true. | "" |
 | **persistence.properties.application.enabled** | Enable the application.properties configmap. If it is set to true, then it will update the values of the application.properties based on setting in the DevOps Plan server /config/application.properties file. Accepted values are:<br>- true to enable application.properties configmap and updating the application.properties values based on setting in the DevOps Plan server /config/application.properties file.<br>- false to disable the application.properties configmap. | false |
 | **persistence.properties.analytics.enabled** | Enable the analytics.properties configmap. If it is set to true, then it will update the values of the analytics.properties based on setting in the DevOps Plan server /config/analytics.properties file. Accepted values are:<br>- true to enable analytics.properties configmap and updating the analytics.properties values based on setting in the DevOps Plan server /config/analytics.properties file.<br>- false to disable the analytics.properties configmap. | false |
 
@@ -578,12 +592,12 @@ The helm chart set to enable by default the persistent volumes (PVs) and persist
 
 | **Parameter** | **Description** | **Default value** |
 | --- | --- | --- |
-| **persistence.storageClass** | If defined, it set the global storageClassName. This parameter is needed if persistence.enabled =true and Storage Class will be used. | "" |
-| **persistence.ccm.storageClass** | It set the storageClassName for the devopsplan pods. This parameter is needed if the default storage class does not support the ReadWriteMany (RWX) accessMode. | ibmc-file-gold-gid |
-| **persistence.analytics.storageClass** | It set the storageClassName for the devopsplan-analytics PVC. | "" |
-| **persistence.postgresql.storageClass** | It set the storageClassName for the devopsplan-postgresql PVC. | "" |
-| **persistence.opensearch.storageClass** | It set the storageClassName for the devopsplan-opensearch PVC. | "" |
-| **persistence.keycloak.storageClass** | It set the storageClassName for the devopsplan-keycloak PVC. | "" |
+| **persistence.storageClass** | If defined, It sets the global storageClassName. This parameter is needed if persistence.enabled =true and Storage Class will be used. | "" |
+| **persistence.ccm.storageClass** | It sets the storageClassName for the devopsplan pods. This parameter is needed if the default storage class does not support the ReadWriteMany (RWX) accessMode. | ibmc-file-gold-gid |
+| **persistence.analytics.storageClass** | It sets the storageClassName for the devopsplan-analytics PVC. | "" |
+| **persistence.postgresql.storageClass** | It sets the storageClassName for the devopsplan-postgresql PVC. | "" |
+| **persistence.opensearch.storageClass** | It sets the storageClassName for the devopsplan-opensearch PVC. | "" |
+| **persistence.keycloak.storageClass** | It sets the storageClassName for the devopsplan-keycloak PVC. | "" |
 
 
 ## Mount Windows package into the DevOps Plan Server
@@ -591,9 +605,9 @@ The following steps describe how enabled/disabled mounting the windows product p
 
 | **Parameter** | **Description** | **Default value** |
 | --- | --- | --- |
-| **winInstall.enabled** | This parameter enables or disable mounting the windows product package in DevOps Plan Server. Accepted values are:<br>- *true* to enable mounting the windows product package.<br>- *false* to disable mounting the windows product package. | true |
+| **winInstall.enabled** | This parameter enables or disables mounting the windows product package in DevOps Plan Server. Accepted values are:<br>- *true* to enable mounting the windows product package.<br>- *false* to disable mounting the windows product package. | true |
 | **winInstall.image.repository** | win-install docker Image repository path. This parameter is needed if *winInstall.enabled=true*. | ibm-devopsplan-win-install |
-| **winInstall.image.tag** | win-install image tag. This parameter is needed if *winInstall.enabled=*true* | 3.0.0 |
+| **winInstall.image.tag** | win-install image tag. This parameter is needed if *winInstall.enabled=*true* | 3.0.2 |
 | **winInstall.image.pullPolicy** | win-install image pull policy. This parameter is needed if *winInstall.enabled=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent |
 | **winInstall.accessModes** | win-install persistence Volume access modes. This parameter is needed if *winInstall.enabled=rtue*. | ReadWriteOnce |
 | **winInstall.size** | win-install persistence Volume size. This parameter is needed if *winInstall.enabled=true*. | 2Gi |
@@ -616,7 +630,7 @@ The default OpenSearch and OpenSearch Dashboards Password is set to **admin**. Y
   1. Create a new password hash for OpenSearch.
 
   ```bash
-    $ docker run -d --name devopsplan-opensearch --env "discovery.type=single-node" icr.io/cp/devops-plan/devopsplan-opensearch:3.0.0
+    $ docker run -d --name devopsplan-opensearch --env "discovery.type=single-node" icr.io/cp/devops-plan/devopsplan-opensearch:3.0.2
     $ docker exec -it  devopsplan-opensearch /bin/bash -c /usr/share/opensearch/plugins/opensearch-security/tools/hash.sh
   ```
 
@@ -692,18 +706,30 @@ You can rollback to the previous release using *helm rollback* command.
 2. Use Helm to upgrade the chart to new release as described in section **Rolling upgrade release**.
 
 **Procedure:**
-1. Run *helm history* command to see revision numbers of your helm chart release. You should have min two revision numbers. revision 1 for install and revision 2 for the upgrade that you execute in **Before you begin** section. Example below shows you have a helm chart release name *ibm-devopsplan1* with revision 1 installed the helm chart *ibm-devopsplan1-3.0.0* for release 3.0.0 and revision 2 upgraded the helm chart *ibm-devopsplan2-3.0.1* to release 3.0.0.
+1. Run *helm history* command to see revision numbers of your helm chart release. You should have min two revision numbers. revision 1 for install and revision 2 for the upgrade that you execute in **Before you begin** section. Example below shows you have a helm chart release name *ibm-devopsplan1* with revision 1 installed the helm chart *ibm-devopsplan1-3.0.1* for release 3.0.1 and revision 2 upgraded the helm chart *ibm-devopsplan2-3.0.2* to release 3.0.2.
+
   ```bash
-  $ helm history ibm-devopsplan1 --namespace dev  REVISION        UPDATED                         STATUS          CHART           APP VERSION     DESCRIPTION
-  1               Thu Jan 20 21:58:13 2024        superseded      ibm-devopsplan1-3.0.0          Install complete  2               Thu Jan 20 22:13:56 2024        deployed        ibm-devopsplan2-3.0.0          Upgrade complete  ```
+  $ helm history ibm-devopsplan1 --namespace dev
+  REVISION        UPDATED                         STATUS          CHART           APP VERSION     DESCRIPTION
+  1               Thu Nov 20 21:58:13 2024        superseded      ibm-devopsplan1-3.0.1          Install complete
+  2               Thu Nov 20 22:13:56 2024        deployed        ibm-devopsplan2-3.0.2          Upgrade complete
+  ```
+
 2. Rollback helm chart using *helm rollback* command. Example below will rollback helm chart release *ibm-devopsplan1* from revision 2 to revision 1.
 
-  ```bash  $ helm rollback ibm-devopsplan --namespace dev  Rollback was a success! Happy Helming!
+  ```bash
+  $ helm rollback ibm-devopsplan --namespace dev
+  Rollback was a success! Happy Helming!
   ```
+
 3. Run *helm history RELEASE* command again to see the new revision 3 has been created after rollback, and it rollbacked to revision 1 the helm chart release *ibm-devopsplan1*.
-  ```bash  $ helm history ibm-devopsplan1 --namespace dev
-  REVISION        UPDATED                         STATUS          CHART           APP VERSION     DESCRIPTION  1               Thu Jan 20 21:58:13 2024        superseded      ibm-devopsplan1-ibm.0          Install complete  2               Thu Jan 20 22:13:56 2024        deployed        ibm-devopsplan2-3.0.0          Upgrade complete
-  3               Thu Jan 20 22:30:32 2024        deployed        ibm-devopsplan1-3.0.0          Rollback to 1
+
+  ```bash
+  $ helm history ibm-devopsplan1 --namespace dev
+  REVISION        UPDATED                         STATUS          CHART           APP VERSION     DESCRIPTION
+  1               Thu Nov 20 21:58:13 2024        superseded      ibm-devopsplan1-3.0.1          Install complete
+  2               Thu Nov 20 22:13:56 2024        deployed        ibm-devopsplan2-3.0.2          Upgrade complete
+  3               Thu Nov 20 22:30:32 2024        deployed        ibm-devopsplan1-3.0.1          Rollback to 1
   ```
  
  ## **Additional Information**
@@ -711,8 +737,8 @@ You can rollback to the previous release using *helm rollback* command.
 <details><summary>Downloads and Useful Links</summary>
 <p>
 
-- [DevOps Plan](https://ibm.com/docs/en/devops-plan/3.0.0)
-- [Getting started with DevOps Plan Helm Chart](https://www.ibm.com/docs/en/devops-plan/3.0.0?topic=plan-getting-started-devops-helm-chart-openshift)
+- [DevOps Plan](https://ibm.com/docs/en/devops-plan/3.0.2)
+- [Getting started with DevOps Plan Helm Chart](https://www.ibm.com/docs/en/devops-plan/3.0.2?topic=plan-getting-started-devops-helm-chart-openshift)
 
 </p>
 </details>
