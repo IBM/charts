@@ -1,8 +1,8 @@
-# IBM Sterling Control Center Monitor V6.2.1.0
+# IBM Sterling Control Center Monitor V6.4.0.0
 
 ## Introduction
 
-IBM▒ Control Center Monitor is a centralized monitoring and management system. It gives operations personnel the capability to continuously monitor the status of Configuration Managers, engines, and adapters across the enterprise for the following server types from one central location: IBM Sterling Connect:Direct▒, IBM Sterling Connect:Enterprise▒, IBM Sterling B2B Integrator, IBM Sterling File Gateway, IBM Global High Availability Mailbox, IBM Sterling Connect:Express, IBM QuickFile, IBM MQ Managed File Transfer and Many FTP servers. To find out more, see the Knowledge Center for [IBM Sterling Control Center Monitor](  https://www.ibm.com/docs/en/control-center/6.2.1.0?topic=sterling-control-center-monitor-621).
+IBM▒ Control Center Monitor is a centralized monitoring and management system. It gives operations personnel the capability to continuously monitor the status of Configuration Managers, engines, and adapters across the enterprise for the following server types from one central location: IBM Sterling Connect:Direct▒, IBM Sterling Connect:Enterprise▒, IBM Sterling B2B Integrator, IBM Sterling File Gateway, IBM Global High Availability Mailbox, IBM Sterling Connect:Express, IBM QuickFile, IBM MQ Managed File Transfer and Many FTP servers. To find out more, see the Knowledge Center for [IBM Sterling Control Center Monitor](  https://www.ibm.com/docs/en/control-center/6.4.0?topic=sterling-control-center-monitor-640).
 
 ## Chart Details
 
@@ -17,9 +17,9 @@ This chart deploys IBM Sterling Control Center Monitor on a container management
 
 ## Prerequisites
 
-1. Red Hat OpenShift Container Platform Version 4.11.0 or later fixes
-2. Kubernetes version >= 1.23 with beta APIs enabled.
-3. Helm version >= 3.2
+1. Red Hat OpenShift Container Platform Version 4.14.0 and less than 4.17.0 or later fixes
+2. Kubernetes version >= 1.27 and <=1.31 with beta APIs enabled.
+3. Helm version >= 3.13
 4. Ensure that one of the supported database server (Oracle/DB2/MSSQL) is installed and the database is accessible from inside the cluster.
 5. Ensure that the docker images for IBM Sterling Control Center Monitor from IBM Entitled Registry are downloaded and pushed to an image registry accessible to the cluster.
 6. Database driver files can be passed using any one of the following ways:
@@ -46,7 +46,7 @@ kubectl create secret docker-registry <name of secret> --docker-server=<your-reg
 
 With Kubernetes v1.25, Pod Security Policy (PSP) API has been removed and replaced with Pod Security Admission (PSA) contoller. Kubernetes PSA conroller enforces predefined Pod Security levels at the namespace level. The Kubernetes Pod Security Standards defines three different levels: privileged, baseline, and restricted. Refer to Kubernetes [`Pod Security Standards`] (https://kubernetes.io/docs/concepts/security/pod-security-standards/) documentation for more details. This chart is compatible with the restricted security level. 
 
-For users upgrading from older Kubernetes version to v1.25 or higher, refer to Kubernetes [`Migrate from PSP`](https://kubernetes.io/docs/tasks/configure-pod-container/migrate-from-psp/) documentation to help with migrating from PodSecurityPolicies to the built-in Pod Security Admission controller.
+For users upgrading from older Kubernetes version to v1.27 or higher, refer to Kubernetes [`Migrate from PSP`](https://kubernetes.io/docs/tasks/configure-pod-container/migrate-from-psp/) documentation to help with migrating from PodSecurityPolicies to the built-in Pod Security Admission controller.
 
 For users continuing on older Kubernetes versions (<1.25) and using PodSecurityPolicies, choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you. This chart is compatible with most restrictive policies.
 Below is an optional custom PSP definition based on the IBM restricted PSP.
@@ -155,7 +155,7 @@ Below is an optional custom PSP definition based on the IBM restricted PSP.
 
 ### SecurityContextConstraints Requirements
 
-Red Hat OpenShift provides a pre-defined or default set of SecurityContextConstraints (SCC). These SCCs are used to control permissions for pods. These permissions include actions that a pod can perform and what resources it can access. You can use SCCs to define a set of conditions that a pod must run with to be accepted into the system. Refer to OpenShift [`Managing Security Context Constraints`](https://docs.openshift.com/container-platform/4.11/authentication/managing-security-context-constraints.html#default-sccs_configuring-internal-oauth) documentation for more details on the default SCCs. This chart is compatible with **nonroot-v2** (added in OpenShift v4.11) default SCCs and does not require a custom SCC to be defined explicity.
+Red Hat OpenShift provides a pre-defined or default set of SecurityContextConstraints (SCC). These SCCs are used to control permissions for pods. These permissions include actions that a pod can perform and what resources it can access. You can use SCCs to define a set of conditions that a pod must run with to be accepted into the system. Refer to OpenShift [`Managing Security Context Constraints`](https://docs.openshift.com/container-platform/4.14/authentication/managing-security-context-constraints.html#default-sccs_configuring-internal-oauth) documentation for more details on the default SCCs. This chart is compatible with **nonroot-v2** (added in OpenShift v4.11) default SCCs and does not require a custom SCC to be defined explicity.
 
 For OpenShift, choose either a predefined SCC or have your cluster administrator create a custom SCC for you as per the security profile and policies adopted for all OpenShift deployments. This chart is compatible with most restrictive security context constraints.
 Below is an optional custom SCC definition based on the IBM restricted SCC.
@@ -303,7 +303,7 @@ This chart uses the following resources by default:
 ## Agreement to IBM Control Center License
 
 You must read the IBM Sterling Control Center License agreement terms before installation, using the below link:
-[License](https://www.ibm.com/support/customer/csol/terms/?id=L-KNAN-C6VGE3&lc=en#detail-document) (L/N: L-KNAN-C6VGE3)
+[License](https://www.ibm.com/support/customer/csol/terms/?id=L-MBLY-9ARX3J&lc=en) (L/N: L-MBLY-9ARX3J)
 
 ## Installing the Chart
 
@@ -316,7 +316,7 @@ Ensure that the chart is downloaded locally and available.
 Run the below command
 
 ```bash
-$ helm install my-release -f values.yaml ibm-sccm-2.0.4.tgz
+$ helm install my-release -f values.yaml ibm-sccm-4.0.0.tgz
 ```
 
 Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 6-7 minutes for Installing Control Center.
@@ -333,7 +333,6 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `image.tag`                                     | Image tag                                           |                                          |
 | `image.imageSecrets`                            | Image pull secrets                                  |                                          |
 | `image.pullPolicy`                              | Image pull policy                                   | `IfNotPresent`                           |
-| `ccArgs.appUserUID`                             | UID for continer user                               |                                          |
 | `ccArgs.ccInterval`                             | Interval Time between pod restart                   | `2h`                                     |
 | `ccArgs.devEnvDropTables`                       | Flag for dropping table in dev environment          | `false`                                  |
 | `ccArgs.enableAutoRebalanceServers`             | Auto rebalancing of monitored servers between EPs   | `true`                                   |
@@ -344,10 +343,15 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `ccArgs.dbPort`                                 | Database Port number                                |                                          |
 | `ccArgs.dbUser`                                 | Database Username                                   |                                          |
 | `ccArgs.dbName`                                 | Database name                                       |                                          |
-| `ccArgs.dbLoc`                                  | Database localization                               | `none`                                   |            
+| `ccArgs.dbLoc`                                  | Database localization                               | `none`                                   |
 | `ccArgs.dbInit`                                 | Database Initialization Flag                        | `true`                                   |
 | `ccArgs.dbPartition`                            | Database Partitioning Flag                          | `false`                                  |
 | `ccArgs.dbDrivers`                              | Database drivers                                    |                                          |
+| `ccArgs.dbPasswordVaultEnable`                  | Database Password Vault Flag                        | `false`                                  |
+| `ccArgs.dbPasswordVaultTimeout`                 | Database Password Vault Timeout                     | `60`                                     |
+| `ccArgs.dbPasswordVaultRetryWaitTime`           | Database Password Vault Retry Time                  | `15`                                     |
+| `ccArgs.dbPasswordVaultScriptLocation`          | Database Password Vault Script Path                 |                                          |
+| `ccArgs.dbPasswordVaultRetries`                 | Database Password Vault Retries Count               | `10`                                     |
 | `ccArgs.mssqlGlobal`                            | Database Globalization Flag                         | `false`                                  |
 | `ccArgs.weblistenAddress`                       | Web Listen Address                                  | `0.0.0.0.`                               |
 | `ccArgs.webHost`                                | Web Hostname                                        |                                          |
@@ -429,6 +433,7 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `service.externalIP`                            | External IP for service discovery                   |                                          |
 | `storageSecurity.fsGroup`                       | Used for controlling access to block storage        |                                          |
 | `storageSecurity.supplementalGroups`            | Groups IDs are used for controlling access          | `[]`                                     |
+| `storageSecurity.runAsUser`                     | UID for container user                              | `1010`                                   |
 | `secret.secretName`                             | Secret name for Secure Parameters                   |                                          |
 | `secret.certsSecretName`                        | Secret name for certificates                        |                                          |
 | `resources.limits.cpu`                          | Container CPU limit                                 | `3000m`                                  |
@@ -482,6 +487,7 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `ingress.annotations`                           | annotation for ingress resource                     | `[]`                                     |
 | `ingress.tls.enabled`                           | TLS is enabled or disabled for ingress resource     | `false`                                  |
 | `ingress.tls.secretName`                        | TLS secret name if enabled                          |                                          |
+| `consoleLogEnabled`                             | To enable engine logs to redirect to console        | `false`                                  |
 
 Specify each parameter in values.yaml to `helm install`. For example,
 
@@ -514,7 +520,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-sccm-2.0.4.tgz
+helm upgrade my-release -f values.yaml ibm-sccm-4.0.0.gz
 ```
 
 Refer [RELEASENOTES.md](RELEASENOTES.md) for Fix history.
@@ -593,7 +599,8 @@ Use `networkPolicy` to control traffic flow at the port level.
 
 1. All sensitive application data at rest is stored in binary format so user cannot decrypt it. This chart does not support Encryption of user data at rest by default. Administrator can configure storage encryption to encrypt all data at rest.
 
-2. Data in motion is encrypted using transport layer security(TLS 1.2). For more information please see product [Knowledge center link]( https://www.ibm.com/docs/en/control-center/6.2.1.0?topic=sterling-control-center-monitor-621)
+2. Data in motion is encrypted using transport layer security(TLS 1.2). For more information please see product [Knowledge center link]( https://www.ibm.com/docs/en/control-center/6.4.0?topic=sterling-control-center-monitor-640 )
+
 
 ## Storage
 
@@ -606,8 +613,13 @@ IBM Sterling Control Center Helm chart supports both dynamic and pre-created per
 ## Limitations
 
 - High availability and scalability are supported in traditional way of Control Center deployment using Kubernetes load balancer service.
-- IBM Control Center Monitor chart supports only amd64 architecture.
+- IBM Control Center Monitor chart supports only amd64,ppc64le architecture.
+- In a containerized environment, the following certificate management features are not supported:
+* Keystore certificate management
+* Truststore certificate management
+* Certificate management using Venafi
+- SSP reports will not run in container enironment
 
 ## Documentation
 
-[IBM Sterling Control Center](https://www.ibm.com/docs/en/control-center/6.2.1.0?topic=sterling-control-center-monitor-621)
+[IBM Sterling Control Center](https://www.ibm.com/docs/en/control-center/6.4.0?topic=sterling-control-center-monitor-640)
