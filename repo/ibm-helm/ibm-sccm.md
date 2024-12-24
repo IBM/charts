@@ -316,7 +316,7 @@ Ensure that the chart is downloaded locally and available.
 Run the below command
 
 ```bash
-$ helm install my-release -f values.yaml ibm-sccm-4.0.0.tgz
+$ helm install my-release -f values.yaml ibm-sccm-4.0.1.tgz
 ```
 
 Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 6-7 minutes for Installing Control Center.
@@ -463,8 +463,14 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `readinessProbe.initialDelaySeconds`            | Initial delays for readiness                        | `175`                                    |
 | `readinessProbe.timeoutSeconds`                 | Timeout for readiness                               | `15`                                     |
 | `readinessProbe.periodSeconds`                  | Time period for readiness                           | `120`                                    |
-| `networkPolicy.egress`                          | Network Policy egress rules                         | `{}`                                     |
-| `networkPolicy.ingress`                         | Network Policy ingress rules                        | `{}`                                     |
+| `networkPolicy.egress.enabled`                  | Network Policy egress rules will be enabled or not  | `false`                                  |
+| `networkPolicy.egress.ports`                    | Network Policy egress ports                         |                                          |
+| `networkPolicy.egress.toSelectors`              | Network Policy egress selectors                     |                                          |
+| `networkPolicy.ingress.enabled`                 | Network Policy ingress rules will be applied or not | `false`                                  |
+| `networkPolicy.ingress.ports`                   | Network Policy ingress ports                        |
+                   |
+| `networkPolicy.ingress.fromSelectors`           | Network Policy ingress selectors                    |
+                   |
 | `route.enabled`                                 | Route for OpenShift Enabled/Disabled                | `false`                                  |
 | `secComp.type`                                  | seccomp profile type                                | `RuntimeDefault`                         |
 | `secComp.profile`                               | seccomp profile filepath                            | ``                                       |
@@ -520,7 +526,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-sccm-4.0.0.gz
+helm upgrade my-release -f values.yaml ibm-sccm-4.0.1.gz
 ```
 
 Refer [RELEASENOTES.md](RELEASENOTES.md) for Fix history.
