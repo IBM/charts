@@ -1,8 +1,8 @@
-# IBM Sterling Secure Proxy Engine v6.1.0.0
+# IBM Sterling Secure Proxy Engine v6.2.0.1
 
 ## Introduction
   
-IBM® Sterling Secure Proxy acts as an application proxy between Connect:Direct® nodes or between a client application and a Sterling B2B Integrator server. It provides a high level of data protection between external connections and your internal network. Define an inbound node definition for each trading partner connection from outside the company and an outbound node definition for every company server to which Secure Proxy will connect. To find out more, see the Knowledge Center for [IBM Sterling Secure Proxy Engine](https://www.ibm.com/docs/en/secure-proxy/6.1.0).
+IBM® Sterling Secure Proxy acts as an application proxy between Connect:Direct® nodes or between a client application and a Sterling B2B Integrator server. It provides a high level of data protection between external connections and your internal network. Define an inbound node definition for each trading partner connection from outside the company and an outbound node definition for every company server to which Secure Proxy will connect. To find out more, see the Knowledge Center for [IBM Sterling Secure Proxy Engine](https://www.ibm.com/docs/en/secure-proxy/6.2.0).
 
 
 ## Chart Details
@@ -18,7 +18,7 @@ This chart deploys IBM Sterling Secure Proxy Engine on a container management pl
 
 ## Prerequisites
 
-Please refer to [Planning](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=software-planning) and [Pre-installation tasks](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=installing-pre-installation-tasks) section in the online Knowledge Center documentation. 
+Please refer to [Planning](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=software-planning) and [Pre-installation tasks](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=installing-pre-installation-tasks) section in the online Knowledge Center documentation. 
 
 ### SecurityContextConstraints Requirements
 
@@ -29,56 +29,49 @@ The IBM Sterling Secure Proxy Engine chart requires an SecurityContextConstraint
 ```
 apiVersion: security.openshift.io/v1
 kind: SecurityContextConstraints
-metadata: 
-  name: ibm-ssp-engine-scc
+metadata:
+  name: ibm-ssp-engine-scc 
   labels:
-    app.kubernetes.io/name: ibm-ssp-engine-scc
-    app.kubernetes.io/instance: ibm-ssp-engine-scc
-    app.kubernetes.io/managed-by: IBM
+    app: "ibm-ssp-engine-scc"
+    app.kubernetes.io/instance: "ibm-ssp-engine-scc"
+    app.kubernetes.io/managed-by: "IBM"
+    app.kubernetes.io/name: "ibm-ssp-engine-scc"
 allowHostDirVolumePlugin: false
 allowHostIPC: false
 allowHostNetwork: false
 allowHostPID: false
 allowHostPorts: false
-privileged: false
+allowPrivilegeEscalation: false
 allowPrivilegedContainer: false
-allowPrivilegeEscalation: true
-requiredDropCapabilities:
-- KILL
-- MKNOD
-- SETFCAP
-- FSETID
-- NET_BIND_SERVICE
-- SYS_CHROOT
-- SETPCAP
-- NET_RAW
 allowedCapabilities:
-- SETGID
-- DAC_OVERRIDE 
-defaultAddCapabilities: []
-defaultAllowPrivilegeEscalation: false
-forbiddenSysctls:
-- "*"
+defaultAddCapabilities: null
 fsGroup:
   type: MustRunAs
   ranges:
   - min: 1
     max: 4294967294
+priority: 0
 readOnlyRootFilesystem: false
+requiredDropCapabilities:
+- ALL
 runAsUser:
-  type: MustRunAsRange 
-  uidRangeMin: 1 
-  uidRangeMax: 1000639999
+  type: MustRunAsRange
+  uidRangeMin: 1
+  uidRangeMax: 4294967294
 seLinuxContext:
-  type: RunAsAny
+  type: MustRunAs
+seccompProfiles:
+- runtime/default
 supplementalGroups:
-  type: RunAsAny
+  type: MustRunAs
   ranges:
   - min: 1
     max: 4294967294
+users: []
 volumes:
 - configMap
 - downwardAPI
+- emptyDir
 - persistentVolumeClaim
 - projected
 - secret
@@ -98,7 +91,7 @@ volumes:
 
 ## Resources Required
 
-Please refer [Verification of system requirements](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=planning-verification-system-requirements) section in the online Knowledge Center documentation.
+Please refer [Verification of system requirements](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=planning-verification-system-requirements) section in the online Knowledge Center documentation.
 
 ## Agreement to IBM SSP License
 
@@ -107,27 +100,27 @@ You must read the IBM Sterling Secure Proxy License agreement terms before insta
 
 ## Installing the Chart
 
-Please refer [Installing](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=installing-sterling-secure-proxy-using-helm-chart) section in the online Knowledge Center documentation.
+Please refer [Installing](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=installing-sterling-secure-proxy-using-helm-chart) section in the online Knowledge Center documentation.
 
 ## Configuration
 
-Please refer the [Configuring - Understanding values.yaml](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=tasks-configuring-understanding-valuesyaml) section in the online Knowledge Center documentation.
+Please refer the [Configuring - Understanding values.yaml](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=tasks-configuring-understanding-valuesyaml) section in the online Knowledge Center documentation.
 
 ## Verifying the Chart
 
-Please refer the [Validating the Installation](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
+Please refer the [Validating the Installation](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
 
 ## Upgrading the Chart
 
-Please refer the [Upgrade - Upgrading a Release](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=uninstall-upgrading-release) section in the online Knowledge Center documentation.
+Please refer the [Upgrade - Upgrading a Release](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=uninstall-upgrading-release) section in the online Knowledge Center documentation.
 
 ## Rollback the Chart
 
-Please refer the [Rollback - Recovering a Failure](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=uninstall-rollback-recovering-failure) section in the online Knowledge Center documentation.
+Please refer the [Rollback - Recovering a Failure](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=uninstall-rollback-recovering-failure) section in the online Knowledge Center documentation.
 
 ## Uninstalling the Chart
 
-Please refer the [Uninstall – Uninstalling a Release](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=uninstall-uninstalling-release) section in the online Knowledge Center documentation.
+Please refer the [Uninstall – Uninstalling a Release](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=uninstall-uninstalling-release) section in the online Knowledge Center documentation.
 
 ## Backup & Restore
 
@@ -155,11 +148,11 @@ Restoring the data in new deployment, it can be achieved by following steps
 
 ## Exposing Services
 
-Please refer to [Exposed Services](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
+Please refer to [Exposed Services](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
 
 ## DIME and DARE
 
-Please refer to [DIME and DARE Security Considerations](https://www.ibm.com/docs/en/secure-proxy/6.1.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
+Please refer to [DIME and DARE Security Considerations](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
 
 ## Limitations
 

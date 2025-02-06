@@ -27,56 +27,49 @@ The IBM Sterling External Authentication Server chart requires an SecurityContex
 ```
 apiVersion: security.openshift.io/v1
 kind: SecurityContextConstraints
-metadata: 
-  name: ibm-seas-scc
+metadata:
+  name: ibm-seas-scc 
   labels:
-    app.kubernetes.io/name: ibm-seas-scc
-    app.kubernetes.io/instance: ibm-seas-scc
-    app.kubernetes.io/managed-by: IBM
+    app: "ibm-seas-scc"
+    app.kubernetes.io/instance: "ibm-seas-scc"
+    app.kubernetes.io/managed-by: "IBM"
+    app.kubernetes.io/name: "ibm-seas-scc"
 allowHostDirVolumePlugin: false
 allowHostIPC: false
 allowHostNetwork: false
 allowHostPID: false
 allowHostPorts: false
-privileged: false
+allowPrivilegeEscalation: false
 allowPrivilegedContainer: false
-allowPrivilegeEscalation: true
-requiredDropCapabilities:
-- KILL
-- MKNOD
-- SETFCAP
-- FSETID
-- NET_BIND_SERVICE
-- SYS_CHROOT
-- SETPCAP
-- NET_RAW
 allowedCapabilities:
-- DAC_OVERRIDE 
-- SETGID
-defaultAddCapabilities: []
-defaultAllowPrivilegeEscalation: false
-forbiddenSysctls:
-- "*"
+defaultAddCapabilities: null
 fsGroup:
   type: MustRunAs
   ranges:
   - min: 1
     max: 4294967294
+priority: 0
 readOnlyRootFilesystem: false
+requiredDropCapabilities:
+- ALL
 runAsUser:
-  type: MustRunAsRange 
-  uidRangeMin: 1 
-  uidRangeMax: 1000639999
+  type: MustRunAsRange
+  uidRangeMin: 1
+  uidRangeMax: 4294967294
 seLinuxContext:
-  type: RunAsAny
+  type: MustRunAs
+seccompProfiles:
+- runtime/default
 supplementalGroups:
-  type: RunAsAny
+  type: MustRunAs
   ranges:
   - min: 1
     max: 4294967294
+users: []
 volumes:
 - configMap
 - downwardAPI
+- emptyDir
 - persistentVolumeClaim
 - projected
 - secret
