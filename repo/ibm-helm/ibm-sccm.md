@@ -2,7 +2,7 @@
 
 ## Introduction
 
-IBM▒ Control Center Monitor is a centralized monitoring and management system. It gives operations personnel the capability to continuously monitor the status of Configuration Managers, engines, and adapters across the enterprise for the following server types from one central location: IBM Sterling Connect:Direct▒, IBM Sterling Connect:Enterprise▒, IBM Sterling B2B Integrator, IBM Sterling File Gateway, IBM Global High Availability Mailbox, IBM Sterling Connect:Express, IBM QuickFile, IBM MQ Managed File Transfer and Many FTP servers. To find out more, see the Knowledge Center for [IBM Sterling Control Center Monitor](  https://www.ibm.com/docs/en/control-center/6.3.1?topic=sterling-control-center-monitor-631 ).
+IBM▒ Control Center Monitor is a centralized monitoring and management system. It gives operations personnel the capability to continuously monitor the status of Configuration Managers, engines, and adapters across the enterprise for the following server types from one central location: IBM Sterling Connect:Direct▒, IBM Sterling Connect:Enterprise▒, IBM Sterling B2B Integrator, IBM Sterling File Gateway, IBM Global High Availability Mailbox, IBM Sterling Connect:Express, IBM QuickFile, IBM MQ Managed File Transfer and Many FTP servers. To find out more, see the Knowledge Center for [IBM Sterling Control Center Monitor](  https://www.ibm.com/docs/en/control-center/6.3.1?topic=sterling-control-center-monitor-631).
 
 ## Chart Details
 
@@ -41,6 +41,14 @@ kubectl create secret generic ibm-sccm-certs --from-file=keystore=<path to keyst
 ```
 kubectl create secret docker-registry <name of secret> --docker-server=<your-registry-server> --docker-username=<your-username> --docker-password=<your-password> --docker-email=<your-email>
 ```
+
+Configure this pull secret in the service account used for deployment using this command
+
+```
+kubectl patch serviceaccount <service-account-name> -p '{"imagePullSecrets": [{"name": "<pull-secret-name>"}]}'
+```
+
+It is recommended to configure the pull secret in the service account as it automatically binds as a pull secret for all application pods. If the pull secret is added to the service account then the image pullSecret configurations in the helm configuration file are not required.
 
 ### PodSecurityPolicy Requirements
 
@@ -155,7 +163,7 @@ Below is an optional custom PSP definition based on the IBM restricted PSP.
 
 ### SecurityContextConstraints Requirements
 
-Red Hat OpenShift provides a pre-defined or default set of SecurityContextConstraints (SCC). These SCCs are used to control permissions for pods. These permissions include actions that a pod can perform and what resources it can access. You can use SCCs to define a set of conditions that a pod must run with to be accepted into the system. Refer to OpenShift [`Managing Security Context Constraints`](https://docs.openshift.com/container-platform/4.11/authentication/managing-security-context-constraints.html#default-sccs_configuring-internal-oauth) documentation for more details on the default SCCs. This chart is compatible with **nonroot-v2** (added in OpenShift v4.11) default SCCs and does not require a custom SCC to be defined explicity.
+Red Hat OpenShift provides a pre-defined or default set of SecurityContextConstraints (SCC). These SCCs are used to control permissions for pods. These permissions include actions that a pod can perform and what resources it can access. You can use SCCs to define a set of conditions that a pod must run with to be accepted into the system. Refer to OpenShift [`Managing Security Context Constraints`](https://docs.openshift.com/container-platform/4.14/authentication/managing-security-context-constraints.html#default-sccs_configuring-internal-oauth) documentation for more details on the default SCCs. This chart is compatible with **nonroot-v2** (added in OpenShift v4.11) default SCCs and does not require a custom SCC to be defined explicity.
 
 For OpenShift, choose either a predefined SCC or have your cluster administrator create a custom SCC for you as per the security profile and policies adopted for all OpenShift deployments. This chart is compatible with most restrictive security context constraints.
 Below is an optional custom SCC definition based on the IBM restricted SCC.
@@ -303,7 +311,7 @@ This chart uses the following resources by default:
 ## Agreement to IBM Control Center License
 
 You must read the IBM Sterling Control Center License agreement terms before installation, using the below link:
-[License](https://www.ibm.com/support/customer/csol/terms/?id=L-QZDV-G39NEP&lc=en#detail-document) (L/N: L-QZDV-G39NEP)
+[License](https://www.ibm.com/support/customer/csol/terms/?id=L-QZDV-G39NEP&lc=en) (L/N: L-QZDV-G39NEP)
 
 ## Installing the Chart
 
@@ -316,7 +324,7 @@ Ensure that the chart is downloaded locally and available.
 Run the below command
 
 ```bash
-$ helm install my-release -f values.yaml ibm-sccm-3.1.11.tgz
+$ helm install my-release -f values.yaml ibm-sccm-3.1.12.tgz
 ```
 
 Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 6-7 minutes for Installing Control Center.
@@ -343,7 +351,7 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `ccArgs.dbPort`                                 | Database Port number                                |                                          |
 | `ccArgs.dbUser`                                 | Database Username                                   |                                          |
 | `ccArgs.dbName`                                 | Database name                                       |                                          |
-| `ccArgs.dbLoc`                                  | Database localization                               | `none`                                     |            
+| `ccArgs.dbLoc`                                  | Database localization                               | `none`                                   |
 | `ccArgs.dbInit`                                 | Database Initialization Flag                        | `true`                                   |
 | `ccArgs.dbPartition`                            | Database Partitioning Flag                          | `false`                                  |
 | `ccArgs.dbDrivers`                              | Database drivers                                    |                                          |
@@ -462,10 +470,8 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `networkPolicy.egress.ports`                    | Network Policy egress ports                         |                                          |
 | `networkPolicy.egress.toSelectors`              | Network Policy egress selectors                     |                                          |
 | `networkPolicy.ingress.enabled`                 | Network Policy ingress rules will be applied or not | `false`                                  |
-| `networkPolicy.ingress.ports`                   | Network Policy ingress ports                        |
-                   |
-| `networkPolicy.ingress.fromSelectors`           | Network Policy ingress selectors                    |
-                   |
+| `networkPolicy.ingress.ports`                   | Network Policy ingress ports                        |                                          |
+| `networkPolicy.ingress.fromSelectors`           | Network Policy ingress selectors                    |                                          |
 | `route.enabled`                                 | Route for OpenShift Enabled/Disabled                | `false`                                  |
 | `secComp.type`                                  | seccomp profile type                                | `RuntimeDefault`                         |
 | `secComp.profile`                               | seccomp profile filepath                            | ``                                       |
@@ -490,7 +496,22 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `ingress.tls.secretName`                        | TLS secret name if enabled                          |                                          |
 | `consoleLogEnabled`                             | To enable engine logs to redirect to console        | `false`                                  |
 
+> **Tip**: If `ccArgs.dbinit` flag is true, then Only Monitored server activities will be deleted. Change this to true only if you need to delete all the monitored servers' activities. Even when this flag is true, no summary data (CC_PROCESS, CC_FILE_TRANSFER) will be deleted. Also, no configuration data such as Rules, SLCs, Monitored servers connection details will be deleted.
+
+> **Tip**: Globalization is only needed if data to be stored contains multi-byte characters, which are common in character sets such as Kanji. Database I/O performance may drop multiple orders of magnitude if globalization support is selected, so it is NOT recommended you do so with MSSQL. If you set true for `ccArgs.mssqlGlobal` variable, then your database size can also increase significantly.
+
 Specify each parameter in values.yaml to `helm install`. For example,
+
+```bash
+helm install my-release -f values.yaml ibm-sccm-3.1.12.tgz
+```
+
+Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. You can create a copy of values.yaml file e.g. my-values.yaml and edit the values that you need to override. Use the my-values.yaml file for installation. For example,
+
+```bash
+helm install <release-name> -f my-values.yaml ibm-sccm-3.1.12.tgz
+```
+> **Tip**: You can use the default [values.yaml](values.yaml)
 
 ## Affinity
 
@@ -521,7 +542,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-sccm-3.1.11.gz
+helm upgrade my-release -f values.yaml ibm-sccm-3.1.12.gz
 ```
 
 Refer [RELEASENOTES.md](RELEASENOTES.md) for Fix history.
