@@ -1,16 +1,15 @@
-# Helm Chart for IBM UrbanCode Velocity (ibm-ucv-prod)
+# CASE Bundle for IBM DevOps Velocity (ibm-ucv-prod)
 
 ## Introduction
-[IBM UrbanCode Velocity](https://www.ibm.com/cloud/urbancode/velocity) is a DevOps and value stream management tool to help you understand your DevOps practices, implement changes, review change impact, and automate release processes.
+[IBM DevOps Velocity](https://www.ibm.com/products/devops-velocity) is a DevOps and value stream management tool to help you understand your DevOps practices, implement changes, review change impact, and automate release processes.
 
 ## Chart Details
-This chart deploys a single instance of IBM UrbanCode Velocity.
+This chart deploys a single instance of IBM DevOps Velocity.
   * 9 backend microservices
   * 3 frontend microservices
   * Single AMQP (Advanced Message Queuing Protocol) StatefulSet
   * NGINX for inter-service routing
   * Exposed externally via Ingress
-  * [Argo](https://github.com/argoproj/argo) workflows for on-demand pod creation to run integrations
 
 ## Prerequisites
 
@@ -128,9 +127,9 @@ This chart also defines a custom SecurityContextConstraints which can be used to
     min: 1
     runAsUser:
       type: MustRunAsRange
-    seLinuxContext:
-      type: MustRunAs
     seLinux:
+      type: MustRunAs
+    seLinuxContext:
       type: MustRunAs
     fsGroup:
       type: MustRunAs
@@ -191,7 +190,7 @@ The helm chart has the following values. They can be overwritten using the `--se
 | Parameter | Description | Default |
 | --------- | ----------- | ------- |
 | `license` | Enter 'accept' to indicate that you accept all terms and conditions of the End User License Agreement (EULA). | `true` |
-| `access.key` | The access key obtained with the sign up or purchase of UrbanCode Velocity. This key is required to start Velocity and contains information such as the Velocity Edition and Trial vs Permanent. | `invalid-key` |
+| `access.key` | The access key obtained with the sign up or purchase of DevOps Velocity. This key is required to start Velocity and contains information such as the Velocity Edition and Trial vs Permanent. | `invalid-key` |
 | `url.protocol` | The protocol of the Velocity URL. Only `https` is supported. | `https` |
 | `url.domain` | The domain name users will access Velocity at. This is usually the ingress host name or the hostname of your kubernetes master node. If you have any reverse proxy in front of your kubernetes cluster, use that. | `localhost` |
 | `url.port` | The port users will use to access the app. If you have any reverse proxy in front of your kubernetes cluster, use that. | `32443` |
@@ -219,11 +218,11 @@ There are no permanent storage solutions required.
 
 ### User Authentication and Authorization Strategy
 
-The UrbanCode Velocity authentication strategy includes browser cookies and user access key for API usage. Authorization resolves tenant permissions according to roles and teams.
+The DevOps Velocity authentication strategy includes browser cookies and user access key for API usage. Authorization resolves tenant permissions according to roles and teams.
 
 ### Integrations
 
-UrbanCode Velocity supports LDAP and header based SSO integrations. LDAP roles are supported and roles passed via SSO header.
+DevOps Velocity supports LDAP and header based SSO integrations. LDAP roles are supported and roles passed via SSO header.
 
 ### Administration and Management
 
@@ -235,7 +234,7 @@ User audit records are found in the "audit_log" collection in the "security" dat
 
 ## Backup and Recovery
 
-UrbanCode Velocity can be fully backed-up as a restore point by capturing the following:
+DevOps Velocity can be fully backed-up as a restore point by capturing the following:
 
 1. Database: This should be a single MongoDB instance containing multiple MongoDB databases per service.
 2. Environmental variables (secrets): these may affect, for instance - encryption, access, and operation.
@@ -245,7 +244,7 @@ For database and environment variable secrets management strategies, it is both 
 The following is a simple back-up and restore example:
 
 1. Backup the Database (Refer to MongoDB documentation for details [https://docs.mongodb.com/manual/tutorial/backup-and-restore-tools/](https://docs.mongodb.com/manual/tutorial/backup-and-restore-tools/))
-    1. Run MongoDBs `mongodump` command against UrbanCode Velocity's MongoDB instance (this command can execute against a remote instance). For example:
+    1. Run MongoDBs `mongodump` command against DevOps Velocity's MongoDB instance (this command can execute against a remote instance). For example:
 
         `mongodump --host=mongoInstanceAddress --port=27017 --out=/opt/backup/velocity-2020-7-4`
 
@@ -262,7 +261,7 @@ The following is a simple back-up and restore example:
 
 ## Scaling Services
 
-Some services can be scaled with performance improvements, others cannot. See the list of services below for a summary as of urbanCode Velocity 2.0.0:
+Some services can be scaled with performance improvements, others cannot. See the list of services below for a summary as of Velocity 2.0.0:
 
 **Service Containers**
 
@@ -292,11 +291,11 @@ Scaling of velocity router is not typical and probably not helpful.
 
 ## Multiple Instances
 
-For multiple instances of UrbanCode Velocity within the same cluster, use a separate namespace for each instance. Determine which ports will be used for each instance, then install accordingly. In particular, NodePorts do not respect namespaces, so you will need to select unique ports for your instances of rabbit (rabbitmq.nodePort).
+For multiple instances of DevOps Velocity within the same cluster, use a separate namespace for each instance. Determine which ports will be used for each instance, then install accordingly. In particular, NodePorts do not respect namespaces, so you will need to select unique ports for your instances of rabbit (rabbitmq.nodePort).
 
 ## Rolling Back Services
 
-To rollback to a previous version of UrbanCode Velocity you will need a database dump created from the MongoDB Database before the upgrade. For instance, if you are upgrading from 1.5.5 to 2.0.0, creating a database dump before the upgrade will allow you to rollback to 1.5.5 if there are problems with 2.0.0. It is recommended to always create a MongoDB Database dump before upgrading UrbanCode Velocity. Please see the [Backup and Recovery](#backup-and-recovery) section for more information on how to execute the `mongodump` command.
+To rollback to a previous version of DevOps Velocity you will need a database dump created from the MongoDB Database before the upgrade. For instance, if you are upgrading from 1.5.5 to 2.0.0, creating a database dump before the upgrade will allow you to rollback to 1.5.5 if there are problems with 2.0.0. It is recommended to always create a MongoDB Database dump before upgrading DevOps Velocity. Please see the [Backup and Recovery](#backup-and-recovery) section for more information on how to execute the `mongodump` command.
 
 **Warning - You will lose any data added/modified after the database dump was created.**
 
@@ -306,12 +305,10 @@ To rollback to a previous version of UrbanCode Velocity you will need a database
     - The easiest way to do this is using the `mongorestore` command. You may again refer to the [Backup and Recovery](#backup-and-recovery) section for help with this command. It is very important that you specify the `--drop` flag when running this command (`mongorestore --host mongoInstanceAddress --port 27017 --drop /backup/dump`). Without the `--drop` flag you will have duplicate data in your database.
 3. Once your database has been restored to its previous state, you can now recreate the Velocity Helm release. Please see the [Installing the Chart](#installing-the-chart) section for help.
     - When you reinstall Velocity, make sure that you specify the version that you are rolling back to using the `--version` flag.
-    - For instance, if you are rolling back to UrbanCode Velocity version 1.5.5:<br/>
+    - For instance, if you are rolling back to DevOps Velocity version 1.5.5:<br/>
     `helm install my-release --set license=accept --set access.key=$ACCESS_KEY --set url.domain=localhost --version=1.5.5 ibm-ucv-prod`
 
 ## Other Documentation
 
-To learn more about UrbanCode Velocity, read our knowledge center documentation and checkout the [urbancode.com](https://www.urbancode.com) website.
-
 **Knowledge Center**: https://www.ibm.com/support/knowledgecenter/SSCKX6
-**Videos, Blogs, and more**: https://www.urbancode.com/resources/?search=&product_filter%5B%5D=811
+**Videos, Blogs, and more**: https://community.ibm.com/community/user/search?s=tags%3A%22UrbanCode%20Velocity%22&executesearch=true
