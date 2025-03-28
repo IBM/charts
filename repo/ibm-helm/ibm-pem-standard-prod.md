@@ -26,38 +26,61 @@ This chart deploys IBM Partner Engagement Manager Standard cluster on a containe
 9. When `communitymanager.nonprod.archive.enabled` is `true`, create a persistent volume for Non-prod PCM archive document storage with access mode as 'Read Write Many'.
 
     Mount the archive persistent volume to PEM server
+10. Obtain default TLS certificates(tls.key,tls.crt) of the used by the Ingress Controller (Router) 
 
-10. Create secrets with requisite confidential credentials for passphrase.txt, Keystore.jks dbpasswords and keystore passwords. You can use the supplied configuration files under pak_extensions/pre-install/secret directory.
+    ```
+      oc get secret <router-tls-certs-secretname> -n openshift-ingress -o jsonpath="{.data['tls\.key']}" | base64 -d > tls.key 
+      oc get secret <router-tls-certs-secretname> -n openshift-ingress -o jsonpath="{.data['tls\.crt']}" | base64 -d > tls.crt
 
-11. Create a secret from the provided syntax file included in helm charts /ibm-cloudpak-extensons/preinstall/secrets.yaml
+    ```
+11. Create service secret with the extracted tls.key and tls.crt to handle ssl termination at application level
+    
+    ```
+
+      helm list -n <namespace> (copy the pem cm helm release name ) 
+
+      #Prod community manager instance, 
+
+      oc create secret generic <helm release name>-prodpcm-service --from-file=tls.crt=tls.crt --from-file=tls.key=tls.key -n <namespace> 
+        
+
+      #Non-Prod community manager instance, 
+
+      oc create secret generic <helm release name>-nonprodpcm-service --from-file=tls.crt=tls.crt --from-file=tls.key=tls.key -n <namespace>
+    
+    ```
+
+12. Create secrets with requisite confidential credentials for passphrase.txt, Keystore.jks dbpasswords and keystore passwords. You can use the supplied configuration files under pak_extensions/pre-install/secret directory.
+
+13. Create a secret from the provided syntax file included in helm charts /ibm-cloudpak-extensons/preinstall/secrets.yaml
 
     ```
       oc apply -f app-secrets.yaml
       ```
 
-12. Create a secret to pull the image from a private registry or repository using following command:
+14. Create a secret to pull the image from a private registry or repository using following command:
     ```
     oc create secret docker-registry <name of secret> --docker-server=<your-registry-server> --docker-username=<your-username> --docker-password=<your-password> --docker-email=<your-email>
        ```
 
-13. Create secrets with confidential certificates (Keystore files for both Partner Engagement Manager and Community Manger) required by Database, MQ for SSL connectivity using below command:
+15. Create secrets with confidential certificates (Keystore files for both Partner Engagement Manager and Community Manger) required by Database, MQ for SSL connectivity using below command:
 
      Note: Name of the secret and the keystore filename must be same for server keystore secret
     ```
      oc create secret generic <secret-name> --from-file=/path/to/<Keystore.jks>
 	   ```
-14. Create configmap with localtime file present in local machine using below command
+16. Create configmap with localtime file present in local machine using below command
     ```
      oc create configmap <configmap-name> --from-file=/etc/localtime
 	   ```
 
-15. When installing the chart on a new database which does not have IBM PEM standard Software schema tables and metadata,
+17. When installing the chart on a new database which does not have IBM PEM standard Software schema tables and metadata,
 * ensure that `dbsetup.upgrade` parameter is set to `false` and `dbsetup.enabled` parameter is set to `true`. This will create the required database tables and metadata in the database before installing the chart.
 
-16. When installing the chart on a database with new image upgrade,
+18. When installing the chart on a database with new image upgrade,
 * ensure that `dbsetup.upgrade` parameter is set to `true`.
 
-17. Create service account and apply security context contraints to created service account.
+19. Create service account and apply security context contraints to created service account.
 
     ```
      oc create sa <service account name>
@@ -353,10 +376,10 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | Parameter                | Description             | Default        |
 | ------------------------ | ----------------------- | -------------- |
 | `image.name` | Provide the value in double quotes | `"cp.icr.io/cp/ibm-pem/pem"` |
-| `image.tag` | Specify the tag name | `"6.2.3.3"` |
+| `image.tag` | Specify the tag name | `"6.2.0.10"` |
 | `image.pullPolicy` |  | `null` |
 | `image.pullSecret` | Provide the pull secret name | `""` |
-| `arch` | Specify architecture (amd64, s390x) | `"amd64"` |
+| `arch` | Specify architecture (amd64) | `"amd64"` |
 | `serviceAccountName` | specify the service account name which has required permissions | `null` |
 | `timezone.configmapname` | specify the timezone configmap | `null` |
 | `volumeClaims.resources.enabled` | if enabled persistent volume will be used | `true` |
@@ -379,7 +402,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `volumeClaims.logs.accessModes` |  | `["ReadWriteMany"]` |
 | `test.image.repository` |  | `"cp.icr.io/cp"` |
 | `test.image.name` |  | `"opencontent-common-utils"` |
-| `test.image.tag` |  | `"1.1.60"` |
+| `test.image.tag` |  | `"1.1.67"` |
 | `test.image.pullPolicy` |  | `"IfNotPresent"` |
 | `dbsetup.enabled` | If it is first installation specify the values true | `false` |
 | `dbsetup.upgrade` | If it is upgrade Specify the values to true | `true` |
@@ -623,23 +646,12 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.install` |  | `true` |
 | `communitymanager.image.repository` | Specify the repository | `"cp.icr.io/cp/ibm-pem/pem"` |
 | `communitymanager.image.pullPolicy` | Specify te image pull policy | `null` |
-| `communitymanager.image.tag` | Specify the tag name | `"6.2.3.3"` |
+| `communitymanager.image.tag` | Specify the tag name | `"6.2.0.10"` |
 | `communitymanager.image.pullSecret` | Provide the pull secret name | `null` |
 | `communitymanager.prod.enable` | If you are want to proceed for prod pcm installation then you have to mention it as true or else false | `true` |
-| `communitymanager.prod.setupfile.time_zone` | Specify the timezone EX:America/New_York (Country/city) | `null` |
 | `communitymanager.prod.setupfile.acceptLicence` | We should make accept-license should be true for pcm installation | `true` |
 | `communitymanager.prod.setupfile.cm.color` | This will enable the black theme in UI, PCM colores. red, green, grey, yellow, black | `"black"` |
 | `communitymanager.prod.setupfile.cm.cmks` | Provide the password secret | `null` |
-| `communitymanager.prod.setupfile.server.ssl.enabled` | Application will try to enable SSL if it is true | `false` |
-| `communitymanager.prod.setupfile.server.ssl.key_store` | Application will try to load the key-store from this location if ssl enabled. | `"keystore.p12"` |
-| `communitymanager.prod.setupfile.server.ssl.keystoresecret` | secret for keystore | `null` |
-| `communitymanager.prod.setupfile.server.ssl.key_store_password` | keystorepass_secret | `null` |
-| `communitymanager.prod.setupfile.server.ssl.key_store_type` | Here we need to provide keystore type | `"PKCS12"` |
-| `communitymanager.prod.setupfile.server.serverHeader` | Default server header i,.e IBM Partner Engagement Manager Community Manager | `"IBM Partner Engagement Manager Community Manager"` |
-| `communitymanager.prod.setupfile.server.compression.enabled` | Defualt is set to true  , Please don't change | `true` |
-| `communitymanager.prod.setupfile.server.compression.min_response_size` | Default size is 1024 , Constant value please dont change | `1024` |
-| `communitymanager.prod.setupfile.server.ajp.enabled` |  | `false` |
-| `communitymanager.prod.setupfile.server.ajp.port` |  | `8585` |
 | `communitymanager.prod.setupfile.spring.liquibase.enabled` | If you want to run Database script along with code deployment then make it as true or else false | `true` |
 | `communitymanager.prod.setupfile.spring.liquibase.liquibase_tablespace` |  | `null` |
 | `communitymanager.prod.setupfile.spring.datasource.type` | This should be constant, please dont change | `"com.zaxxer.hikari.HikariDataSource"` |
@@ -838,20 +850,9 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.prod.archive.capacity` |  | `"100Mi"` |
 | `communitymanager.prod.archive.storageclass` |  | `"slow"` |
 | `communitymanager.nonprod.enable` | set to true to deploy non prod pcm | `false` |
-| `communitymanager.nonprod.setupfile.time_zone` | Specify the timezone EX:America/New_York (Country/city) | `null` |
 | `communitymanager.nonprod.setupfile.acceptLicence` | We should make accept-license should be true for pcm installation | `true` |
 | `communitymanager.nonprod.setupfile.cm.color` | This will enable the black theme in UI, PCM colores. red, green, grey, yellow, black | `"black"` |
 | `communitymanager.nonprod.setupfile.cm.cmks` | Provide the password secret | `null` |
-| `communitymanager.nonprod.setupfile.server.ssl.enabled` | Application will try to enable SSL if it is true | `false` |
-| `communitymanager.nonprod.setupfile.server.ssl.key_store` | Application will try to load the key-store from this location if ssl enabled. | `"keystore.p12"` |
-| `communitymanager.nonprod.setupfile.server.ssl.keystoresecret` | secret for keystore | `null` |
-| `communitymanager.nonprod.setupfile.server.ssl.key_store_password` | keystorepass_secret | `null` |
-| `communitymanager.nonprod.setupfile.server.ssl.key_store_type` | Here we need to provide keystore type | `"PKCS12"` |
-| `communitymanager.nonprod.setupfile.server.serverHeader` | Default server header i,.e IBM Partner Engagement Manager Community Manager | `"IBM Partner Engagement Manager Community Manager"` |
-| `communitymanager.nonprod.setupfile.server.compression.enabled` | Defualt is set to true  , Please don't change | `true` |
-| `communitymanager.nonprod.setupfile.server.compression.min_response_size` | Default size is 1024 , Constant value please dont change | `1024` |
-| `communitymanager.nonprod.setupfile.server.ajp.enabled` |  | `false` |
-| `communitymanager.nonprod.setupfile.server.ajp.port` |  | `8585` |
 | `communitymanager.nonprod.setupfile.spring.liquibase.enabled` | If you want to run Database script along with code deployment then make it as true or else false | `true` |
 | `communitymanager.nonprod.setupfile.spring.liquibase.liquibase_tablespace` |  | `null` |
 | `communitymanager.nonprod.setupfile.spring.datasource.type` | This should be constant, please dont change | `"com.zaxxer.hikari.HikariDataSource"` |
