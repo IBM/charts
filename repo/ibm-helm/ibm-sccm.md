@@ -327,7 +327,7 @@ Ensure that the chart is downloaded locally and available.
 Run the below command
 
 ```bash
-$ helm install my-release -f values.yaml ibm-sccm-4.0.8.tgz
+$ helm install my-release -f values.yaml ibm-sccm-4.0.9.tgz
 ```
 
 Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 6-7 minutes for Installing Control Center.
@@ -511,13 +511,13 @@ The following tables lists the configurable parameters of the IBM Control Center
 Specify each parameter in values.yaml to `helm install`. For example,
 
 ```bash
-helm install my-release -f values.yaml ibm-sccm-4.0.8.tgz
+helm install my-release -f values.yaml ibm-sccm-4.0.9.tgz
 ```
 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. You can create a copy of values.yaml file e.g. my-values.yaml and edit the values that you need to override. Use the my-values.yaml file for installation. For example,
 
 ```bash
-helm install <release-name> -f my-values.yaml ibm-sccm-4.0.8.tgz
+helm install <release-name> -f my-values.yaml ibm-sccm-4.0.9.tgz
 ```
 > **Tip**: You can use the default [values.yaml](values.yaml)
 
@@ -550,7 +550,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-sccm-4.0.8.gz
+helm upgrade my-release -f values.yaml ibm-sccm-4.0.9.gz
 ```
 
 Refer [RELEASENOTES.md](RELEASENOTES.md) for Fix history.
