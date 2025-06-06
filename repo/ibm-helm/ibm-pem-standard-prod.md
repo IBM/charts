@@ -7,7 +7,7 @@ This chart deploys IBM Partner Engagement Manager Standard cluster on a containe
 
 ## Prerequisites
 
-1. Kubernetes version >= 1.28 and <= 1.31
+1. Kubernetes version >= 1.27 and <= 1.30
 
 2. Red Hat OpenShift Container Platform version >= 4.14
 
@@ -67,6 +67,8 @@ This chart deploys IBM Partner Engagement Manager Standard cluster on a containe
      oc adm policy add-scc-to-user ibm-pem-scc system:serviceaccount:<namespace>:<service account name>
 	   ```
     Note: Avoid installing multiple charts on same namespace
+18. For installing Community Manager, the JWT_SECRET_KEY must be defined in a Kubernetes/OpenShift Secret. If this value is not available, the Helm install or upgrade will fail. The name of the Secret containing the JWT_SECRET_KEY must be specified in the values.yaml file under communitymanager.prod.setupfile.jwt.secretkey or communitymanager.nonprod.setupfile.jwt.secretkey, depending on the environment.
+19. For installing Community Manager with SAML authentication enabled, the SAML_JWT_SECRET_KEY must also be defined in a Kubernetes/OpenShift Secret. The Helm install or upgrade will fail if this value is not provided. The name of the Secret containing the SAML_JWT_SECRET_KEY must be specified in the values.yaml file under communitymanager.prod.setupfile.saml.jwt.secretkey or communitymanager.nonprod.setupfile.saml.jwt.secretkey, depending on the environment.
 
 ### PodSecurityPolicy Requirements
 
@@ -353,7 +355,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | Parameter                | Description             | Default        |
 | ------------------------ | ----------------------- | -------------- |
 | `image.name` | Provide the value in double quotes | `"cp.icr.io/cp/ibm-pem/pem"` |
-| `image.tag` | Specify the tag name | `"6.2.3.4"` |
+| `image.tag` | Specify the tag name | `"6.2.4.1_standard"` |
 | `image.pullPolicy` |  | `null` |
 | `image.pullSecret` | Provide the pull secret name | `""` |
 | `arch` | Specify architecture (amd64, s390x) | `"amd64"` |
@@ -379,7 +381,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `volumeClaims.logs.accessModes` |  | `["ReadWriteMany"]` |
 | `test.image.repository` |  | `"cp.icr.io/cp"` |
 | `test.image.name` |  | `"opencontent-common-utils"` |
-| `test.image.tag` |  | `"1.1.60"` |
+| `test.image.tag` |  | `"1.1.67"` |
 | `test.image.pullPolicy` |  | `"IfNotPresent"` |
 | `dbsetup.enabled` | If it is first installation specify the values true | `false` |
 | `dbsetup.upgrade` | If it is upgrade Specify the values to true | `true` |
@@ -623,7 +625,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.install` |  | `true` |
 | `communitymanager.image.repository` | Specify the repository | `"cp.icr.io/cp/ibm-pem/pem"` |
 | `communitymanager.image.pullPolicy` | Specify te image pull policy | `null` |
-| `communitymanager.image.tag` | Specify the tag name | `"6.2.3.4"` |
+| `communitymanager.image.tag` | Specify the tag name | `"6.2.4.1"` |
 | `communitymanager.image.pullSecret` | Provide the pull secret name | `null` |
 | `communitymanager.prod.enable` | If you are want to proceed for prod pcm installation then you have to mention it as true or else false | `true` |
 | `communitymanager.prod.setupfile.time_zone` | Specify the timezone EX:America/New_York (Country/city) | `null` |
@@ -678,7 +680,8 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.prod.setupfile.login.user_cmks_expire` | days | `30` |
 | `communitymanager.prod.setupfile.basic.auth.username` | Specifythe user name | `"pemuser"` |
 | `communitymanager.prod.setupfile.basic.auth.cmks` | specify the secret | `null` |
-| `communitymanager.prod.setupfile.jwt.secretkey` | it is recommended that you choose a strong, randomly generated password of at least 32 characters in length | `null` |
+| `communitymanager.prod.setupfile.jwt.secretkey` | Provide the name of the Secret containing application passwords,ensure to provide JWT_SECRET_KEY value in the your secrets file
+ | `null`  |
 | `communitymanager.prod.setupfile.jwt.session_expire` | Minutes (Token session Expiry) | `60` |
 | `communitymanager.prod.setupfile.sterling_b2bi.core_bp.inbound` | CM_MailBox_GET_RoutingRule_Inbound , Inbound mailbox bootstrap business process | `"CM_MailBox_GET_RoutingRule_Inbound"` |
 | `communitymanager.prod.setupfile.sterling_b2bi.core_bp.outbound` | CM_MailBox_GET_RoutingRule_Outbound , Outbound mailbox bootstrap business process | `"CM_MailBox_GET_RoutingRule_Outbound"` |
@@ -745,7 +748,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.prod.setupfile.workFlow.duplicate.mft` | If you want to allow Duplicate MFT Transactions with in the flow then update true or else make it false. | `true` |
 | `communitymanager.prod.setupfile.workFlow.duplicate.docHandling` | If you want to allow Duplicate DH Transactions with in the application then update true or else make it false. | `true` |
 | `communitymanager.prod.setupfile.file_transfer.search.time_range` | Minutes | `30` |
-| `communitymanager.prod.setupfile.saml.jwt.secret_key` | it is recommended that you choose a strong, randomly generated password of at least 32 characters in length | `null` |
+| `communitymanager.prod.setupfile.saml.jwt.secret_key` | Provide the name of the Secret containing application passwords,ensure to provide SAML_JWT_SECRET_KEY value in the your secrets file | `null` |
 | `communitymanager.prod.setupfile.saml.jwt.session_expire` | Minutes | `60` |
 | `communitymanager.prod.setupfile.saml.idp.metadata` | Provide the IDP metadata file location. | `null` |
 | `communitymanager.prod.setupfile.saml.idp.entity_id` | .Provide the Entity name whic we provide in IDP | `"PcmEntityIdp"` |
@@ -888,7 +891,8 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.nonprod.setupfile.login.user_cmks_expire` | days | `30` |
 | `communitymanager.nonprod.setupfile.basic.auth.username` | Specifythe user name | `"pemuser"` |
 | `communitymanager.nonprod.setupfile.basic.auth.cmks` | specify the secret | `null` |
-| `communitymanager.nonprod.setupfile.jwt.secretkey` | it is recommended that you choose a strong, randomly generated password of at least 32 characters in length | `null` |
+| `communitymanager.nonprod.setupfile.jwt.secretkey` | Provide the name of the Secret containing application passwords,ensure to provide JWT_SECRET_KEY value in the your secrets file
+ | `null` |
 | `communitymanager.nonprod.setupfile.jwt.session_expire` | Minutes (Token session Expiry) | `60` |
 | `communitymanager.nonprod.setupfile.sterling_b2bi.core_bp.inbound` | CM_MailBox_GET_RoutingRule_Inbound , Inbound mailbox bootstrap business process | `"CM_MailBox_GET_RoutingRule_Inbound"` |
 | `communitymanager.nonprod.setupfile.sterling_b2bi.core_bp.outbound` | CM_MailBox_GET_RoutingRule_Outbound , Outbound mailbox bootstrap business process | `"CM_MailBox_GET_RoutingRule_Outbound"` |
@@ -955,7 +959,8 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.nonprod.setupfile.workFlow.duplicate.mft` | If you want to allow Duplicate MFT Transactions with in the flow then update true or else make it false. | `true` |
 | `communitymanager.nonprod.setupfile.workFlow.duplicate.docHandling` | If you want to allow Duplicate DH Transactions with in the application then update true or else make it false. | `true` |
 | `communitymanager.nonprod.setupfile.file_transfer.search.time_range` | Minutes | `30` |
-| `communitymanager.nonprod.setupfile.saml.jwt.secret_key` | it is recommended that you choose a strong, randomly generated password of at least 32 characters in length | `null` |
+| `communitymanager.nonprod.setupfile.saml.jwt.secret_key` | Provide the name of the Secret containing application passwords,ensure to provide SAML_JWT_SECRET_KEY value in the your secrets file
+ | `null` |
 | `communitymanager.nonprod.setupfile.saml.jwt.session_expire` | Minutes | `60` |
 | `communitymanager.nonprod.setupfile.saml.idp.metadata` | Provide the IDP metadata file location. | `null` |
 | `communitymanager.nonprod.setupfile.saml.idp.entity_id` | .Provide the Entity name whic we provide in IDP | `"PcmEntityIdp"` |
