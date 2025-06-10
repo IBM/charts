@@ -20,7 +20,7 @@ This chart deploys IBM Connect:Direct Web Services on a container management pla
 
 ## Prerequisites
 
-1. Red Hat OpenShift Container Platform Version should be >= 4.14 and <=4.17
+1. Red Hat OpenShift Container Platform Version should be >= 4.14 and <=4.18
 2. Kubernetes version >= 1.27 and < 1.32.
 3. Helm version >= 3.2
 4. Ensure that the docker images for IBM Connect:Direct Web Services from IBM Entitled Registry are downloaded and pushed to an image registry accessible to the cluster.
@@ -82,7 +82,7 @@ Ensure that the chart is downloaded locally and available.
 Run the below command
 
 ```bash
-$ helm install my-release -f values.yaml ibm-cdws-1.1.6.tgz
+$ helm install my-release -f values.yaml ibm-cdws-1.1.7.tgz
 ```
 
 Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 2-3 minutes for Installing Web Services.
@@ -207,7 +207,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-cdws-1.1.6.tgz
+helm upgrade my-release -f values.yaml ibm-cdws-1.1.7.tgz
 ```
 
 Refer [RELEASENOTES.md](RELEASENOTES.md) for Fix history.
