@@ -1,4 +1,4 @@
-# IBM Sterling B2B Integrator Enterprise Edition v6.2.1.0
+# IBM Sterling B2B Integrator Enterprise Edition v6.2.0.5
 ## Introduction
 
 IBM Sterling B2B Integrator helps companies integrate complex B2B EDI processes with their partner communities. Organizations get a single, flexible B2B platform that supports most communication protocols, helps secure your B2B network and data, and achieves high-availability operations. The offering enables companies to reduce costs by consolidating EDI and non-EDI any-to-any transmissions on a single B2B platform and helps automate B2B processes across enterprises, while providing governance and visibility over those processes.
@@ -20,14 +20,14 @@ Services
 ## Prerequisites
 
 1. Red Hat OpenShift Container Platform 
-   Version 4.14.0 or later fixes
    Version 4.15.0 or later fixes
    Version 4.16.0 or later fixes
    Version 4.17.0 or later fixes
+   Version 4.18.0 or later fixes
 
-2. Kubernetes version >= 1.28 and <= 1.31
+2. Kubernetes version >= 1.29 and <= 1.32
 
-3. Helm version >= 3.17.x
+3. Helm version >= 3.18.x
 
 4. Ensure that the docker images for IBM Sterling B2B Integrator Software Enterprise Edition from IBM Entitled Registry are downloaded and pushed to an image registry accessible to the cluster.
 
@@ -45,7 +45,7 @@ Services
 
 10. Create custom network policies to enable required ingress and egress endpoints for required external services like database server, MQ server, 3rd party integration services, protocol adapter endpoints and so on.
 
-11. Create secrets with requisite confidential credentials for system passphrase, database, MQ server and Liberty. You can use the supplied configuration files under pak_extensions/pre-install/secret directory. 
+11. Create secrets with requisite confidential credentials for system passphrase, database, MQ server and Liberty. You can use the supplied configuration files under pak_extensions/pre-install/secret directory.
 
 12. Create a secret to pull the image from a private registry or repository using following command
     ```
@@ -382,7 +382,7 @@ Parameter                                      | Description                    
 `global.license`                               | Accept B2BI/SFG license                                              | `false`
 `global.licenseType`                           | Specify the license edition as per license agreement.                | prod
 `global.image.repository`                      | Repository for B2B docker images                                     | 
-`global.image.tag          `                   | Docker image tag                                                     | `6.2.1.0`
+`global.image.tag          `                   | Docker image tag                                                     | `6.2.0.5`
 `global.image.digest          `                | Docker image digest. Takes precedence over tag                       | 
 `global.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `global.image.pullSecret `         			   | Pull secret for repository access                                    | `ibm-entitlement-key`
@@ -445,11 +445,13 @@ Parameter                                      | Description                    
 `dataSetup.enabled`                            | Enable database setup job execution                                  | true
 `dataSetup.upgrade`                            | Upgrade an older release                                             | false
 `dataSetup.image.repository`                 | DB setup container image repository                                   | 
-`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.2.1.0`
+`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.2.0.5`
 `dataSetup.image.digest'                      | Docker image digest. Takes precedence over tag                       |
 `dataSetup.image.pullPolicy`                 | Pull policy for repository                                           | `IfNotPresent`
 `dataSetup.image.pullSecret`         		  | Pull secret for repository access                                    |  `ibm-entitlement-key` 
+`dataSetup.resources`                          | CPU/Memory/Ephemeral Storage resource requests/limits                                |
 `dataSetup.extraLabels`                        | Extra labels                                                         |
+`dataSetup.extraAnnotations`                   | Extra or custom Annotations                                    |
 `env.tz`                                       | Timezone for application runtime                                     | `UTC`
 `env.upgradeCompatibilityVerified`             | Indicate release upgrade compatibility verification done             | `false`
 `env.debugMode`                                | To view debug logs during pod startup                                | `false`
@@ -509,8 +511,6 @@ Parameter                                      | Description                    
 `setupCfg.licenseAcceptEnableFileOperation`    | Consent for accepting license to enable File Operation               | false
 `setupCfg.systemPassphraseSecret`              | System passphrase secret name                                        | 
 `setupCfg.enableFipsMode`                      | Enable FIPS mode                                                     | false
-`setupCfg.fipsCustomProfileName`               | FIPS custom Profile Name                                             |
-`setupCfg.fipsCustomProfileFileName`           | FIPS custom Profile File Name                                        |
 `setupCfg.nistComplianceMode`                  | NIST 800-131a compliance mode                                        | `off`
 `setupCfg.dbVendor`                            | Database vendor - DB2/Oracle/MSSQL                                   | 
 `setupCfg.dbHost`                              | Database host                                                        | 
@@ -649,6 +649,7 @@ name	                                         |
 `asi.defaultPodDisruptionBudget.enabled`       | Enable default pod disruption budget                                 | false
 `asi.defaultPodDisruptionBudget.minAvailable`  | Minimum available for pod disruption budget                          | 1
 `asi.extraLabels`                              | Extra labels                                                         | 
+`asi.extraAnnotations`                   | Extra or custom Annotations                                    |                                    |
 `asi.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`    | k8s PodSpec.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".       | 
 `asi.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`   | k8s PodSpec.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    | 
 `asi.podAffinity.requiredDuringSchedulingIgnoredDuringExecution`     | k8s PodSpec.podAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    | 
@@ -661,8 +662,8 @@ name	                                         |
 `asi.extraConfigMaps`              | Extra configmaps. `mountAsVolume` if `true`, the configmap will be mounted as a volume on `/ibm/resources/<configmap-name>` folder else they will be exposed as environment variables.  | 
 `asi.myFgAccess.myFgPort`          | If myFG is hosted on HTTP Server adapter on ASI server, provide the internal port used while configuring that.  | 
 `asi.myFgAccess.myFgProtocol`      | If myFG is hosted on HTTP Server adapter on ASI server, provide the internal protocol used while configuring that.  | 
-`asi.jmxMonitoring.enabled`     | Enable JMX Monitoring			| false
-`asi.jmxMonitoring.port`     | JMX Service port 			| 
+`asi.jmxMonitoring.enabled`     | Enable JMX Monitoring                 | false
+`asi.jmxMonitoring.port`     | JMX Service port                         |
 `asi.jmxMonitoring.authentication.enabled`     | Enable JMX Monitoring Authentication                         | false
 `asi.jmxMonitoring.authentication.secretName`     | Secret name for JMX Monitoring Authentication                         | 
 `asi.jmxMonitoring.ssl.enabled`     | Enable SSL for JMX Monitoring                 | false
@@ -729,6 +730,7 @@ name	                                         |
 `ac.defaultPodDisruptionBudget.enabled`       | Enable default pod disruption budget                                 | false
 `ac.defaultPodDisruptionBudget.minAvailable`  | Minimum available for pod disruption budget                          | 1
 `ac.extraLabels`                              | Extra labels                                                         | 
+`ac.extraAnnotations`                   | Extra or custom Annotations                                    |
 `ac.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`    | k8s PodSpec.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".       | 
 `ac.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`   | k8s PodSpec.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    | 
 `ac.podAffinity.requiredDuringSchedulingIgnoredDuringExecution`     | k8s PodSpec.podAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    | 
@@ -791,6 +793,7 @@ name	                                         |
 `api.defaultPodDisruptionBudget.enabled`       | Enable default pod disruption budget                                 | false
 `api.defaultPodDisruptionBudget.minAvailable`  | Minimum available for pod disruption budget                          | 1
 `api.extraLabels`                              | Extra labels                                                         | 
+`api.extraAnnotations`                   | Extra or custom Annotations                                    |
 `api.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`    | k8s PodSpec.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".       | 
 `api.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`   | k8s PodSpec.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    | 
 `api.podAffinity.requiredDuringSchedulingIgnoredDuringExecution`     | k8s PodSpec.podAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    | 
@@ -811,13 +814,15 @@ name	                                         |
 `test.image.digest          `                  | helm test and cleanup docker image digest. Takes precedence over tag |
 `test.image.pullPolicy`                        | Pull policy for helm test image repository                           | `IfNotPresent`
 `test.extraLabels`                            | Extra labels                                                          |
+`test.extraAnnotations`                   | Extra or custom Annotations                                    |
 `purge.enabled`                                | Enable external purge job                                            | 'false'
 `purge.image.repository          `             | External purge docker image repository                               | `purge`
-`purge.image.tag          `                    | External purge image tag                                             | `6.2.1.0`
+`purge.image.tag          `                    | External purge image tag                                             | `6.2.0.5`
 `purge.image.digest          `                 | External purge image digest. Takes precedence over tag               |
 `purge.image.pullPolicy`                       | Pull policy for external purge docker image                          | `IfNotPresent`
 `purge.image.pullSecret`                       | Pull secret for repository access                                    | `ibm-entitlement-key`
 'purge.extraLabels'                            | Extra labels                                                         |
+`purge.extraAnnotations`                   | Extra or custom Annotations                                    |
 `purge.schedule`                               | External purge job creation and execution schedule. Its a Cron format string such as 1 * * * * or 
 @hourly as schedule day/time. Please refer [Kubernetes documentation](https://kubernetes.io/docs/tasks/job/automated-tasks-with-cron-jobs/#schedule)  for further details on Cron string for schedule. Please specify the schedule value in quotes    | 
 `purge.startingDeadlineSeconds`                | Deadline in seconds for starting the job if it misses its scheduled time for any reason | 
@@ -867,29 +872,6 @@ name	                                         |
 |`documentService.connectionPoolConfig.keepAlive`                    |   keep Alive for documentService Pod.                                                                                                                                                   | 300000     |
 |`documentService.connectionPoolConfig.retryCount`                   |   number of re try documentService                                                                                                                                                   |  2    |
 |`documentService.connectionPoolConfig.disableContentCompression`     |  disable Content compression for documentService                                                                                                                                                    | true     |
-`as4Service.enabled`                               | Enable integration with AS4 microservice                             |false     |
-`as4Service.license`                               | Accept AS4/SFG license                                               | `false`
-`as4Service.licenseType`                           | Specify the license edition as per license agreement.                | non-prod
-`as4Service.image.repository`                      | Repository for AS4 docker images                                     |
-`as4Service.image.tag          `                   | Docker image tag                                                     | `6.2.1.0`
-`as4Service.image.digest          `                | Docker image digest. Takes precedence over tag                       |
-`as4Service.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
-`as4Service.image.pullSecret `                     | Pull secret for repository access                              | 
-`as4Service.dataSetup.enabled`                           | Enable database setup job execution                                  | true
-`as4Service.dbSetup.dbVendor`                            | Database vendor - DB2/Oracle/MSSQL                                   |
-`as4Service.dbSetup.dbHost`                              | Database host                                                        |
-`as4Service.dbSetup.dbPort`                              | Database port                                                        |
-`as4Service.dbSetup.dbDrivers`                           | Database driver jar name                                             |
-`as4Service.dbSetup.dbSecret`                            | Database user secret name                                            |
-`as4Service.mqSetup.mqHost`                              | MQ Server host                                                       |
-`as4Service.mqSetup.mqPort`                              | MQ Server port                                                       |
-`as4Service.mqSetup.mqServerChannel`                     | MQ Server Channel Name                                               |
-`as4Service.mqSetup.mqServerQueueManager`                | MQ Server Queue Manager Name                                         |
-`as4Service.mqSetup.mqSecret`                            | MQ Server user secret Name                                           |
-`as4Service.as4operational.ingress.internal.host`        | Internal Host name for ingress resource                              |
-`as4Service.as4informational.ingress.internal.host`      | Internal Host name for ingress resource                              |
-
-
 
 ## Upgrading the Chart
 
