@@ -6,10 +6,10 @@ IBM DevOps Test Hub brings together test data, test environments, and test runs 
 
 ### Resources Required
 
-* [RedHat OpenShift Container Platform](https://docs.openshift.com/container-platform/4.15/release_notes/ocp-4-15-release-notes.html) v4.15 or later (x86_64)
-* [OpenShift SDN in _network policy_ mode](https://docs.openshift.com/container-platform/4.15/networking/openshift_sdn/about-openshift-sdn.html) (Optional) The default installation includes NetworkPolicy resources, these will only be acted upon if the SDN is configured appropriately.
-* [Dynamic Volume Provisioning](https://docs.openshift.com/container-platform/4.15/storage/dynamic-provisioning.html) supporting accessModes ReadWriteOnce (RWO) and ReadWriteMany (RWX).
-* [Jaeger Operator](https://docs.openshift.com/container-platform/4.15/service_mesh/v2x/installing-ossm.html#ossm-install-ossm-operator_installing-ossm) (Optional) If tests should contribute trace information and Jaeger based reports are required.
+* [RedHat OpenShift Container Platform](https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/release_notes/ocp-4-16-release-notes) v4.16 or later (x86_64)
+* [OpenShift SDN in _network policy_ mode](https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/networking/openshift-sdn-network-plugin#about-openshift-sdn) (Optional) The default installation includes NetworkPolicy resources, these will only be acted upon if the SDN is configured appropriately.
+* [Dynamic Volume Provisioning](https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/storage/dynamic-provisioning) supporting accessModes ReadWriteOnce (RWO) and ReadWriteMany (RWX).
+* [Jaeger Operator](https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/service_mesh/service-mesh-2-x#installing-ossm) (Optional) If tests should contribute trace information and Jaeger based reports are required.
 
 
 
@@ -25,7 +25,7 @@ To install the product you will need cluster administrator privileges.
 
 ## Red Hat OpenShift SecurityContextConstraints Requirements
 
-The product is compatible with the `restricted` and `restricted-v2` [SecurityContextConstraint](https://docs.openshift.com/container-platform/4.15/authentication/managing-security-context-constraints.html#default-sccs_configuring-internal-oauth).
+The product is compatible with the `restricted` and `restricted-v2` [SecurityContextConstraint](https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/authentication_and_authorization/managing-pod-security-policies).
 
 If you would prefer to use the custom ibm-devops-restricted SCC, please do the following before installation:
 
@@ -97,8 +97,8 @@ This change propagates after a couple of minutes. [Further reading](https://clou
 
 ### Local Machine
 
-* [oc](https://docs.openshift.com/container-platform/4.15/cli_reference/openshift_cli/getting-started-cli.html)
-* [helm v3.15.2 or later](https://docs.openshift.com/container-platform/4.15/applications/working_with_helm_charts/installing-helm.html)
+* [oc](https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/cli_tools/openshift-cli-oc)
+* [helm v3.17.3 or later](https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/building_applications/working-with-helm-charts#installing-helm)
 
 ### Storage
 
@@ -129,7 +129,7 @@ The pod [`fsGroup`](https://kubernetes.io/docs/tasks/configure-pod-container/sec
 Fetch chart for install:
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-prod --version 11.0.4
+helm pull --untar ibm-helm/ibm-devops-prod --version 11.0.5
 cd ibm-devops-prod
 ```
 
@@ -403,7 +403,7 @@ oc create secret generic -n $NAMESPACE usercerts --from-file=corp-ca.crt
 Once created you need to restart pods that mount it for the additional CA to be trusted. Pods that mount this secret can be listed by running:
 ```bash
 oc get pod -n $NAMESPACE -o json | jq -r \
-  '.items[] | select(.spec.volumes[].secret.secretName == "usercerts") | .metadata.name'
+  '.items[] | select(.spec.volumes[]?.secret.secretName == "usercerts") | .metadata.name'
 ```
 They can be forced to restart by deleting them.
 ```bash
@@ -466,4 +466,3 @@ This methods should also be used when restoring a backup made where different se
 * It is not currently possible to edit test assets. This must be done in DevOps Test Workbench.
 * In each namespace, only one instance of the product can be installed.
 * The replica count configuration enables a maximum of 50 active concurrent users. This configuration can not be changed.
-
