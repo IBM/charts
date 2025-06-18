@@ -254,7 +254,7 @@ The Helm chart has the following values that can be overriden using the --set pa
 |               | size | Size of the volume to hold the DevOps Deploy agent conf directory |  |
 |              | accessMode | Persistent storage access mode for the conf directory persistent volume. | ReadWriteOnce |
 | relayUri |  | Agent Relay Proxy URI if the agent is connecting to a relay. If multiple relays are specified, separate them with commas. For example, random:(http://relay1:20080,http://relay2:20080) |  |
-| codestationUrl |  | Agent Relay Codestation URL. If multiple relays are specified, separate them with commas. For example, random:(http://relay1:20081,http://relay2:20081) |  |
+| codestationUrl |  | Agent Relay Codestation URL. If multiple relays are specified, separate them with commas. For example, random:(https://relay1:20081,https://relay2:20081) |  |
 | serverUri |  | DevOps Deploy server URI. If multiple servers are specified, separate them with commas. For example, random:(wss://ucd1.example.com:7919,wss://ucd2.example.com:7919) |  |
 | secret | name | Kubernetes secret which defines password to use when creating keystores. | |
 | agentTeams |  | Teams to add this agent to when it connects to the DevOps Deploy server.Format is <team>:<type>. Multiple team specifications are separated with a comma. |  |

@@ -344,6 +344,8 @@ The Helm chart has the following values.
 |          | fetchDriver | Boolean specifying whether to fetch JDBC driver from well-known location.  Suppported for db2, mysql, oracle, and sqlserver. This setting will be ignored if extLibVolume.configMapName is specified. | Default value true |
 |          | driverVersion | Version of JDBC driver to fetch from well-known location.  This value is optional.  If not specified, the latest jdbc driver for the database type will be fetched. | |
 |          | createDatabase | Automatically create a MySQL 8.0 Database | Default is false |
+|          | dbVolume.storageClassName | If createDatasbase equals "true", specifies the name of the storageclass to use. | |
+|          | dbVolume.size | If createDatasbase equals "true", specifies the size of the persistent volume used by the database. | |
 | secureConnections  | required | Specify whether DevOps Deploy server connections are required to be secure | Default value is "true" |
 |                    | tlsSecret | Name of Kubernetes TLS secret that contains the signed certificate for the Deploy server | |
 | secret | name | Kubernetes secret which defines required DevOps Deploy passwords. | You may leave this blank to use default name of HelmReleaseName-secrets where HelmReleaseName is the name of your Helm Release, otherwise specify the secret name here. If name is left blank and HelReleaseName-secrets does not exist in the namepace, then a default secret will be automatically created with randomized values for the passwords. |
