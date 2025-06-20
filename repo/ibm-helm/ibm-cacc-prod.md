@@ -83,10 +83,8 @@ Custom SecurityContextConstraints definition:
 
 ## Installing the Chart
 
-```
-$ git clone https://github.com/IBM/charts.git
-$ cd stable/ibm-cognos-anayltics-certified-containers
-```
+IBM Cognos Analytics Certified Containers helm chart is located at https://github.com/IBM/charts/tree/master/repo/ibm-helm.  
+The name of the chart is ibm-cacc-prod-{HELM_CHART_VERSION}.tgz where HELM_CHART_VERSION is ibm-cacc-prod chart version starting from 1.0.0
 
 ### 1. Pre-install cluster configuration
 
@@ -139,16 +137,16 @@ Save the API key in a text file.
 Similar to Step 1., once the entitlement key has been download, proceed to create a secret name regcred. This secret will contain the repository, username and pull key. The secret will be used by the Helm installer to access the IBM repository and pull the 
 CA Certified Containers during the deployment phase.
 
-For an Internet deployment (non-air-gapped), the CA Certified Container images will be pulled from icr.io/cp/cognos. The username for this repository is iamapikey. The password will be the entitlement key (API key) that was saved.
+For an Internet deployment (non-air-gapped), the CA Certified Container images will be pulled from cp.icr.io/cp/cognos. The username for this repository is cp. The password will be the IBM entitlement key (API key) that was saved.
 ```
-$ export DOCKER_REPOSITORY=icr.io/cp/cognos
-$ export DOCKER_REPO_USERNAME=iamapikey
-$ export DOCKER_REPO_PASSWORD=<entitlement key>
+$ export DOCKER_REPOSITORY=cp.icr.io/cp/cognos
+$ export DOCKER_REPO_USERNAME=cp
+$ export DOCKER_REPO_PASSWORD=<IBM entitlement key>
 
 $ kubectl create secret docker-registry regcred --docker-server=${DOCKER_REPOSITORY} --docker-username=${DOCKER_REPO_USERNAME} --docker-password=${DOCKER_REPO_PASSWORD} -n ${NAMESPACE}
 ```
 
-For an air-gapped installation, a tool such as Skopeo or Crane can be (Docker cp can also work) used to pull the images from icr.io/cp/cognos to a private repository. Once the Cognos Analytics Certified Containers have been pulled, the regcred secret can be populated using the 
+For an air-gapped installation, a tool such as Skopeo or Crane can be (Docker cp can also work) used to pull the images from cp.icr.io/cp/cognos to a private repository. Once the Cognos Analytics Certified Containers have been pulled, the regcred secret can be populated using the 
 credentials for the private repository.
 
 ```
@@ -243,7 +241,8 @@ In an editor, open the caConfiguration.yaml file and update the fields to repres
 
 * Once you have cloned the IBM Charts repo, navigate to the Cognos Analytics helm chart folder and initiate the install
 
-$ helm install -f ${OVERRIDE_FILE} ibm-cacc-prod --version 1.0.0 --namespace ${NAMESPACE}
+$ export HELM_CHART_VERSION=1.0.1
+$ helm install -f ${OVERRIDE_FILE} https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm/ibm-cacc-prod-{HELM_CHART_VERSION}.tgz  --version {HELM_CHART_VERSION} --namespace ${NAMESPACE}
 ```
 
 
@@ -283,7 +282,7 @@ The following tables lists the configurable parameters of the ibm-cacc chart and
 | Parameter                  | Description                                     | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
 |license.accept|License acceptance. Must be set to true to deploy CACC|false|
-|image.registry|Repository where CA images will be pulled from. Can be set to reference private repository.|icr.io/cp/cognos|
+|image.registry|Repository where CA images will be pulled from. Can be set to reference private repository.|cp.icr.io/cp/cognos|
 |imagePullSecrets.name|Kubernetes Secret used to pull images from repository.|regcred|
 |configs.mailServerConfiguration|Mail Server Configuration|false|
 |configs.mailServerHostPort|specify the location of the mail server: host:port|""|
@@ -379,7 +378,7 @@ These configuration settings can be enabled to configure the Content Manager ser
 | Parameter                  | Description                                     | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
 |services.contentManagerService.ldapConfiguration|Defines a group of properties that allows the product to access an LDAP server for user authentication|false|
-|services.contentManagerService.ldapInst|Specifies the type of security used for authenticating users|"LDAP"|
+|services.contentManagerService.ldapInstanceName|Specifies the name of the LDAP instance|"LDAP"|
 |services.contentManagerService.ldapNamespaceID|Specifies a unique identifier for the authentication namespace|"LDAP"|
 |services.contentManagerService.ldapHostname|Specifies the host namedirectory server|"localhost"|
 |services.contentManagerService.ldapPor|Specifies the port of the directory server|389|
