@@ -2,14 +2,14 @@
 
 ## **Introduction**
 
-[DevOps Plan](https://ibm.com/docs/en/devops-plan/3.0.3) is a change management software platform for enterprise level scaling, process customization, and control to accelerate project delivery and increase developer productivity.
+[DevOps Plan](https://ibm.com/docs/en/devops-plan/3.0.4) is a change management software platform for enterprise level scaling, process customization, and control to accelerate project delivery and increase developer productivity.
 
 ## **Chart Details**
 - This chart deploys a single instance of DevOps Plan that may be scaled to multiple instances.
 
 ## **Product Documentation**
 
-- [DevOps Plan Product Documentation](https://ibm.com/docs/en/devops-plan/3.0.3)
+- [DevOps Plan Product Documentation](https://ibm.com/docs/en/devops-plan/3.0.4)
 
 ## **Prerequisites**
 
@@ -78,6 +78,18 @@
 
     - Once the DevOps Plan server has started Concurrent User license metrics to the IBM License service (this can take up to 24 hours), you can retrieve license usage data by following these [instructions](https://www.ibm.com/docs/en/cloud-paks/foundational-services/4.6?topic=data-per-cluster-from-license-service).
 
+7. Helm Installation Timeout Recommendation
+
+    - If your OpenShift cluster is experiencing slow response times, particularly when starting pods the default Helm install timeout of 5 minutes (`--timeout=5m0s`) may be insufficient, leading to failed deployments.
+
+    - To avoid these timeouts during `helm install`, we recommend increasing the timeout value to 10 minutes:
+
+    ```bash
+    helm install <release-name> <chart-path> --timeout=10m0s
+    ```
+
+    - Adjust the `<release-name>` and `<chart-path>` placeholders as needed for your deployment.
+
 ## **Installing the Chart**
 
 Add the DevOps Plan helm chart repository to the local client.
@@ -107,22 +119,32 @@ Get the _default_ `openshift-cluster-dns-name` and set it in the *global.domain*
 
   ```bash
   helm install ibm-devopsplan ibm-helm/ibm-devopsplan-prod \
-    --version [CHART VERSION] \
+    -f ibm-devopsplan-prod/values-openshift.yaml  \
     --namespace devopsplan \
     --set global.imagePullSecrets={ibm-entitlement-key} \
-    --set global.domain=[openshift-cluster-dns-name]
+    --set global.domain=[openshift-cluster-dns-name] \
+    --timeout 10m
   ```
 
-  If you plan to install the latest version of the DevOps Plan, then you don't need to add **--version [CHART VERSION]**.
+  You can adjust the timeout value based on the performance and responsiveness of your OpenShift cluster.
 
-  If you plan to use external PostgreSQL database, refer to [Installing DevOps Plan with External Database and Optional email server settings](https://www.ibm.com/docs/devops-plan/3.0.3?topic=gsdphc-installing-devops-plan-external-databases-optional-email-server-settings).
+  In order for the user invitation email to work, you also need to set serverQualifiedUrlPath to the DevOps Plan URL during the install/upgrade command.
 
-  If you plan to use External Keycloak, refer to [Installing DevOps Plan with External Keycloak Single Sign On feature](https://www.ibm.com/docs/en/devops-plan/3.0.3?topic=openshift-enabling-devops-plan-keycloak-single-sign-feature).
+  ```bash
+  --set serverQualifiedUrlPath=[DevOps Plan URL]
+  ```   
+  If you plan to use external PostgreSQL database, refer to **Installing DevOps Plan with External Database and Optional email server settings** section in this README.
+
+  If you plan to use External Keycloak, refer to **Installing DevOps Plan with External Keycloak Single Sign On feature** section in this README.
+
+  If you plan to enabled Control, refer to DevOps Plan install with DevOps Control section in this README.
+
+  If you plan to enabled Llama, refer to AI Assistant Integration with Llama section in this README.
 
   When providing your own cluster if the default storage class does not support the ReadWriteMany (RWX) accessMode or it does not support Storage Class ibmc-file-gold-gid, then an alternative class must be specified using the following additional helm values:
 
   ```bash
-    --set persistence.storageClass=[default_storage_class] \
+    --set global.persistence.rwoStorageClass=[default_storage_class] \
     --set persistence.ccm.storageClass=[ReadWriteMany_storage_class] \
     --set securityContext.fsGroup=65531
   ```
@@ -133,13 +155,12 @@ Get the _default_ `openshift-cluster-dns-name` and set it in the *global.domain*
 
 4. Start the DevOps Plan home page in your browser by using https://ibm-devopsplan.[openshift-cluster-dns-name]
 
-
 ### **Install with Customize parameters settings**
 
 1. Get a copy of the values.yaml file from the helm chart so you can update it with values used by the install.
 
   ```
-  $ helm inspect values ibm-helm/ibm-devopsplan-prod --version [CHART VERSION] > myvalues.yaml
+  $ helm inspect values ibm-helm/ibm-devopsplan-prod > myvalues.yaml
   ```
 
 2. Edit the file myvalues.yaml to specify the parameter values to use when installing the DevOps Plan instance. The **Configuration** section lists the parameter values that can be set.
@@ -148,14 +169,13 @@ Get the _default_ `openshift-cluster-dns-name` and set it in the *global.domain*
 
   ```bash
   helm install ibm-devopsplan ibm-helm/ibm-devopsplan-prod \
-    --version [CHART VERSION] \
+    -f ibm-devopsplan-prod/values-openshift.yaml  \
     --namespace devopsplan \
-    --values myvalues.yaml
+    --values myvalues.yaml \
+    --timeout 10m
   ```
 
 Tip: List all releases using *helm list*.
-
-If you plan to install the latest version of the DevOps Plan, then you don't need to add **--version [CHART VERSION]**.
 
 ## **Uninstalling the Chart**
 
@@ -168,12 +188,15 @@ To uninstall/delete the ibm-devopsplan deployment.
 
 The command removes all the Kubernetes components associated with the chart and deletes the release.
 
-## **Installing DevOps Plan with License Metric Enabled**
+## **Enable License Metrics**
+
 The global.licenseMetric is set to false by default. You need to set it to true during the helm install/upgrade
 
   ```bash
   --set global.licenseMetric=true 
   ```
+
+Before you can enable license metrics, you must have IBM License Service installed on your OpenShift environment and copy the license service upload secret and configmap. For more information on installing IBM License Service, see Licensing Requirements step in Prerequisites section.
 
 ## **Installing DevOps Plan with External Database and Optional email server settings**
 DevOps Plan requires a PostgreSQL database to create TeamSpace and Applications. The PostgreSQL database may be running in your cluster or on hardware that resides outside of your cluster. The values used to connect to the database are required when installing the DevOps Plan. The DevOps Plan helm chart provides the PostgreSQL database by default settings. You can disable it and use your own PostgreSQL database.
@@ -245,6 +268,8 @@ The helm chart enables the Keycloak Single Sign On feature installed with the he
       jsonFile:
         enabled: true
         configMapName: keycloak-json
+    keycloaksrv:
+      enabled: false
     ```
 
 3. add *-f keycloak.yaml* to *helm install* or *helm upgrade* command.
@@ -269,13 +294,15 @@ Install the helm chart with the default parameters into namespace *devopsplan* w
 
   ```bash
   helm install ibm-devopsplan ./ibm-devopsplan-prod \
-    -f ibm-devopsplan-prod/control-openshift.yaml  \
+    -f ibm-devopsplan-prod/values-openshift.yaml  \
+    -f ibm-devopsplan-prod/control-Openshift.yaml  \
     --namespace devopsplan \
     --set global.imagePullSecrets={ibm-entitlement-key} \
     --set global.domain=[openshift-cluster-dns-name] \
-    --set control.enabled=true
+    --set control.enabled=true \
+    --set control.gitea.config.webhook.SKIP_TLS_VERIFY=true \
+    --timeout 10m
   ```
-
 
   4. **Run *helm status ibm-devopsplan -n devopsplan* to retrieve URLs, username and password.**
 
@@ -289,6 +316,89 @@ The DevOps Control is using the internal PostgreSQL database by default. If you 
   --set control.postgresql.username=[CONTROL_DATABASE_USERNAME] \
   --set control.postgresql.password=[CONTROL_DATABASE_PASSWORD] 
   ```
+
+## AI Assistant Integration with Llama (Open-Source LLMs)
+
+This guide explains how to integrate open-source LLaMA models into your **DevOps Plan** using [Ollama](https://ollama.com/).
+
+### Overview
+
+DevOps Plan leverages the [Ollama](https://ollama.com/) tool to run LLaMA and other open-source models locally on your **CPU or GPU** with minimal setup.
+
+Ollama provides access to a growing set of open-weight [models](https://ollama.com/search), including: **LLaMA 2**, **LLaMA 3**, **LLaMA 4**, **Mistral**, **Code LLaMA**, **Gemma**, **Phi**, **Orion** and more.
+
+### Helm Chart Configuration
+
+During Helm installation or upgrade, you can configure Ollama to **pull and run** specific models by adding them to your `values.yaml` or CLI `--set` parameters.
+
+### Example Configuration:
+
+```yaml
+llama:
+  models:
+    - name: [Model_Name]  # e.g., llama3
+
+  run:
+    - name: [Model_Name]  # e.g., llama3
+```
+
+### Interacting via API
+
+After deployment, you can interact with the models using a REST API or by running `kubectl exec` inside the pod.
+
+### Example API Call:
+
+```bash
+curl -k -s [Llama_URL]/api/generate -d '{
+  "model": "[Model_Name]",
+  "prompt": "[Your_Message]",
+  "stream": false
+}'
+```
+
+**Notes:**
+
+* On startup, the model is **downloaded and cached** in the container.
+* On first use, the model is **loaded into memory (RAM)**.
+* The **first request may be slower** due to initialization if the model is not yet loaded.
+
+### Enabling Llama in DevOps Plan
+
+By default, Llama is **disabled**. To enable it during Helm installation or upgrade, use:
+
+```bash
+helm upgrade --install hcl-devopsplan . \
+  --namespace $NAMESPACE \
+  ......
+  ......
+  --set llama.enabled=true
+```
+
+ If the default storage class does not support the ReadWriteMany (RWX) accessMode or it does not support Storage Class ibmc-file-gold-gid, then an alternative class must be specified using the following additional helm values:
+
+  ```bash
+    --set llama.persistence.ccm.storageClass=[ReadWriteMany_storage_class] \
+  ```
+
+### Verifying Installation
+
+After enabling Llama, confirm the pod and service are running and get Llama URL using 'helm status':
+
+```bash
+helm status hcl-devopsplan -n $NAMESPACE
+```
+
+To verify Ollama is up:
+
+```bash
+kubectl exec -it [devopsplan_pod_name] -- curl -ks [Llama_URL]
+```
+
+Expected response:
+
+```bash
+Ollama is running
+```
 
 ### Install the SSL certificate:
 Follow these instructions to install SSL certificates in the devopsplan container:
@@ -317,6 +427,98 @@ Follow these instructions to install SSL certificates in the devopsplan containe
     ```
   5. add *-f ssl.yaml* to *helm install* or *helm upgrade* command.
 
+## Scaling
+To increase or decrease the number of DevOps Plan Server instances issue the following command:
+
+  ```bash
+  kubectl scale --replicas=2 statefulset/ibm-devopsplan
+  ```
+
+## Update OpenSearch and OpenSearch Dashboards Password
+
+By default, OpenSearch and OpenSearch Dashboards use the username admin. To change the default username and password, you can update the values.yaml file or use the --set flags during Helm installation.
+
+- Option 1: Modify values.yaml
+
+  ```bash
+  opensearch:
+    username: [USERNAME]
+    password: [PASSWORD]
+  ```
+
+- Option 2: Use --set flags with Helm
+
+  ```bash
+  --set opensearch.username=[USERNAME]
+  --set opensearch.password=[PASSWORD]
+
+## Settings Feedback Email Address
+To set email address for the feedback, the admin requires to set feedback.to.emailaddress and feedback.from.emailaddress during the Helm install/upgrade.
+  ```bash
+  feedback:
+    toEmailaddress: [TO_EMAIL_ADDRESS]
+    fromEmailaddress: [FROM_EMAIL_ADDRESS]
+  ```
+
+## Rolling upgrade release
+
+You can upgrade DevOps Plan to the newest release using the helm upgrade command.
+
+- Use Helm to install the DevOps Plan chart as described in section **Installing the Chart**.
+
+- If you already installed with the internal PostgreSQL database, and you plan to upgrade with the latest release version without deleting the PostgreSQL PVC, then you need to get the existing password before uninstall/upgrade and set it during *helm upgrade --install*. Get the password for internal PostgreSQL database by running this command when namespace is set to *devopsplan*:
+  ```bash
+  export POSTGRES_PASSWORD=$(kubectl get secret --namespace devopsplan ibm-devopsplan-postgresql -o jsonpath="{.data.tenant-datastore-password}" | base64 -d)
+  ```
+  Set the password during the helm upgrade --install:
+  ```bash
+  --set postgresql.existingPassword=$POSTGRES_PASSWORD
+  ```
+
+- If you already installed with the internal Keycloak, and you plan to upgrade with the latest release version without deleting the Keycloak PVC, then you need to get the existing password before uninstall/upgrade and set it during *helm upgrade --install*. Get the password for internal Keycloak by running this command when namespace is set to *devopsplan*:
+  ```bash
+  export KEYCLOAK_PASSWORD=$(kubectl get secret --namespace devopsplan ibm-devopsplan-keycloak -o jsonpath="{.data.keycloak-password}" | base64 -d)
+  ```
+  Set the password during the helm upgrade --install:
+  ```bash
+  --set keycloak.existingPassword=$KEYCLOAK_PASSWORD
+  ```
+
+## Rolling rollback release
+You can rollback to the previous release using *helm rollback* command.
+
+**Before you begin**
+
+1. Use Helm to install the chart as described in section **Installing the Chart**.
+2. Use Helm to upgrade the chart to new release as described in section **Rolling upgrade release**.
+
+**Procedure:**
+1. Run *helm history* command to see revision numbers of your helm chart release. You should have min two revision numbers. revision 1 for install and revision 2 for the upgrade that you execute in **Before you begin** section. Example below shows you have a helm chart release name *ibm-devopsplan1* with revision 1 installed the helm chart *ibm-devopsplan1-3.0.3* for release 3.0.4 and revision 2 upgraded the helm chart *ibm-devopsplan2-3.0.4* to release 3.0.4.
+
+  ```bash
+  $ helm history ibm-devopsplan1 --namespace dev
+  REVISION        UPDATED                         STATUS          CHART           APP VERSION     DESCRIPTION
+  1               Thu Nov 20 21:58:13 2024        superseded      ibm-devopsplan1-3.0.3          Install complete
+  2               Thu Nov 20 22:13:56 2024        deployed        ibm-devopsplan2-3.0.4          Upgrade complete
+  ```
+
+2. Rollback helm chart using *helm rollback* command. Example below will rollback helm chart release *ibm-devopsplan1* from revision 2 to revision 1.
+
+  ```bash
+  $ helm rollback ibm-devopsplan --namespace dev
+  Rollback was a success! Happy Helming!
+  ```
+
+3. Run *helm history RELEASE* command again to see the new revision 3 has been created after rollback, and it rollbacked to revision 1 the helm chart release *ibm-devopsplan1*.
+
+  ```bash
+  $ helm history ibm-devopsplan1 --namespace dev
+  REVISION        UPDATED                         STATUS          CHART           APP VERSION     DESCRIPTION
+  1               Thu Nov 20 21:58:13 2024        superseded      ibm-devopsplan1-3.0.3          Install complete
+  2               Thu Nov 20 22:13:56 2024        deployed        ibm-devopsplan2-3.0.4          Upgrade complete
+  3               Thu Nov 20 22:30:32 2024        deployed        ibm-devopsplan1-3.0.3          Rollback to 1
+  ```
+ 
 ## **Configuration**
 
 ### Parameters
@@ -348,7 +550,7 @@ The Helm chart has the following values that can be overridden using the *--set 
 | **swagger.enabled** | This parameter enables or disables Swagger UI visibility. Accepted values are:<br>- *true* to enable Swagger UI visibility.<br>- *false* to disable Swagger UI visibility. | false |
 
 ### Parameters for creating TeamSpace and Applications
-The PostgreSQL database requires to create TeamSpace and Applications. The helm chart is installed with the internal PostgreSQL database by default. If you plan to install/upgrade the helm charts with an external database, then you need to set the *postgresql.enabled* to *false* and set the *spring.datastore* and *tenant.datastore* configuration settings based on your external database parameters. PostgreSQL database is supported for release 3.0.3.
+The PostgreSQL database requires to create TeamSpace and Applications. The helm chart is installed with the internal PostgreSQL database by default. If you plan to install/upgrade the helm charts with an external database, then you need to set the *postgresql.enabled* to *false* and set the *spring.datastore* and *tenant.datastore* configuration settings based on your external database parameters. PostgreSQL database is supported for release 3.0.4.
 
 | **Parameter** | **Description** | **Default value** |
 | --- | --- | --- |
@@ -386,7 +588,7 @@ The helm chart installs the Analytics feature on a separate pod by default. you 
 | **analytics.urlMapping** | URL mapping. <br>- The mapping URL format should be *https:[mapping-name].com*.  | "" |
 | **analytics.replicaCount** | Number of replica Analytics Pods. This parameter is needed if analytics.service *=true.* | 1 |
 | **analytics.image.repository** | Analytics docker Image repository path. This parameter is needed if analytics.service *=true.* | cp/devops-plan/devopsplan-analytics |
-| **analytics.image.tag** | Analytics Image tag. This parameter is needed if *analytics.service=true.* | 3.0.3 |
+| **analytics.image.tag** | Analytics Image tag. This parameter is needed if *analytics.service=true.* | 3.0.4 |
 | **analytics.image.pullPolicy** | Analytics image pull policy. This parameter is needed if *analytics.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **analytics.hostname** | Analytics hostname | analytics |
 
@@ -397,7 +599,7 @@ The helm chart is installed with the internal postgresql database by default.
 | --- | --- | --- |
 | **postgresql.enabled** | This parameter enables or disables devopsplan-postgresql database service. Accepted values are:<br>- *true* to enable postgresql database service.<br>- *false* to disable postgresql database service. | true |
 | **postgresql.repository** | Postgresql database docker Image repository path. This parameter is needed if *postgresql.enabled=true.* | cp/devops-plan/devopsplan-postgresql |
-| **postgresql.tag** | Postgresql database Image tag.This parameter is needed if *postgresql.enabled=true.* | 3.0.3 |
+| **postgresql.tag** | Postgresql database Image tag.This parameter is needed if *postgresql.enabled=true.* | 3.0.4 |
 | **postgresql.pullPolicy** | Postgresql database image pull policy.This parameter is needed if *postgresql.enabled=true*Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent |
  **postgresql.service.type** | postgresql service type  | LoadBalancer |
 | **postgresql.service.exposePort** | postgresql service port  | "" |
@@ -416,13 +618,13 @@ The dashboards analytics configuration setting options set by default for dashbo
 | **nginx.urlMapping** | URL mapping. <br>- The mapping URL format should be *https:[mapping-name].com*.  | "" |
 | **nginx.replicaCount** | Number of replica nginx Pods. This parameter is needed if nginx.service *=true.* | 1 |
 | **nginx.image.repository** | Nginx docker Image repository path. This parameter is needed if nginx.service *=true.* | cp/devops-plan/devopsplan-nginx |
-| **nginx.image.tag** | Nginx Image tag. This parameter is needed if *nginx.service=true.* | 3.0.3 |
+| **nginx.image.tag** | Nginx Image tag. This parameter is needed if *nginx.service=true.* | 3.0.4 |
 | **nginx.image.pullPolicy** | Nginx image pull policy. This parameter is needed if *nginx.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **nginx.hostname** | Nginx hostname | nginx |
 | **dashboards.service** | This parameter enables or disables dashboards service. Accepted values are:<br>- *true* to enable Nginx service.<br>- *false* to disable dashboards service.<br>This parameter is needed if you plan to use Dashboard features for Business Analytics. | true |
 | **dashboards.replicaCount** | Number of replica dashboards Pods. This parameter is needed if dashboards.service *=true.* | 1 |
 | **dashboards.image.repository** | Opensearch-dashboards docker Image repository path. This parameter is needed if dashboards.service *=true.* | cp/devops-plan/devopsplan-dashboards |
-| **dashboards.image.tag** | Opensearch-dashboards Image tag. This parameter is needed if *dashboards.service=true.* | 3.0.3 |
+| **dashboards.image.tag** | Opensearch-dashboards Image tag. This parameter is needed if *dashboards.service=true.* | 3.0.4 |
 | **dashboards.image.pullPolicy** | Opensearch-dashboards image pull policy. This parameter is needed if *dashboards.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **dashboards.hostname** | Dashboards hostname | dashboards |
 | **dashboards.username** | Opensearch Dashboards username | "admin" |
@@ -430,7 +632,7 @@ The dashboards analytics configuration setting options set by default for dashbo
 | **logstash.service** | This parameter enables or disables devopsplan-logstash service. Accepted values are:<br>- *true* to enable Nginx service.<br>- *false* to disable devopsplan-logstash service.<br>This parameter is needed if you plan to use Dashboard features for Business Analytics. | true |
 | **logstash.replicaCount** | Number of replica devopsplan-logstash pods. This parameter is needed if logstash.service *=true.* | 1 |
 | **logstash.image.repository** | logstash docker Image repository path. This parameter is needed if logstash.service *=true.* | cp/devops-plan/devopsplan-logstash |
-| **logstash.image.tag** | devopsplan-logstash Image tag. This parameter is needed if *logstas.service=true.* | 3.0.3 |
+| **logstash.image.tag** | devopsplan-logstash Image tag. This parameter is needed if *logstas.service=true.* | 3.0.4 |
 | **logstash.image.pullPolicy** | Opensearch-logstash image pull policy. This parameter is needed if *logstas.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **logstash.port** | logstash port | 5011 |
 | **logstash.username** | logstash username | "logstash" |
@@ -438,7 +640,7 @@ The dashboards analytics configuration setting options set by default for dashbo
 | **opensearch.service** | This parameter enables or disables opensearch service. Accepted values are:<br>- *true* to enable Nginx service.<br>- *false* to disable opensearch service.<br>This parameter is needed if you plan to use Dashboard features for Business Analytics. | true |
 | **opensearch.replicaCount** | Number of replica opensearch pods. This parameter is needed if opensearch.service *=true.* | 1 |
 | **opensearch.image.repository** | Opensearch docker Image repository path. This parameter is needed if opensearch.service *=true.* | cp/devops-plan/devopsplan-opensearch |
-| **opensearch.image.tag** | Opensearch Image tag. This parameter is needed if *opensearch.service=true.* | 3.0.3 |
+| **opensearch.image.tag** | Opensearch Image tag. This parameter is needed if *opensearch.service=true.* | 3.0.4 |
 | **opensearch.image.pullPolicy** | Opensearch image pull policy. This parameter is needed if *opensearch.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **opensearch.hostname** | Opensearch hostname | opensearch |
 | **opensearch.hash** | Opensearch password hash | "" |
@@ -451,19 +653,8 @@ Single-Sign-On functionality by default is set to disable. If the admin plans to
 | --- | --- | --- |
 | **keycloak.enabled** | This parameter enables or disables Single-Sign-On (Keycloak)  service. Accepted values are:<br>- *true* to enable Single-Sign-On service.<br>- *false* to disable Single-Sign-On service.<br>This parameter is needed if you plan to use Single-Sign-On feature. | false |
 | **keycloak.service.enabled** | This parameter enables or disables Keycloak service in Helm Chart for Single-Sign-On service. Accepted values are:<br>- *true* to enable Keycloak service.<br>- *false* to disable Keycloak service.<br>This parameter is needed if you plan to use Single-Sign-On feature and deploy Keycloak with Helm chart. | false |
-| **keycloak.service.replicaCount** | Number of replica keycloak Pods. This parameter is needed if *keycloak.service.enabled=true*. | 1 |
-| **keycloak.service.image.repository** | keycloak docker Image repository path. This parameter is needed if *keycloak.service.enabled=true*. | cp/devops-plan/devopsplan-keycloak |
-| **keycloak.service.image.tag** | Keycloak Image tag. This parameter is needed if *keycloak.service.enabled=true*. | 3.0.3 |
-| **keycloak.service.image.pullPolicy** | Keycloak image pull policy. This parameter is needed if *keycloak.service.enabled=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent |
-| **keycloak.service.hostname** | Keycloak hostname. | keycloak |
-| **keycloak.service.type** | Keycloak service type. | ClusterIP |
-| **keycloak.service.exposePort** | Keycloak service port. | "" |
 | **keycloak.service.ipAddress** | Cluster IP address or Hostname. | "" |
-| **keycloak.service.tls.enabled** | Enable installing Keycloak tls certificate and private key files. Accepted values are:<br>- *true* to enable installing tls files <br>- *false* to disable installing tls files. | true |
-| **keycloak.service.tls.configMapName** | This is the configMap file name that contains the tls certificate and tls private key files. This parameter is needed if keycloak.service.enabled *=true.* | keycloak-tls |
-| **keycloak.service.importRealm.enabled** | Enable importing Keycloak realm configuration file. Accepted values are:<br>- *true* to enable importing  Keycloak realm configuration file<br>- *false* to disable importing Keycloak realm configuration file. | false |
-| **keycloak.service.importRealm.fileName** | This is the configMap file name that contains the realm configuration file. This parameter is needed if keycloak.service.enabled *=true.*  and *keycloak.service.importRealm.enabled*| realm.json |
-| **keycloak.service.configMapName.fileName** | This is the configMap file name that contains the realm configuration file. This parameter is needed if keycloak.service.enabled *=true.* and *keycloak.service.importRealm.enabled* | realm-json |
+| **keycloak.service.clientName  | The ccn-client Id. | "ccm-client" |
 | **keycloak.username** | Keycloak Administration Console username. | admin |
 | **keycloak.password** | Keycloak Administration Console password. | admin |
 | **keycloak.realmName** | The Realm name. | "CCM" |
@@ -472,6 +663,18 @@ Single-Sign-On functionality by default is set to disable. If the admin plans to
 | **keycloak.urlMapping** | Keycloak URL | "" |
 | **keycloak.jsonFile.enabled** | Enable installing keycloak.json file to the DevOps Plan servers /config folder.  Accepted values are:<br>- *true* to enable installing keycloak.json file <br>- *false* to disable installing keycloak.json file. | false |
 | **keycloak.jsonFile.configMapName** | This is the configMap file name that contains the keycloak.json file. This parameter is needed if keycloak.jsonFile.enabled *=true.* | keycloak-json |
+| **keycloaksrv.enabled** | This parameter enables or disables Keycloak service in Helm Chart for Single-Sign-On service. Accepted values are:<br>- *true* to enable Keycloak service.<br>- *false* to disable Keycloak service.<br>This parameter is needed if you plan to use Single-Sign-On feature and deploy Keycloak with Helm chart. | false |
+| **keycloaksrv.image.repository** | keycloak docker Image repository path. | devops-plan/devopsplan-keycloak |
+| **keycloaksrv.image.tag** | Keycloak Image tag. | 3.0.4 |
+| **keycloaksrv.image.pullPolicy** | Keycloak image pull policy. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent |
+| **keycloaksrv.service.type** | Specify the nodePort values for the LoadBalancer and NodePort service types. | LoadBalancer |
+| **keycloaksrv.service.nodePorts.http** | Keycloak service HTTP port. | 30107 |
+| **keycloaksrv.service.nodePorts.https** | Keycloak service HTTPS port. | 30104 |
+| **keycloaksrv.auth.adminUser** | Keycloak administrator user | admin |
+| **keycloaksrv.auth.adminPassword** | Keycloak administrator password for the new user | "" |
+| **keycloaksrv.postgresql.auth.postgresPassword** | Password for the "postgres" admin user. | "" |
+| **keycloaksrv.postgresql.auth.password** | Password for the non-root username for Keycloak | "" |
+| **keycloaksrv.keycloakConfigCli.backoffLimit** | Specifies the number of retries before considering the Job as failed | 1 |
 
 ### SSL Parameters
 You need to set the ssl parameters  in order to install SSL certificates.
@@ -634,7 +837,7 @@ The following steps describe how enabled/disabled mounting the windows product p
 | --- | --- | --- |
 | **winInstall.enabled** | This parameter enables or disables mounting the windows product package in DevOps Plan Server. Accepted values are:<br>- *true* to enable mounting the windows product package.<br>- *false* to disable mounting the windows product package. | true |
 | **winInstall.image.repository** | win-install docker Image repository path. This parameter is needed if *winInstall.enabled=true*. | ibm-devopsplan-win-install |
-| **winInstall.image.tag** | win-install image tag. This parameter is needed if *winInstall.enabled=*true* | 3.0.3 |
+| **winInstall.image.tag** | win-install image tag. This parameter is needed if *winInstall.enabled=*true* | 3.0.4 |
 | **winInstall.image.pullPolicy** | win-install image pull policy. This parameter is needed if *winInstall.enabled=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent |
 | **winInstall.accessModes** | win-install persistence Volume access modes. This parameter is needed if *winInstall.enabled=rtue*. | ReadWriteOnce |
 | **winInstall.size** | win-install persistence Volume size. This parameter is needed if *winInstall.enabled=true*. | 2Gi |
@@ -643,204 +846,41 @@ The following steps describe how enabled/disabled mounting the windows product p
 
    **Note:** The helm chart by default sets the persistent volume. If your Kubernetes environment does not provide with default StorageClass, then you need to create your own default StorageClass and set the StorageClass name to *persistence.storageClass*. Otherwise, you need to set *persistence.enabled=false*.
 
-## Scaling
-To increase or decrease the number of DevOps Plan Server instances issue the following command:
+## Troubleshooting
+
+### keycloak-config-cli Job Failure (Error Status)
+
+The keycloak-config-cli Pod shows a status of Error, and the Job fails without applying the Keycloak configuration.
+
+**Possible Cause**
+
+The keycloak-config-cli Job may be starting before the Keycloak server is fully ready, resulting in a connection failure. Kubernetes will only retry the Job up to the number of times defined by backoffLimit. If the retry limit is too low, the Job may fail permanently before Keycloak becomes available. 
+
+**Recommended Action: Increase backoffLimit**
+
+By default, the backoffLimit set to 1. You can increase to 5:
+
+- Option 1: Modify values.yaml
 
   ```bash
-  kubectl scale --replicas=2 statefulset/ibm-devopsplan
+  keycloaksrv:
+    keycloakConfigCli:
+      backoffLimit: 5  # Try 5 retries instead of the default (usually 1)
   ```
 
-## Update OpenSearch and OpenSearch Dashboards Password
-
-The default OpenSearch and OpenSearch Dashboards Password is set to **admin**. You can update the default password using the following steps:
-
-  1. Create a new password hash for OpenSearch.
+- Option 2: Use --set flags with Helm
 
   ```bash
-    $ docker run -d --name devopsplan-opensearch --env "discovery.type=single-node" icr.io/cp/devops-plan/devopsplan-opensearch:3.0.3
-    $ docker exec -it  devopsplan-opensearch /bin/bash -c /usr/share/opensearch/plugins/opensearch-security/tools/hash.sh
+  --set keycloaksrv.keycloakConfigCli.backoffLimit=5
   ```
 
-  - You see prompt for the new password. Enter the new password. You should see the password hash is generated.
-    Example:
-
-  ```bash
-    [Password:] myNewPassword
-    $2y$12$3UScOsDk1bCjHk4Jd/p9vuCzgVqrU05h1w4F5VFZCCFhgoF1/vwvO
-  ```
-
-  - You can stop and remove the devopsplan-opensearch container after you generated password hash.
-
-  ```bash
-    $ docker stop devopsplan-opensearch
-    $ docker rm devopsplan-opensearch
-  ```
-
-  2. Create a file called *openseach-user.yaml*. Set the new OpenSearch Dashboards password and new OpenSearch password hash.
-
-    ```yaml
-    dashboards:
-      password: [NEW_OPENSEARCH_DASHBOARDS_PASSWORD]
-    opensearch:
-      hash: [NEW_OPENSEARCH_HASH_PASSWORD]
-    ```
-
-  5. add *-f openseach-user.yaml* to *helm upgrade --install* command.
-
-## Settings Feedback Email Address
-To set email address for the feedback, the admin requires to set feedback.to.emailaddress and feedback.from.emailaddress during the Helm install/upgrade.
-  ```bash
-  feedback:
-    toEmailaddress: [TO_EMAIL_ADDRESS]
-    fromEmailaddress: [FROM_EMAIL_ADDRESS]
-  ```
-
-## Rolling upgrade release
-
-You can upgrade DevOps Plan to the newest release using the helm upgrade command.
-
-Before you perform the upgrade, you must first do the following:
-  - Use Helm to install the DevOps Plan chart as described in section **Installing the Chart**.
-
-Rolling upgrades utilize the helm upgrade command. For more information, see Helm [Upgrade](https://helm.sh/docs/helm/helm_upgrade/) in the Helm documentation.
-
-**Case 1: Upgrade the Chart**
-
-  ```bash
-  helm upgrade ibm-devopsplan ibm-helm/ibm-devopsplan-prod \
-    --namespace [namespace] \
-    --set global.imagePullSecret=ibm-entitlement-key \
-    --set global.domain=[openshift-cluster-dns-name]
-
-  ```
-
-**Case 2: Upgrade the Docker image**
-
-  ```bash
-  helm upgrade ibm-devopsplan ibm-helm/ibm-devopsplan-prod \
-    --namespace [namespace] \
-    --set global.imagePullSecret=ibm-entitlement-key \
-    --set global.domain=[openshift-cluster-dns-name]
-    --set image.tag=[image-tag]
-  ```
-
- **Case 3: Upgrade the the Chart from DevOps Plan 3.0.2 to 3.0.3**
-
-The DevOps Plan 3.0.3 Helm Chart upgraded the version of the OpenSearch and OpenSearh Dashboard from 2.11 to 2.18. The version 2.18 does not support default **admin** password. OpenSearch 2.18 admin password requires a minimum of eight characters with  at least one uppercase, one lowercase, one digit, and one special character. Therefore, you need to update the default **admin** password with the new required password during the install of the DevOps Plan 3.0.2 and follow the steps below to upgrade DevOps Plan 3.0.2 to 3.0.3.
-
-1. Update opensearch admin password and generate hashed for opensearch password in version 2.11
-
-  ```bash
-  NEW_ADMIN_PASSWORD=[opensearch-new-admin-password]
-  docker run -d --name devopsplan-opensearch --env "discovery.type=single-node" opensearchproject/opensearch:2.11.0
-  docker exec -it  devopsplan-opensearch /bin/bash -c /usr/share/opensearch/plugins/opensearch-security/tools/hash.sh -p ${NEW_ADMIN_PASSWORD}
-  docker stop devopsplan-opensearch
-  docker rm devopsplan-opensearch
-  ```
-  you get the opensearch hash value for the new opensearch admin password.
-
-2. Create a new-opensearch-password-302.yaml file and set the new password and hash value
-
-  ```bash
-  dashboards:
-    password: "[opensearch-new-admin-password]"
-  opensearch:
-    hash: "[opensearch-hash-value]"
-  ```
-
-3. Install DevOps Plan 3.0.2
-
-  ```bash
-  helm upgrade --install ibm-devopsplan ibm-helm/ibm-devopsplan-prod \
-    -f new-opensearch-password-302.yaml \
-    --version 3.0.2 \
-    --namespace devopsplan \
-    --set global.imagePullSecret=ibm-entitlement-key \
-    --set global.domain=[openshift-cluster-dns-name]
-  ```
-
-4. Create a new-opensearch-password-303.yaml file and set the new password and hash value
-
-  ```bash
-  opensearch: &opensearch
-    password: "[opensearch-new-admin-password]"
-    hash: "[opensearch-hash-value]"
-  data-prepper:
-    opensearch: *opensearch
-  ```
-
-5. Upgrade to DevOps Plan 3.0.3
-
-  ```bash
-  helm upgrade --install ibm-devopsplan ibm-helm/ibm-devopsplan-prod \
-    -f new-opensearch-password-303.yaml \
-    --namespace devopsplan \
-    --set global.imagePullSecret=ibm-entitlement-key \
-    --set global.domain=[openshift-cluster-dns-name]
-  ```
-
-- If you already installed with the internal PostgreSQL database, and you plan to upgrade with the latest release version without deleting the PostgreSQL PVC, then you need to get the existing password before uninstall/upgrade and set it during *helm upgrade --install*. Get the password for internal PostgreSQL database by running this command when namespace is set to *devopsplan*:
-  ```bash
-  export POSTGRES_PASSWORD=$(kubectl get secret --namespace devopsplan ibm-devopsplan-postgresql -o jsonpath="{.data.tenant-datastore-password}" | base64 -d)
-  ```
-  Set the password during the helm upgrade --install:
-  ```bash
-  --set postgresql.existingPassword=$POSTGRES_PASSWORD
-  ```
-
-- If you already installed with the internal Keycloak, and you plan to upgrade with the latest release version without deleting the Keycloak PVC, then you need to get the existing password before uninstall/upgrade and set it during *helm upgrade --install*. Get the password for internal Keycloak by running this command when namespace is set to *devopsplan*:
-  ```bash
-  export KEYCLOAK_PASSWORD=$(kubectl get secret --namespace devopsplan ibm-devopsplan-keycloak -o jsonpath="{.data.keycloak-password}" | base64 -d)
-  ```
-  Set the password during the helm upgrade --install:
-  ```bash
-  --set keycloak.existingPassword=$KEYCLOAK_PASSWORD
-  ```
-
-## Rolling rollback release
-You can rollback to the previous release using *helm rollback* command.
-
-**Before you begin**
-
-1. Use Helm to install the chart as described in section **Installing the Chart**.
-2. Use Helm to upgrade the chart to new release as described in section **Rolling upgrade release**.
-
-**Procedure:**
-1. Run *helm history* command to see revision numbers of your helm chart release. You should have min two revision numbers. revision 1 for install and revision 2 for the upgrade that you execute in **Before you begin** section. Example below shows you have a helm chart release name *ibm-devopsplan1* with revision 1 installed the helm chart *ibm-devopsplan1-3.0.2* for release 3.0.3 and revision 2 upgraded the helm chart *ibm-devopsplan2-3.0.3* to release 3.0.3.
-
-  ```bash
-  $ helm history ibm-devopsplan1 --namespace dev
-  REVISION        UPDATED                         STATUS          CHART           APP VERSION     DESCRIPTION
-  1               Thu Nov 20 21:58:13 2024        superseded      ibm-devopsplan1-3.0.2          Install complete
-  2               Thu Nov 20 22:13:56 2024        deployed        ibm-devopsplan2-3.0.3          Upgrade complete
-  ```
-
-2. Rollback helm chart using *helm rollback* command. Example below will rollback helm chart release *ibm-devopsplan1* from revision 2 to revision 1.
-
-  ```bash
-  $ helm rollback ibm-devopsplan --namespace dev
-  Rollback was a success! Happy Helming!
-  ```
-
-3. Run *helm history RELEASE* command again to see the new revision 3 has been created after rollback, and it rollbacked to revision 1 the helm chart release *ibm-devopsplan1*.
-
-  ```bash
-  $ helm history ibm-devopsplan1 --namespace dev
-  REVISION        UPDATED                         STATUS          CHART           APP VERSION     DESCRIPTION
-  1               Thu Nov 20 21:58:13 2024        superseded      ibm-devopsplan1-3.0.2          Install complete
-  2               Thu Nov 20 22:13:56 2024        deployed        ibm-devopsplan2-3.0.3          Upgrade complete
-  3               Thu Nov 20 22:30:32 2024        deployed        ibm-devopsplan1-3.0.2          Rollback to 1
-  ```
- 
-  **Note**: When you rollback from helm chart release 3.0.3 to 3.0.2, the OpenSearch version 2.18 indexes data saved in the OpenSearch Persistence volume and it is not compatible with OpenSearch version 2.11 which is running on DevOps Plan release 3.0.2. You need to delete all data from the OpenSearch Persistence volume /node folder before running the helm rollback command. 
- 
- ## **Additional Information**
+## **Additional Information**
 
 <details><summary>Downloads and Useful Links</summary>
 <p>
 
-- [DevOps Plan](https://ibm.com/docs/en/devops-plan/3.0.3)
-- [Getting started with DevOps Plan Helm Chart](https://www.ibm.com/docs/en/devops-plan/3.0.3?topic=plan-getting-started-devops-helm-chart-openshift)
+- [DevOps Plan](https://ibm.com/docs/en/devops-plan/3.0.4)
+- [Getting started with DevOps Plan Helm Chart](https://www.ibm.com/docs/en/devops-plan/3.0.4?topic=plan-getting-started-devops-helm-chart-openshift)
 
 </p>
 </details>
