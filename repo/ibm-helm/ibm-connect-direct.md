@@ -106,4 +106,4 @@ Please refer to [DIME and DARE Security Considerations](https://www.ibm.com/docs
 
 ## Limitations
 
-Please refer to [Limitations](https://www.ibm.com/docs/en/connect-direct/6.4.0?topic=installing-connectdirect-unix-using-certified-container-software#concept_rd1_m5m_lkb)
+Please refer to [Limitations](https://www.ibm.com/docs/en/connect-direct/6.4.0?topic=installing-connectdirect-unix-using-sterling-connectdirect-unix-container#concept_rd1_m5m_lkb__title__1)
