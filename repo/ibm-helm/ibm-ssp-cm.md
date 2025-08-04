@@ -1,9 +1,9 @@
-# IBM Sterling Secure Proxy Configuration Manager v6.2.0.1
+# IBM Sterling Secure Proxy Configuration Manager v6.2.1.0
 
 ## Introduction
   
 Configuration Manager (Sterling Secure Proxy CM)—Configuration Manager is installed in the trusted zone. Use this tool to configure your environment.
-When you save a configuration definition (Sterling Secure Proxy configuration store) at CM, it is pushed to an engine, using an SSL session. Configuration files are encrypted and stored on the computer where CM is installed. To find out more, see the Knowledge Center for [IBM Sterling Secure Proxy CM](https://www.ibm.com/docs/en/secure-proxy/6.2.0).
+When you save a configuration definition (Sterling Secure Proxy configuration store) at CM, it is pushed to an engine, using an SSL session. Configuration files are encrypted and stored on the computer where CM is installed. To find out more, see the Knowledge Center for [IBM Sterling Secure Proxy CM](https://www.ibm.com/docs/en/secure-proxy/6.2.1).
 
 
 ## Chart Details
@@ -19,7 +19,7 @@ This chart deploys IBM Sterling Secure Proxy CM on a container management platfo
 
 ## Prerequisites
 
-Please refer to [Planning](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=software-planning) and [Pre-installation tasks](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=installing-pre-installation-tasks) section in the online Knowledge Center documentation. 
+Please refer to [Planning](https://www.ibm.com/docs/en/secure-proxy/6.2.1?topic=software-planning) and [Pre-installation tasks](https://www.ibm.com/docs/en/secure-proxy/6.2.1?topic=installing-pre-installation-tasks) section in the online Knowledge Center documentation. 
 
 ### SecurityContextConstraints Requirements
 
@@ -92,7 +92,7 @@ volumes:
 
 ## Resources Required
 
-Please refer [Verification of system requirements](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=planning-verification-system-requirements) section in the online Knowledge Center documentation.
+Please refer [Verification of system requirements](https://www.ibm.com/docs/en/secure-proxy/6.2.1?topic=planning-verification-system-requirements) section in the online Knowledge Center documentation.
 
 ## Agreement to IBM SSP License
 
@@ -101,27 +101,27 @@ You must read the IBM Sterling Secure Proxy License agreement terms before insta
 
 ## Installing the Chart
 
-Please refer [Installing](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=installing-sterling-secure-proxy-using-helm-chart) section in the online Knowledge Center documentation.
+Please refer [Installing](https://www.ibm.com/docs/en/secure-proxy/6.2.1?topic=installing-sterling-secure-proxy-using-helm-chart) section in the online Knowledge Center documentation.
 
 ## Configuration
 
-Please refer the [Configuring - Understanding values.yaml](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=tasks-configuring-understanding-valuesyaml) section in the online Knowledge Center documentation.
+Please refer the [Configuring - Understanding values.yaml](https://www.ibm.com/docs/en/secure-proxy/6.2.1?topic=tasks-configuring-understanding-valuesyaml) section in the online Knowledge Center documentation.
 
 ## Verifying the Chart
 
-Please refer the [Validating the Installation](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
+Please refer the [Validating the Installation](https://www.ibm.com/docs/en/secure-proxy/6.2.1?topic=installing-validating-installation) section in the online Knowledge Center documentation.
 
 ## Upgrading the Chart
 
-Please refer the [Upgrade - Upgrading a Release](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=uninstall-upgrading-release) section in the online Knowledge Center documentation.
+Please refer the [Upgrade - Upgrading a Release](https://www.ibm.com/docs/en/secure-proxy/6.2.1?topic=uninstall-upgrading-release) section in the online Knowledge Center documentation.
 
 ## Rollback the Chart
 
-Please refer the [Rollback - Recovering a Failure](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=uninstall-rollback-recovering-failure) section in the online Knowledge Center documentation.
+Please refer the [Rollback - Recovering a Failure](https://www.ibm.com/docs/en/secure-proxy/6.2.1?topic=uninstall-rollback-recovering-failure) section in the online Knowledge Center documentation.
 
 ## Uninstalling the Chart
 
-Please refer the [Uninstall – Uninstalling a Release](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=uninstall-uninstalling-release) section in the online Knowledge Center documentation.
+Please refer the [Uninstall – Uninstalling a Release](https://www.ibm.com/docs/en/secure-proxy/6.2.1?topic=uninstall-uninstalling-release) section in the online Knowledge Center documentation.
 
 ## Backup & Restore
 
@@ -149,11 +149,11 @@ Restoring the data in new deployment, it can be achieved by following steps
 
 ## Exposing Services
 
-Please refer to [Exposed Services](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
+Please refer to [Exposed Services](https://www.ibm.com/docs/en/secure-proxy/6.2.1?topic=installing-validating-installation) section in the online Knowledge Center documentation.
 
 ## DIME and DARE
 
-Please refer to [DIME and DARE Security Considerations](https://www.ibm.com/docs/en/secure-proxy/6.2.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
+Please refer to [DIME and DARE Security Considerations](https://www.ibm.com/docs/en/secure-proxy/6.2.1?topic=installing-validating-installation) section in the online Knowledge Center documentation.
 
 ## Limitations
 
