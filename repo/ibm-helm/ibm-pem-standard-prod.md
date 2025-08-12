@@ -27,37 +27,111 @@ This chart deploys IBM Partner Engagement Manager Standard cluster on a containe
 
     Mount the archive persistent volume to PEM server
 
-10. Create secrets with requisite confidential credentials for passphrase.txt, Keystore.jks dbpasswords and keystore passwords. You can use the supplied configuration files under pak_extensions/pre-install/secret directory.
+10. When `useDynamicProvisioning: true` and `existingClaim:` i.e. empty, then the PVCs will get created automatically. By default it will be treated as `true` if kept empty.
 
-11. Create a secret from the provided syntax file included in helm charts /ibm-cloudpak-extensons/preinstall/secrets.yaml
+11. When `useDynamicProvisioning: false` and `existingClaim: "your-manually-created-pvc-name"`, then Helm will bind to your pre-created PVCs. 
+
+> **Note:** Dynamic PVCs are only created during the install phase, as the required pre-hook runs only at that stage.  
+> - To switch from **dynamic** PVC mode to **manual** PVC mode, a simple `helm upgrade` will work.
+> - To switch from **manual** PVC mode to **dynamic** PVC mode, you must perform a fresh `helm install` or deployment — a `helm upgrade` will not work.  
+
+  #### Steps to create a manual PVCs - 
+  ##### Prepare the NFS Server
+  i. On your NFS server VM, create the directory to be used by the PersistentVolume (PV).
+
+  ii. Ensure NFS is installed and running.
+
+  iii. Add the export path to `/etc/exports`, for example:
+  ```
+  /srv/data/logs    *(rw,sync,no_root_squash)
+  ```
+  iv. Reload exports:
+  ```
+  exportfs -a
+  ```
+  
+  ##### Create PersistentVolume (PV)
+  i. Save the following template as `<your-pv-name>` (e.g., `pv-logs.yaml`):
+  ```yaml
+  apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+      name: <your-pv-name>
+      labels:
+      intent: <your-pv-name>
+  spec:
+      storageClassName: <storage-class>
+      capacity:
+      storage: <size>
+      accessModes:
+      - ReadWriteMany
+      nfs:
+      server: <nfs-server-ip>
+      path: <exported-path>
+  ``` 
+  
+  ii. Apply the PV manifest:
+  ```bash
+  oc apply -f <your-pv-name>.yaml
+  ```
+  ##### Create PersistentVolumeClaim (PVC)
+  i. In the OpenShift console, go to Storage → PersistentVolumeClaims.
+
+  ii. Click Create PVC, switch to YAML view, and edit the yaml and click create. Template -
+  ```yaml
+  apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: <your-pvc-name>
+    namespace: <target-namespace>
+  spec:
+    accessModes:
+      - ReadWriteMany
+    volumeMode: Filesystem
+    storageClassName: <storage-class>
+    resources:
+      requests:
+        storage: <size>
+    selector:
+      matchLabels:
+        intent: <your-pv-name>
+  ```
+  iii. Command to check PVC status - 
+  ```
+    oc get pvc
+  ```
+
+12. Create secrets with requisite confidential credentials for passphrase.txt, Keystore.jks dbpasswords and keystore passwords. You can use the supplied configuration files under pak_extensions/pre-install/secret directory.
+
+13. Create a secret from the provided syntax file included in helm charts /ibm-cloudpak-extensons/preinstall/secrets.yaml
 
     ```
       oc apply -f app-secrets.yaml
       ```
 
-12. Create a secret to pull the image from a private registry or repository using following command:
+14. Create a secret to pull the image from a private registry or repository using following command:
     ```
     oc create secret docker-registry <name of secret> --docker-server=<your-registry-server> --docker-username=<your-username> --docker-password=<your-password> --docker-email=<your-email>
        ```
 
-13. Create secrets with confidential certificates (Keystore files for both Partner Engagement Manager and Community Manger) required by Database, MQ for SSL connectivity using below command:
+15. Create secrets with confidential certificates (Keystore files for both Partner Engagement Manager and Community Manger) required by Database, MQ for SSL connectivity using below command:
 
      Note: Name of the secret and the keystore filename must be same for server keystore secret
     ```
      oc create secret generic <secret-name> --from-file=/path/to/<Keystore.jks>
 	   ```
-14. Create configmap with localtime file present in local machine using below command
+16. Create configmap with localtime file present in local machine using below command
     ```
      oc create configmap <configmap-name> --from-file=/etc/localtime
 	   ```
 
-15. When installing the chart on a new database which does not have IBM PEM standard Software schema tables and metadata,
+17. When installing the chart on a new database which does not have IBM PEM standard Software schema tables and metadata,
 * ensure that `dbsetup.upgrade` parameter is set to `false` and `dbsetup.enabled` parameter is set to `true`. This will create the required database tables and metadata in the database before installing the chart.
 
-16. When installing the chart on a database with new image upgrade,
+18. When installing the chart on a database with new image upgrade,
 * ensure that `dbsetup.upgrade` parameter is set to `true`.
 
-17. Create service account and apply security context contraints to created service account.
+19. Create service account and apply security context contraints to created service account.
 
     ```
      oc create sa <service account name>
@@ -67,8 +141,8 @@ This chart deploys IBM Partner Engagement Manager Standard cluster on a containe
      oc adm policy add-scc-to-user ibm-pem-scc system:serviceaccount:<namespace>:<service account name>
 	   ```
     Note: Avoid installing multiple charts on same namespace
-18. For installing Community Manager, the JWT_SECRET_KEY must be defined in a Kubernetes/OpenShift Secret. If this value is not available, the Helm install or upgrade will fail. The name of the Secret containing the JWT_SECRET_KEY must be specified in the values.yaml file under communitymanager.prod.setupfile.jwt.secretkey or communitymanager.nonprod.setupfile.jwt.secretkey, depending on the environment.
-19. For installing Community Manager with SAML authentication enabled, the SAML_JWT_SECRET_KEY must also be defined in a Kubernetes/OpenShift Secret. The Helm install or upgrade will fail if this value is not provided. The name of the Secret containing the SAML_JWT_SECRET_KEY must be specified in the values.yaml file under communitymanager.prod.setupfile.saml.jwt.secretkey or communitymanager.nonprod.setupfile.saml.jwt.secretkey, depending on the environment.
+20. For installing Community Manager, the JWT_SECRET_KEY must be defined in a Kubernetes/OpenShift Secret. If this value is not available, the Helm install or upgrade will fail. The name of the Secret containing the JWT_SECRET_KEY must be specified in the values.yaml file under communitymanager.prod.setupfile.jwt.secretkey or communitymanager.nonprod.setupfile.jwt.secretkey, depending on the environment.
+21. For installing Community Manager with SAML authentication enabled, the SAML_JWT_SECRET_KEY must also be defined in a Kubernetes/OpenShift Secret. The Helm install or upgrade will fail if this value is not provided. The name of the Secret containing the SAML_JWT_SECRET_KEY must be specified in the values.yaml file under communitymanager.prod.setupfile.saml.jwt.secretkey or communitymanager.nonprod.setupfile.saml.jwt.secretkey, depending on the environment.
 
 ### PodSecurityPolicy Requirements
 
