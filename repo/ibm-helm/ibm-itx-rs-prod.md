@@ -1,6 +1,6 @@
 # Readme
 
-Helm Chart for IBM&reg; Sterling Transformation Extender for Red Hat OpenShift 11.0.1
+Helm Chart for IBM&reg; Sterling Transformation Extender for Red Hat OpenShift 11.0.2
 <br>&copy; Copyright IBM Corporation 2024, 2025 All rights reserved.
 <br>Program Number : 5724-Q23 
 
@@ -10,13 +10,13 @@ IBM&reg; Sterling Transformation Extender (ITX) provides a unified solution for 
 
 IBM&reg; Sterling Transformation Extender for Red Hat OpenShift (RHOS) is a containerized distribution of ITX. It enables maps and flows to be executed via REST API endpoints. Another name for IBM Sterling Transformation Extender for Red Hat OpenShift is ITX Runtime Server (ITX RS). Maps are designed using ITX Design Studio and flows are created using ITX Design Server. Both ITX Design Studio and Design Server are components that are separate from ITX RS. They must be installed and run locally on a Windows host. When you obtain access to the ITX RS component, you will be provided with instructions on how to obtain the ITX Design Studio and Design Server components as well.
 
-For additional high-level overview of the ITX Runtime Server product, refer to this [support page](https://www.ibm.com/support/pages/node/7166685).
+For additional high-level overview of the ITX Runtime Server product, refer to this [support page](https://www.ibm.com/support/pages/node/7241930).
 
 # Chart Details
 
 ## Prerequisites
 
-This distribution is tested on Red Hat OpenShift 4.14. The OCP project must have access to "redis" to run maps in fenced mode or asynchronously. This deployment has been tested with redis-operator.v0.8.0, which is provisioned from OpenShift's OperatorHub. Also, the Bitnami chart version 19.1.5 of Redis has been used for testing.     
+This distribution is tested on Red Hat OpenShift 4.18. The OCP project must have access to "redis" to run maps in fenced mode or asynchronously. This deployment has been tested with redis-operator 7.22.0, which is provisioned from OpenShift's OperatorHub. Also, the Bitnami chart version 19.1.5 of Redis has been used for testing.     
 
 Installing a PodDisruptionBudget
 
@@ -39,7 +39,7 @@ spec:
 
 ### SecurityContextConstraints Requirements
 
-This chart requires a specific type of `SecurityContextConstraints` to be defined and bound to the user or service account of the installation. The predefined `SecurityContextConstraints`, [`nonroot-v2`](https://docs.openshift.com/container-platform/4.14/authentication/managing-security-context-constraints.html), has been verified for this chart.  If your user or service account is bound to this `SecurityContextConstraints` resource, you can proceed to install the chart.
+This chart requires a specific type of `SecurityContextConstraints` to be defined and bound to the user or service account of the installation. The predefined `SecurityContextConstraints`, [`nonroot-v2`](https://docs.openshift.com/container-platform/4.18/authentication/managing-security-context-constraints.html), has been verified for this chart.  If your user or service account is bound to this `SecurityContextConstraints` resource, you can proceed to install the chart.
 
 Below is a `SecurityContextConstraints` (SCC) which can be used for finer control of the permissions and capabilities needed to install this chart. It is modeled after the predefined `nonroot-v2` SCC but with the added restriction of only permitting user and group ID, 1001, which is required by ITX Runtime Server.
 
@@ -71,8 +71,8 @@ seccompProfiles:
 - runtime/default
 runAsUser:
   type: MustRunAsRange
-  uidRangeMin: 1000
-  uidRangeMax: 65535
+  uidRangeMin: 1001
+  uidRangeMax: 1001
 fsGroup:
   type: MustRunAs
   ranges:
@@ -130,14 +130,15 @@ Limitations of ITX Runtime Server have been mentioned in the CASE README for IBM
 
 ### Shared parameters
 
-| Parameter            | Description                                                                         | Default    |
-| -------------------- | ----------------------------------------------------------------------------------- | ---------- |
-| `displayName`        | Display name for ITX RS deployment                       | `"IBM Sterling Transformation Extender for Red Hat OpenShift"`  |
-| `nameOverride`       | Name override for the install                            | `""`       |
-| `fullnameOverride`   | Full name override for the install                       | `""`       |
-| `itxImageRegistry`   | Container image registry and namespace                   | `"cp.icr.io/cp"` |
-| `itxImagePullSecret` | Container registry pull secret                           | `"ibm-encryption-key"`       |
-|                      |                                                          |            |
+| Parameter             | Description                                                 | Default                                                        |
+| --------------------- | ----------------------------------------------------------- | -------------------------------------------------------------- |
+| `displayName`         | Display name for ITX RS deployment                          | `"IBM Sterling Transformation Extender for Red Hat OpenShift"` |
+| `nameOverride`        | Name override for the install                               | `""`                                                           |
+| `fullnameOverride`    | Full name override for the install                          | `""`                                                           |
+| `itxImageRegistry`    | Container image registry and namespace                      | `"cp.icr.io/cp"`                                               |
+| `itxImagePullSecret`  | Container registry pull secret                              | `"ibm-encryption-key"`                                         |
+| `shutdownTimeSeconds` | Grace period for map/flow completion before ITX RS shutdown | `0`                                                            |
+|                       |                                                             |                                                                |
 
 ### REST V1-based deployment parameters
 
@@ -197,8 +198,8 @@ Limitations of ITX Runtime Server have been mentioned in the CASE README for IBM
 | ---------------------------------------------- | --------------------------------------------------------------------- | ----------------------- |
 | `rest.deploy`                                  | Deploy **rest** component                    | `false`                     |
 | `rest.image.repository`                        | Container image registry & repository        | `"cp.icr.io/cp/ibm-itx-rs"` |
-| `rest.image.tag`                               | Container image tag                          | `"11.0.1.1.20250425"`       |
-| `rest.image.digest`                            | Container image digest                       | `"sha256:85d62908c20f427cb01c4d3a8df61f09108c36d764c42e1db6fa7ea4d3db977d"`    |
+| `rest.image.tag`                               | Container image tag                          | `"11.0.2.0.20250829"`       |
+| `rest.image.digest`                            | Container image digest                       | `"sha256:35894f9753dab895e028ea3201a06f7d327433860f7461ca5dd2e96115ad510f"`    |
 | `rest.image.pullPolicy`                        | Container image pull policy                              | `"IfNotPresent"`          |
 | `rest.image.pullPolicyOverride`                | Container image pull policy override                     | `false`          |
 | `rest.mapFileExtension`                        | Compiled map file extension                              | `"mmc"`                   |
@@ -512,13 +513,13 @@ PVNAME=`(kubectl get -o template pvc rest-data --template={{.spec.volumeName}})`
 Ensure that the value was stored successfully:
 
 ```bash
-echo $PVNAME
+echo 
 ```
 
 To confirm that the reclaim policy for the PV was set to `Delete` issue the command:
 
 ```
-kubectl get pv $PVNAME
+kubectl get pv 
 ```
 
 Check the value under the `RECLAIM POLICY` column and confirm that it is set to `Delete`.
@@ -528,10 +529,10 @@ If you were to delete the `rest-data` PVC at this time, the PV would be automati
 Change the reclaim policy for the PV from `Delete` to `Retain` by running the command:
 
 ```bash
-kubectl patch pv $PVNAME -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+kubectl patch pv  -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
 ```
 
-Re-issue the `kubectl get pv $PVNAME` command and confirm that the `RECLAIM POLICY` for the PV was changed to `Retain`.
+Re-issue the `kubectl get pv ` command and confirm that the `RECLAIM POLICY` for the PV was changed to `Retain`.
 
 At this point you will have a PVC that you can reference in the new ITX RS installation.  For example, the command line option `--set rest.persistence.data.existingClaim="rest-data"` and `--set restV1.persistence.data.existingClaim="rest-data"` can be used to ensure that the ITX RS v1 and v2 APIs use the same PVC.  
 
@@ -541,15 +542,15 @@ As an extra check to make sure the PV will remain in place after deleting the bo
 kubectl delete pvc rest-data
 ```
 
-Re-issue the `kubectl get pv $PVNAME` command and notice that the PV is still present, that its `STATUS` column shows `Released`, and that its `CLAIM` column still indicates that the PV is claimed by the `rest-data` PVC.
+Re-issue the `kubectl get pv ` command and notice that the PV is still present, that its `STATUS` column shows `Released`, and that its `CLAIM` column still indicates that the PV is claimed by the `rest-data` PVC.
 
 Before you can claim this PV again, you need to remove the claim reference from it, which you can do by running the command: 
 
 ```bash
-kubectl patch pv $PVNAME --type json -p '[{"op": "remove", "path": "/spec/claimRef"}]'
+kubectl patch pv  --type json -p '[{"op": "remove", "path": "/spec/claimRef"}]'
 ```
 
-You can now create `rest-data` PVC again and bind it directly to the $PVNAME PV:
+You can now create `rest-data` PVC again and bind it directly to the  PV:
 
 ```bash
 cat <<EOF | kubectl apply -f -
@@ -563,13 +564,13 @@ spec:
   resources:
     requests:
       storage: 10Gi
-  volumeName: $PVNAME
+  volumeName: 
 EOF
 ```
 
-Re-issue the command `kubectl get pvc rest-data` to ensure the PVC is created and is bound to the `$PVNAME` PV.
+Re-issue the command `kubectl get pvc rest-data` to ensure the PVC is created and is bound to the `` PV.
 
-Notice that the `volumeName: $PVNAME` element was included in the `spec` section in the previous command to require binding the PVC to the specific PV (referenced by the `PVNAME` shell variable). If a PV was available all along with `Retain` reclaim policy set on it, such as for example if it was previously provisioned by the cluster administrator, you would be able to run the command like the one above to create a PVC and bind it to that PV without having to first go through the steps for dynamically provisioning a PV.
+Notice that the `volumeName: ` element was included in the `spec` section in the previous command to require binding the PVC to the specific PV (referenced by the `PVNAME` shell variable). If a PV was available all along with `Retain` reclaim policy set on it, such as for example if it was previously provisioned by the cluster administrator, you would be able to run the command like the one above to create a PVC and bind it to that PV without having to first go through the steps for dynamically provisioning a PV.
 
 ## Referencing existing PVCs
 
@@ -611,7 +612,7 @@ The default, generic names given to the dynamically provisioned PVs in ITX RS wi
 
 ## Upgrade and Rollback considerations
 
-ITX RS 3.0.1 Helm chart has the major version `3` (`3.x.y`). To move between ITX RS installations with different minor chart versions, `helm upgrade` and `helm rollback` commands can be used.
+ITX RS 3.1.0 Helm chart has the major version `3` (`3.x.y`). To move between ITX RS installations with different minor chart versions, `helm upgrade` and `helm rollback` commands can be used.
 
 Upgrading and rolling back ITX by default preserves the ITX RS PVCs and PVs and their contents. It is however recommended to back up ITX files before performing upgrade or rollback operations. If direct access to the storage provisioned for ITX is available, you can choose to copy the files to an alternative location so that they can be restored later if necessary.
 
@@ -641,6 +642,6 @@ As a reference, this table lists all ITX RS product versions and their correspon
 
 | ITX product version    | Helm chart version |
 | ---------------------- | ------------------ |
-| `11.0.1`               | `3.0.*`            |
+| `11.0.2`               | `3.1.*`            |
 
 ---
