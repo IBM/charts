@@ -1,4 +1,4 @@
-# IBM Sterling B2B Integrator Enterprise Edition v6.2.1.1
+# IBM Sterling B2B Integrator Enterprise Edition v6.1.2.7_2
 ## Introduction
 
 IBM Sterling B2B Integrator helps companies integrate complex B2B EDI processes with their partner communities. Organizations get a single, flexible B2B platform that supports most communication protocols, helps secure your B2B network and data, and achieves high-availability operations. The offering enables companies to reduce costs by consolidating EDI and non-EDI any-to-any transmissions on a single B2B platform and helps automate B2B processes across enterprises, while providing governance and visibility over those processes.
@@ -39,7 +39,7 @@ Services
   a. For using init container for resources when `resourcesInit.enabled` is `true`, create an init container image bundled with the required external resource artifacts and configure the image details in the `resourcesInit.image` section.
   b. For using persistent volume for resources when `appResourcesPVC.enabled` is `true`, create a persistent volume for application resources with access mode as 'Read Only Many' and place the required external resource artifacts in the mapped volume location.
 
-8. When `appLogsPVC.enabled` is `true`, create a persistent volume for application logs with access mode as 'Read Write Many'.
+8. When `logs.enableAppLogOnConsole` is `false`, create a persistent volume for application logs with access mode as 'Read Write Many'.
 
 9. When `appDocumentsPVC.enabled` is `true`, create a persistent volume for application document storage with access mode as 'Read Write Many'.
 
@@ -144,7 +144,20 @@ Below is an optional custom PSP definition based on the IBM restricted PSP.
       hostNetwork: false
       allowedCapabilities:
       requiredDropCapabilities:
-      - ALL
+      - MKNOD
+      - AUDIT_WRITE
+      - KILL
+      - NET_BIND_SERVICE
+      - NET_RAW
+      - FOWNER
+      - FSETID
+      - SYS_CHROOT
+      - SETFCAP
+      - SETPCAP
+      - CHOWN
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
       allowedHostPaths:
       runAsUser:
         rule: MustRunAsNonRoot
@@ -259,12 +272,25 @@ Below is an optional custom SCC definition based on the IBM restricted SCC.
         max: 4294967294
     readOnlyRootFilesystem: false
     requiredDropCapabilities:
-    - ALL
+    - MKNOD
+    - AUDIT_WRITE
+    - KILL
+    - NET_BIND_SERVICE
+    - NET_RAW
+    - FOWNER
+    - FSETID
+    - SYS_CHROOT
+    - SETFCAP
+    - SETPCAP
+    - CHOWN
+    - SETGID
+    - SETUID
+    - DAC_OVERRIDE
     runAsUser:
       type: MustRunAsRange
     # This can be customized for your host machine
     seLinuxContext:
-      type: MustRunAs
+      type: RunAsAny
     # seLinuxOptions:
     #   level:
     #   user:
@@ -382,7 +408,7 @@ Parameter                                      | Description                    
 `global.license`                               | Accept B2BI/SFG license                                              | `false`
 `global.licenseType`                           | Specify the license edition as per license agreement.                | prod
 `global.image.repository`                      | Repository for B2B docker images                                     | 
-`global.image.tag          `                   | Docker image tag                                                     | `6.2.1.1`
+`global.image.tag          `                   | Docker image tag                                                     | `6.1.2.7_2`
 `global.image.digest          `                | Docker image digest. Takes precedence over tag                       | 
 `global.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `global.image.pullSecret `         			   | Pull secret for repository access                                    | `ibm-entitlement-key`
@@ -395,19 +421,12 @@ Parameter                                      | Description                    
 `arch.s390x`                                   | Specify weight to be used for scheduling for architecture s390x      | `2 - No Preference`
 `serviceAccount.name`                          | Existing service account name                                        | `default`
 `resourcesInit.enabled`                        | Enable resource init containers                                      | false
-`resourcesInit.image.repository`               | Repository for resource init container images                        |
-`resourcesInit.image.tag`                      | Docker image tag                                                     |
-`resourcesInit.image.digest`                   | Docker image digest. Takes precedence over tag                       |
+`resourcesInit.image.repository`               | Repository for resource init container images                        | cp.icr.io/cp/ibm-b2bi/
+`resourcesInit.image.name`                     | Docker image name                                                    | b2bi-resources
+`resourcesInit.image.tag`                      | Docker image tag                                                     | 6.1.2.7_2
+`resourcesInit.image.digest`                   | Docker image digest. Takes precedence over tag                       | sha256:3de967931bf244883fbfd85ec6f366c9aaa7c6977946e6f0049db862fc745189
 `resourcesInit.image.pullPolicy`               | Pull policy for repository                                           | `IfNotPresent`
 `resourcesInit.command`                        | Command to be executed in the resource init container                |
-`customizationInit.enabled`                        | Enable customization init container                                      | false
-`customizationInit.dataSetup.enabled`          | Enable data setup for customization init container                                      | false
-`customizationInit.dataSetup.includeServicePackages`  | Custom service packages to include during data setup for customization init container             | `all`
-`customizationInit.image.repository`               | Repository for customization init container image                        |
-`customizationInit.image.tag`                      | Docker image tag                                                     |
-`customizationInit.image.digest`                   | Docker image digest. Takes precedence over tag                       |
-`customizationInit.image.pullPolicy`               | Pull policy for repository                                           | `IfNotPresent`
-`customizationInit.command`                        | Command to be executed during customization init container startup               |
 `persistence.enabled`                          | Enable storage access to persistent volumes                          | true
 `persistence.useDynamicProvisioning`           | Enable dynamic provisioning of persistent volumes                    | false 
 `appResourcesPVC.enabled`                      | Enable Application resource storage                                  | true 
@@ -417,7 +436,6 @@ Parameter                                      | Description                    
 `appResourcesPVC.accessMode`                   | Resources persistent volume access mode                              | `ReadOnlyMany`
 `appResourcesPVC.size`                         | Resources persistent volume storage size                             | 100 Mi
 `appResourcesPVC.preDefinedResourcePVCName`    | Predefined resources persistent volume name                          | 
-`appLogsPVC.enabled`                           | Enable Application logs storage                                  | true 
 `appLogsPVC.storageClassName`                  | Logs persistent volume storage class name                            | ``
 `appLogsPVC.selector.label`                    | Logs persistent volume selector label                                | `intent`
 `appLogsPVC.selector.value`                    | Logs persistent volume selector value                                | `logs`
@@ -445,13 +463,11 @@ Parameter                                      | Description                    
 `dataSetup.enabled`                            | Enable database setup job execution                                  | true
 `dataSetup.upgrade`                            | Upgrade an older release                                             | false
 `dataSetup.image.repository`                 | DB setup container image repository                                   | 
-`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.2.1.1`
+`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.1.2.7_2`
 `dataSetup.image.digest'                      | Docker image digest. Takes precedence over tag                       |
 `dataSetup.image.pullPolicy`                 | Pull policy for repository                                           | `IfNotPresent`
 `dataSetup.image.pullSecret`         		  | Pull secret for repository access                                    |  `ibm-entitlement-key` 
-`dataSetup.resources`                          | CPU/Memory/Ephemeral Storage resource requests/limits                                |
 `dataSetup.extraLabels`                        | Extra labels                                                         |
-`dataSetup.extraAnnotations`                   | Extra or custom Annotations                                    |
 `env.tz`                                       | Timezone for application runtime                                     | `UTC`
 `env.upgradeCompatibilityVerified`             | Indicate release upgrade compatibility verification done             | `false`
 `env.debugMode`                                | To view debug logs during pod startup                                | `false`
@@ -459,51 +475,6 @@ Parameter                                      | Description                    
 `logs.enableAppLogOnConsole`                   | Enable application logs redirection to pod console                   | `true` 
 `integrations.seasIntegration.isEnabled`       | Enable Seas integration. For more information, please refer to the product documentation           | false
 `integrations.seasIntegration.seasVersion`     | Seas version                                                         | `1.0`
-`integrations.itxIntegration.enabled`          | Enable ITX integration. For more information, please refer to the product documentation            | false
-`integrations.itxIntegration.dataSetup.enabled`| Enable database setup job execution for itx                          | true
-`integrations.itxIntegration.image.repository` | Repository for ITX docker images                                     | 
-`integrations.itxIntegration.image.tag`        | Docker image tag                                                     | 
-`integrations.itxIntegration.image.digest`     | Docker image digest. Takes precedence over tag                       | 
-`integrations.itxIntegration.image.pullPolicy` | Pull policy for repository                                           | `IfNotPresent`
-`integrations.itxIntegration.image.pullSecret` | Pull secret for repository access                                    |
-`integrations.itxIntegration.dataPVC.name`                         | Application data persistent volume claim name                   | `itxdata`
-`integrations.itxIntegration.dataPVC.useDynamicProvisioning`       | Enable dynamic provisioning of persistent volumes               | true 
-`integrations.itxIntegration.dataPVC.storageClassName`             | Data persistent volume storage class name                       | ``
-`integrations.itxIntegration.dataPVC.selector.label`               | Data persistent volume selector label                           | `intent`
-`integrations.itxIntegration.dataPVC.selector.value`               | Data persistent volume selector value                           | `itxdata`
-`integrations.itxIntegration.dataPVC.accessMode`                   | Data persistent volume access mode                              | `ReadWriteMany`
-`integrations.itxIntegration.dataPVC.size`                         | Data persistent volume storage size                             | 100Mi
-`integrations.itxIntegration.dataPVC.preDefinedDataPVCName`        | Predefined data persistent volume name                          | 
-`integrations.itxIntegration.logsPVC.name`                         | Application Logs persistent volume claim name                   | `itxlogs`
-`integrations.itxIntegration.logsPVC.useDynamicProvisioning`       | Enable dynamic provisioning of persistent volumes               | true 
-`integrations.itxIntegration.logsPVC.storageClassName`             | Logs persistent volume storage class name                       | ``
-`integrations.itxIntegration.logsPVC.selector.label`               | Logs persistent volume selector label                           | `intent`
-`integrations.itxIntegration.logsPVC.selector.value`               | Logs persistent volume selector value                           | `itxlogs`
-`integrations.itxIntegration.logsPVC.accessMode`                   | Logs persistent volume access mode                              | `ReadWriteMany`
-`integrations.itxIntegration.logsPVC.size`                         | Logs persistent volume storage size                             | 100Mi
-`integrations.itxIntegration.logsPVC.preDefinedLogsPVCName`        | Predefined Logs persistent volume name                          | 
-`integrations.itxIntegration.log.includeHostInLogNames`            | Include hostname in log file name                               | true
-`integrations.itxIntegration.log.jniLog.level`                     | JNI log level                                                   | `none`
-`integrations.itxIntegration.log.cmgrLog.level`                    | Connections Manager log level                                   | `none`
-`integrations.itxaIntegration.enabled`          | Enable ITXA integration. For more information, please refer to the product documentation            | false
-`integrations.itxaIntegration.dataSetup.enabled`| Enable database setup job execution for itxa                         | true
-`integrations.itxaIntegration.image.repository` | Repository for ITXA docker images                                    | 
-`integrations.itxaIntegration.image.tag`        | Docker image tag                                                     | 
-`integrations.itxaIntegration.image.digest`     | Docker image digest. Takes precedence over tag                       | 
-`integrations.itxaIntegration.image.pullPolicy` | Pull policy for repository                                           | `IfNotPresent`
-`integrations.itxaIntegration.image.pullSecret` | Pull secret for repository access                                    |
-`integrations.itxaIntegration.appSecret`        | Name of DB secret                                                    | 
-`integrations.itxaIntegration.secureDBConnection.enabled`                | TLS for DB connection                                                |  false
-`integrations.itxaIntegration.secureDBConnection.dbservercertsecretname` | Secret for database server certificate                               | 
-`integrations.itxaIntegration.persistence.claims.name`                   | Persistent volume name                                               | 
-`integrations.itxaIntegration.sso.host`                                  | Host name for ITXA UI server                                         | 
-`integrations.itxaIntegration.sso.port`                                  | Port on which ITXA UI server is accessible                           | 
-`integrations.itxaIntegration.sso.ssl.enabled`                           | TLS for ITXA UI server                                               |  true
-`integrations.itxaIntegration.resourcesInit.enabled`                        | Enable resource init container for ITXA                              | true
-`integrations.itxaIntegration.resourcesInit.image.repository`               | Repository for resource init container images                        |
-`integrations.itxaIntegration.resourcesInit.image.tag`                      | Docker image tag                                                     |
-`integrations.itxaIntegration.resourcesInit.image.digest`                   | Docker image digest. Takes precedence over tag                       |
-`integrations.itxaIntegration.resourcesInit.image.pullPolicy`               | Pull policy for repository                                           | `IfNotPresent`
 `setupCfg.basePort`                            | Base/initial port for the application                                | 50000
 `setupCfg.licenseAcceptEnableSfg`              | Consent for accepting license for Sterling File Gateway module       | false
 `setupCfg.licenseAcceptEnableEbics`            | Consent for accepting license for EBICs module                       | false
@@ -511,8 +482,6 @@ Parameter                                      | Description                    
 `setupCfg.licenseAcceptEnableFileOperation`    | Consent for accepting license to enable File Operation               | false
 `setupCfg.systemPassphraseSecret`              | System passphrase secret name                                        | 
 `setupCfg.enableFipsMode`                      | Enable FIPS mode                                                     | false
-`setupCfg.fipsCustomProfileName`               | FIPS custom Profile Name                                             |
-`setupCfg.fipsCustomProfileFileName`           | FIPS custom Profile File Name                                        |
 `setupCfg.nistComplianceMode`                  | NIST 800-131a compliance mode                                        | `off`
 `setupCfg.dbVendor`                            | Database vendor - DB2/Oracle/MSSQL                                   | 
 `setupCfg.dbHost`                              | Database host                                                        | 
@@ -565,7 +534,6 @@ name	                                         |
 version	                                       | 
 `setupCfg.sapSncLibName`                       | SAP SNC library 
 name	                                         | 
-`setupCfg.launchClaServer`                     | Enable to launch CLA server in ASI                                   | false
 `asi.replicaCount`                             | Application server independent(ASI) deployment replica count         | 1
 `asi.env.jvmOptions`                           | JVM options for asi                                                  | 
 `asi.env.extraEnvs`                            | Provide extra environment variables for ASI                          | 
@@ -618,15 +586,15 @@ name	                                         |
 `asi.livenessProbe.initialDelaySeconds`        | Livenessprobe initial delay in seconds                               | 60
 `asi.livenessProbe.timeoutSeconds`             | Livenessprobe timeout in seconds                                     | 30
 `asi.livenessProbe.periodSeconds`              | Livenessprobe interval in seconds                                    | 60
-`asi.readinessProbe.initialDelaySeconds`       | ReadinessProbe initial delay in seconds                              | 30
+`asi.readinessProbe.initialDelaySeconds`       | ReadinessProbe initial delay in seconds                              | 60
 `asi.readinessProbe.timeoutSeconds`            | ReadinessProbe timeout in seconds                                    | 5
 `asi.readinessProbe.periodSeconds`             | ReadinessProbe interval in seconds                                   | 60
 `asi.readinessProbe.command`                   | ReadinessProbe command to be executed                                |
 `asi.readinessProbe.arg`                       | ReadinessProbe command arguments                                     |
-`asi.startupProbe.initialDelaySeconds`         | StartupProbe initial delay in seconds                                | 300
+`asi.startupProbe.initialDelaySeconds`         | StartupProbe initial delay in seconds                                | 120
 `asi.startupProbe.timeoutSeconds`              | StartupProbe timeout in seconds                                      | 30
 `asi.startupProbe.periodSeconds`               | StartupProbe interval in seconds                                     | 60
-`asi.startupProbe.failureThreshold`            | StartupProbe failure threshold                                       | 6
+`asi.startupProbe.failureThreshold`            | StartupProbe failure threshold                                       | 3
 `asi.internalAccess.enableHttps`               | Enable https for internal traffic                                    | true
 `asi.internalAccess.enableHttps.httpsPort`     | Application internal https port                                      | 
 `asi.internalAccess.tlsSecretName`             | Application tls secret name for internal traffic                     |   
@@ -651,7 +619,6 @@ name	                                         |
 `asi.defaultPodDisruptionBudget.enabled`       | Enable default pod disruption budget                                 | false
 `asi.defaultPodDisruptionBudget.minAvailable`  | Minimum available for pod disruption budget                          | 1
 `asi.extraLabels`                              | Extra labels                                                         | 
-`asi.extraAnnotations`                   | Extra or custom Annotations                                    |
 `asi.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`    | k8s PodSpec.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".       | 
 `asi.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`   | k8s PodSpec.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    | 
 `asi.podAffinity.requiredDuringSchedulingIgnoredDuringExecution`     | k8s PodSpec.podAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    | 
@@ -664,14 +631,6 @@ name	                                         |
 `asi.extraConfigMaps`              | Extra configmaps. `mountAsVolume` if `true`, the configmap will be mounted as a volume on `/ibm/resources/<configmap-name>` folder else they will be exposed as environment variables.  | 
 `asi.myFgAccess.myFgPort`          | If myFG is hosted on HTTP Server adapter on ASI server, provide the internal port used while configuring that.  | 
 `asi.myFgAccess.myFgProtocol`      | If myFG is hosted on HTTP Server adapter on ASI server, provide the internal protocol used while configuring that.  | 
-`asi.jmxMonitoring.enabled`     | Enable JMX Monitoring			| false
-`asi.jmxMonitoring.port`     | JMX Service port 			| 
-`asi.jmxMonitoring.authentication.enabled`     | Enable JMX Monitoring Authentication                         | false
-`asi.jmxMonitoring.authentication.secretName`     | Secret name for JMX Monitoring Authentication                         | 
-`asi.jmxMonitoring.ssl.enabled`     | Enable SSL for JMX Monitoring                 | false
-`asi.jmxMonitoring.ssl.clientAuth`     | Enable SSL with client authenticate for JMX Monitoring                 | false
-`asi.javaSecurity.keystoreSecret`     | Secret which contains keystore file and keystore-password for Java                  |
-`asi.javaSecurity.truststoreSecret`     | Secret which contains truststore file and truststore-password for Java                 |
 `asi.hostAliases`                           | Host aliases to be added to pod /etc/hosts  |
 `asi.performanceTuning.allocateMemToBI`     | `true` if memory to be allocated to BI else `false` | false
 `asi.performanceTuning.allocateMemToSAP`    | `true` if memory to be allocated to SAP else `false` | false 
@@ -732,7 +691,6 @@ name	                                         |
 `ac.defaultPodDisruptionBudget.enabled`       | Enable default pod disruption budget                                 | false
 `ac.defaultPodDisruptionBudget.minAvailable`  | Minimum available for pod disruption budget                          | 1
 `ac.extraLabels`                              | Extra labels                                                         | 
-`ac.extraAnnotations`                              | Extra or custom annotations                                                    | 
 `ac.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`    | k8s PodSpec.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".       | 
 `ac.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`   | k8s PodSpec.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    | 
 `ac.podAffinity.requiredDuringSchedulingIgnoredDuringExecution`     | k8s PodSpec.podAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    | 
@@ -795,7 +753,6 @@ name	                                         |
 `api.defaultPodDisruptionBudget.enabled`       | Enable default pod disruption budget                                 | false
 `api.defaultPodDisruptionBudget.minAvailable`  | Minimum available for pod disruption budget                          | 1
 `api.extraLabels`                              | Extra labels                                                         | 
-`api.extraAnnotations`                   | Extra or custom Annotations                                    |
 `api.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`    | k8s PodSpec.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".       | 
 `api.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`   | k8s PodSpec.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    | 
 `api.podAffinity.requiredDuringSchedulingIgnoredDuringExecution`     | k8s PodSpec.podAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    | 
@@ -811,20 +768,19 @@ name	                                         |
 `api.networkPolicies.egress.customPolicies` | Configure custom egress network policies for api pods                   |
 `nameOverride`                                 | Chart resource short name override                                   | 
 `fullnameOverride`                             | Chart resource full name override                                    | 
-`test.image.repository`                        | Repository for docker image used for helm test and cleanup           | 'ibmcom/opencontent-common-utils'
+`test.image.repository`                        | Repository for docker image used for helm test and cleanup           | 'ibmcom'
+`test.image.name          `                    | helm test and cleanup docker image name                              | `opencontent-common-utils`
 `test.image.tag          `                     | helm test and cleanup docker image tag                               | `1.1.68`
 `test.image.digest          `                  | helm test and cleanup docker image digest. Takes precedence over tag |
 `test.image.pullPolicy`                        | Pull policy for helm test image repository                           | `IfNotPresent`
-`test.extraLabels`                            | Extra labels                                                          |
-`test.extraAnnotations`                   | Extra or custom Annotations                                    |
+`test.extraLabels`                            | Extra labels                                                         |
 `purge.enabled`                                | Enable external purge job                                            | 'false'
 `purge.image.repository          `             | External purge docker image repository                               | `purge`
-`purge.image.tag          `                    | External purge image tag                                             | `6.2.1.1`
+`purge.image.tag          `                    | External purge image tag                                             | `6.1.2.7_2`
 `purge.image.digest          `                 | External purge image digest. Takes precedence over tag               |
 `purge.image.pullPolicy`                       | Pull policy for external purge docker image                          | `IfNotPresent`
 `purge.image.pullSecret`                       | Pull secret for repository access                                    | `ibm-entitlement-key`
-'purge.extraLabels'                            | Extra labels                                                         |
-`purge.extraAnnotations`                   | Extra or custom Annotations                                    |
+`purge.extraLabels`                            | Extra labels                                                         |
 `purge.schedule`                               | External purge job creation and execution schedule. Its a Cron format string such as 1 * * * * or 
 @hourly as schedule day/time. Please refer [Kubernetes documentation](https://kubernetes.io/docs/tasks/job/automated-tasks-with-cron-jobs/#schedule)  for further details on Cron string for schedule. Please specify the schedule value in quotes    | 
 `purge.startingDeadlineSeconds`                | Deadline in seconds for starting the job if it misses its scheduled time for any reason | 
@@ -835,68 +791,9 @@ name	                                         |
 `purge.failedJobsHistoryLimit`                 | Specify how many failed external purge jobs should be kept in history      | 1
 `purge.env.jvmOptions`                         | JVM options for purge                                                      | 
 `purge.env.extraEnvs`                          | Provide extra environment variables for Purge Job                          | 
-`purge.internalAccess.enableHttps`               | Enable https for internal traffic                                    | true
-`purge.internalAccess.tlsSecretName`             | Application tls secret name for internal traffic                     |
 `purge.resources`                              | CPU/Memory/Ephemeral Storage resource requests/limits for the external purge job pod         | 1 CPU and 2Gi Memory
-`purge.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`   | k8s PodSpec.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".       | 
-`purge.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`  | k8s PodSpec.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    |
-|`documentService.enabled`                                             | Enable integration with document service                                                              |false     |
-|`documentService.sslEnabled`                                             | Enabling client SSL on the document service                                                              |true     |
-|`documentService.useGrpc`                                             | Using gRPC connection with document service                                                              |true     |
-|`documentService.readBufferSize`                                      | Read buffer size for Get document service                                                             |32768     |
-|`documentService.grpcPoolSize`                                      | Maximum number of pool threads for gRPC connection                                                             |150     |
-|`documentService.keepAliveGrpc`                                      | Keep alive time in seconds for threads in pool for gRPC connection                                                              |300     |
-|`documentService.license`                                             | Document service license agreement                                                                    |false
-|`documentService.replicaCount`                                        | 	Number of replicas for the document service                                                         |1
-|`documentService.image.repository`                                    |  Document service image repository                                                                     |
-|`documentService.image.pullPolicy`                                    |  Document service Image pull policy                                                                    |
-|`documentService.image.tag`                                           |  Document service image tag                                                                            |
-|`documentService.image.pullSecret`                                    | Secret used for pulling from repositories                                                             |
-|`documentService.serviceAccount.name`                                 | User wishes to use own/already created service account                                                 | default
-|`documentService.application.ssl.enabled`                             |  Enabling client SSL on the document service                                                            | true
-|`documentService.application.ssl.tlsSecretName`                       |  Using the TLS secret name for communication between b2bi and the document service                      |
-|`documentService.application.ssl.trustStoreSecretName`               |   Using the Trust store secret name for communication between b2bi and the document service            |
-|`documentService.application.ssl.clientAuth`                        |   The server type of clientAuth for the document service                                                | want
-|`documentService.application.logging.level`                         |   The logging level for the document service                                                            | ERROR
-|`documentService.application.objecstore.name`                       |   The name of the cloud provider                                                                                                      |      |
-|`documentService.application.objecstore.classname`                  |   Specific storage class name                                                                                                      |      |
-|`documentService.application.objecstore.endpoint`                   |   Accessing the Cloud Storage specific endpoint                                                                                                      |      |
-|`documentService.application.objecstore.namespace`                  |   	Namespace as the top-level container for all buckets                                                                                                      |      |
-|`documentService.application.objecstore.region`                     |    Object Storage data centers are located in regions                                                                                                     |      |
-|`documentService.application.objecstore.secretName`                 |   Secret is the object-storage-access-keys name                                                                                                      |      |
-|`documentService.connectionPoolConfig.maxTotalConnections`          |   max Total Connections handle by documentService.                                                                                                                                                   | 250     |
-|`documentService.connectionPoolConfig.maxConnectionsPerRoute`       |   want to use object store type using by documentService.                                                                                                                                                   | 100     |
-|`documentService.connectionPoolConfig.connectTimeout`               |   set time of documentService connectTimeout.                                                                                                                                                   | 10000     |
-|`documentService.connectionPoolConfig.readTimeout`                  |   read Timeout by documentService.                                                                                                                                                   | 60000     |
-|`documentService.connectionPoolConfig.idleTimeout`                  |   idle Timeout for documentService.                                                                                                                                                   | 60000     |
-|`documentService.connectionPoolConfig.idleMonitorThread`            |   idle Monitor Thread for documentService.                                                                                                                                                   | true     |
-|`documentService.connectionPoolConfig.waitTimeout`                  |   wait Time out by documentService.                                                                                                                                                   | 30000     |
-|`documentService.connectionPoolConfig.keepAlive`                    |   keep Alive for documentService Pod.                                                                                                                                                   | 300000     |
-|`documentService.connectionPoolConfig.retryCount`                   |   number of re try documentService                                                                                                                                                   |  2    |
-|`documentService.connectionPoolConfig.disableContentCompression`     |  disable Content compression for documentService                                                                                                                                                    | true     |
-`as4Service.enabled`                               | Enable integration with AS4 microservice                             |false     |
-`as4Service.license`                               | Accept AS4/SFG license                                               | `false`
-`as4Service.licenseType`                           | Specify the license edition as per license agreement.                | non-prod
-`as4Service.image.repository`                      | Repository for AS4 docker images                                     |
-`as4Service.image.tag          `                   | Docker image tag                                                     | `6.2.1.1`
-`as4Service.image.digest          `                | Docker image digest. Takes precedence over tag                       |
-`as4Service.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
-`as4Service.image.pullSecret `                     | Pull secret for repository access                              | 
-`as4Service.dataSetup.enabled`                           | Enable database setup job execution                                  | true
-`as4Service.dbSetup.dbVendor`                            | Database vendor - DB2/Oracle/MSSQL                                   |
-`as4Service.dbSetup.dbHost`                              | Database host                                                        |
-`as4Service.dbSetup.dbPort`                              | Database port                                                        |
-`as4Service.dbSetup.dbDrivers`                           | Database driver jar name                                             |
-`as4Service.dbSetup.dbSecret`                            | Database user secret name                                            |
-`as4Service.mqSetup.mqHost`                              | MQ Server host                                                       |
-`as4Service.mqSetup.mqPort`                              | MQ Server port                                                       |
-`as4Service.mqSetup.mqServerChannel`                     | MQ Server Channel Name                                               |
-`as4Service.mqSetup.mqServerQueueManager`                | MQ Server Queue Manager Name                                         |
-`as4Service.mqSetup.mqSecret`                            | MQ Server user secret Name                                           |
-`as4Service.as4operational.ingress.internal.host`        | Internal Host name for ingress resource                              |
-`as4Service.as4informational.ingress.internal.host`      | Internal Host name for ingress resource                              |
-
-
+`purge.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`    | k8s PodSpec.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".       | 
+`purge.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`   | k8s PodSpec.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity".	    |
 
 ## Upgrading the Chart
 
@@ -949,7 +846,7 @@ To uninstall/delete the `my-release` deployment run the command:
 Since there are certain kubernetes resources created using the `pre-install` hook, helm delete command will try to delete them as a post delete activity. In case it fails to do so, you need to manually delete the following resources created by the chart:
 * ConfigMap - <release name>-b2bi-config
 * PersistentVolumeClaim if persistence is enabled - <release name>-b2bi-resources-pvc
-* PersistentVolumeClaim if persistence is enabled and appLogsPVC is enabled - <release name>-b2bi-logs-pvc
+* PersistentVolumeClaim if persistence is enabled and enableAppLogOnConsole is disabled - <release name>-b2bi-logs-pvc
 
 Note: You may also consider deleting the secrets and peristent volumes created as part of prerequisites, after creating their backups.
 
