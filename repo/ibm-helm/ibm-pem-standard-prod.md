@@ -7,11 +7,11 @@ This chart deploys IBM Partner Engagement Manager Standard cluster on a containe
 
 ## Prerequisites
 
-1. Kubernetes version >= 1.27 and <= 1.30
+1. Kubernetes version >= 1.30 and <= 1.33
 
-2. Red Hat OpenShift Container Platform version >= 4.14
+2. Red Hat OpenShift Container Platform version >= 4.16
 
-3. Helm version >= 3.16.x
+3. Helm version >= 3.18.x
 
 4. Ensure that one of the supported database server (Oracle/DB2/MSSQL) is installed and the database is accessible from inside the cluster.
 
@@ -27,111 +27,37 @@ This chart deploys IBM Partner Engagement Manager Standard cluster on a containe
 
     Mount the archive persistent volume to PEM server
 
-10. When `useDynamicProvisioning: true` and `existingClaim:` i.e. empty, then the PVCs will get created automatically. By default it will be treated as `true` if kept empty.
+10. Create secrets with requisite confidential credentials for passphrase.txt, Keystore.jks dbpasswords and keystore passwords. You can use the supplied configuration files under pak_extensions/pre-install/secret directory.
 
-11. When `useDynamicProvisioning: false` and `existingClaim: "your-manually-created-pvc-name"`, then Helm will bind to your pre-created PVCs. 
-
-> **Note:** Dynamic PVCs are only created during the install phase, as the required pre-hook runs only at that stage.  
-> - To switch from **dynamic** PVC mode to **manual** PVC mode, a simple `helm upgrade` will work.
-> - To switch from **manual** PVC mode to **dynamic** PVC mode, you must perform a fresh `helm install` or deployment — a `helm upgrade` will not work.  
-
-  #### Steps to create a manual PVCs - 
-  ##### Prepare the NFS Server
-  i. On your NFS server VM, create the directory to be used by the PersistentVolume (PV).
-
-  ii. Ensure NFS is installed and running.
-
-  iii. Add the export path to `/etc/exports`, for example:
-  ```
-  /srv/data/logs    *(rw,sync,no_root_squash)
-  ```
-  iv. Reload exports:
-  ```
-  exportfs -a
-  ```
-  
-  ##### Create PersistentVolume (PV)
-  i. Save the following template as `<your-pv-name>` (e.g., `pv-logs.yaml`):
-  ```yaml
-  apiVersion: v1
-  kind: PersistentVolume
-  metadata:
-      name: <your-pv-name>
-      labels:
-      intent: <your-pv-name>
-  spec:
-      storageClassName: <storage-class>
-      capacity:
-      storage: <size>
-      accessModes:
-      - ReadWriteMany
-      nfs:
-      server: <nfs-server-ip>
-      path: <exported-path>
-  ``` 
-  
-  ii. Apply the PV manifest:
-  ```bash
-  oc apply -f <your-pv-name>.yaml
-  ```
-  ##### Create PersistentVolumeClaim (PVC)
-  i. In the OpenShift console, go to Storage → PersistentVolumeClaims.
-
-  ii. Click Create PVC, switch to YAML view, and edit the yaml and click create. Template -
-  ```yaml
-  apiVersion: v1
-  kind: PersistentVolumeClaim
-  metadata:
-    name: <your-pvc-name>
-    namespace: <target-namespace>
-  spec:
-    accessModes:
-      - ReadWriteMany
-    volumeMode: Filesystem
-    storageClassName: <storage-class>
-    resources:
-      requests:
-        storage: <size>
-    selector:
-      matchLabels:
-        intent: <your-pv-name>
-  ```
-  iii. Command to check PVC status - 
-  ```
-    oc get pvc
-  ```
-
-12. Create secrets with requisite confidential credentials for passphrase.txt, Keystore.jks dbpasswords and keystore passwords. You can use the supplied configuration files under pak_extensions/pre-install/secret directory.
-
-13. Create a secret from the provided syntax file included in helm charts /ibm-cloudpak-extensons/preinstall/secrets.yaml
+11. Create a secret from the provided syntax file included in helm charts /ibm-cloudpak-extensons/preinstall/secrets.yaml
 
     ```
       oc apply -f app-secrets.yaml
       ```
 
-14. Create a secret to pull the image from a private registry or repository using following command:
+12. Create a secret to pull the image from a private registry or repository using following command:
     ```
     oc create secret docker-registry <name of secret> --docker-server=<your-registry-server> --docker-username=<your-username> --docker-password=<your-password> --docker-email=<your-email>
        ```
 
-15. Create secrets with confidential certificates (Keystore files for both Partner Engagement Manager and Community Manger) required by Database, MQ for SSL connectivity using below command:
+13. Create secrets with confidential certificates (Keystore files for both Partner Engagement Manager and Community Manger) required by Database, MQ for SSL connectivity using below command:
 
      Note: Name of the secret and the keystore filename must be same for server keystore secret
     ```
      oc create secret generic <secret-name> --from-file=/path/to/<Keystore.jks>
 	   ```
-16. Create configmap with localtime file present in local machine using below command
+14. Create configmap with localtime file present in local machine using below command
     ```
      oc create configmap <configmap-name> --from-file=/etc/localtime
 	   ```
 
-17. When installing the chart on a new database which does not have IBM PEM standard Software schema tables and metadata,
+15. When installing the chart on a new database which does not have IBM PEM standard Software schema tables and metadata,
 * ensure that `dbsetup.upgrade` parameter is set to `false` and `dbsetup.enabled` parameter is set to `true`. This will create the required database tables and metadata in the database before installing the chart.
 
-18. When installing the chart on a database with new image upgrade,
+16. When installing the chart on a database with new image upgrade,
 * ensure that `dbsetup.upgrade` parameter is set to `true`.
 
-19. Create service account and apply security context contraints to created service account.
+17. Create service account and apply security context contraints to created service account.
 
     ```
      oc create sa <service account name>
@@ -141,8 +67,6 @@ This chart deploys IBM Partner Engagement Manager Standard cluster on a containe
      oc adm policy add-scc-to-user ibm-pem-scc system:serviceaccount:<namespace>:<service account name>
 	   ```
     Note: Avoid installing multiple charts on same namespace
-20. For installing Community Manager, the JWT_SECRET_KEY must be defined in a Kubernetes/OpenShift Secret. If this value is not available, the Helm install or upgrade will fail. The name of the Secret containing the JWT_SECRET_KEY must be specified in the values.yaml file under communitymanager.prod.setupfile.jwt.secretkey or communitymanager.nonprod.setupfile.jwt.secretkey, depending on the environment.
-21. For installing Community Manager with SAML authentication enabled, the SAML_JWT_SECRET_KEY must also be defined in a Kubernetes/OpenShift Secret. The Helm install or upgrade will fail if this value is not provided. The name of the Secret containing the SAML_JWT_SECRET_KEY must be specified in the values.yaml file under communitymanager.prod.setupfile.saml.jwt.secretkey or communitymanager.nonprod.setupfile.saml.jwt.secretkey, depending on the environment.
 
 ### PodSecurityPolicy Requirements
 
@@ -429,7 +353,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | Parameter                | Description             | Default        |
 | ------------------------ | ----------------------- | -------------- |
 | `image.name` | Provide the value in double quotes | `"cp.icr.io/cp/ibm-pem/pem"` |
-| `image.tag` | Specify the tag name | `"6.2.4.1_standard"` |
+| `image.tag` | Specify the tag name | `"6.2.3.5"` |
 | `image.pullPolicy` |  | `null` |
 | `image.pullSecret` | Provide the pull secret name | `""` |
 | `arch` | Specify architecture (amd64, s390x) | `"amd64"` |
@@ -455,7 +379,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `volumeClaims.logs.accessModes` |  | `["ReadWriteMany"]` |
 | `test.image.repository` |  | `"cp.icr.io/cp"` |
 | `test.image.name` |  | `"opencontent-common-utils"` |
-| `test.image.tag` |  | `"1.1.67"` |
+| `test.image.tag` |  | `"1.1.60"` |
 | `test.image.pullPolicy` |  | `"IfNotPresent"` |
 | `dbsetup.enabled` | If it is first installation specify the values true | `false` |
 | `dbsetup.upgrade` | If it is upgrade Specify the values to true | `true` |
@@ -699,7 +623,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.install` |  | `true` |
 | `communitymanager.image.repository` | Specify the repository | `"cp.icr.io/cp/ibm-pem/pem"` |
 | `communitymanager.image.pullPolicy` | Specify te image pull policy | `null` |
-| `communitymanager.image.tag` | Specify the tag name | `"6.2.4.1"` |
+| `communitymanager.image.tag` | Specify the tag name | `"6.2.3.5"` |
 | `communitymanager.image.pullSecret` | Provide the pull secret name | `null` |
 | `communitymanager.prod.enable` | If you are want to proceed for prod pcm installation then you have to mention it as true or else false | `true` |
 | `communitymanager.prod.setupfile.time_zone` | Specify the timezone EX:America/New_York (Country/city) | `null` |
@@ -754,8 +678,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.prod.setupfile.login.user_cmks_expire` | days | `30` |
 | `communitymanager.prod.setupfile.basic.auth.username` | Specifythe user name | `"pemuser"` |
 | `communitymanager.prod.setupfile.basic.auth.cmks` | specify the secret | `null` |
-| `communitymanager.prod.setupfile.jwt.secretkey` | Provide the name of the Secret containing application passwords,ensure to provide JWT_SECRET_KEY value in the your secrets file
- | `null`  |
+| `communitymanager.prod.setupfile.jwt.secretkey` | it is recommended that you choose a strong, randomly generated password of at least 32 characters in length | `null` |
 | `communitymanager.prod.setupfile.jwt.session_expire` | Minutes (Token session Expiry) | `60` |
 | `communitymanager.prod.setupfile.sterling_b2bi.core_bp.inbound` | CM_MailBox_GET_RoutingRule_Inbound , Inbound mailbox bootstrap business process | `"CM_MailBox_GET_RoutingRule_Inbound"` |
 | `communitymanager.prod.setupfile.sterling_b2bi.core_bp.outbound` | CM_MailBox_GET_RoutingRule_Outbound , Outbound mailbox bootstrap business process | `"CM_MailBox_GET_RoutingRule_Outbound"` |
@@ -822,7 +745,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.prod.setupfile.workFlow.duplicate.mft` | If you want to allow Duplicate MFT Transactions with in the flow then update true or else make it false. | `true` |
 | `communitymanager.prod.setupfile.workFlow.duplicate.docHandling` | If you want to allow Duplicate DH Transactions with in the application then update true or else make it false. | `true` |
 | `communitymanager.prod.setupfile.file_transfer.search.time_range` | Minutes | `30` |
-| `communitymanager.prod.setupfile.saml.jwt.secret_key` | Provide the name of the Secret containing application passwords,ensure to provide SAML_JWT_SECRET_KEY value in the your secrets file | `null` |
+| `communitymanager.prod.setupfile.saml.jwt.secret_key` | it is recommended that you choose a strong, randomly generated password of at least 32 characters in length | `null` |
 | `communitymanager.prod.setupfile.saml.jwt.session_expire` | Minutes | `60` |
 | `communitymanager.prod.setupfile.saml.idp.metadata` | Provide the IDP metadata file location. | `null` |
 | `communitymanager.prod.setupfile.saml.idp.entity_id` | .Provide the Entity name whic we provide in IDP | `"PcmEntityIdp"` |
@@ -965,8 +888,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.nonprod.setupfile.login.user_cmks_expire` | days | `30` |
 | `communitymanager.nonprod.setupfile.basic.auth.username` | Specifythe user name | `"pemuser"` |
 | `communitymanager.nonprod.setupfile.basic.auth.cmks` | specify the secret | `null` |
-| `communitymanager.nonprod.setupfile.jwt.secretkey` | Provide the name of the Secret containing application passwords,ensure to provide JWT_SECRET_KEY value in the your secrets file
- | `null` |
+| `communitymanager.nonprod.setupfile.jwt.secretkey` | it is recommended that you choose a strong, randomly generated password of at least 32 characters in length | `null` |
 | `communitymanager.nonprod.setupfile.jwt.session_expire` | Minutes (Token session Expiry) | `60` |
 | `communitymanager.nonprod.setupfile.sterling_b2bi.core_bp.inbound` | CM_MailBox_GET_RoutingRule_Inbound , Inbound mailbox bootstrap business process | `"CM_MailBox_GET_RoutingRule_Inbound"` |
 | `communitymanager.nonprod.setupfile.sterling_b2bi.core_bp.outbound` | CM_MailBox_GET_RoutingRule_Outbound , Outbound mailbox bootstrap business process | `"CM_MailBox_GET_RoutingRule_Outbound"` |
@@ -1033,8 +955,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.nonprod.setupfile.workFlow.duplicate.mft` | If you want to allow Duplicate MFT Transactions with in the flow then update true or else make it false. | `true` |
 | `communitymanager.nonprod.setupfile.workFlow.duplicate.docHandling` | If you want to allow Duplicate DH Transactions with in the application then update true or else make it false. | `true` |
 | `communitymanager.nonprod.setupfile.file_transfer.search.time_range` | Minutes | `30` |
-| `communitymanager.nonprod.setupfile.saml.jwt.secret_key` | Provide the name of the Secret containing application passwords,ensure to provide SAML_JWT_SECRET_KEY value in the your secrets file
- | `null` |
+| `communitymanager.nonprod.setupfile.saml.jwt.secret_key` | it is recommended that you choose a strong, randomly generated password of at least 32 characters in length | `null` |
 | `communitymanager.nonprod.setupfile.saml.jwt.session_expire` | Minutes | `60` |
 | `communitymanager.nonprod.setupfile.saml.idp.metadata` | Provide the IDP metadata file location. | `null` |
 | `communitymanager.nonprod.setupfile.saml.idp.entity_id` | .Provide the Entity name whic we provide in IDP | `"PcmEntityIdp"` |
