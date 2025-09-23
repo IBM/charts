@@ -6,10 +6,9 @@ IBM DevOps Test Hub brings together test data, test environments, and test runs 
 
 ### Resources Required
 
-* [RedHat OpenShift Container Platform](https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/release_notes/ocp-4-16-release-notes) v4.16 or later (x86_64)
-* [OpenShift SDN in _network policy_ mode](https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/networking/openshift-sdn-network-plugin#about-openshift-sdn) (Optional) The default installation includes NetworkPolicy resources, these will only be acted upon if the SDN is configured appropriately.
-* [Dynamic Volume Provisioning](https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/storage/dynamic-provisioning) supporting accessModes ReadWriteOnce (RWO) and ReadWriteMany (RWX).
-* [Jaeger Operator](https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/service_mesh/service-mesh-2-x#installing-ossm) (Optional) If tests should contribute trace information and Jaeger based reports are required.
+* [RedHat OpenShift Container Platform](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/release_notes/ocp-4-17-release-notes) v4.17 or later (x86_64)
+* [Dynamic Volume Provisioning](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/storage/dynamic-provisioning) supporting accessModes ReadWriteOnce (RWO) and ReadWriteMany (RWX).
+* [Jaeger Operator](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/service_mesh/service-mesh-2-x#installing-ossm) (Optional) If tests should contribute trace information and Jaeger based reports are required.
 
 
 
@@ -25,7 +24,7 @@ To install the product you will need cluster administrator privileges.
 
 ## Red Hat OpenShift SecurityContextConstraints Requirements
 
-The product is compatible with the `restricted` and `restricted-v2` [SecurityContextConstraint](https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/authentication_and_authorization/managing-pod-security-policies).
+The product is compatible with the `restricted` and `restricted-v2` [SecurityContextConstraint](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/authentication_and_authorization/managing-pod-security-policies).
 
 If you would prefer to use the custom ibm-devops-restricted SCC, please do the following before installation:
 
@@ -97,8 +96,8 @@ This change propagates after a couple of minutes. [Further reading](https://clou
 
 ### Local Machine
 
-* [oc](https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/cli_tools/openshift-cli-oc)
-* [helm v3.17.3 or later](https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/building_applications/working-with-helm-charts#installing-helm)
+* [oc](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/cli_tools/openshift-cli-oc)
+* [helm v3.17.4 or later](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/building_applications/working-with-helm-charts#installing-helm)
 
 ### Storage
 
@@ -129,9 +128,10 @@ The pod [`fsGroup`](https://kubernetes.io/docs/tasks/configure-pod-container/sec
 Fetch chart for install:
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-prod --version 11.0.5
+helm pull --untar ibm-helm/ibm-devops-prod --version 11.0.6
 cd ibm-devops-prod
 ```
+
 
 
 
@@ -179,6 +179,7 @@ helm upgrade --install $HELM_NAME . -n $NAMESPACE \
 | `global.ibmImagePullPassword`                  | Password to pull images from the `imageRegistry`. | '' |
 | `global.persistence.rwoStorageClass`           | The storageClass to use if the cluster default is not appropriate. | '' |
 | `global.persistence.rwxStorageClass`           | For environments that do not provide a default StorageClass that supports the ReadWriteMany (RWX) accessMode, this value must be set to a suitable StorageClass that supports ReadWriteMany access. | REQUIRED |
+| `global.privateCaBundleSecretName`             | Name of secret containing `ca.crt`, which lists certificates to trust (in PEM format). | '' |
 | `rationalLicenseKeyServer`                     | Where floating licenses are hosted to entitle use of the product. For example `@ip-address` | '' |
 | `imageRegistry`                                | The location of container images to use. See [move-images](lib/airgap/move-images.sh) | cp.icr.io/cp |
 | `ingress.cert.create`                          | Create an self-signed certificate matching the ingress domain if none exists in secret `global.ibmCertSecretName`. | true |
@@ -394,32 +395,27 @@ Then use the additional helm value an install:
 
 ### Trust of external self signed endpoints
 
-The product only trusts certificates signed by recognized CAs. To trust additional CAs, for example your internal corporate CA, you must create a secret containing the additional CAs you wish to trust.
+The product only trusts certificates signed by recognized CAs. To trust additional CAs (for example your internal corporate CA), you must create a secret containing the additional CAs you wish to trust.
 
-The certificate must be in PEM format and have a `.crt` extension.
+The certificate(s) must be in PEM format. You may list CAs in the ca.crt entry.
 ```bash
-oc create secret generic -n $NAMESPACE usercerts --from-file=corp-ca.crt
+oc create secret generic -n $NAMESPACE my-internal-ca-bundle \
+    --from-file=ca.crt=./corp-ca.pem
 ```
-Once created you need to restart pods that mount it for the additional CA to be trusted. Pods that mount this secret can be listed by running:
+Once created you need to helm upgrade and restart pods for the additional CAs to be trusted.
 ```bash
-oc get pod -n $NAMESPACE -o json | jq -r \
-  '.items[] | select(.spec.volumes[]?.secret.secretName == "usercerts") | .metadata.name'
+helm upgrade $HELM_NAME . -n $NAMESPACE --reuse-values \
+  --set global.privateCaBundleSecretName=my-internal-ca-bundle
 ```
 They can be forced to restart by deleting them.
 ```bash
-oc delete pod $HELM_NAME-tam-0 -n $NAMESPACE
+oc delete pod -n $NAMESPACE \
+  $(oc get pod -n $NAMESPACE -o json | jq -r \
+    '.items[] | select(.spec.volumes[]?.configMap.name == "'$HELM_NAME'-trust-cacerts") | .metadata.name')
 ```
 The log will show the additional CAs if successfully added.
 ```bash
-oc logs $HELM_NAME-tam-0 -n $NAMESPACE -c trust-store
-```
-Further certificates can be added. Note that getting certificates with openssl without verification makes you vulnerable to man-in-the-middle attacks.
-```bash
-openssl s_client -connect cncf.io:443 -servername cncf.io </dev/null \
-  | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' > cncf.crt
-
-oc patch secret usercerts -n $NAMESPACE --type=json \
-  -p='[{"op":"replace","path":"/data/cncf.crt","value":"'$(base64 -w0 cncf.crt)'"}]'
+oc logs -n devops-system -ljob-name=main-trust --tail=500
 ```
 The secret is not included in the normal backup scheme. You should manually backup the secret containing the additional CAs if you consider it valuable.
 
@@ -431,7 +427,7 @@ In the default configuration, no egress rules are created to restrict the endpoi
 
 Data should be secured at rest. It is necessary to ensure that encryption at rest is enabled. Typically, encryption at rest is required for installation of OpenShift Container Platform. It is important to implement some form of cluster wide passive encryption. Please refer to the following document for guidance:
 
-https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/8/html-single/security_hardening/index
+https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html-single/security_hardening/index
 
 ### Dynamic workload
 
