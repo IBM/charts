@@ -2,7 +2,7 @@
 
 ## Introduction
 
-[DevOps Plan](https://ibm.com/docs/en/devops-plan/3.0.4) is a change management platform designed for enterprise-level scalability, customizable processes, and enhanced project control. It accelerates project delivery and improves developer productivity.
+[DevOps Plan](https://ibm.com/docs/en/devops-plan/3.0.5) is a change management platform designed for enterprise-level scalability, customizable processes, and enhanced project control. It accelerates project delivery and improves developer productivity.
 
 ## Chart Details
 
@@ -10,7 +10,7 @@
 
 ## Product Documentation
 
-- [DevOps Plan Product Documentation](https://ibm.com/docs/en/devops-plan/3.0.4)
+- [DevOps Plan Product Documentation](https://ibm.com/docs/en/devops-plan/3.0.5)
 
 ## Prerequisites
 
@@ -469,12 +469,28 @@ This guide explains how to configure and use Velero and MinIO to back up and res
   helm pull ibm-helm/ibm-devopsplan-prod --untar
   ```
 
-**Step 2.** Install the Backup and Restore into namespace *backup* with the release name *backup*.
+**Step 2.** Create a namespace called backup.
+
+  ```bash
+  Kubectl create namespace backup
+  ```
+
+**Step 3.** Create a Docker registry secret for pulling images from IBM Entitled Registry into the namespace backup.
+
+  ```bash
+  Kubectl create secret docker-registry ibm-entitlement-key \
+    --namespace backup \
+    --docker-username=cp \
+    --docker-password=<EntitlementKey> \
+    --docker-server=cp.icr.io
+  ```
+
+**Step 4.** Install the Backup and Restore into namespace *backup* with the release name *backup*.
 
   ```bash
   helm install backup ./ibm-devopsplan-prod \
     -f ibm-devopsplan-prod/backup-openshift.yaml \
-    --namespace backup --create-namespace  \
+    --namespace backup \
     --set global.imagePullSecrets={ibm-entitlement-key} \
     --timeout 10m
   ```
@@ -488,11 +504,11 @@ This guide explains how to configure and use Velero and MinIO to back up and res
  Replace <your-storage-class-name> with the name of your desired storage class.
 
 
-**Step 3.** Install the Velero client
+**Step 5.** Install the Velero client
 
     chmod +x  ibm-devopsplan-prod/files/ocbackup.sh && ibm-devopsplan-prod/files/ocbackup.sh backup
 
-**Step 4.** Verify the Installation:
+**Step 6.** Verify the Installation:
 
 The BackupStorageLocation is ready to use when it has the phase Available. You can check the status with the following command:
 
@@ -841,8 +857,6 @@ You can rollback to the previous release using *helm rollback* command.
   3               Thu Nov 20 22:30:32 2024        deployed        ibm-devopsplan1-3.0.3          Rollback to 1
   ```
 
-- The OpenSearch version has been upgraded from 2.18.0 to 3.1.0 as part of the DevOps Plan 3.0.5 release. OpenSearch 2.18.0 is based on Lucene 9, whereas OpenSearch 3.1.0 is based on Lucene 10. This Rollback constitutes a major version change; therefore, in-place rolling back are not supported. To complete the rollback, either a full cluster restart or a migration involving reindexing is required. For detailed guidance, refer to the official OpenSearch documentation.
-
 ---
 
 ## **Configuration**
@@ -877,7 +891,7 @@ The Helm chart has the following values that can be overridden using the *--set 
 | **auth.jwt.refreshTokenValiditySeconds** | Duration for which a JWT refresh token remains valid, in seconds. | `86400` (1 day) |
 
 ### Parameters for creating TeamSpace and Applications
-The PostgreSQL database requires to create TeamSpace and Applications. The helm chart is installed with the internal PostgreSQL database by default. If you plan to install/upgrade the helm charts with an external database, then you need to set the *postgresql.enabled* to *false* and set the *spring.datastore* and *tenant.datastore* configuration settings based on your external database parameters. PostgreSQL database is supported for release 3.0.4.
+The PostgreSQL database requires to create TeamSpace and Applications. The helm chart is installed with the internal PostgreSQL database by default. If you plan to install/upgrade the helm charts with an external database, then you need to set the *postgresql.enabled* to *false* and set the *spring.datastore* and *tenant.datastore* configuration settings based on your external database parameters.
 
 | **Parameter** | **Description** | **Default value** |
 | --- | --- | --- |
@@ -915,7 +929,7 @@ The helm chart installs the Analytics feature on a separate pod by default. you 
 | **analytics.urlMapping** | URL mapping. <br>- The mapping URL format should be *https:[mapping-name].com*.  | "" |
 | **analytics.replicaCount** | Number of replica Analytics Pods. This parameter is needed if analytics.service *=true.* | 1 |
 | **analytics.image.repository** | Analytics docker Image repository path. This parameter is needed if analytics.service *=true.* | cp/devops-plan/devopsplan-analytics |
-| **analytics.image.tag** | Analytics Image tag. This parameter is needed if *analytics.service=true.* | 3.0.4 |
+| **analytics.image.tag** | Analytics Image tag. This parameter is needed if *analytics.service=true.* | 3.0.5.1 |
 | **analytics.image.pullPolicy** | Analytics image pull policy. This parameter is needed if *analytics.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **analytics.hostname** | Analytics hostname | analytics |
 
@@ -926,7 +940,7 @@ The helm chart is installed with the internal postgresql database by default.
 | --- | --- | --- |
 | **postgresql.enabled** | This parameter enables or disables devopsplan-postgresql database service. Accepted values are:<br>- *true* to enable postgresql database service.<br>- *false* to disable postgresql database service. | true |
 | **postgresql.repository** | Postgresql database docker Image repository path. This parameter is needed if *postgresql.enabled=true.* | cp/devops-plan/devopsplan-postgresql |
-| **postgresql.tag** | Postgresql database Image tag.This parameter is needed if *postgresql.enabled=true.* | 3.0.4 |
+| **postgresql.tag** | Postgresql database Image tag.This parameter is needed if *postgresql.enabled=true.* | 3.0.5.1 |
 | **postgresql.pullPolicy** | Postgresql database image pull policy.This parameter is needed if *postgresql.enabled=true*Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent |
  **postgresql.service.type** | postgresql service type  | LoadBalancer |
 | **postgresql.service.exposePort** | postgresql service port  | "" |
@@ -945,13 +959,13 @@ The dashboards analytics configuration setting options set by default for dashbo
 | **nginx.urlMapping** | URL mapping. <br>- The mapping URL format should be *https:[mapping-name].com*.  | "" |
 | **nginx.replicaCount** | Number of replica nginx Pods. This parameter is needed if nginx.service *=true.* | 1 |
 | **nginx.image.repository** | Nginx docker Image repository path. This parameter is needed if nginx.service *=true.* | cp/devops-plan/devopsplan-nginx |
-| **nginx.image.tag** | Nginx Image tag. This parameter is needed if *nginx.service=true.* | 3.0.4 |
+| **nginx.image.tag** | Nginx Image tag. This parameter is needed if *nginx.service=true.* | 3.0.5.1 |
 | **nginx.image.pullPolicy** | Nginx image pull policy. This parameter is needed if *nginx.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **nginx.hostname** | Nginx hostname | nginx |
 | **dashboards.service** | This parameter enables or disables dashboards service. Accepted values are:<br>- *true* to enable Nginx service.<br>- *false* to disable dashboards service.<br>This parameter is needed if you plan to use Dashboard features for Business Analytics. | true |
 | **dashboards.replicaCount** | Number of replica dashboards Pods. This parameter is needed if dashboards.service *=true.* | 1 |
 | **dashboards.image.repository** | Opensearch-dashboards docker Image repository path. This parameter is needed if dashboards.service *=true.* | cp/devops-plan/devopsplan-dashboards |
-| **dashboards.image.tag** | Opensearch-dashboards Image tag. This parameter is needed if *dashboards.service=true.* | 3.0.4 |
+| **dashboards.image.tag** | Opensearch-dashboards Image tag. This parameter is needed if *dashboards.service=true.* | 3.0.5.1 |
 | **dashboards.image.pullPolicy** | Opensearch-dashboards image pull policy. This parameter is needed if *dashboards.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **dashboards.hostname** | Dashboards hostname | dashboards |
 | **dashboards.username** | Opensearch Dashboards username | "admin" |
@@ -959,7 +973,7 @@ The dashboards analytics configuration setting options set by default for dashbo
 | **logstash.service** | This parameter enables or disables devopsplan-logstash service. Accepted values are:<br>- *true* to enable Nginx service.<br>- *false* to disable devopsplan-logstash service.<br>This parameter is needed if you plan to use Dashboard features for Business Analytics. | true |
 | **logstash.replicaCount** | Number of replica devopsplan-logstash pods. This parameter is needed if logstash.service *=true.* | 1 |
 | **logstash.image.repository** | logstash docker Image repository path. This parameter is needed if logstash.service *=true.* | cp/devops-plan/devopsplan-logstash |
-| **logstash.image.tag** | devopsplan-logstash Image tag. This parameter is needed if *logstas.service=true.* | 3.0.4 |
+| **logstash.image.tag** | devopsplan-logstash Image tag. This parameter is needed if *logstas.service=true.* | 3.0.5.1 |
 | **logstash.image.pullPolicy** | Opensearch-logstash image pull policy. This parameter is needed if *logstas.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **logstash.port** | logstash port | 5011 |
 | **logstash.username** | logstash username | "logstash" |
@@ -967,7 +981,7 @@ The dashboards analytics configuration setting options set by default for dashbo
 | **opensearch.service** | This parameter enables or disables opensearch service. Accepted values are:<br>- *true* to enable Nginx service.<br>- *false* to disable opensearch service.<br>This parameter is needed if you plan to use Dashboard features for Business Analytics. | true |
 | **opensearch.replicaCount** | Number of replica opensearch pods. This parameter is needed if opensearch.service *=true.* | 1 |
 | **opensearch.image.repository** | Opensearch docker Image repository path. This parameter is needed if opensearch.service *=true.* | cp/devops-plan/devopsplan-opensearch |
-| **opensearch.image.tag** | Opensearch Image tag. This parameter is needed if *opensearch.service=true.* | 3.0.4 |
+| **opensearch.image.tag** | Opensearch Image tag. This parameter is needed if *opensearch.service=true.* | 3.0.5.1 |
 | **opensearch.image.pullPolicy** | Opensearch image pull policy. This parameter is needed if *opensearch.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **opensearch.hostname** | Opensearch hostname | opensearch |
 | **opensearch.hash** | Opensearch password hash | "" |
@@ -992,7 +1006,7 @@ Single-Sign-On functionality by default is set to disable. If the admin plans to
 | **keycloak.jsonFile.configMapName** | This is the configMap file name that contains the keycloak.json file. This parameter is needed if keycloak.jsonFile.enabled *=true.* | keycloak-json |
 | **keycloaksrv.enabled** | This parameter enables or disables Keycloak service in Helm Chart for Single-Sign-On service. Accepted values are:<br>- *true* to enable Keycloak service.<br>- *false* to disable Keycloak service.<br>This parameter is needed if you plan to use Single-Sign-On feature and deploy Keycloak with Helm chart. | false |
 | **keycloaksrv.image.repository** | keycloak docker Image repository path. | devops-plan/devopsplan-keycloak |
-| **keycloaksrv.image.tag** | Keycloak Image tag. | 3.0.4 |
+| **keycloaksrv.image.tag** | Keycloak Image tag. | 3.0.5.1 |
 | **keycloaksrv.image.pullPolicy** | Keycloak image pull policy. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent |
 | **keycloaksrv.service.type** | Specify the nodePort values for the LoadBalancer and NodePort service types. | LoadBalancer |
 | **keycloaksrv.service.nodePorts.http** | Keycloak service HTTP port. | 30107 |
@@ -1164,7 +1178,7 @@ The following steps describe how enabled/disabled mounting the windows product p
 | --- | --- | --- |
 | **winInstall.enabled** | This parameter enables or disables mounting the windows product package in DevOps Plan Server. Accepted values are:<br>- *true* to enable mounting the windows product package.<br>- *false* to disable mounting the windows product package. | true |
 | **winInstall.image.repository** | win-install docker Image repository path. This parameter is needed if *winInstall.enabled=true*. | ibm-devopsplan-win-install |
-| **winInstall.image.tag** | win-install image tag. This parameter is needed if *winInstall.enabled=*true* | 3.0.4 |
+| **winInstall.image.tag** | win-install image tag. This parameter is needed if *winInstall.enabled=*true* | 3.0.5.1 |
 | **winInstall.image.pullPolicy** | win-install image pull policy. This parameter is needed if *winInstall.enabled=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent |
 | **winInstall.accessModes** | win-install persistence Volume access modes. This parameter is needed if *winInstall.enabled=rtue*. | ReadWriteOnce |
 | **winInstall.size** | win-install persistence Volume size. This parameter is needed if *winInstall.enabled=true*. | 2Gi |
@@ -1206,8 +1220,8 @@ By default, the backoffLimit set to 1. You can increase to 5:
 <details><summary>Downloads and Useful Links</summary>
 <p>
 
-- [DevOps Plan](https://ibm.com/docs/en/devops-plan/3.0.4)
-- [Getting started with DevOps Plan Helm Chart](https://www.ibm.com/docs/en/devops-plan/3.0.4?topic=plan-getting-started-devops-helm-chart-openshift)
+- [DevOps Plan](https://ibm.com/docs/en/devops-plan/3.0.5)
+- [Getting started with DevOps Plan Helm Chart](https://www.ibm.com/docs/en/devops-plan/3.0.5?topic=plan-getting-started-devops-helm-chart-openshift)
 
 </p>
 </details>
