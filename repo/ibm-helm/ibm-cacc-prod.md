@@ -23,7 +23,7 @@ Statefulsets
 ```
 
 ## Prerequisites
-* Kubernetes Version - "1.31.0 and above"
+* Kubernetes Version - "1.27.0 and above"
 * OpenShift Version - "4.16 and above"
 
 * Helm Level:
@@ -64,17 +64,18 @@ The minimum required to deploy Cognos Analytics Certified containers is
 
 The following is an estimation of the compute resources for each of the Cognos Analytics services
 
-| Pod | Cpu | Memory |
-| --- | ----| -------|
-| CM | 6000m| 13Gi|
-| RS | 2000m| 10Gi|
-| Rest| 2000m| 8Gi|
-| UI | 2000m| 8Gi|
-| Smarts| 2000m| 12Gi|
-| DSS | 5000m| 10Gi|
-| Proxy | 10m| 100m|
-| Pinger | 10m| 10m|
+| Pod    | Cpu       | Cpu     | Memory    | Memory  |
+|        | Requests  | Limits  | Requests  | Limits  |
+|--------|-----------|---------|-----------|---------|
+| CM     |     4200m |   8400m |    4200Mi |  8800Mi |
+| RS     |     2200m |   6400m |    4200Mi | 11800Mi |
+| Rest   |     2200m |   4400m |    4200Mi |  6800Mi |
+| UI     |     3200m |   3400m |    4200Mi |  6800Mi |
+| Smarts |     2200m |   5400m |    5200Mi |  8800Mi |
+| DSS    |     2200m |   6400m |    6200Mi | 11800Mi |
+| CAProxy|      400m |   1000m |     200Mi |   800Mi |
 
+| Total  |    16300m |  35400m |   28400Mi | 53600Mi | 
 
 ## Red Hat OpenShift SecurityContextConstraints Requirements
 Custom SecurityContextConstraints definition:
@@ -241,8 +242,10 @@ In an editor, open the caConfiguration.yaml file and update the fields to repres
 
 * Once you have cloned the IBM Charts repo, navigate to the Cognos Analytics helm chart folder and initiate the install
 
-$ export HELM_CHART_VERSION=1.0.1
-$ helm install -f ${OVERRIDE_FILE} https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm/ibm-cacc-prod-{HELM_CHART_VERSION}.tgz  --version {HELM_CHART_VERSION} --namespace ${NAMESPACE}
+$ export NAMESPACE=ns1
+$ export HELM_CHART_VERSION=1.0.13
+
+$ helm install -f ${OVERRIDE_FILE} ca-instance https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm/ibm-cacc-prod-{HELM_CHART_VERSION}.tgz  --version {HELM_CHART_VERSION} --namespace ${NAMESPACE}
 ```
 
 
@@ -381,7 +384,7 @@ These configuration settings can be enabled to configure the Content Manager ser
 |services.contentManagerService.ldapInstanceName|Specifies the name of the LDAP instance|"LDAP"|
 |services.contentManagerService.ldapNamespaceID|Specifies a unique identifier for the authentication namespace|"LDAP"|
 |services.contentManagerService.ldapHostname|Specifies the host namedirectory server|"localhost"|
-|services.contentManagerService.ldapPor|Specifies the port of the directory server|389|
+|services.contentManagerService.ldapPort|Specifies the port of the directory server|389|
 |services.contentManagerService.ldapBaseDistinguishedName|Specifies the base distinguished name of the LDAP server|"dc=example,dc=com"|
 |services.contentManagerService.ldapUserLookup|Specifies the user lookup used for binding to the LDAP directory server|"(uid=${userID})"|
 |services.contentManagerService.ldapUseBindCredentialsForSearch|Specifies whether to use the bind credentials to perform a search|true|
@@ -435,6 +438,18 @@ These configuration settings can be enabled to configure the Content Manager ser
 |services.contentManagerService.openIdTokenEndpointAuthStrategy|Configure the authentication strategy for the token endpoint in OpenID connections|"client_secret_post"|
 |services.contentManagerService.openIdUserInfoEndpoint|Specify the user information endpoint URL for the OpenID connections|" "|
 |services.contentManagerService.openIdUseDiscEndpoint|Specify whether to use the discovery endpoint for retrieving the OpenID provider's configuration information|false|
+|services.contentManagerService.openIdAcFaxPhone|Specifies the OIDC claim used for the "faxPhone" property for an account.|No Default|
+|services.contentManagerService.openIdAcMemberOf|Specifies the OIDC claim used for the "memberOf" property for an account.|No Default|
+|services.contentManagerService.openIdAcPagerPhone|Specifies the OIDC claim used for the "pagerPhone" property for an account.|No Default|
+|services.contentManagerService.openIdPrivateKeyFile|Specifies the file that contains the private signing key. The file that contains the private signing key in PKCS8 format. It must contain a single private RSA key of length 2048 bit|No Default|
+|services.contentManagerService.openIdPrivateKeyId|Specifies the key identifier that should be placed in the JWT header. The key identifier that will be set in the JWT 'kid' header. Use this configuration item if your identity provider requires a 'kid'. Leave this value blank if your identity provider does not require a 'kid'.|No Default|
+|services.contentManagerService.openIdPgStrategy|Specifies how to get the user's identity when using the password grant flow. Set this value to 'ID token' if all user claims are returned in the id_token. Set this value to 'ID token and userinfo endpoint' if an id_token is returned from the password grant flow but does not contain all of the user claims. Set this value to 'Userinfo endpoint' if the id_token does not contain any user claims and if the user claims should be retrieved from the userinfo endpoint. Set this value to 'Unsupported' if the Identity Provider does not support the password grant flow.|idToken / idTokenUserinfo / unsupported / userinfo|
+|services.contentManagerService.openIdPgInclScope|Specifies that the scope should be included when using the password grant flow. Set this value to true to indicate that the scope parameter should be included as part of the query string for the password grant flow. Set this value to false to indicate that the scope should be omitted from the query string for the password grant flow|True / False|
+|services.contentManagerService.openIdPgAddParams|Specifies any additional parameters that are required for the password grant flow.|No Default|
+|services.contentManagerService.openIdCertUri|Specifies the OpenID Connect endpoint for retrieving JWT signing keys. The JWKS endpoint is a URL that your OpenID Connect identity provider uses to provide signing key data. In most cases, the URL should use the https scheme. The JWKS endpoint is invoked when validating an id_token returned from the identity provider.|No Default|
+|services.contentManagerService.openIdPkceStrategy|Specifies what proof of key exchange (PKCE) algorithm to use. The default of S256 is appropriate in most cases unless the Identity Provider requires plain or does not support proof of key exchange at all.|S256 / plain / unsupported|
+|services.contentManagerService.restrictAccessToCRN|Allows administrators to restrict user access to the application. When this parameter is enabled, users can only access the application if they belong to at least one group or role within the built-in namespace (does not include the group "All Authenticated Users").|False / True|
+
 
 ### Content Manager Service DB Store configuration settings
 
