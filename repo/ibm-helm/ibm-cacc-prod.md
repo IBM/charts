@@ -1,4 +1,4 @@
-# Cognos Analytics Certified Containers 12.1.0
+# Cognos Analytics Certified Containers 12.1.1
 
 
 ## Introduction
@@ -243,7 +243,7 @@ In an editor, open the caConfiguration.yaml file and update the fields to repres
 * Once you have cloned the IBM Charts repo, navigate to the Cognos Analytics helm chart folder and initiate the install
 
 $ export NAMESPACE=ns1
-$ export HELM_CHART_VERSION=1.0.13
+$ export HELM_CHART_VERSION=1.1.0
 
 $ helm install -f ${OVERRIDE_FILE} ca-instance https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm/ibm-cacc-prod-{HELM_CHART_VERSION}.tgz  --version {HELM_CHART_VERSION} --namespace ${NAMESPACE}
 ```
