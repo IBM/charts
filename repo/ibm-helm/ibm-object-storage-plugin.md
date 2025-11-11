@@ -7,15 +7,13 @@ The following table details orchestration platforms suitable for deployment of t
 
 |Orchestration platform|Version|Architecture|
 |----------------------|-------|------------|
-|Kubernetes|1.29|x86|
-|Kubernetes|1.28|x86|
-|Kubernetes|1.27|x86|
-|Kubernetes|1.26|x86|
-|Red Hat OpenShift|4.10|x86|
-|Red Hat OpenShift|4.11|x86|
-|Red Hat OpenShift|4.12|x86|
-|Red Hat OpenShift|4.13|x86|
-|Red Hat OpenShift|4.14|x86|
+|Kubernetes|1.31|x86|
+|Kubernetes|1.32|x86|
+|Kubernetes|1.33|x86|
+|Red Hat OpenShift®|4.16|x86|
+|Red Hat OpenShift|4.17|x86|
+|Red Hat OpenShift®|4.18|x86|
+|Red Hat OpenShift|4.19|x86|
 
 ## Introduction
 [IBM Cloud Object Storage](https://cloud.ibm.com/docs/services/cloud-object-storage?topic=cloud-object-storage-about-ibm-cloud-object-storage#about-ibm-cloud-object-storage) is persistent, highly available storage that you can mount to apps that run in a Kubernetes cluster by using the IBM Cloud Object Storage plug-in. The plug-in is a Kubernetes Flex-Volume plug-in that connects Cloud Object Storage buckets to pods in your cluster. Information that is stored with IBM Cloud Object Storage is encrypted in transit and at rest, dispersed across multiple geographic locations, and accessed over HTTP by using a REST API.
@@ -759,7 +757,7 @@ v3.6.3+gd506314
 Checking cluster type
 Fetching WORKER OS details ...
 Installing the Helm chart...
-PROVIDER: RHOCP
+PROVIDER: IBMC-VPC
 WORKER_OS: redhat
 PLATFORM: openshift
 KUBE_DRIVER_PATH: /etc/kubernetes
