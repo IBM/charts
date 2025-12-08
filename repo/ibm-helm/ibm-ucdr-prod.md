@@ -258,7 +258,14 @@ The Helm chart has the following values.
 | image | pullPolicy | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to IfNotPresent |
 |       | secret |  An image pull secret used to authenticate with the image registry | If no value is specified we will look for a pull secret named ibm-entitlement-key. |
 | license | accept | Set to true to indicate you have read and agree to license agreements : https://ibm.biz/devops-deploy-license | false |
+| statefulset | annotations | Annotations for statefulset | Default value is "" |
+|             | topologySpreadConstraints.enabled | Determines if topologySpreadConstraints are defined for the agent statefulset | Default value is false |
+|             | topologySpreadConstraints.maxSkew | Describes the degree to which Pods may be unevenly distributed | Default value is 1 |
+|             | topologySpreadConstraints.topologyKey | The key of node labels. Nodes that have a label with this key and identical values are considered to be in the same topology. | Default value is "kubernetes.io/arch" |
 | service | type | Specify type of service | Valid options are ClusterIP, NodePort and LoadBalancer (for clusters that support LoadBalancer). Default is LoadBalancer |
+|         | annotations | Annotations for the service | Default value is "" |
+|         | loadBalancerClass | https://kubernetes.io/docs/concepts/services-networking/service/#load-balancer-class | Default value is "" |
+|         | loadBalancerSourceRanges | https://kubernetes.io/docs/tasks/access-application-cluster/configure-cloud-provider-firewall/#restrict-access-for-loadbalancer-service |
 | persistence | enabled | Determines if persistent storage will be used to hold the DevOps Deploy server appdata directory contents. This should always be true to preserve server data on container restarts. | Default value "true" |
 |             | useDynamicProvisioning | Set to "true" if the cluster supports dynamic storage provisoning | Default value "false" |
 |             | fsGroup | The group ID to use to access persistent volumes | Default value "1001" |
@@ -281,6 +288,8 @@ The Helm chart has the following values.
 |           | requests.cpu  | Describes the minimum amount of CPU required - if not specified will default to limit (if specified) or otherwise implementation-defined value. | Default is 100m. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu) |
 |           | requests.memory | Describes the minimum amount of memory required. If not specified, the memory amount will default to the limit (if specified) or the implementation-defined value | Default is 200Mi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
 |           | requests.ephemeral-storage | Describes the minimum amount of ephemeral storage required. If not specified, the amount will default to the limit (if specified) or the implementation-defined value  | Default is 500Mi. See Kubernetes - [ephemeral storage](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#setting-requests-and-limits-for-local-ephemeral-storage) |
+| javaContainerOptions | activeProcessorCount | JVM argument used to explicitly specify the number of CPU cores that the Java Virtual Machine (JVM) should consider as available. | Default is 2 |
+|                      | maxRAMPercentage | Allows the Java Virtual Machine (JVM) to automatically determine the maximum heap size as a percentage of the container's allocated memory limit, rather than the total physical RAM of the host system. | Default is 70 |
 
 ## Scaling
 To increase or decrease the number of DevOps Deploy Agent Relay instances/replicas issue the following command:
