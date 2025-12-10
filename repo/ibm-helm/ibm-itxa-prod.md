@@ -1,13 +1,14 @@
 
-IBM Transformation Extender Advanced v10.0.1.11
+IBM Transformation Extender Advanced v10.0.2.1
 
-## What's New
+## What's New 
 
-ITXA 10.0.1.11 Certified Container release.
-See IBM ITXA Documentation for a full list of [what's new in ITXA 10.0.1.11.](https://www.ibm.com/docs/en/stea/10.0?topic=welcome-whats-new-in-version-10011)
+ITXA 10.0.2.1 Certified Container release.
+See IBM ITXA Documentation for a full list of [what's new in ITXA 10.0.2.1.](https://www.ibm.com/docs/en/stea/10.0.0?topic=welcome-whats-new-in-version-1002)
 
 ## Introduction
 [IBM Transformation Extender Advanced (ITXA)](https://www.ibm.com/docs/en/stea/10.0) includes support for Enveloping, De-enveloping, and processing of Standards based documents.  This includes validation and acknowledgement generation.  It also supports tranformation via either the IBM Transformation Extender (ITX) or Sterling B2BI Integrator core engines.  ITXA can also leverage the ITX Financial Payment, Supply Chain, or HealthCare packs to support industry specific standards.
+
 ## Notes
 * ITXA user passwords are stored in the database. It is highly recommend that encryption is enabled for the database used for ITXA.
 
@@ -28,7 +29,7 @@ This chart deploys Transformation Extender Advanced on a container management pl
 
 Note: The steps below are for a new install.  To upgrade from a previous non-containerized install or containerized deployment of ITXA, see [Upgrading the Chart](#upgrading-the-chart) below.
 
-1. Redhat Openshift Container Platform version 4.16, 4.17 and 4.18 or Kubernetes Cluster version 1.29 to 1.31 is available.
+1. Redhat Openshift Container Platform version 4.18, 4.19 and 4.20 or Kubernetes Cluster version 1.31 to 1.33 is available.
 2. Ensure that all images are downloaded from the IBM Entitled Registry and pushed to an image registry accessible by the cluster.  See [Downloading Artifacts](https://www.ibm.com/docs/en/stea/10.0?topic=images-downloading-artifacts) for more details.
 3. [Download the helm chart](https://www.ibm.com/docs/en/stea/10.0?topic=da-downloading-certified-container-helm-charts-from-chart-repository) from the IBM Charts repository and Extract to a working directory.
 4. If integrating ITXA with B2BI, it is recommended to install ITXA and B2BI in the same namespace.  If not you will need to duplicate the Persistent Volume (PV) and create separate Persistent Volume Claims (PVCs) in each namespace.
@@ -37,7 +38,8 @@ Note: The steps below are for a new install.  To upgrade from a previous non-con
 7. Create The following Kubernetes Secrets per [the instructions below](#install-persistent-related-objects-in-openshift): itxa-db-secret, tls-itxa-secret, itxa-ingress-secret and itxa-user-secret.
 8. Create Role, RBAC, Pod Security Policy, Cluster Role, Cluster Rolebinding, and Security Context Constraint [using sample yamls below](#podsecuritypolicy-requirements)
     **Red Hat OpenShift SecurityContextConstraints Requirements** and **PodSecurityPolicy Requirements**
-9. Configure the proper JDBC driver to match the Database you are using. Populate global.database.dbDriver in values.yaml with valid values ojdbc8.jar, db2jcc4.jar or mssql-jdbc-12.10.1.jre8.jar for supported databases Oracle, DB2 or MSSQL respectively. For detailed instructions see [Specifying the proper database driver](#specifying-the-proper-database-driver) below.
+9. Configure the proper JDBC driver to match the Database you are using. Populate `global.database.dbDriver` in values.yaml with valid values `ojdbc11.jar`, `db2jcc4.jar` or `mssql-jdbc-11.2.0.jre17.jar` for supported databases Oracle, DB2 or MSSQL respectively. 
+For detailed instructions see [Specifying the proper database driver](#specifying-the-proper-database-driver) below.
 10. Populate necessary sections in the values.yaml that is included with the helm chart.
     1.  Set License to true.
     2.  Add proper images and tags and pull secret for your repo.
@@ -53,8 +55,12 @@ Note: The steps below are for a new install.  To upgrade from a previous non-con
 After modifying itxa-init-db image, you can install dbinit and UI server at the same time as follows.
 
 ### Install ITXA dbinit and UI Server at the same time
+Configure image repository to pull the image. Please see [Configuring the image repository either at global level or Image level](#Configuring-the-image-repository-either-at-global-level-or-Image-level) below.
+
 Set itxadbinit to true. 
+
 Set the itxaUI to true
+
 Set the packs to true under deployPacks for any pack you want to install or upgrade.
 
 ```
@@ -88,7 +94,7 @@ Then, run  `helm upgrade` with the same command line you ran for helm install ab
 
 ## Installing the Chart (Installing the ITXA UI Server)
 
-Prepare a custom values.yaml file based on the configuration section. Ensure that application license is accepted by setting the value of `global.license` to true.
+Prepare a custom values.yaml file based on the [Configuration](#Configuration) section. Ensure that application license is accepted by setting the value of `global.license` to true.
 
 Note:
 
@@ -480,12 +486,45 @@ kubectl create -f <custom-scc.yaml>
 
 ## Red Hat OpenShift Seccomp Profile Support
 Helm chart introduces support for enabling a default Seccomp Profile (`restricted` or `restricted-v2`) through the `defaultSeccompProfile.enabled` property in `values.yaml`.
+
 To ensures proper file permissions and avoids failures when container is running under `restricted` SCCs, patch the namespace to use UID `1001` and GID `0`.
+
 ```
 oc patch namespace <namespace> -p '{"metadata": {"annotations": {"openshift.io/sa.scc.uid-range": "1001/10000"}}}'
 oc patch namespace <namespace> -p '{"metadata": {"annotations": {"openshift.io/sa.scc.supplemental-groups": "0/10000"}}}'
 ```
+
 ## Configuration
+
+### Configuring the image repository either at global level or Image level
+The image repository can be configured at two levels in `values.yaml`:
+1. Image level - overrides global settings for specific components (resourcesInit, itxauiserver, or itxadbinit)
+2. Global level - applies to all images
+
+
+Image-Level Configuration
+
+When the following parameters are configured at the component level, the image will be pulled from the specified repository:
+e.g: resourcesInit section in values.yaml:
+```
+resourcesInit:
+    enabled: true
+    image:
+      repository: "cp.icr.io/cp/ibm-itxa"
+      pullSecret: "er-secret"
+      name: itxa-resources
+      tag: <image_tag>
+      #digest: <image_digest>
+      pullPolicy: "IfNotPresent"
+```
+
+Fallback to Global Repository
+
+If the repository parameter is commented out or not specified in a component section for any image, then the deployment will fall back to the global repository defined in `.Values.global.repository`.
+
+Configuration Priority:
+1. Image-level repository (if specified)
+2. Global `.Values.global.repository` (if Image-level is not specified)
 
 ### Ingress
 
@@ -495,14 +534,11 @@ oc patch namespace <namespace> -p '{"metadata": {"annotations": {"openshift.io/s
 
 #### Specifying the proper database driver
 
-The jdbc jars are bundled in the image "itxa-resources". These jars will be available in the ITXA containers at location /ibm/resources. 
+The jdbc jars are bundled in the image "itxa-resources". These jars will be available in the ITXA containers at location /ibm/resources. So now, customer does not need to upload jars either in S3 Object or store in NFS Share.
 
 Populate following fields in values.yaml to use these jdbc jars present inside the containers.
-
 a. Set global.resourcesInit.enabled to true.
-
 b. Provide image name and tag for "itxa-resources".
-
 c. Comment the following fields for S3 storage:
 ```
    #global.database.s3host 
@@ -518,10 +554,10 @@ image:
 name: itxa-resources
 tag: <tag_name>
 #digest: sha256:1d9045511c1203e6d6d25ed32c700dfca230076412915857c2c40b1409151b7c
-pullPolicy: "IfNotPresent"
+pullPolicy: "Always"
 ```
 
-If you are using S3 Object or store in NFS Share and not "itxa-resources", then you need to download the required jdbc jar for the database and copy it on S3 storage or NFS share. For more details on jdbc version for the database you are using, please see [ here ](https://www.ibm.com/docs/en/stea/10.0.1?topic=prerequisites-database-configuration-parameters) 
+If you are using S3 Object or store in NFS Share and not "itxa-resources", then you need to download the required jdbc jar for the database and copy it on S3 storage or NFS share. For more details on jdbc version for the database you are using, please see [ here ](https://www.ibm.com/docs/en/stea/10.0.2?topic=prerequisites-database-configuration-parameters) 
 
 ### Installation of new database
 
@@ -529,7 +565,7 @@ This will create the required database tables and factory data in the database.
 
 
 1. Create db2 database user.
-2. Create db2 database and grant the necessary priviledges. For more details on creation of database with multiple schema, please see [ here ](https://www.ibm.com/docs/en/stea/10.0.1?topic=prerequisites-database-configuration-parameters) 
+2. Create db2 database and grant the necessary priviledges. For more details on creation of database with multiple schema, please see [ here ](https://www.ibm.com/docs/en/stea/10.0.2?topic=prerequisites-database-configuration-parameters) 
 3. Add following properties in `itxa-db-secret.yaml` file.
 
 ```yaml
@@ -591,10 +627,13 @@ Then run helm install command to install database.
 ## Upgrading the Chart
 
 Please note,
+
 1. For any upgrade, loadFactoryData needs to be install
 2. deployPacks works only if loadFactoryData is install
 3. loadFactoryData set to donotinstall or blank when you are on same version of ITXA and just want to refresh image for security or moving from IIM to container of the same version without any changes in the packs.
+
 ### ITXA Upgrade Scenarios
+
 | Scenarios and Example                                   | Current Setup of ITXA | ITXA Upgrade | Packs Change | itxadatasetup.loadFactoryData | itxadatasetup.deployPacks|
 |---------------------------------------------------------|------------------------|--------------|-------------|-------------------------------|--------------------------|
 | 1. IIM / Container to Container 10.0.1.11               | Container / IIM       | Yes          | Yes          | install                       | true                     |
@@ -602,6 +641,7 @@ Please note,
 | 3. IIM / Container 10.0.1.11 to Container 10.0.1.11     | Container / IIM       | No           | Yes          | install                       | true                     |
 | 4. Image Refresh for security issues                    | Container only        | No           | No           | donotinstall or blank         | false                    |
 | 5. IIM 10.0.1.11 to Container 10.0.1.11                 | IIM only              | No           | No           | donotinstall or blank         | false                    |
+
 ### Upgrading the Chart from a Non-Containerized Install
 
 These charts do support upgrading from a non containerized install.  The differences from a new install are listed below.  The container will be installed on a Kubernetes or OCP worker node, but can use the same database as the non containerized deployment. Any db schema changes for the new version are done as part of the upgrade and connot be rolled back.
@@ -610,14 +650,14 @@ If you are on 10.0.1.7 and earlier version of non-containerized ITXA :
 
 1.  Make a backup of the database so it can be rolled back if issues occur.
 2.  Follow Steps 1-11 in the [Quick Start Checklist](#quickstart-checklist) above.  When filling out the itxa-db-secret in step 7, make sure to use the same schema, credentials and connection info as your current ITXA database including admin user password in itxa-user-secret file. 
-3.  As part of upgrade, you need to use new ITX pack version supported by ITXA 10.0.1.11. Follow the instructions in Step 12 as listed and create a new dbinit image including new packs.  
+3.  As part of upgrade, you need to use new ITX pack version supported by ITXA 10.0.2.1. Follow the instructions in Step 12 as listed and create a new dbinit image including new packs.  
 4.  Continue with Step 13 after dbinit is done to deploy the ITXA UI.
 
-If you are already on 10.0.1.11 non-containerized ITXA : 
+If you are already on 10.0.2.1 non-containerized ITXA : 
 
 1. Make a backup of the database. 
 2. Follow Steps 1-11 in the [Quick Start Checklist](#quickstart-checklist) above.  When filling out the itxa-db-secret in step 7, make sure to use the same schema, credentials and connection info as your current ITXA database including admin user password in itxa-user-secret file. 
-3. As you are already on 10.0.1.11, you don't need to deploy dbinit and directly proceed to deploy ITXA UI by setting `itxadatasetup.loadFactoryData` parameter  to `donotinstall` or blank,  and set  `itxadatasetup.deployPacks` parameter to true for packs visibility in UI as per entitlement. 
+3. As you are already on 10.0.2.1, you don't need to deploy dbinit and directly proceed to deploy ITXA UI by setting `itxadatasetup.loadFactoryData` parameter  to `donotinstall` or blank,  and set  `itxadatasetup.deployPacks` parameter to true for packs visibility in UI as per entitlement. 
 
 
 ### Upgrading the chart to apply config changes or new ITXA patched images without updating the version of ITXA.
@@ -682,6 +722,7 @@ Parameter                                        | Description                  
 `itxauiserver.resources`                          | CPU/Memory resource requests/limits                                  | Memory: `2560Mi`, CPU: `1`
 `itxauiserver.ingress.enabled`                    | Whether Ingress settings enabled                                     | true
 `itxauiserver.ingress.host`                       | Ingress host                                                         |
+`itxauiserver.ingress.backendProtocol`            | Protocol (HTTP/HTTPS) used by Ingress to connect to the backend service| `http`
 `itxauiserver.ingress.controller`                 | Controller class for ingress controller                              | nginx
 `itxauiserver.ingress.contextRoots`               | Context roots which are allowed to be accessed through ingress       | ["spe","adminCenter","/"]
 `itxauiserver.ingress.annotations`                | Annotations for the ingress resource                                 |
@@ -714,6 +755,37 @@ section "Affinity and Tolerations". |
 `global.arch`                                  | Architecture affinity while scheduling pods                          | amd64: `2 - No preference`, ppc64le: `2 - No preference`
 `global.install.itxaUI.enabled`          | Install ITXA UI Server                                                 |
 `global.install.itxadbinit.enabled`         | Run Database Initialization Job                                                |
+`networkPolicy.allowAllIngress`                | Allow ingress from all namespaces if `true`                                                                     | `false`                    
+`networkPolicy.allowNsIngress`                 | Allow ingress from selected namespaces (`ingress` group and `kube-system`) and pods                                 | `true`                     
+`networkPolicy.allowAllEgress`                 | Allow egress to all IPs (0.0.0.0/0) if `true`                                                                   | `false`                    
+`networkPolicy.egress.enabled`                 | Enable egress restrictions. All dependent properties below are only effective if this is `true`.                | `false`                    
+`networkPolicy.egress.dbAccess.enabled`        | Allow egress to the database IP (effective only if `networkPolicy.egress.enabled` is `true`)                        | `true`                     
+`networkPolicy.egress.dbAccess.cidr`           | CIDR of database IP to allow (effective only if `networkPolicy.egress.enabled` is `true`)                           | `"9.46.243.79/32"`         
+`networkPolicy.egress.dbAccess.ports`          | List of TCP ports to allow for database access (effective only if `networkPolicy.egress.enabled` is `true`)         | `[9080, 9443, 25010, 443]` 
+`networkPolicy.egress.internalNetwork.enabled` | Allow egress to internal network IP range (effective only if `networkPolicy.egress.enabled` is `true`)              | `true`                     
+`networkPolicy.egress.internalNetwork.cidr`    | CIDR of internal network IPs to allow (effective only if `networkPolicy.egress.enabled` is `true`)                  | `"192.168.1.0/24"`         
+`networkPolicy.egress.internalNetwork.ports`   | List of TCP ports to allow for internal network access (effective only if `networkPolicy.egress.enabled` is `true`) | `[9080, 9443]`             
+`resourceControls.podLimits.enabled`           | Enable/disable LimitRange enforcement                                      | `false`
+`resourceControls.podLimits.maxCpu`            | Maximum CPU per container                                      |
+`resourceControls.podLimits.maxMemory`         | Maximum memory per container                                       |
+`resourceControls.podLimits.minCpu`            | Minimum CPU per container                                     |
+`resourceControls.podLimits.minMemory`         | Minimum memory per container                                      |
+`resourceControls.podLimits.maxPodCpu`         | Maximum CPU per pod                                     |
+`resourceControls.podLimits.maxPodMemory`      | Maximum memory per pod                                     |
+`resourceControls.podLimits.annotations`       | Custom annotations for LimitRange resource                                      |
+`resourceControls.resourceQuota.enabled`       | Enable/disable ResourceQuota enforcement                               | `false`
+`resourceControls.resourceQuota.maxPods`       | Maximum pods in namespace                |
+`resourceControls.resourceQuota.requestsCpu`   | Total CPU requests                        |
+`resourceControls.resourceQuota.requestsMemory`| Total memory requests                    |
+`resourceControls.resourceQuota.limitsCpu`     | Total CPU limits                         |
+`resourceControls.resourceQuota.limitsMemory`  | Total memory limits                         |
+`resourceControls.resourceQuota.maxPvcs`       | Maximum persistent volume claims                        |
+`resourceControls.resourceQuota.annotations`   | Custom annotations for ResourceQuota resource            |
+`initContainerResources.requests.cpu`          | Guaranteed CPU for init containers               | `250m` 
+`initContainerResources.requests.memory`       |  Guaranteed memory for init containers                | `256Mi`
+`initContainerResources.limits.cpu`            |  Maximum CPU for init containers                             | `1`
+`initContainerResources.limits.memory`         |  Maximum memory for init containers                | `1Gi`
+
 
 
 ## Affinity and Tolerations
@@ -940,6 +1012,161 @@ There is a provided itxa-ui-server.xml , which will be deployed as server.xml to
 * Warning - Please don't change out of the box settings provided in server xml, it may impact the application.
 
 
+## Resource Controls Section Parameters
+
+### A. Pod Limits (`resourceControls.podLimits`)
+
+Controls resource limits at the **container and pod level** using Kubernetes LimitRange:
+
+| Parameter | Description |  Default Value
+|-----------|---------------|-------------|
+| `resourceControls.podLimits.enabled` | Enable/disable LimitRange enforcement |
+| `resourceControls.podLimits.maxCpu` |  Maximum CPU per container  |
+| `resourceControls.podLimits.maxMemory` | Maximum memory per container  |
+| `resourceControls.podLimits.minCpu` |  Minimum CPU per container  |
+| `resourceControls.podLimits.minMemory` |  Minimum memory per container  |
+| `resourceControls.podLimits.maxPodCpu` |  Maximum CPU per pod  |
+| `resourceControls.podLimits.maxPodMemory` |  Maximum memory per pod  |
+| `resourceControls.podLimits.annotations` |  Custom annotations for LimitRange resource |
+
+**Purpose:**
+- Prevents any single container from consuming excessive resources
+- Enforces minimum resource requests for stability
+
+### B. Resource Quota (`resourceControls.resourceQuota`)
+
+Controls resource limits at the **namespace level** using Kubernetes ResourceQuota:
+
+| Parameter | Description | Default Value
+|-----------|---------------|-------------|
+| `resourceControls.resourceQuota.enabled` | Enable/disable ResourceQuota enforcement |
+| `resourceControls.resourceQuota.maxPods` | Maximum pods in namespace  |
+| `resourceControls.resourceQuota.requestsCpu` |  Total CPU requests  |
+| `resourceControls.resourceQuota.requestsMemory` | Total memory requests  |
+| `resourceControls.resourceQuota.limitsCpu` |  Total CPU limits  |
+| `resourceControls.resourceQuota.limitsMemory` |  Total memory limits  |
+| `resourceControls.resourceQuota.maxPvcs` | Maximum persistent volume claims |
+| `resourceControls.resourceQuota.annotations` | Custom annotations for ResourceQuota resource |
+
+**Purpose:**
+- Ensures fair resource distribution across namespace
+- Protects cluster from namespace-level resource exhaustion
+
+**Calculation Logic:**
+```
+Total Worker Capacity: 3 workers × 8 CPU × 16GB = 24 CPU, 48GB
+Requests (50%): 12 CPU, 24GB (guaranteed resources)
+Limits (75%): 18 CPU, 36GB (burst capacity)
+Max Pods: 15 (conservative ~5 per worker node)
+```
+
+```yaml
+resourceControls:
+  podLimits:
+    enabled: true
+    maxCpu: "8"
+    maxMemory: "16Gi"
+    minCpu: "100m"
+    minMemory: "128Mi"
+    maxPodCpu: "8"
+    maxPodMemory: "16Gi"
+    annotations: {}
+  
+  resourceQuota:
+    enabled: true
+    maxPods: "15"
+    requestsCpu: "12"
+    requestsMemory: "24Gi"
+    limitsCpu: "18"
+    limitsMemory: "36Gi"
+    maxPvcs: "10"
+    annotations: {}
+```
+
+
+### C. Init Container Resources (`initContainerResources`)
+
+#### Purpose
+Init containers (ITX init, resources-init, itxauiserver-init) now have explicit resource specifications to:
+- Comply with LimitRange requirements
+- Prevent pod creation failures
+- Ensure predictable resource allocation during initialization
+
+#### Parameters
+
+| Parameter | Description | Description |
+|-----------|---------------|-------------|
+| `initContainerResources.requests.cpu` | Guaranteed CPU for init containers (0.5 cores) | `500m` 
+| `initContainerResources.requests.memory` |  Guaranteed memory for init containers (512 MiB) | `512Mi`
+| `initContainerResources.limits.cpu` |  Maximum CPU for init containers (2 cores) | `2`
+| `initContainerResources.limits.memory` |  Maximum memory for init containers (2 GiB) | `2Gi`
+
+#### Configuration Example
+```yaml
+itxauiserver:
+  initContainerResources:
+    requests:
+      cpu: 500m      # 0.5 CPU cores guaranteed
+      memory: 512Mi  # 512 MiB guaranteed
+    limits:
+      cpu: 2         # Maximum 2 CPU cores
+      memory: 2Gi    # Maximum 2 GiB
+```
+
+**Applied to:**
+- `itx-init` container (ITX runtime initialization)
+- `resources-init` container (database driver deployment)
+- `itxauiserver-init` container (application server initialization)
+
+**Important Notes:**
+- These limits must comply with the LimitRange `podLimits.maxCpu` and `podLimits.maxMemory` values
+- If init container limits exceed LimitRange maximums, pod creation will fail
+- Adjust these values based on your cluster's LimitRange configuration
+
+### D. Data Setup Job Resources (`itxadbinit.resources`)
+
+#### Purpose
+The `itxadatasetup` job requires explicit resource specifications to:
+- Prevent scheduling failures due to insufficient node resources
+- Comply with LimitRange requirements
+- Ensure predictable resource allocation during database initialization
+
+#### Parameters
+
+| Parameter | Default Value | Description |
+|-----------|---------------|-------------|
+| `requests.ephemeral-storage` | `500Mi` | Guaranteed ephemeral storage (500 MiB) |
+| `requests.memory` | `1Gi` | Guaranteed memory (1 GiB) |
+| `requests.cpu` | `500m` | Guaranteed CPU (0.5 cores) |
+| `limits.ephemeral-storage` | `1000Mi` | Maximum ephemeral storage (1000 MiB) |
+| `limits.memory` | `4Gi` | Maximum memory (4 GiB) |
+| `limits.cpu` | `2` | Maximum CPU (2 cores) |
+
+#### Configuration Example
+```yaml
+itxadbinit:
+  resources:
+    requests:
+      ephemeral-storage: 500Mi
+      memory: 1Gi
+      cpu: 500m
+    limits:
+      ephemeral-storage: 1000Mi
+      memory: 4Gi
+      cpu: 2
+```
+
+**Applied to:**
+- `itxadatasetup` job main container (database initialization and factory data loading)
+
+**Init Containers:**
+- `itx-init` and `resources-init` containers use `initContainerResources`
+
+**Important Notes:**
+- Adjust memory/CPU based on your database size and complexity
+- Ensure limits comply with LimitRange `maxCpu` and `maxMemory` values
+- If job fails to schedule, reduce memory/CPU requests to fit available node capacity
+
 ## Limitations
 
 1.  Getting permission errors on persistent volume access when I try to deploy the chart.
@@ -971,4 +1198,4 @@ Create Busybox deployment and set proper access on ITXA file share.
 
 ## Resources Required
 
-Openshift Cluster v4.16, v4.17 or v4.18
+Redhat Openshift Container Platform version 4.18, 4.19 and 4.20 or Kubernetes Cluster version 1.31 to 1.33
