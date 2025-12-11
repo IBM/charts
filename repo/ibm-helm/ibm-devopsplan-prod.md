@@ -2,7 +2,7 @@
 
 ## Introduction
 
-[DevOps Plan](https://ibm.com/docs/en/devops-plan/3.0.5) is a change management platform designed for enterprise-level scalability, customizable processes, and enhanced project control. It accelerates project delivery and improves developer productivity.
+[DevOps Plan](https://ibm.com/docs/en/devops-plan/3.0.6) is a change management platform designed for enterprise-level scalability, customizable processes, and enhanced project control. It accelerates project delivery and improves developer productivity..
 
 ## Chart Details
 
@@ -10,14 +10,14 @@
 
 ## Product Documentation
 
-- [DevOps Plan Product Documentation](https://ibm.com/docs/en/devops-plan/3.0.5)
+- [DevOps Plan Product Documentation](https://ibm.com/docs/en/devops-plan/3.0.6)
 
 ## Prerequisites
 
 1. **Kubernetes and CLI Tools**
-   - Kubernetes 1.16.0+
-   - OpenShift CLI (oc)
-   - Helm 3
+   - Kubernetes v1.20.0 or later 
+   - OpenShift CLI (oc) or kubectl CLI
+   - Helm v3.16 or later
 
    Installation guides:
    - [kubectl CLI](https://kubernetes.io/docs/tasks/tools/)
@@ -25,58 +25,49 @@
    - [Helm 3 CLI](https://helm.sh/docs/intro/install/)
 
 2. **Image and Helm Chart Access**
-   - DevOps Plan images and Helm charts are available from the IBM Entitled Registry and public Helm repository.
+   - DevOps Plan images and Helm charts are available from the IBM Entitled Registry and [public Helm repository](https://github.com/IBM/charts/tree/master/repo/ibm-helm).
 
      - Public Helm chart repository: [https://github.com/IBM/charts/tree/master/repo/ibm-helm](https://github.com/IBM/charts/tree/master/repo/ibm-helm)
 
      - Obtain an entitlement key:
-       - Log in to [MyIBM Container Software Library](https://myibm.ibm.com/products-services/containerlibrary)
-       - Copy your entitlement key from the *Entitlement keys* section
-
-     - Create a secret (named `ibm-entitlement-key`) for authentication in `devopsplan` namespace:
-       ```bash
-       oc create secret docker-registry ibm-entitlement-key \
-         --namespace devopsplan \
-         --docker-username=cp \
-         --docker-password=<EntitlementKey> \
-         --docker-server=cp.icr.io
-       ```
-       - Secrets are namespace-scoped and must be created in each namespace where DevOps Plan will be installed.
-       - Secrets configuration is needed in `global.imagePullSecret`.
+       1. Log in to [MyIBM Container Software Library](https://myibm.ibm.com/products-services/containerlibrary)
+       2. Copy your entitlement key from the *Entitlement keys* section and set it to `EntitlementKey` when creating the `imagePullSecret`.
 
 3. **PostgreSQL Database**
    - DevOps Plan requires a PostgreSQL database to manage TeamSpaces and Applications.
-   - You may use the built-in PostgreSQL provided by the Helm chart or disable it and configure your own external PostgreSQL instance.
+   - You may use the built-in PostgreSQL provided by the Helm chart or configure your own external PostgreSQL instance.
    - Database connection parameters are required during installation if using an external database.
 
 4. **Persistent Volumes**
    - Persistent storage is required for DevOps Plan data (`data`, `config`, `share`, `logs`).
    - If your Kubernetes cluster supports a default `StorageClass` and dynamic provisioning, no manual PV creation is needed.
-   - DevOps Plan requires non-root access to persistent storage. When using IBM File Storage, you need to either use the IBM provided "gid" File storage class with default group ID 65531 or create your own customized storage class to specify a different group ID. Please follow the instructions at https://cloud.ibm.com/docs/containers?topic=containers-cs_storage_nonroot for more details.
-   - The DevOps Plan persistent volumes has been tested with default StorageClass "ibmc-block-gold" for the persistence volume with no sharing the data, persistence.ccm.storageClass=ibmc-file-gold-gid for the persistence volume with sharing the data and securityContext.fsGroup=65531. The default setting for the StorageClass and fsGroup shown below and you can update based on your cluster environment.
+   - DevOps Plan requires non-root access to persistent storage. 
+     WWhen using IBM File Storage, use the IBM-provided “gid” File storage class (default group ID `65531`) or a custom storage class with a different group ID.  
+     See: [IBM Cloud Storage Non-Root Access](https://cloud.ibm.com/docs/containers?topic=containers-cs_storage_nonroot)
 
-     ```yaml
-     persistence:
-       storageClass: ''
-       ccm:
-         storageClass: ibmc-file-gold-gid
-     securityContext:
-       fsGroup: 65531
-     ```
-   - If default StorageClass is not set, then create a `StorageClass`, `PersistentVolume` and set the storage class name during the helm install.
+    **Example configuration:**
+    ```yaml
+    persistence:
+      storageClass: ''
+      ccm:
+        storageClass: ibmc-file-gold-gid
+    securityContext:
+      fsGroup: 65531
+    ```
 
-   ```bash
-   --set global.persistence.rwoStorageClass=<Your StorageClass>
-   ```
+    **Set storage class manually if no default exists:**
+    ```bash
+    --set global.persistence.rwoStorageClass=<Your StorageClass>
+    ```
 
-   For RWX (ReadWriteMany) support:
-
-   ```bash
-   --set global.persistence.rwxStorageClass=<Your RWX StorageClass>
-   ```
+    **For RWX (ReadWriteMany) support:**
+    ```bash
+    --set global.persistence.rwxStorageClass=<Your RWX StorageClass>
+    ```
 
 5. **Keycloak Single Sign-On**
-   - The Helm chart installs Keycloak by default. You can disable this and use an external Keycloak instance instead.
+   - The Helm chart installs Keycloak by default.
+      You can disable this and use an external Keycloak instance instead.
 
 6. **Licensing Requirements**
    - The DevOps Plan image uploads license metrics (Concurrent Users) to the IBM License Service.
@@ -114,27 +105,185 @@ helm repo update
 helm search repo ibm-helm/ibm-devopsplan
 ```
 
-To find OpenShift DNS name for the domain name:
+### Create the Namespace
+
+```bash
+kubectl create namespace devopsplan
+```
+
+### Create an ImagePullSecret
+
+```bash
+oc create secret docker-registry ibm-entitlement-key \
+  --namespace devopsplan \
+  --docker-username=cp \
+  --docker-password=<EntitlementKey> \
+  --docker-server=cp.icr.io
+```
+
+---
+
+### Install on OpenShift cluster
+
+Set OpenShift DNS name for the domain name:
+
 ```bash
 DOMAIN=$(oc get --namespace=openshift-ingress-operator ingresscontroller/default -ojsonpath='{.status.domain}')
 ```
 
-### Install with Default Parameters
+Download ibm-devopsplan-prod chart from devops-plan repository and unpack it in local directory.
+
+```bash
+helm pull ibm-helm/ibm-devopsplan-prod --untar
+```
+
+Install the helm chart:
+
 ```bash
 helm install ibm-devopsplan ibm-helm/ibm-devopsplan-prod \
   --namespace devopsplan \
   --set global.imagePullSecrets={ibm-entitlement-key} \
-  --set global.domain=${DOMAIN} \
-  --timeout 10m
+  --set global.domain=${DOMAIN}
+```
+
+> **Note:**  
+> If your cluster’s default storage class does not support `ReadWriteMany`, set:
+> ```bash
+> --set global.persistence.rwxStorageClass=<rwx_storage_class> > --set securityContext.fsGroup=65531
+> ```
+
+---
+
+### Install on Local Kubernetes cluster
+
+Download ibm-devopsplan-prod chart from devops-plan repository and unpack it in local directory.
+
+```bash
+helm pull ibm-helm/ibm-devopsplan-prod --untar
+```
+
+Install the helm chart:
+
+```bash
+helm install ibm-devopsplan ibm-helm/ibm-devopsplan-prod \
+  -f ibm-devopsplan-prod/values-nginx.yaml \
+  --namespace devopsplan \
+  --set global.imagePullSecrets={ibm-entitlement-key} \
+  --set global.persistence.rwoStorageClass=[default_storage_class] \
+  --set keycloak.service.ipAddress=[vm_ip_address]
+```
+
+> **Note:**  
+> If your cluster’s default storage class does not support `ReadWriteMany`, set:
+> ```bash
+> --set global.persistence.rwxStorageClass=<rwx_storage_class>
+> ```
+
+---
+
+### Install with Emissary-ingress Load Balancer
+
+#### **Before You Begin**
+
+1. **Check OpenSSL Version**
+
+Ensure OpenSSL version is 1.1.1 or later:
+
+```bash
+openssl version
+# Example output: OpenSSL 1.1.1s  1 Nov 2022
+```
+
+2. **Check Port 443 Availability**
+
+```bash
+netstat -anp | grep 443 | grep LISTEN
+```
+
+#### **Step 1: Install Emissary-ingress**
+
+Install Emissary-ingress via Helm. Refer to the [official quick start guide](https://www.getambassador.io/docs/emissary/latest/tutorials/getting-started) for full instructions.
+
+```bash
+# Add Helm repo and update
+helm repo add datawire https://app.getambassador.io
+helm repo update
+
+# Create namespace and install Emissary
+kubectl create namespace emissary
+kubectl apply -f https://app.getambassador.io/yaml/emissary/3.9.1/emissary-crds.yaml
+kubectl wait --timeout=90s --for=condition=available deployment emissary-apiext -n emissary-system
+
+helm install emissary-ingress --namespace emissary datawire/emissary-ingress
+kubectl -n emissary wait --for=condition=available --timeout=90s deploy -lapp.kubernetes.io/instance=emissary-ingress
+```
+
+Verify resources:
+
+```bash
+kubectl get all -n emissary
+kubectl get all -n emissary-system
+```
+
+If the EXTERNAL-IP remains in a pending, assign an external IP:
+
+```bash
+IPADDRESS=<Your_External_IP_Address>
+kubectl patch service emissary-ingress -n emissary -p "{\"spec\": {\"externalIPs\": [\"$IPADDRESS\"]}}"
+```
+
+#### **Step 2: Generate Ingress Secrets**
+
+```bash
+DOMAIN=<Your_External_IP_Address>.nip.io
+NAMESPACE=devopsplan
+kubectl create namespace $NAMESPACE
+```
+
+```bash
+  helm pull ibm-helm/ibm-devopsplan-prod --untar \
+  chmod +x ibm-devopsplan-prod/files/*.sh \
+  && bash ibm-devopsplan-prod/files/certificate.sh -n $NAMESPACE -s ingress $DOMAIN
+```
+
+Verify the secrets:
+
+```bash
+kubectl get secret -n $NAMESPACE | grep ingress
+```
+
+#### **Step 3: Install DevOps Plan**
+
+```bash
+helm upgrade --install ibm-devopsplan ./ibm-devopsplan-prod \
+  -f ibm-devopsplan-prod/values-emissary.yaml \
+  --namespace $NAMESPACE \
+  --set global.imagePullSecrets={ibm-entitlement-key} \
+  --set global.certSecretName=ingress \
+  --set global.domain=$DOMAIN \
+  --set global.persistence.rwoStorageClass=<Your storage class name> \
+  --set replicaCount=<Number_of_replica>
 ```
 
 > Note:
 > - Ensure global.imagePullSecrets are formatted with braces: `{ibm-entitlement-key}`
-> - To enable user invitation emails, set the `serverQualifiedUrlPath` to your DevOps Plan URL:
+> - If using external Keycloak, replace `-f values-emissary.yaml` with `--set ingress.type=mapping`
+
+#### **Step 4: Verify the Installation**
 
 ```bash
---set serverQualifiedUrlPath=<DevOps Plan URL>
+kubectl get mapping -n $NAMESPACE
+helm status ibm-devopsplan -n $NAMESPACE
 ```
+
+Access URLs:
+
+```bash
+echo "https://ibm-devopsplan-keycloak.${DOMAIN}"
+echo "https://ibm-devopsplan.${DOMAIN}"
+```
+
+---
 
 ### **Optional Installations**
 
@@ -143,13 +292,6 @@ helm install ibm-devopsplan ibm-helm/ibm-devopsplan-prod \
 - **DevOps Control**: See *Installing with DevOps Control*
 - **AI Assistant (Llama)**: See *AI Assistant Integration with Llama*
 - **Self-Signed and Private CA**: See *Self-Signed and Private CA*
-
-- If your cluster's default storage class does not support `ReadWriteMany` or `ibmc-file-gold-gid`, use:
-```bash
---set global.persistence.rwoStorageClass=[default_storage_class] \
---set persistence.ccm.storageClass=[ReadWriteMany_storage_class] \
---set securityContext.fsGroup=65531
-```
 
 ---
 
@@ -232,6 +374,34 @@ global:
 
 ---
 
+## **Enable External Access to the Internal PostgreSQL Database**
+
+If you plan to install DevOps Plan using the internal PostgreSQL database and need to access it through DevOps Plan Designer or other supported PostgreSQL tools such as pgAdmin 4, you must enable external PostgreSQL access in the `helm install` or `helm upgrade` command:
+
+```bash
+--set postgresql.enableExternalAccess=true 
+```
+
+After enabling this setting, run the helm status command to view the configuration values required for connecting to the PostgreSQL database.
+
+### Connection Details
+
+- **Host:**
+  - Use **global.domain** if installing on an OpenShift cluster or using an Emissary-ingress Load Balancer.
+  - Use the **VM IP address** if installing on a local Kubernetes cluster.
+- **Port:** Use the value of **postgresql.externalAccessPort**.
+  Defualt value is **30106**.
+- **Database:** *postgres*
+- **Username:** *postgres*
+- **Password:**
+  To retrieve the password, run the following command (ensure the namespace is set to devopsplan):
+
+  ```bash
+  kubectl get secret --namespace devopsplan devopsplan-postgresql -o jsonpath="{.data.tenant-datastore-password}" | base64 -d; echo 
+  ```
+
+---
+
 ## **Installing DevOps Plan with External Keycloak (Single Sign-On)**
 
 The Helm chart supports disabling the internal Keycloak service and integrating with an external Keycloak instance.
@@ -280,34 +450,33 @@ Add `-f keycloak.yaml` to your `helm install` or `helm upgrade` command.
 
 DevOps Control offers Git hosting and collaboration features based on Gitea.
 
-### **Steps**
 
-1. **Create imagePullSecret**
+### **Steps to Install**
 
-Create an imagePullSecret named 'ibm-entitlement-key' as explained in Step 2 of Prerequisites section.
+1. Install DevOps Plan on OpenShift cluster or Emissary-ingress (see *Install on OpenShift cluster* and *Install with Emissary-ingress Load Balancer* sections for details).
+2. Make sure you download ibm-devopsplan-prod chart from devops-plan repository and unpack it in local directory.
 
-2. **Pull the Helm chart**
-  
 ```bash
 helm pull ibm-helm/ibm-devopsplan-prod --untar
-```
+ ```
 
-3. **Install the helm chart**
-
-Install the helm chart with the default parameters into namespace *devopsplan* with the release name *ibm-devopsplan*.
+3. Add the follwing settings to Helm install/upgrade command to enable DevOps Control:
 
 ```bash
-helm install ibm-devopsplan ./ibm-devopsplan-prod \
-  -f ibm-devopsplan-prod/control-Openshift.yaml  \
-  --namespace devopsplan \
-  --set global.imagePullSecrets={ibm-entitlement-key} \
-  --set global.domain=DOMAIN \
-  --set control.enabled=true \
-  --set control.gitea.config.webhook.SKIP_TLS_VERIFY=true \
-  --timeout 10m
+-f ibm-devopsplan-prod/control-Openshift.yaml \
+--set control.enabled=true \
+--set control.gitea.config.webhook.SKIP_TLS_VERIFY=true
+
 ```
 
-4. **Run *helm status ibm-devopsplan -n devopsplan* to retrieve URLs, username and password.**
+4. Verify:
+
+```bash
+helm status ibm-devopsplan -n $NAMESPACE
+echo "https://devopsplan-control.$DOMAIN/control"
+```
+
+5. **Run *helm status ibm-devopsplan -n devopsplan* to retrieve URLs, username and password.**
 
 Start the DevOps Plan home page in your browser by using https://devopsplan-control.$INGRESS_DOMAIN/control.
 
@@ -339,7 +508,8 @@ llama:
 ### **API Call Example**
 
 ```bash
-curl -k -s <Llama_URL>/api/generate -d '{
+Llama_URL=http://{{ .Release.Name }}-llama:11434
+curl -k -s ${Llama_URL}/api/generate -d '{
   "model": "<Model_Name>",
   "prompt": "<Your_Message>",
   "stream": false
@@ -362,7 +532,7 @@ If the default storage class does not support the ReadWriteMany (RWX) accessMode
 
 ```bash
 helm status ibm-devopsplan -n $NAMESPACE
-kubectl exec -it <devopsplan_pod_name> -- curl -ks <Llama_URL>
+kubectl exec -it <devopsplan_pod_name> -- curl -ks ${Llama_URL}
 # Expected: Ollama is running
 ```
 
@@ -463,7 +633,7 @@ ssl:
 This guide explains how to configure and use Velero and MinIO to back up and restore your Openshift cluster, including Persistent Volume Claims (PVCs). Velero manages backups while MinIO provides S3-compatible storage.
 
 ### Install Backup and Restore Helm Chart
-**Steps 1.** Download ibm-devopsplan-prod chart from devops-plan repository and unpack it in local directory
+**Steps 1.** Download ibm-devopsplan-prod chart from devops-plan repository and unpack it in local directory.
 
   ```bash
   helm pull ibm-helm/ibm-devopsplan-prod --untar
@@ -478,7 +648,7 @@ This guide explains how to configure and use Velero and MinIO to back up and res
 **Step 3.** Create a Docker registry secret for pulling images from IBM Entitled Registry into the namespace backup.
 
   ```bash
-  Kubectl create secret docker-registry ibm-entitlement-key \
+  oc create secret docker-registry ibm-entitlement-key \
     --namespace backup \
     --docker-username=cp \
     --docker-password=<EntitlementKey> \
@@ -675,13 +845,32 @@ To uninstall/delete the backup and restore Helm chart with namespace delete.
 
   ```bash
   helm delete backup -n backup
-  helm delete ns backup
+  oc delete ns backup
   ```
 
 ### Limitation:
 
 Velero does not back up or restore hostPath volumes directly. If your Kubernetes setup uses hostPath volumes, you won't be able to use Velero's backup and restore functionality for those volumes.
 Delete the backup namespace as well to prevent potential MinIO repository corruption after uninstallation of Velero/Minio.
+
+### Additional Configuration:
+
+If the cluster is running slowly, you may need to adjust the Velero resource limits as well as the default liveness and readiness probe parameters to ensure that backup and restore operations work properly.
+
+| **Parameter**                                         | **Description**                                                                 | **Default** |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------- | ----------- |
+| `velero.nodeAgent.resources.requests.memory`          | Memory requests                                                                 | `128Mi`     |
+| `velero.nodeAgent.resources.limits.memory`            | Memory limits                                                                   | `512Mi`     |
+| `velero.nodeAgent.resources.requests.cpu`             | CPU requests                                                                    | `500m`      |
+| `velero.nodeAgent.resources.limits.cpu`               | CPU limits                                                                      | `1000m`     |
+| `velero.nodeAgent.livenessProbe.initialDelaySeconds`  | LivenessProbe initialDelaySeconds                                               | `10`        |
+| `velero.nodeAgent.livenessProbe.periodSeconds`        | LivenessProbe periodSeconds                                                     | `30`        |
+| `velero.nodeAgent.livenessProbe.timeoutSeconds=10`    | LivenessProbe timeoutSeconds                                                    | `5`         |
+| `velero.nodeAgent.livenessProbe.failureThreshold`     | LivenessProbe failureThreshold                                                  | `5`         |
+| `velero.nodeAgent.readinessProbe.initialDelaySeconds` | ReadinessProbe initialDelaySeconds                                              | `10`        |
+| `velero.nodeAgent.readinessProbe.periodSeconds`       | ReadinessProbe periodSeconds                                                    | `30`        |
+| `velero.nodeAgent.readinessProbe.timeoutSeconds`      | ReadinessProbe timeoutSeconds                                                   | `5`         |
+| `velero.nodeAgent.readinessProbe.failureThreshold`    | ReadinessProbe failureThreshold                                                 | `5`         |
 
 ---
 
@@ -804,7 +993,7 @@ You can upgrade DevOps Plan to the newest release using the helm upgrade command
 
 - If you already installed with the internal PostgreSQL database, and you plan to upgrade with the latest release version without deleting the PostgreSQL PVC, then you need to get the existing password before uninstall/upgrade and set it during *helm upgrade --install*. Get the password for internal PostgreSQL database by running this command when namespace is set to *devopsplan*:
   ```bash
-  export POSTGRES_PASSWORD=$(kubectl get secret --namespace devopsplan ibm-devopsplan-postgresql -o jsonpath="{.data.tenant-datastore-password}" | base64 -d)
+  export POSTGRES_PASSWORD=$(kubectl get secret --namespace devopsplan devopsplan-postgresql -o jsonpath="{.data.tenant-datastore-password}" | base64 -d)
   ```
   Set the password during the helm upgrade --install:
   ```bash
@@ -831,13 +1020,13 @@ You can rollback to the previous release using *helm rollback* command.
 2. Use Helm to upgrade the chart to new release as described in section **Rolling upgrade release**.
 
 **Procedure:**
-1. Run *helm history* command to see revision numbers of your helm chart release. You should have min two revision numbers. revision 1 for install and revision 2 for the upgrade that you execute in **Before you begin** section. Example below shows you have a helm chart release name *ibm-devopsplan1* with revision 1 installed the helm chart *ibm-devopsplan1-3.0.3* for release 3.0.4 and revision 2 upgraded the helm chart *ibm-devopsplan2-3.0.4* to release 3.0.4.
+1. Run *helm history* command to see revision numbers of your helm chart release. You should have min two revision numbers. revision 1 for install and revision 2 for the upgrade that you execute in **Before you begin** section. Example below shows you have a helm chart release name *ibm-devopsplan1* with revision 1 installed the helm chart *ibm-devopsplan1-3.0.3* for release 3.0.6 and revision 2 upgraded the helm chart *ibm-devopsplan2-3.0.6* to release 3.0.6.
 
   ```bash
   $ helm history ibm-devopsplan1 --namespace dev
   REVISION        UPDATED                         STATUS          CHART           APP VERSION     DESCRIPTION
   1               Thu Nov 20 21:58:13 2024        superseded      ibm-devopsplan1-3.0.3          Install complete
-  2               Thu Nov 20 22:13:56 2024        deployed        ibm-devopsplan2-3.0.4          Upgrade complete
+  2               Thu Nov 20 22:13:56 2024        deployed        ibm-devopsplan2-3.0.6          Upgrade complete
   ```
 
 2. Rollback helm chart using *helm rollback* command. Example below will rollback helm chart release *ibm-devopsplan1* from revision 2 to revision 1.
@@ -853,9 +1042,11 @@ You can rollback to the previous release using *helm rollback* command.
   $ helm history ibm-devopsplan1 --namespace dev
   REVISION        UPDATED                         STATUS          CHART           APP VERSION     DESCRIPTION
   1               Thu Nov 20 21:58:13 2024        superseded      ibm-devopsplan1-3.0.3          Install complete
-  2               Thu Nov 20 22:13:56 2024        deployed        ibm-devopsplan2-3.0.4          Upgrade complete
+  2               Thu Nov 20 22:13:56 2024        deployed        ibm-devopsplan2-3.0.6          Upgrade complete
   3               Thu Nov 20 22:30:32 2024        deployed        ibm-devopsplan1-3.0.3          Rollback to 1
   ```
+
+- The OpenSearch version has been upgraded from 2.18.0 to 3.1.0 as part of the DevOps Plan 3.0.6 release. OpenSearch 2.18.0 is based on Lucene 9, whereas OpenSearch 3.1.0 is based on Lucene 10. This Rollback constitutes a major version change; therefore, in-place rolling back are not supported. To complete the rollback, either a full cluster restart or a migration involving reindexing is required. For detailed guidance, refer to the official OpenSearch documentation.
 
 ---
 
@@ -891,7 +1082,7 @@ The Helm chart has the following values that can be overridden using the *--set 
 | **auth.jwt.refreshTokenValiditySeconds** | Duration for which a JWT refresh token remains valid, in seconds. | `86400` (1 day) |
 
 ### Parameters for creating TeamSpace and Applications
-The PostgreSQL database requires to create TeamSpace and Applications. The helm chart is installed with the internal PostgreSQL database by default. If you plan to install/upgrade the helm charts with an external database, then you need to set the *postgresql.enabled* to *false* and set the *spring.datastore* and *tenant.datastore* configuration settings based on your external database parameters.
+The PostgreSQL database requires to create TeamSpace and Applications. The helm chart is installed with the internal PostgreSQL database by default. If you plan to install/upgrade the helm charts with an external database, then you need to set the *postgresql.enabled* to *false* and set the *spring.datastore* and *tenant.datastore* configuration settings based on your external database parameters. PostgreSQL database is supported for release 3.0.6.
 
 | **Parameter** | **Description** | **Default value** |
 | --- | --- | --- |
@@ -929,7 +1120,7 @@ The helm chart installs the Analytics feature on a separate pod by default. you 
 | **analytics.urlMapping** | URL mapping. <br>- The mapping URL format should be *https:[mapping-name].com*.  | "" |
 | **analytics.replicaCount** | Number of replica Analytics Pods. This parameter is needed if analytics.service *=true.* | 1 |
 | **analytics.image.repository** | Analytics docker Image repository path. This parameter is needed if analytics.service *=true.* | cp/devops-plan/devopsplan-analytics |
-| **analytics.image.tag** | Analytics Image tag. This parameter is needed if *analytics.service=true.* | 3.0.5.1 |
+| **analytics.image.tag** | Analytics Image tag. This parameter is needed if *analytics.service=true.* | 3.0.6 |
 | **analytics.image.pullPolicy** | Analytics image pull policy. This parameter is needed if *analytics.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **analytics.hostname** | Analytics hostname | analytics |
 
@@ -940,7 +1131,7 @@ The helm chart is installed with the internal postgresql database by default.
 | --- | --- | --- |
 | **postgresql.enabled** | This parameter enables or disables devopsplan-postgresql database service. Accepted values are:<br>- *true* to enable postgresql database service.<br>- *false* to disable postgresql database service. | true |
 | **postgresql.repository** | Postgresql database docker Image repository path. This parameter is needed if *postgresql.enabled=true.* | cp/devops-plan/devopsplan-postgresql |
-| **postgresql.tag** | Postgresql database Image tag.This parameter is needed if *postgresql.enabled=true.* | 3.0.5.1 |
+| **postgresql.tag** | Postgresql database Image tag.This parameter is needed if *postgresql.enabled=true.* | 3.0.6 |
 | **postgresql.pullPolicy** | Postgresql database image pull policy.This parameter is needed if *postgresql.enabled=true*Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent |
  **postgresql.service.type** | postgresql service type  | LoadBalancer |
 | **postgresql.service.exposePort** | postgresql service port  | "" |
@@ -959,13 +1150,13 @@ The dashboards analytics configuration setting options set by default for dashbo
 | **nginx.urlMapping** | URL mapping. <br>- The mapping URL format should be *https:[mapping-name].com*.  | "" |
 | **nginx.replicaCount** | Number of replica nginx Pods. This parameter is needed if nginx.service *=true.* | 1 |
 | **nginx.image.repository** | Nginx docker Image repository path. This parameter is needed if nginx.service *=true.* | cp/devops-plan/devopsplan-nginx |
-| **nginx.image.tag** | Nginx Image tag. This parameter is needed if *nginx.service=true.* | 3.0.5.1 |
+| **nginx.image.tag** | Nginx Image tag. This parameter is needed if *nginx.service=true.* | 3.0.6 |
 | **nginx.image.pullPolicy** | Nginx image pull policy. This parameter is needed if *nginx.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **nginx.hostname** | Nginx hostname | nginx |
 | **dashboards.service** | This parameter enables or disables dashboards service. Accepted values are:<br>- *true* to enable Nginx service.<br>- *false* to disable dashboards service.<br>This parameter is needed if you plan to use Dashboard features for Business Analytics. | true |
 | **dashboards.replicaCount** | Number of replica dashboards Pods. This parameter is needed if dashboards.service *=true.* | 1 |
 | **dashboards.image.repository** | Opensearch-dashboards docker Image repository path. This parameter is needed if dashboards.service *=true.* | cp/devops-plan/devopsplan-dashboards |
-| **dashboards.image.tag** | Opensearch-dashboards Image tag. This parameter is needed if *dashboards.service=true.* | 3.0.5.1 |
+| **dashboards.image.tag** | Opensearch-dashboards Image tag. This parameter is needed if *dashboards.service=true.* | 3.0.6 |
 | **dashboards.image.pullPolicy** | Opensearch-dashboards image pull policy. This parameter is needed if *dashboards.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **dashboards.hostname** | Dashboards hostname | dashboards |
 | **dashboards.username** | Opensearch Dashboards username | "admin" |
@@ -973,7 +1164,7 @@ The dashboards analytics configuration setting options set by default for dashbo
 | **logstash.service** | This parameter enables or disables devopsplan-logstash service. Accepted values are:<br>- *true* to enable Nginx service.<br>- *false* to disable devopsplan-logstash service.<br>This parameter is needed if you plan to use Dashboard features for Business Analytics. | true |
 | **logstash.replicaCount** | Number of replica devopsplan-logstash pods. This parameter is needed if logstash.service *=true.* | 1 |
 | **logstash.image.repository** | logstash docker Image repository path. This parameter is needed if logstash.service *=true.* | cp/devops-plan/devopsplan-logstash |
-| **logstash.image.tag** | devopsplan-logstash Image tag. This parameter is needed if *logstas.service=true.* | 3.0.5.1 |
+| **logstash.image.tag** | devopsplan-logstash Image tag. This parameter is needed if *logstas.service=true.* | 3.0.6 |
 | **logstash.image.pullPolicy** | Opensearch-logstash image pull policy. This parameter is needed if *logstas.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **logstash.port** | logstash port | 5011 |
 | **logstash.username** | logstash username | "logstash" |
@@ -981,7 +1172,7 @@ The dashboards analytics configuration setting options set by default for dashbo
 | **opensearch.service** | This parameter enables or disables opensearch service. Accepted values are:<br>- *true* to enable Nginx service.<br>- *false* to disable opensearch service.<br>This parameter is needed if you plan to use Dashboard features for Business Analytics. | true |
 | **opensearch.replicaCount** | Number of replica opensearch pods. This parameter is needed if opensearch.service *=true.* | 1 |
 | **opensearch.image.repository** | Opensearch docker Image repository path. This parameter is needed if opensearch.service *=true.* | cp/devops-plan/devopsplan-opensearch |
-| **opensearch.image.tag** | Opensearch Image tag. This parameter is needed if *opensearch.service=true.* | 3.0.5.1 |
+| **opensearch.image.tag** | Opensearch Image tag. This parameter is needed if *opensearch.service=true.* | 3.0.6 |
 | **opensearch.image.pullPolicy** | Opensearch image pull policy. This parameter is needed if *opensearch.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **opensearch.hostname** | Opensearch hostname | opensearch |
 | **opensearch.hash** | Opensearch password hash | "" |
@@ -1006,7 +1197,7 @@ Single-Sign-On functionality by default is set to disable. If the admin plans to
 | **keycloak.jsonFile.configMapName** | This is the configMap file name that contains the keycloak.json file. This parameter is needed if keycloak.jsonFile.enabled *=true.* | keycloak-json |
 | **keycloaksrv.enabled** | This parameter enables or disables Keycloak service in Helm Chart for Single-Sign-On service. Accepted values are:<br>- *true* to enable Keycloak service.<br>- *false* to disable Keycloak service.<br>This parameter is needed if you plan to use Single-Sign-On feature and deploy Keycloak with Helm chart. | false |
 | **keycloaksrv.image.repository** | keycloak docker Image repository path. | devops-plan/devopsplan-keycloak |
-| **keycloaksrv.image.tag** | Keycloak Image tag. | 3.0.5.1 |
+| **keycloaksrv.image.tag** | Keycloak Image tag. | 3.0.6 |
 | **keycloaksrv.image.pullPolicy** | Keycloak image pull policy. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent |
 | **keycloaksrv.service.type** | Specify the nodePort values for the LoadBalancer and NodePort service types. | LoadBalancer |
 | **keycloaksrv.service.nodePorts.http** | Keycloak service HTTP port. | 30107 |
@@ -1178,7 +1369,7 @@ The following steps describe how enabled/disabled mounting the windows product p
 | --- | --- | --- |
 | **winInstall.enabled** | This parameter enables or disables mounting the windows product package in DevOps Plan Server. Accepted values are:<br>- *true* to enable mounting the windows product package.<br>- *false* to disable mounting the windows product package. | true |
 | **winInstall.image.repository** | win-install docker Image repository path. This parameter is needed if *winInstall.enabled=true*. | ibm-devopsplan-win-install |
-| **winInstall.image.tag** | win-install image tag. This parameter is needed if *winInstall.enabled=*true* | 3.0.5.1 |
+| **winInstall.image.tag** | win-install image tag. This parameter is needed if *winInstall.enabled=*true* | 3.0.6 |
 | **winInstall.image.pullPolicy** | win-install image pull policy. This parameter is needed if *winInstall.enabled=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent |
 | **winInstall.accessModes** | win-install persistence Volume access modes. This parameter is needed if *winInstall.enabled=rtue*. | ReadWriteOnce |
 | **winInstall.size** | win-install persistence Volume size. This parameter is needed if *winInstall.enabled=true*. | 2Gi |
@@ -1220,8 +1411,8 @@ By default, the backoffLimit set to 1. You can increase to 5:
 <details><summary>Downloads and Useful Links</summary>
 <p>
 
-- [DevOps Plan](https://ibm.com/docs/en/devops-plan/3.0.5)
-- [Getting started with DevOps Plan Helm Chart](https://www.ibm.com/docs/en/devops-plan/3.0.5?topic=plan-getting-started-devops-helm-chart-openshift)
+- [DevOps Plan](https://ibm.com/docs/en/devops-plan/3.0.6)
+- [Getting started with DevOps Plan Helm Chart](https://www.ibm.com/docs/en/devops-plan/3.0.6?topic=plan-getting-started-devops-helm-chart-openshift)
 
 </p>
 </details>
