@@ -23,4 +23,4 @@ Not applicable
 
 See also the [documentation](https://ibm.biz/event-automation).
 
-*© Copyright IBM Corp. 2023*
+*© Copyright IBM Corp. 2023, 2025*
