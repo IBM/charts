@@ -14,7 +14,7 @@ IBM DevOps Loop is a cloud-based continuous integration platform built on modern
   
   3. A valid public certificates issued by trusted Certificate Authorities (CAs).
 
-  4. For installation instructions and requisite requirements, see Installation of DevOps Loop at <https://www.ibm.com/docs/en/devops-loop/1.0.3?topic=administration-installation-devops-loop>
+  4. For installation instructions and requisite requirements, see Installation of DevOps Loop at <https://www.ibm.com/docs/en/devops-loop/2.0.0?topic=administration-installation-devops-loop>
   
   5. Image and Helm Chart - The DevOps Loop images and helm chart can be accessed via the Entitled Registry and public Helm repository.
 
@@ -48,7 +48,7 @@ See IBM Rational License Key Server documentation for more details.
 
 This installation includes locally deployed databases.  This includes a sample install of MongoDB.
 
-Before you begin, follow requisite steps and configuration at Installation of DevOps Loop:  <https://www.ibm.com/docs/en/devops-loop/1.0.3?topic=administration-installation-devops-loop>
+Before you begin, follow requisite steps and configuration at Installation of DevOps Loop:  <https://www.ibm.com/docs/en/devops-loop/2.0.0?topic=administration-installation-devops-loop>
 
 Fetch chart for install:
 
@@ -62,7 +62,7 @@ helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/
 #External fully qualified domain name of the cluster
 #
 #See Installation of DevOps Loop documentation for more details:
-#https://www.ibm.com/docs/en/devops-loop/1.0.3?topic=administration-installation-devops-loop
+#https://www.ibm.com/docs/en/devops-loop/2.0.0?topic=administration-installation-devops-loop
 DOMAIN=
 
 #Required
@@ -95,7 +95,7 @@ PASSWORD_SEED=
 #Specify the TLS secret name in your namespace as necessary.
 #
 #See Installation of DevOps Loop documentation for more details:
-#https://www.ibm.com/docs/en/devops-loop/1.0.3?topic=administration-installation-devops-loop
+#https://www.ibm.com/docs/en/devops-loop/2.0.0?topic=administration-installation-devops-loop
 TLS_CERT_SECRET_NAME=
 
 #Set SELF_SIGNED=true to generate and use a self-signed certificate for the
@@ -115,7 +115,7 @@ RWO_STORAGE_CLASS=
 #Required
 NAMESPACE=devops-loop
 HELM_NAME=devops-loop
-LOOP_CHART_VERSION=1.0.301
+LOOP_CHART_VERSION=2.0.000
 
 #Optional Additional Helm options
 ADDITIONAL_HELM_OPTIONS=""
@@ -324,18 +324,18 @@ See IBM Rational License Key Server documentation for more details.
 
 This installation includes locally deployed databases.  This includes a sample install of MongoDB.
 
-Before you begin, follow requisite steps and configuration at Installation of DevOps Loop: https://www.ibm.com/docs/en/devops-loop/1.0.3?topic=administration-installation-devops-loop
+Before you begin, follow requisite steps and configuration at Installation of DevOps Loop: https://www.ibm.com/docs/en/devops-loop/2.0.0?topic=administration-installation-devops-loop
 
 Fetch chart for install:
 
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-loop --version 1.0.301
+helm pull --untar ibm-helm/ibm-devops-loop --version 2.0.000
 ```
 
 ```bash
 #Pull ibm helm charts
-LOOP_CHART_VERSION=1.0.301
+LOOP_CHART_VERSION=2.0.000
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
 helm pull --untar ibm-helm/ibm-devops-loop --version ${LOOP_CHART_VERSION}
 #
@@ -349,7 +349,7 @@ helm pull --untar ibm-helm/ibm-devops-loop --version ${LOOP_CHART_VERSION}
 # qualified name associated with your cluster.
 #
 #See Installation of DevOps Loop documentation for more details:
-#https://www.ibm.com/docs/en/devops-loop/1.0.3?topic=administration-installation-devops-loop
+#https://www.ibm.com/docs/en/devops-loop/2.0.0?topic=administration-installation-devops-loop
 DOMAIN=$(oc get -n openshift-ingress-operator ingresscontroller default -o jsonpath='{.status.domain}')
 
 #Required
@@ -382,7 +382,7 @@ PASSWORD_SEED=
 #Specify the TLS secret name in your namespace as necessary.
 #
 #See Installation of DevOps Loop documentation for more details:
-#https://www.ibm.com/docs/en/devops-loop/1.0.3?topic=administration-installation-devops-loop
+#https://www.ibm.com/docs/en/devops-loop/2.0.0?topic=administration-installation-devops-loop
 TLS_CERT_SECRET_NAME=
 
 #Set SELF_SIGNED=true to generate and use a self-signed certificate for the
