@@ -1,4 +1,4 @@
-# IBM Sterling External Authentication Server v6.1.1.0
+# IBM Sterling External Authentication Server v6.1.1.2
 
 ## Introduction
 
@@ -158,5 +158,5 @@ Please refer to [DIME and DARE Security Considerations](https://www.ibm.com/docs
 - IBM Sterling External Authentication Server chart is supported with only 1 replica count.
 - IBM Sterling External Authentication Server chart supports only amd64 architecture.
 - Non-persistence mode is not supported.
-- The rollback support is not available from 6.1.1.0 to 6.0.3.0 due to some structural changes in IBM Sterling External Authentication Server.
+- The rollback support is not available from 6.1.1.2 to 6.0.3.0 due to some structural changes in IBM Sterling External Authentication Server.
 
