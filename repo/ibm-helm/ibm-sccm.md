@@ -1,8 +1,8 @@
-# IBM Sterling Control Center Monitor V6.4.1.0
+# IBM Sterling Control Center Monitor V6.4.0.0
 
 ## Introduction
 
-IBM▒ Control Center Monitor is a centralized monitoring and management system. It gives operations personnel the capability to continuously monitor the status of Configuration Managers, engines, and adapters across the enterprise for the following server types from one central location: IBM Sterling Connect:Direct▒, IBM Sterling Connect:Enterprise▒, IBM Sterling B2B Integrator, IBM Sterling File Gateway, IBM Global High Availability Mailbox, IBM Sterling Connect:Express, IBM QuickFile, IBM MQ Managed File Transfer and Many FTP servers. To find out more, see the Knowledge Center for [IBM Sterling Control Center Monitor](  https://www.ibm.com/docs/en/control-center/6.4.1?topic=sterling-control-center-monitor-641).
+IBM▒ Control Center Monitor is a centralized monitoring and management system. It gives operations personnel the capability to continuously monitor the status of Configuration Managers, engines, and adapters across the enterprise for the following server types from one central location: IBM Sterling Connect:Direct▒, IBM Sterling Connect:Enterprise▒, IBM Sterling B2B Integrator, IBM Sterling File Gateway, IBM Global High Availability Mailbox, IBM Sterling Connect:Express, IBM QuickFile, IBM MQ Managed File Transfer and Many FTP servers. To find out more, see the Knowledge Center for [IBM Sterling Control Center Monitor](  https://www.ibm.com/docs/en/control-center/6.4.0?topic=sterling-control-center-monitor-640).
 
 ## Chart Details
 
@@ -18,11 +18,11 @@ This chart deploys IBM Sterling Control Center Monitor on a container management
 ## Prerequisites
 
 1. Red Hat OpenShift Container Platform 
+   * Version 4.14.0 or later fixes
    * Version 4.15.0 or later fixes
    * Version 4.16.0 or later fixes
    * Version 4.17.0 or later fixes
-   * Version 4.18.0 or later fixes
-2. Kubernetes version >= 1.30 and <=1.33 with beta APIs enabled.
+2. Kubernetes version >= 1.27 and <=1.31 with beta APIs enabled.
 3. Helm version >= 3.18.x
 4. Ensure that one of the supported database server (Oracle/DB2/MSSQL) is installed and the database is accessible from inside the cluster.
 5. Ensure that the docker images for IBM Sterling Control Center Monitor from IBM Entitled Registry are downloaded and pushed to an image registry accessible to the cluster.
@@ -312,7 +312,7 @@ This chart uses the following resources by default:
 ## Agreement to IBM Control Center License
 
 You must read the IBM Sterling Control Center License agreement terms before installation, using the below link:
-[License](https://www.ibm.com/support/customer/csol/terms/?id=L-BGZS-2GMLUY&lc=en) (L/N: L-BGZS-2GMLUY)
+[License](https://www.ibm.com/support/customer/csol/terms/?id=L-MBLY-9ARX3J&lc=en) (L/N: L-MBLY-9ARX3J)
 
 ## Installing the Chart
 
@@ -325,7 +325,7 @@ Ensure that the chart is downloaded locally and available.
 Run the below command
 
 ```bash
-$ helm install my-release -f values.yaml ibm-sccm-4.1.1.tgz
+$ helm install my-release -f values.yaml ibm-sccm-4.0.13.tgz
 ```
 
 Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 6-7 minutes for Installing Control Center.
@@ -441,8 +441,7 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `service.webConsoleSecure.allowIngressTraffic`  | Allowing Ingress traffic for Secure Web Console     | `true`                                   |
 | `service.externalIP`                            | External IP for service discovery                   |                                          |
 | `storageSecurity.fsGroup`                       | Used for controlling access to block storage        |                                          |
-| `storageSecurity.fsGroupChangePolicy`           | Used for controlling access to block storage        | `
-  fsGroupChangePolicy: "OnRootMismatch` |
+| `storageSecurity.fsGroupChangePolicy`           | Used for controlling access to block storage        | `fsGroupChangePolicy: "OnRootMismatch"`  |
 | `storageSecurity.supplementalGroups`            | Groups IDs are used for controlling access          | `[]`                                     |
 | `storageSecurity.runAsUser`                     | UID for container user                              | `1010`                                   |
 | `secret.secretName`                             | Secret name for Secure Parameters                   |                                          |
@@ -481,18 +480,19 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `networkPolicy.ingress.ports`                   | Network Policy ingress ports                        |                                          |
 | `networkPolicy.ingress.fromSelectors`           | Network Policy ingress selectors                    |                                          |
 | `route.enabled`                                 | Route for OpenShift Enabled/Disabled                | `false`                                  |
+| `route.host`                                    | hostname to access Control Center Application       |                                          |
 | `secComp.type`                                  | seccomp profile type                                | `RuntimeDefault`                         |
-| `secComp.profile`                               | seccomp profile filepath                            | ``                                       |
+| `secComp.profile`                               | seccomp profile filepath                            |                                          |
 | `timeZone`                                      | This flag is used for setting TimeZone of container | `Asia/Calcutta`                          |
 | `debugScripts`                                  | This flag is used for debugging and troubleshooting | `false`                                  |
 | `extraInitContainers.name`                      | This will be used as name of init container         | `copy-resources`                         |
-| `extraInitContainers.repository`                | Image respository for init container                | ``                                       |
-| `extraInitContainers.tag`                       | Image respository tag for init container            | ``                                       |
-| `extraInitContainers.imageSecrets`              | Image secrets for init container                    | ``                                       |
+| `extraInitContainers.repository`                | Image respository for init container                |                                          |
+| `extraInitContainers.tag`                       | Image respository tag for init container            |                                          |
+| `extraInitContainers.imageSecrets`              | Image secrets for init container                    |                                          |
 | `extraInitContainers.pullPolicy`                | Image pull policy used for init container           | `Always`                                 |
-| `extraInitContainers.command`                   | command used for running init container             | ``                                       |
+| `extraInitContainers.command`                   | command used for running init container             |                                          |
 | `extraInitContainers.digest.enabled`            | Flag for using digest for images of init container  | `false`                                  |
-| `extraInitContainers.digest.value`              | Image digest value used for init container          | ``                                       |
+| `extraInitContainers.digest.value`              | Image digest value used for init container          |                                          |
 | `extraInitContainers.userInput.enabled`         | user input should be shared volume or not           | `false`                                  |
 | `defaultPodDisruptionBudget.enabled`            | This flag will be used to enable or disable         | `false`                                  |
 | `defaultPodDisruptionBudget.minAvailable`       | Minimum replicas required for pod disruption budget | `0`                                      |
@@ -511,13 +511,13 @@ The following tables lists the configurable parameters of the IBM Control Center
 Specify each parameter in values.yaml to `helm install`. For example,
 
 ```bash
-helm install my-release -f values.yaml ibm-sccm-4.1.1.tgz
+helm install my-release -f values.yaml ibm-sccm-4.0.13.tgz
 ```
 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. You can create a copy of values.yaml file e.g. my-values.yaml and edit the values that you need to override. Use the my-values.yaml file for installation. For example,
 
 ```bash
-helm install <release-name> -f my-values.yaml ibm-sccm-4.1.1.tgz
+helm install <release-name> -f my-values.yaml ibm-sccm-4.0.13.tgz
 ```
 > **Tip**: You can use the default [values.yaml](values.yaml)
 
@@ -550,7 +550,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-sccm-4.1.1.gz
+helm upgrade my-release -f values.yaml ibm-sccm-4.0.13.gz
 ```
 
 Refer [RELEASENOTES.md](RELEASENOTES.md) for Fix history.
@@ -629,7 +629,7 @@ Use `networkPolicy` to control traffic flow at the port level.
 
 1. All sensitive application data at rest is stored in binary format so user cannot decrypt it. This chart does not support Encryption of user data at rest by default. Administrator can configure storage encryption to encrypt all data at rest.
 
-2. Data in motion is encrypted using transport layer security(TLS 1.2). For more information please see product [Knowledge center link]( https://www.ibm.com/docs/en/control-center/6.4.1?topic=sterling-control-center-monitor-641 )
+2. Data in motion is encrypted using transport layer security(TLS 1.2). For more information please see product [Knowledge center link]( https://www.ibm.com/docs/en/control-center/6.4.0?topic=sterling-control-center-monitor-640 )
 
 
 ## Storage
@@ -652,4 +652,4 @@ IBM Sterling Control Center Helm chart supports both dynamic and pre-created per
 
 ## Documentation
 
-[IBM Sterling Control Center](https://www.ibm.com/docs/en/control-center/6.4.1?topic=sterling-control-center-monitor-641)
+[IBM Sterling Control Center](https://www.ibm.com/docs/en/control-center/6.4.0?topic=sterling-control-center-monitor-640)
