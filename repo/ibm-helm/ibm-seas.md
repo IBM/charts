@@ -1,8 +1,8 @@
-# IBM Sterling External Authentication Server v6.1.1.2
+# IBM Sterling External Authentication Server v6.1.0.4
 
 ## Introduction
 
-IBM Sterling External Authentication Server allows you to implement extended authentication and validation services for IBM products, called client applications. Sterling External Authentication Server includes a server that client applications connect to and a GUI to configure Sterling External Authentication Server requirements. To find out more, see the Knowledge Center for [IBM SEAS](https://www.ibm.com/docs/en/external-auth-server/6.1.1).
+IBM Sterling External Authentication Server allows you to implement extended authentication and validation services for IBM products, called client applications. Sterling External Authentication Server includes a server that client applications connect to and a GUI to configure Sterling External Authentication Server requirements. To find out more, see the Knowledge Center for [IBM SEAS](https://www.ibm.com/docs/en/external-auth-server/6.1.0).
 
 ## Chart Details
 
@@ -16,7 +16,7 @@ This chart deploys IBM Sterling External Authentication Server on a container ma
 
 ## Prerequisites
 
-Please refer to [Planning](https://www.ibm.com/docs/en/external-auth-server/6.1.1?topic=software-planning) and [Pre-installation tasks](https://www.ibm.com/docs/en/external-auth-server/6.1.1?topic=installing-pre-installation-tasks) section in the online Knowledge Center documentation. 
+Please refer to [Planning](https://www.ibm.com/docs/en/external-auth-server/6.1.0?topic=software-planning) and [Pre-installation tasks](https://www.ibm.com/docs/en/external-auth-server/6.1.0?topic=installing-pre-installation-tasks) section in the online Knowledge Center documentation. 
 
 ### SecurityContextConstraints Requirements
 
@@ -89,36 +89,36 @@ volumes:
 
 ## Resources Required
 
-Please refer [Verification of system requirements](https://www.ibm.com/docs/en/external-auth-server/6.1.1?topic=planning-verification-system-requirements) section in the online Knowledge Center documentation.
+Please refer [Verification of system requirements](https://www.ibm.com/docs/en/external-auth-server/6.1.0?topic=planning-verification-system-requirements) section in the online Knowledge Center documentation.
 
 ## Agreement to IBM SEAS License
 
 You must read the IBM Sterling External Authentication Server License agreement terms before installation, using the below link:
-[License] http://www-03.ibm.com/software/sla/sladb.nsf (L/N: L-RTZS-YBMYST)
+[License] http://www-03.ibm.com/software/sla/sladb.nsf (L/N: L-KNAN-CHKAUA)
 
 ## Installing the Chart
 
-Please refer [Installing](https://www.ibm.com/docs/en/external-auth-server/6.1.1?topic=installing-sterling-external-authentication-server-using-helm-chart) section in the online Knowledge Center documentation.
+Please refer [Installing](https://www.ibm.com/docs/en/external-auth-server/6.1.0?topic=installing-sterling-external-authentication-server-using-helm-chart) section in the online Knowledge Center documentation.
 
 ## Configuration
 
-Please refer the [Configuring - Understanding values.yaml](https://www.ibm.com/docs/en/external-auth-server/6.1.1?topic=tasks-configuring-understanding-valuesyaml) section in the online Knowledge Center documentation.
+Please refer the [Configuring - Understanding values.yaml](https://www.ibm.com/docs/en/external-auth-server/6.1.0?topic=tasks-configuring-understanding-valuesyaml) section in the online Knowledge Center documentation.
 
 ## Verifying the Chart
 
-Please refer the [Validating the Installation](https://www.ibm.com/docs/en/external-auth-server/6.1.1?topic=installing-validating-installation) section in the online Knowledge Center documentation.
+Please refer the [Validating the Installation](https://www.ibm.com/docs/en/external-auth-server/6.1.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
 
 ## Upgrading the Chart
 
-Please refer the [Upgrade - Upgrading a Release](https://www.ibm.com/docs/en/external-auth-server/6.1.1?topic=uninstall-upgrading-release) section in the online Knowledge Center documentation.
+Please refer the [Upgrade - Upgrading a Release](https://www.ibm.com/docs/en/external-auth-server/6.1.0?topic=uninstall-upgrading-release) section in the online Knowledge Center documentation.
 
 ## Rollback the Chart
 
-Please refer the [Rollback - Recovering a Failure](https://www.ibm.com/docs/en/external-auth-server/6.1.1?topic=uninstall-rollback-recovering-failure) section in the online Knowledge Center documentation.
+Please refer the [Rollback - Recovering a Failure](https://www.ibm.com/docs/en/external-auth-server/6.1.0?topic=uninstall-rollback-recovering-failure) section in the online Knowledge Center documentation.
 
 ## Uninstalling the Chart
 
-Please refer the [Uninstall – Uninstalling a Release](https://www.ibm.com/docs/en/external-auth-server/6.1.1?topic=uninstall-uninstalling-release) section in the online Knowledge Center documentation.
+Please refer the [Uninstall – Uninstalling a Release](https://www.ibm.com/docs/en/external-auth-server/6.1.0?topic=uninstall-uninstalling-release) section in the online Knowledge Center documentation.
 
 ## Backup & Restore
 
@@ -146,11 +146,11 @@ Restoring the data in new deployment, it can be achieved by following steps
 
 ## Exposing Services
 
-Please refer to [Exposed Services](https://www.ibm.com/docs/en/external-auth-server/6.1.1?topic=installing-validating-installation) section in the online Knowledge Center documentation.
+Please refer to [Exposed Services](https://www.ibm.com/docs/en/external-auth-server/6.1.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
 
 ## DIME and DARE
 
-Please refer to [DIME and DARE Security Considerations](https://www.ibm.com/docs/en/external-auth-server/6.1.1?topic=installing-validating-installation) section in the online Knowledge Center documentation.
+Please refer to [DIME and DARE Security Considerations](https://www.ibm.com/docs/en/external-auth-server/6.1.0?topic=installing-validating-installation) section in the online Knowledge Center documentation.
 
 ## Limitations
 
@@ -158,5 +158,5 @@ Please refer to [DIME and DARE Security Considerations](https://www.ibm.com/docs
 - IBM Sterling External Authentication Server chart is supported with only 1 replica count.
 - IBM Sterling External Authentication Server chart supports only amd64 architecture.
 - Non-persistence mode is not supported.
-- The rollback support is not available from 6.1.1.2 to 6.0.3.0 due to some structural changes in IBM Sterling External Authentication Server.
+- The rollback support is not available from 6.1.0.0 to 6.0.3.0 due to some structural changes in IBM Sterling External Authentication Server.
 
