@@ -1,7 +1,8 @@
-# IBM Sterling File Gateway Enterprise Edition v6.2.2.0
+# IBM Sterling File Gateway Enterprise Edition v6.2.1.1_2
 ## Introduction
 
 IBM Sterling File Gateway lets organizations transfer files between partners by using different protocols, conventions for naming files, and file formats. A scalable and security-enabled gateway, Sterling File Gateway enables companies to consolidate all their internet-based file transfers on a single edge gateway, which helps secure your B2B collaboration network and the data flowing through it. To find out more, see [IBM Sterling File Gateway](https://www.ibm.com/products/file-gateway) on IBM Marketplace.
+
 
 ## Chart Details
 
@@ -24,11 +25,11 @@ Services
    Version 4.18.0 or later fixes
    Version 4.19.0 or later fixes
 
-2. Kubernetes version >= 1.31 and <= 1.34
+2. Kubernetes version >= 1.30 and <= 1.33
 
 3. Helm version >= 3.19.x
 
-4. Ensure that the docker images for IBM Sterling File Gateway Software Enterprise Edition from IBM Entitled Registry are downloaded and pushed to an image registry accessible to the cluster.
+4. Ensure that the docker images for IBM Sterling File Gateway Enterprise Edition from IBM Entitled Registry are downloaded and pushed to an image registry accessible to the cluster.
 
 5. Ensure that one of the supported database server (Oracle/DB2/MSSQL) is installed and the database is accessible from inside the cluster. 
 
@@ -61,7 +62,7 @@ Services
 	kubectl create secret generic <secret-name> --from-file=/path/to/<certificate>
 	```
 
-14. When installing the chart on a new database which does not have IBM Sterling File Gateway Software schema tables and metadata, 
+14. When installing the chart on a new database which does not have IBM Sterling B2B Integrator Software schema tables and metadata, 
 * ensure that `dataSetup.enable` parameter is set to `true` and `dataSetup.upgrade` parameter is set as `false`. This will create the required database tables and metadata in the database before installing the chart.
 
 15. When installing the chart on a database on an older release version
@@ -75,7 +76,7 @@ and is available at:
  - https://github.com/IBM/ibm-licensing-operator/blob/master/README.md#post-installation-steps
 
 ### Installation against a pre-loaded database
-When installing the chart against a database which already has the Sterling File Gateway Software tables and factory meta data ensure that `datasetup.enable` parameter is set to `false`. This will avoid re-creating tables and overwriting factory data.
+When installing the chart against a database which already has the Sterling B2B Integrator Software tables and factory meta data ensure that `datasetup.enable` parameter is set to `false`. This will avoid re-creating tables and overwriting factory data.
 
 ### Creating a Role Based Access Control (RBAC)
 If you are deploying the application on a namespace other than the default namespace, and if you have not created Role Based Access Control (RBAC), create RBAC with the cluster admin role.
@@ -86,7 +87,7 @@ The following sample file illustrates RBAC for the default service account with 
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: ibm-sfg-role-<namespace>
+  name: ibm-b2bi-role-<namespace>
   namespace: <namespace>
 rules:
   - apiGroups: ['route.openshift.io']
@@ -100,7 +101,7 @@ rules:
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: ibm-sfg-rolebinding-<namespace>
+  name: ibm-b2bi-rolebinding-<namespace>
   namespace: <namespace>
 subjects:
   - kind: ServiceAccount
@@ -108,7 +109,7 @@ subjects:
     namespace: <namespace>
 roleRef:
   kind: Role
-  name: ibm-sfg-role-<namespace>
+  name: ibm-b2bi-role-<namespace>
   apiGroup: rbac.authorization.k8s.io
 ```  
 
@@ -131,9 +132,9 @@ Below is an optional custom PSP definition based on the IBM restricted PSP.
     apiVersion: policy/v1beta1
     kind: PodSecurityPolicy
     metadata:
-      name: "ibm-sfg-psp"
+      name: "ibm-b2bi-psp"
       labels:
-        app: "ibm-sfg-psp"
+        app: "ibm-b2bi-psp"
       
     spec:
       privileged: false
@@ -182,14 +183,14 @@ Below is an optional custom PSP definition based on the IBM restricted PSP.
     apiVersion: rbac.authorization.k8s.io/v1
     kind: Role
     metadata:
-      name: "ibm-sfg-psp"
+      name: "ibm-b2bi-psp"
       labels:
-        app: "ibm-sfg-psp"
+        app: "ibm-b2bi-psp"
     rules:
     - apiGroups:
       - policy
       resourceNames:
-      - "ibm-sfg-psp"
+      - "ibm-b2bi-psp"
       resources:
       - podsecuritypolicies
       verbs:
@@ -202,13 +203,13 @@ Below is an optional custom PSP definition based on the IBM restricted PSP.
     apiVersion: rbac.authorization.k8s.io/v1
     kind: RoleBinding
     metadata:
-      name: "ibm-sfg-psp"
+      name: "ibm-b2bi-psp"
       labels:
-        app: "ibm-sfg-psp"
+        app: "ibm-b2bi-psp"
     roleRef:
       apiGroup: rbac.authorization.k8s.io
       kind: Role
-      name: "ibm-sfg-psp"
+      name: "ibm-b2bi-psp"
     subjects:
     - apiGroup: rbac.authorization.k8s.io
       kind: Group
@@ -233,9 +234,9 @@ Below is an optional custom SCC definition based on the IBM restricted SCC.
     apiVersion: security.openshift.io/v1
     kind: SecurityContextConstraints
     metadata: 
-      name: ibm-sfg-scc
+      name: ibm-b2bi-scc
       labels:
-       app: "ibm-sfg-scc"
+       app: "ibm-b2bi-scc"
     allowHostDirVolumePlugin: false
     allowHostIPC: false
     allowHostNetwork: false
@@ -292,14 +293,14 @@ Below is an optional custom SCC definition based on the IBM restricted SCC.
     apiVersion: rbac.authorization.k8s.io/v1
 	  kind: Role
 	  metadata:
-     name: "ibm-sfg-scc"
+     name: "ibm-b2bi-scc"
      labels:
-      app: "ibm-sfg-scc" 
+      app: "ibm-b2bi-scc" 
 	  rules:
 	  - apiGroups:
   	  - security.openshift.io
   	  resourceNames:
-      - "ibm-sfg-scc"
+      - "ibm-b2bi-scc"
       resources:
       - securitycontextconstraints
       verbs:
@@ -313,13 +314,13 @@ Below is an optional custom SCC definition based on the IBM restricted SCC.
     apiVersion: rbac.authorization.k8s.io/v1
     kind: RoleBinding
     metadata:
-      name: "ibm-sfg-scc"
+      name: "ibm-b2bi-scc"
       labels:
-        app: "ibm-sfg-scc"
+        app: "ibm-b2bi-scc"
     roleRef:
       apiGroup: rbac.authorization.k8s.io
       kind: Role
-      name: "ibm-sfg-scc"
+      name: "ibm-b2bi-scc"
     subjects:
     - apiGroup: rbac.authorization.k8s.io
       kind: Group
@@ -381,7 +382,7 @@ Parameter                                      | Description                    
 `global.license`                               | Accept B2BI/SFG license                                              | `false`
 `global.licenseType`                           | Specify the license edition as per license agreement.                | prod
 `global.image.repository`                      | Repository for B2B docker images                                     | 
-`global.image.tag          `                   | Docker image tag                                                     | `6.2.2.0`
+`global.image.tag          `                   | Docker image tag                                                     | `6.2.1.1_2`
 `global.image.digest          `                | Docker image digest. Takes precedence over tag                       | 
 `global.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `global.image.pullSecret `         			   | Pull secret for repository access                                    | `ibm-entitlement-key`
@@ -444,7 +445,7 @@ Parameter                                      | Description                    
 `dataSetup.enabled`                            | Enable database setup job execution                                  | true
 `dataSetup.upgrade`                            | Upgrade an older release                                             | false
 `dataSetup.image.repository`                 | DB setup container image repository                                   | 
-`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.2.2.0`
+`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.2.1.1_2`
 `dataSetup.image.digest'                      | Docker image digest. Takes precedence over tag                       |
 `dataSetup.image.pullPolicy`                 | Pull policy for repository                                           | `IfNotPresent`
 `dataSetup.image.pullSecret`         		  | Pull secret for repository access                                    |  `ibm-entitlement-key` 
@@ -508,7 +509,6 @@ Parameter                                      | Description                    
 `setupCfg.licenseAcceptEnableEbics`            | Consent for accepting license for EBICs module                       | false
 `setupCfg.licenseAcceptEnableFinancialServices`| Consent for accepting license for EBICs client module                | false
 `setupCfg.licenseAcceptEnableFileOperation`    | Consent for accepting license to enable File Operation               | false
-`setupCfg.enableSfg2`                           | Enable Sfg2 to access File Gateway 2.0 APIs.       | false
 `setupCfg.systemPassphraseSecret`              | System passphrase secret name                                        | 
 `setupCfg.enableFipsMode`                      | Enable FIPS mode                                                     | false
 `setupCfg.fipsCustomProfileName`               | FIPS custom Profile Name                                             |
@@ -554,8 +554,6 @@ Parameter                                      | Description                    
 `setupCfg.libertyProtocol`                     | Liberty API server SSL connection protocol                           | `TLSv1.2` 
 `setupCfg.libertySecret`                       | Liberty API server SSL connection secret name                        | 
 `setupCfg.libertyJvmOptions`                   | Liberty API server JVM option (will be deprecated in future release) |
-`setupCfg.clientSecret`                   | Client Secret which container client id and client secret                 | 
-`setupCfg.legacyApisAuthType`                   | The authentication type used for legacy B2BI/SFG APIs and Customization UI. Permitted values are basic (default) and oauth.                 | `basic`
 `setupCfg.defaultDocumentStorageType`        | Default document storage type                                        | `DB`
 `setupCfg.restartCluster`        | restartCluster can be set to true to restart the application cluster by cleaning up all previous node entries, locks and set the schedules to node1.                                        | false
 `setupCfg.useSslForRmi`                        | Enable SSL over RMI calls                                            | true
@@ -767,11 +765,6 @@ name	                                         |
 `api.frontendService.ports.https.targetPort`           | Service target port number or name on pod                            | `https`
 `api.frontendService.ports.https.nodePort`             | Service node port                                                    | 30003
 `api.frontendService.ports.https.protocol`             | Service port connection protocol                                     | `TCP`
-`api.frontendService.ports.fg2https.name`                 | Service http port name for fg2                                   | `fg2https`
-`api.frontendService.ports.fg2https.port`                 | Service http port number                                         | 35009
-`api.frontendService.ports.fg2https.targetPort`           | Service target port number or name on pod                        | `fg2https`
-`api.frontendService.ports.fg2https.nodePort`             | Service node port                                                | 30009
-`api.frontendService.ports.fg2https.protocol`             | Service port connection protocol                                 | `TCP`
 `api.frontendService.extraPorts`                       | Extra ports for service                                              | 
 `api.frontendService.loadBalancerIP`                   | LoadBalancer IP for service                                          |
 `api.frontendService.loadBalancerSourceRanges`        | LoadBalancer IP Ranges for service                                          |
@@ -826,7 +819,7 @@ name	                                         |
 `test.extraAnnotations`                   | Extra or custom Annotations                                    |
 `purge.enabled`                                | Enable external purge job                                            | 'false'
 `purge.image.repository          `             | External purge docker image repository                               | `purge`
-`purge.image.tag          `                    | External purge image tag                                             | `6.2.2.0`
+`purge.image.tag          `                    | External purge image tag                                             | `6.2.1.1_2`
 `purge.image.digest          `                 | External purge image digest. Takes precedence over tag               |
 `purge.image.pullPolicy`                       | Pull policy for external purge docker image                          | `IfNotPresent`
 `purge.image.pullSecret`                       | Pull secret for repository access                                    | `ibm-entitlement-key`
@@ -861,8 +854,8 @@ name	                                         |
 |`documentService.image.pullSecret`                                    | Secret used for pulling from repositories                                                             |
 |`documentService.serviceAccount.name`                                 | User wishes to use own/already created service account                                                 | default
 |`documentService.application.ssl.enabled`                             |  Enabling client SSL on the document service                                                            | true
-|`documentService.application.ssl.tlsSecretName`                       |  Using the TLS secret name for communication between sfg and the document service                      |
-|`documentService.application.ssl.trustStoreSecretName`               |   Using the Trust store secret name for communication between sfg and the document service            |
+|`documentService.application.ssl.tlsSecretName`                       |  Using the TLS secret name for communication between b2bi and the document service                      |
+|`documentService.application.ssl.trustStoreSecretName`               |   Using the Trust store secret name for communication between b2bi and the document service            |
 |`documentService.application.ssl.clientAuth`                        |   The server type of clientAuth for the document service                                                | want
 |`documentService.application.logging.level`                         |   The logging level for the document service                                                            | ERROR
 |`documentService.application.objecstore.name`                       |   The name of the cloud provider                                                                                                      |      |
@@ -885,11 +878,10 @@ name	                                         |
 `as4Service.license`                               | Accept AS4/SFG license                                               | `false`
 `as4Service.licenseType`                           | Specify the license edition as per license agreement.                | non-prod
 `as4Service.image.repository`                      | Repository for AS4 docker images                                     |
-`as4Service.image.tag          `                   | Docker image tag                                                     | `6.2.2.0`
+`as4Service.image.tag          `                   | Docker image tag                                                     | `6.2.1.1_2`
 `as4Service.image.digest          `                | Docker image digest. Takes precedence over tag                       |
 `as4Service.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `as4Service.image.pullSecret `                     | Pull secret for repository access                              | 
-`as4Service.serviceAccount.name`           | User wishes to use own/already created service account                  | default
 `as4Service.dataSetup.enabled`                           | Enable database setup job execution                                  | true
 `as4Service.dbSetup.dbVendor`                            | Database vendor - DB2/Oracle/MSSQL                                   |
 `as4Service.dbSetup.dbHost`                              | Database host                                                        |
@@ -903,29 +895,7 @@ name	                                         |
 `as4Service.mqSetup.mqSecret`                            | MQ Server user secret Name                                           |
 `as4Service.as4operational.ingress.internal.host`        | Internal Host name for ingress resource                              |
 `as4Service.as4informational.ingress.internal.host`      | Internal Host name for ingress resource                              |
-`identityService.enabled`                               | Enable integration with Identity Service                             |false  
-`identityService.license`                               | Accept Identity/SFG license                                          |false
-`identityService.replicaCount`                             | Identity Service deployment replica count         | 1
-`identityService.image.repository`                      | Repository for Identity docker images                                     |
-`identityService.image.tag          `                   | Docker image tag                                                     | `1.0.0.0`
-`identityService.image.digest          `                | Docker image digest. Takes precedence over tag                       |
-`identityService.image.pullPolicy`                      | Pull policy for repository                                      | `IfNotPresent`
-`identityService.image.pullSecret `                     | Pull secret for repository access                              |
-`identityService.serviceAccount.name`                          | Existing service account name                                        | `default`
-`identityService.service.type`            | Service type (`ClusterIP`, `NodePort`, `LoadBalancer`)       | `ClusterIP`
-`identityService.service.externalPort`    | External port exposed by the service      | `443` 
-`identityService.service.externalIP`      | External IP address to use when the service type is `NodePort` or `LoadBalancer`  
-`identityService.ingress.enabled`  | Enable ingress for Identity Service                          | `true` 
-`identityService.ingress.host`     | Ingress host name for the Identity server  
-`identityService.application.server.ssl.enabled`              |  Enabling SSL on the identity service                          | true
-`identityService.application.server.ssl.tlsSecretName`              | TLS secret name which contains certificate            | 
-`identityService.application.clientSecret`              | Client Secret             |  "identity-client-secret"
-`identityService.application.dbVendor`                            | Database vendor - DB2/Oracle/MSSQL                                   | 
-`identityService.application.dbHost`                              | Database host                                                        | 
-`identityService.application.dbPort`                              | Database port                                                        | 
-`identityService.application.dbData`                              | Database schema name                                                 | 
-`identityService.application.dbDrivers`                           | Database driver jar name                                             | 
-`identityService.application.dbSecret`                            | Database user secret name                                            | 
+
 
 
 ## Upgrading the Chart
@@ -943,11 +913,11 @@ helm upgrade my-release -f values.yaml ./ibm-sfg-prod --timeout 3600s
 ```
 
 4. Run the following command to upgrade your deployments with recreation of pods after 
-* changing configurations in properties files available inside `ibm-sfg-prod/properties`,for example, modifying `asi-tuning.properties` file.
+* changing configurations in properties files available inside `ibm-b2bi-prod/properties`,for example, modifying `asi-tuning.properties` file.
 * changing configurations in `setupCfg` section
 
 ```
-helm upgrade my-release -f values.yaml ./ibm-sfg-prod --timeout 3600s --recreate-pods
+helm upgrade my-release -f values.yaml ./ibm-b2bi-prod --timeout 3600s --recreate-pods
 ```
 For product release version upgrade, please refer product documentation.
 
