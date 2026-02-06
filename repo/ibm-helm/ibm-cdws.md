@@ -1,4 +1,4 @@
-# IBM Connect:Direct Web Services V6.3.0
+# IBM Connect:Direct Web Services V6.4.0
 
 ## Introduction
 
@@ -6,7 +6,7 @@ IBM Connect:Direct Web Services targets transforming the Managed File Transfer m
 - Reducing the operating cost
 - Deploying solutions rapidly
 - Opening new opportunities by enabling easy integration with other Web service-based applications
-IBM Connect:Direct Web Services extends a Web-based User Interface (Web Console) and a RESTful API-based interface to Connect:Direct users. To find out more, see the Knowledge Center for [ IBM Connect:Direct Web Services ](  https://www.ibm.com/docs/en/connect-direct/6.3.0?topic=sterling-connectdirect-web-services-v63 ).
+IBM Connect:Direct Web Services extends a Web-based User Interface (Web Console) and a RESTful API-based interface to Connect:Direct users. To find out more, see the Knowledge Center for [ IBM Connect:Direct Web Services ](  https://www.ibm.com/docs/en/connect-direct/6.4.0?topic=sterling-connectdirect-web-services-v64 ).
 
 ## Chart Details
 
@@ -20,7 +20,7 @@ This chart deploys IBM Connect:Direct Web Services on a container management pla
 
 ## Prerequisites
 
-1. Red Hat OpenShift Container Platform Version should be >= 4.14 and <= 4.19
+1. Red Hat OpenShift Container Platform Version should be >= 4.14 and <=4.19
 2. Kubernetes version >= 1.27 and < 1.34.
 3. Helm version >= 3.2
 4. Ensure that the docker images for IBM Connect:Direct Web Services from IBM Entitled Registry are downloaded and pushed to an image registry accessible to the cluster.
@@ -69,7 +69,7 @@ This chart uses the following resources by default:
 ## Agreement to IBM Connect:Direct Web Services License
 
 You must read the IBM Connect:Direct Web Services License agreement terms before installation, using the below link:
-[License](http://www-03.ibm.com/software/sla/sladb.nsf) (L/N:  L-FYHF-K7J2TN)
+[License](http://www-03.ibm.com/software/sla/sladb.nsf) (L/N:  L-ZWKV-MQ9Z94)
 
 ## Installing the Chart
 
@@ -82,7 +82,7 @@ Ensure that the chart is downloaded locally and available.
 Run the below command
 
 ```bash
-$ helm install my-release -f values.yaml ibm-cdws-1.0.14.tgz
+$ helm install my-release -f values.yaml ibm-cdws-1.1.15.tgz
 ```
 
 Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 2-3 minutes for Installing Web Services.
@@ -207,7 +207,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-cdws-1.0.14.tgz
+helm upgrade my-release -f values.yaml ibm-cdws-1.1.15.tgz
 ```
 
 Refer [RELEASENOTES.md](RELEASENOTES.md) for Fix history.
@@ -284,7 +284,7 @@ Use `networkPolicy` to control traffic flow at the port level.
 ## DIME and DARE
 
 1. All sensitive application data at rest is stored in binary format so user cannot decrypt it. This chart does not support encryption of user data at rest by default. Administrator can configure storage encryption to encrypt all data at rest
-2. Data in motion is encrypted using transport layer security(TLS 1.2). For more information please see product [Knowledge center link]( https://www.ibm.com/docs/en/connect-direct/6.3.0?topic=sterling-connectdirect-web-services-v63 )
+2. Data in motion is encrypted using transport layer security(TLS 1.2). For more information please see product [Knowledge center link]( https://www.ibm.com/docs/en/connect-direct/6.4.0?topic=sterling-connectdirect-web-services-v64 )
 
 ## Storage
 
@@ -301,4 +301,4 @@ IBM Connect:Direct Web Services Helm chart supports both dynamic and pre-created
 
 ## Documentation
 
-[IBM Connect:Direct Web Services](https://www.ibm.com/docs/en/connect-direct/6.3.0?topic=sterling-connectdirect-web-services-v63)
+[IBM Connect:Direct Web Services](https://www.ibm.com/docs/en/connect-direct/6.4.0?topic=sterling-connectdirect-web-services-v64)
