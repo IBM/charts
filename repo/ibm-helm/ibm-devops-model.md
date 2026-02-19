@@ -4,19 +4,19 @@
 
 IBM DevOps Solution Workbench helps you to accelerate design and development of enterprise-grade cloud solutions.
 
-IBM DevOps Solution Workbench provides access to a specialized collection of tools and project stacks to automate and 
-streamline recurring solution patterns using industry best practices and modern architecture principles. It enables the 
-quick initiation of development projects with tools tailored for various services and allows customization to meet 
-specific solution needs. Users can leverage a consistent foundation of platform services and standards across all 
+IBM DevOps Solution Workbench provides access to a specialized collection of tools and project stacks to automate and
+streamline recurring solution patterns using industry best practices and modern architecture principles. It enables the
+quick initiation of development projects with tools tailored for various services and allows customization to meet
+specific solution needs. Users can leverage a consistent foundation of platform services and standards across all
 projects, enhancing efficiency and reusability.
 
-IBM DevOps Solution Workbench offers a collaborative design environment that brings together domain experts, developers, 
-architects, and operations teams to work efficiently. It allows teams to capture requirements iteratively and transform 
-them into machine-readable design models, ensuring standardization across projects with specialized design tools. This 
+IBM DevOps Solution Workbench offers a collaborative design environment that brings together domain experts, developers,
+architects, and operations teams to work efficiently. It allows teams to capture requirements iteratively and transform
+them into machine-readable design models, ensuring standardization across projects with specialized design tools. This
 shared environment enhances collaboration and streamlines the design process.
 
-IBM DevOps Solution Workbench accelerates development by automatically generating up to 70% of the required code, 
-seamlessly transforming design models into cloud-native microservices. It allows developers to concentrate on business 
+IBM DevOps Solution Workbench accelerates development by automatically generating up to 70% of the required code,
+seamlessly transforming design models into cloud-native microservices. It allows developers to concentrate on business
 logic while adhering to best practices, thus maximizing creativity and productivity.
 
 # OpenShift Installation Instructions
@@ -63,7 +63,7 @@ Fetch chart for install:
 
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-solution-workbench --version 5.1.1
+helm pull --untar ibm-helm/ibm-devops-model --version 5.1.1
 ```
 
 
@@ -71,7 +71,7 @@ helm pull --untar ibm-helm/ibm-devops-solution-workbench --version 5.1.1
 #Pull ibm helm charts
 CHART_VERSION=5.1.1
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-solution-workbench --version ${CHART_VERSION}
+helm pull --untar ibm-helm/ibm-devops-model --version ${CHART_VERSION}
 #
 #Required
 #External fully qualified domain name of the cluster
@@ -102,8 +102,8 @@ LICENSE_SERVER=
 PASSWORD_SEED=
 
 #Required
-NAMESPACE=devops-solution-workbench
-HELM_NAME=devops-solution-workbench
+NAMESPACE=devops-model
+HELM_NAME=devops-model
 
 #Optional
 #if you are using an own or external mongoDB
@@ -114,14 +114,14 @@ MONGODB_CONNECTION_STRING=
 #Keycloak Config (including /auth path if required)
 #e.g.: "https://keycloak.apps.openshift.cluster.cloud/auth
 KEYCLOAK_URL=
-KEYCLOAK_REALM="devops-solution-workbench"
+KEYCLOAK_REALM="devops-model"
 KEYCLOAK_ADMIN_USERNAME=
 KEYCLOAK_ADMIN_PW=
 
 #Optional Additional Helm options
 ADDITIONAL_HELM_OPTIONS=""
 
-ROOT_DIR=./ibm-devops-solution-workbench
+ROOT_DIR=./ibm-devops-model
 
 run_install() {
 
@@ -165,12 +165,10 @@ run_install
 Delete the product:
 
 ```bash
-NAMESPACE=devops-solution-workbench
-HELM_NAME=devops-solution-workbench
+NAMESPACE=devops-model
+HELM_NAME=devops-model
 helm uninstall $HELM_NAME -n $NAMESPACE
 ```
-
-If you uninstall the helm deployment also the Custom Resource Definitions might be deleted (in case they were included in the helm deployment)!!!
 
 The claims and persistent volumes that contain user data are not automatically be deleted. If you re-install the product these resources will be re-used if present.
 
@@ -185,26 +183,25 @@ Note: This will hang if the namespace contains workload which has not terminated
 
 ### Configuration
 
-| Parameter                                  | Description                                                                                                               | Default  |
-|--------------------------------------------|---------------------------------------------------------------------------------------------------------------------------|----------|
-| `license`                                  | Confirmation that the EULA has been accepted. For example `true`                                                          | REQUIRED |
-| `global.domain`                            | Domain is the ingress domain which is used to create routes.                                                              | REQUIRED |
-| `global.rationalLicenseKeyServer`          | Where floating licenses are hosted to entitle use of the product. For example `@ip-address`                               | REQUIRED |
-| `global.k5.identity.url`                   | Keycloak URL (including `/auth` path if needed)                                                                           | REQUIRED |
-| `global.k5.identity.realm`                 | Keycloak Realm that will be created during installation                                                                   | REQUIRED |
-| `global.k5.identity.username`              | Keycloak Admin username                                                                                                   | REQUIRED |
-| `global.k5.identity.password`              | Keycloak Admin password                                                                                                   | REQUIRED |
-| `global.k5.autoscaling.enabled`            | Enable/disable Horizontal Pod Autoscaling (if disabled 1 pod per service is created)                                      | `true`   |
-| `global.k5.network.routing.routes.enabled` | Enable/disable creation of Routes                                                                                         | `true`   |
-| `global.k5.runtime.enabled`                | Enable/disable default runtime components                                                                                 | `true`   |
-| `k5-pipeline-manager.tekton.initialize`    | Enable/disable creation of tekton pipeline resources (if set to `true` OpenShift Pipelines needs to be installed before)  | `true`   |
-| `database.enabled`                         | Enable/disable deployment and usage of included database (if set to `false` a own mongoDB instance must be provided)      | `true`   |
-| `rbac.create`                              | Enable/disable creation of needed ServiceAccounts, RoleBindings and Roles                                                 | `true`   |
-| `runtime.aggregateRoles.create`            | Enable/disable creation of aggregation roles (needed for runtime)                                                         | `true`   |
-| `runtime.crds.create`                      | Enable/disable creation of CustomResourceDefinitions (needed for runtime)                                                 | `true`   |
-| `runtime.scc.create`                       | Enable/disable creation of Security Context Constraints (needed for runtime)                                              | `true`   |
-| `networkPolicy.create`                     | Enable/disable default Ingress Network Policy                                                                             | `false`  |
-| `truststore.create`                        | Enable/disable creation of Default Truststore                                                                             | `true`   |
+| Parameter                                  | Description                                                                                 | Default  |
+|--------------------------------------------|---------------------------------------------------------------------------------------------|----------|
+| `license`                                  | Confirmation that the EULA has been accepted. For example `true`                            | REQUIRED |
+| `global.domain`                            | Domain is the ingress domain which is used to create routes.                                | REQUIRED |
+| `global.rationalLicenseKeyServer`          | Where floating licenses are hosted to entitle use of the product. For example `@ip-address` | REQUIRED |
+| `global.k5.identity.url`                   | Keycloak URL (including `/auth` path if needed)                                             | REQUIRED |
+| `global.k5.identity.realm`                 | Keycloak Realm that will be created during installation                                     | REQUIRED |
+| `global.k5.identity.username`              | Keycloak Admin username                                                                     | REQUIRED |
+| `global.k5.identity.password`              | Keycloak Admin password                                                                     | REQUIRED |
+| `global.k5.autoscaling.enabled`            | Enable/disable Horizontal Pod Autoscaling (if disabled 1 pod per service is created)        | `true`   |
+| `global.k5.network.routing.routes.enabled` | Enable/disable creation of Routes                                                           | `true`   |
+| `global.k5.runtime.enabled`                | Enable/disable default runtime components                                                   | `true`   |
+| `database.enabled`                         | Enable/disable default runtime components                                                   | `true`   |
+| `rbac.create`                              | Enable/disable creation of needed ServiceAccounts, RoleBindings and Roles                   | `true`   |
+| `runtime.aggregateRoles.create`            | Enable/disable creation of aggregation roles (needed for runtime)                           | `true`   |
+| `runtime.crds.create`                      | Enable/disable creation of CustomResourceDefinitions (needed for runtime)                   | `true`   |
+| `networkPolicy.create`                     | Enable/disable default Ingress Network Policy                                               | `false`  |
+| `runtime.scc.create`                       | Enable/disable creation of Security Context Constraints (needed for runtime)                | `true`   |
+| `truststore.create`                        | Enable/disable creation of Default Truststore                                               | `true`   |
 
 
 ### Routes Configuration
@@ -240,22 +237,22 @@ The following table shows the required Routes:
 
 ## Prerequisites
 
-  1. An available K8s cluster.  
+1. An available K8s cluster.
 
-  2. Keycloak in version 26.
-  
-  3. [Install and setup the Helm 3 CLI](https://helm.sh/docs/intro/install/).
+2. Keycloak in version 26.
 
-  4. Installed and configured [Emissary Ingress Controller](https://emissary-ingress.dev/docs/3.9/topics/running/ingress-controller/)
-* See and execute install script ./lib/ingress-forwarding-emissary-install.sh 
+3. [Install and setup the Helm 3 CLI](https://helm.sh/docs/intro/install/).
 
-  5. Image and Helm Chart - The DevOps Solution Workbench images, and helm chart can be accessed via the Entitled Registry and public Helm repository.
+4. Installed and configured [Emissary Ingress Controller](https://emissary-ingress.dev/docs/3.9/topics/running/ingress-controller/)
+* See and execute install script ./lib/ingress-forwarding-emissary-install.sh
+
+   5. Image and Helm Chart - The DevOps Solution Workbench images, and helm chart can be accessed via the Entitled Registry and public Helm repository.
 
 * The public Helm chart repository can be accessed at <https://github.com/IBM/charts/tree/master/repo/ibm-helm> and directions for accessing the DevOps Solution Workbench chart will be discussed later in this README.
 * Get a key to the entitled registry
-    * Log in to [MyIBM Container Software Library](https://myibm.ibm.com/products-services/containerlibrary) with the IBMid and password that are associated with the entitled software.
-    * In the Entitlement keys section, select Copy key to copy the entitlement key to the clipboard.
-    * An imagePullSecret must be created to be able to authenticate and pull images from the Entitled Registry.  Note: Secrets are namespace scoped, so they must be created in every namespace you plan to install DevOps Solution Workbench into.  Following is an example command to create an imagePullSecret named 'ibm-entitlement-key'.
+   * Log in to [MyIBM Container Software Library](https://myibm.ibm.com/products-services/containerlibrary) with the IBMid and password that are associated with the entitled software.
+   * In the Entitlement keys section, select Copy key to copy the entitlement key to the clipboard.
+   * An imagePullSecret must be created to be able to authenticate and pull images from the Entitled Registry.  Note: Secrets are namespace scoped, so they must be created in every namespace you plan to install DevOps Solution Workbench into.  Following is an example command to create an imagePullSecret named 'ibm-entitlement-key'.
 
   ```bash
   kubectl create secret docker-registry ibm-entitlement-key \
@@ -279,7 +276,7 @@ Fetch chart for install:
 
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-solution-model --version 5.1.1
+helm pull --untar ibm-helm/ibm-devops-model --version 5.1.1
 ```
 
 
@@ -287,7 +284,7 @@ helm pull --untar ibm-helm/ibm-devops-solution-model --version 5.1.1
 #Pull ibm helm charts
 CHART_VERSION=5.1.1
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-solution-workbench --version ${CHART_VERSION}
+helm pull --untar ibm-helm/ibm-devops-model --version ${CHART_VERSION}
 #
 #Required
 #External fully qualified domain name of the cluster
@@ -312,8 +309,8 @@ LICENSE_SERVER=
 PASSWORD_SEED=
 
 #Required
-NAMESPACE=devops-solution-workbench
-HELM_NAME=devops-solution-workbench
+NAMESPACE=devops-model
+HELM_NAME=devops-model
 
 #Optional
 #if you are using an own or external mongoDB
@@ -335,7 +332,7 @@ KEYCLOAK_ADMIN_PW=
 #Optional Additional Helm options
 ADDITIONAL_HELM_OPTIONS=""
 
-ROOT_DIR=./ibm-devops-solution-workbench
+ROOT_DIR=./ibm-devops-model
 
 run_install() {
 
@@ -376,7 +373,6 @@ run_install() {
    --set global.k5.identity.realm=${KEYCLOAK_REALM} \ 
    --set global.k5.identity.username=${KEYCLOAK_ADMIN_USERNAME} \ 
    --set global.k5.identity.password=${KEYCLOAK_ADMIN_PW} \ 
-   --set k5-pipeline-manager.tekton.initialize=false \
    --set license=${ACCEPT_LICENSE}
    "
 
@@ -400,8 +396,6 @@ HELM_NAME=devops-model
 helm uninstall $HELM_NAME -n $NAMESPACE
 ```
 
-If you uninstall the helm deployment also the Custom Resource Definitions might be deleted (in case they were included in the helm deployment)!!!
-
 The claims and persistent volumes that contain user data are not automatically be deleted. If you re-install the product these resources will be re-used if present.
 
 To delete _EVERYTHING_, including user data contained in claims and persistent volumes
@@ -415,22 +409,21 @@ Note: This will hang if the namespace contains workload which has not terminated
 
 ### Configuration
 
-| Parameter                               | Description                                                                                                               | Default  |
-|-----------------------------------------|---------------------------------------------------------------------------------------------------------------------------|----------|
-| `license`                               | Confirmation that the License has been accepted. Must be `true`                                                           | REQUIRED |
-| `global.domain`                         | Domain is the ingress domain which is used to create routes                                                               | REQUIRED |
-| `global.rationalLicenseKeyServer`       | Where floating licenses are hosted to entitle use of the product. For example `@ip-address`                               | REQUIRED |
-| `global.k5.identity.url`                | Keycloak URL (including `/auth` path if needed)                                                                           | REQUIRED |
-| `global.k5.identity.realm`              | Keycloak Realm that will be created during installation                                                                   | REQUIRED |
-| `global.k5.identity.username`           | Keycloak Admin username                                                                                                   | REQUIRED |
-| `global.k5.identity.password`           | Keycloak Admin password                                                                                                   | REQUIRED |
-| `global.k5.autoscaling.enabled`         | Enable/disable Horizontal Pod Autoscaling (if disabled 1 pod per service is created)                                      | `true`   |
-| `global.k5.runtime.enabled`             | Enable/disable default runtime components                                                                                 | `true`   |
-| `database.enabled`                      | Enable/disable installation of included database (if false an own mongoDB must be provided)                               | `true`   |
-| `k5-pipeline-manager.tekton.initialize` | Enable/disable creation of tekton pipeline resources (if set to `true` OpenShift Pipelines needs to be installed before)  | `true`   |
-| `rbac.create`                           | Enable/disable creation of needed ServiceAccounts, RoleBindings and Roles                                                 | `true`   |
-| `runtime.aggregateRoles.create`         | Enable/disable creation of aggregation roles (needed for runtime)                                                         | `true`   |
-| `runtime.crds.create`                   | Enable/disable creation of CustomResourceDefinitions (needed for runtime)                                                 | `true`   |
-| `runtime.scc.create`                    | Enable/disable creation of Security Context Constraints (needed for runtime)                                              | `true`   |
-| `networkPolicy.create`                  | Enable/disable default Ingress Network Policy                                                                             | `false`  |
-| `truststore.create`                     | Enable/disable creation of Default Truststore                                                                             | `true`   |
+| Parameter                         | Description                                                                                 | Default  |
+|-----------------------------------|---------------------------------------------------------------------------------------------|----------|
+| `license`                         | Confirmation that the License has been accepted. Must be `true`                             | REQUIRED |
+| `global.domain`                   | Domain is the ingress domain which is used to create routes                                 | REQUIRED |
+| `global.rationalLicenseKeyServer` | Where floating licenses are hosted to entitle use of the product. For example `@ip-address` | REQUIRED |
+| `global.k5.identity.url`          | Keycloak URL (including `/auth` path if needed)                                             | OPTIONAL |
+| `global.k5.identity.realm`        | Keycloak Realm that will be created during installation                                     | OPTIONAL |
+| `global.k5.identity.username`     | Keycloak Admin username                                                                     | OPTIONAL |
+| `global.k5.identity.password`     | Keycloak Admin password                                                                     | OPTIONAL |
+| `global.k5.autoscaling.enabled`   | Enable/disable Horizontal Pod Autoscaling (if disabled 1 pod per service is created)        | `false`  |
+| `global.k5.runtime.enabled`       | Enable/disable default runtime components                                                   | `false`  |
+| `database.enabled`                | Enable/disable installation of included database (if false an own mongoDB must be provided) | `false`  |
+| `rbac.create`                     | Enable/disable creation of needed ServiceAccounts, RoleBindings and Roles                   | `false`  |
+| `runtime.aggregateRoles.create`   | Enable/disable creation of aggregation roles (needed for runtime)                           | `false`  |
+| `runtime.crds.create`             | Enable/disable creation of CustomResourceDefinitions (needed for runtime)                   | `false`  |
+| `networkPolicy.create`            | Enable/disable default Ingress Network Policy                                               | `false`  |
+| `runtime.scc.create`              | Enable/disable creation of Security Context Constraints (needed for runtime)                | `false`  |
+| `truststore.create`               | Enable/disable creation of Default Truststore                                               | `true`   |
