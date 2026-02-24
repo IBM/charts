@@ -1,8 +1,8 @@
-# IBM Sterling Control Center Monitor V6.4.0.0
+# IBM Sterling Control Center Monitor V6.4.2.0
 
 ## Introduction
 
-IBM▒ Control Center Monitor is a centralized monitoring and management system. It gives operations personnel the capability to continuously monitor the status of Configuration Managers, engines, and adapters across the enterprise for the following server types from one central location: IBM Sterling Connect:Direct▒, IBM Sterling Connect:Enterprise▒, IBM Sterling B2B Integrator, IBM Sterling File Gateway, IBM Global High Availability Mailbox, IBM Sterling Connect:Express, IBM QuickFile, IBM MQ Managed File Transfer and Many FTP servers. To find out more, see the Knowledge Center for [IBM Sterling Control Center Monitor](  https://www.ibm.com/docs/en/control-center/6.4.0?topic=sterling-control-center-monitor-640).
+IBM▒ Control Center Monitor is a centralized monitoring and management system. It gives operations personnel the capability to continuously monitor the status of Configuration Managers, engines, and adapters across the enterprise for the following server types from one central location: IBM Sterling Connect:Direct▒, IBM Sterling Connect:Enterprise▒, IBM Sterling B2B Integrator, IBM Sterling File Gateway, IBM Global High Availability Mailbox, IBM Sterling Connect:Express, IBM QuickFile, IBM MQ Managed File Transfer and Many FTP servers. To find out more, see the Knowledge Center for [IBM Sterling Control Center Monitor](  https://www.ibm.com/docs/en/control-center/6.4.2?topic=sterling-control-center-monitor-642).
 
 ## Chart Details
 
@@ -18,12 +18,12 @@ This chart deploys IBM Sterling Control Center Monitor on a container management
 ## Prerequisites
 
 1. Red Hat OpenShift Container Platform 
-   * Version 4.14.0 or later fixes
-   * Version 4.15.0 or later fixes
    * Version 4.16.0 or later fixes
    * Version 4.17.0 or later fixes
-2. Kubernetes version >= 1.27 and <=1.31 with beta APIs enabled.
-3. Helm version >= 3.18.x
+   * Version 4.18.0 or later fixes
+   * Version 4.19.0 or later fixes
+2. Kubernetes version >= 1.31 and <=1.34 with beta APIs enabled.
+3. Helm version >= 3.18.x and 4.0.0
 4. Ensure that one of the supported database server (Oracle/DB2/MSSQL) is installed and the database is accessible from inside the cluster.
 5. Ensure that the docker images for IBM Sterling Control Center Monitor from IBM Entitled Registry are downloaded and pushed to an image registry accessible to the cluster.
 6. Database driver files can be passed using any one of the following ways:
@@ -312,7 +312,7 @@ This chart uses the following resources by default:
 ## Agreement to IBM Control Center License
 
 You must read the IBM Sterling Control Center License agreement terms before installation, using the below link:
-[License](https://www.ibm.com/support/customer/csol/terms/?id=L-MBLY-9ARX3J&lc=en) (L/N: L-MBLY-9ARX3J)
+[License](https://www.ibm.com/support/customer/csol/terms/?id=L-LNLL-JTKJ77&lc=en) (L/N: L-LNLL-JTKJ77)
 
 ## Installing the Chart
 
@@ -325,7 +325,7 @@ Ensure that the chart is downloaded locally and available.
 Run the below command
 
 ```bash
-$ helm install my-release -f values.yaml ibm-sccm-4.0.14.tgz
+$ helm install my-release -f values.yaml ibm-sccm-4.2.1.tgz
 ```
 
 Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 6-7 minutes for Installing Control Center.
@@ -401,6 +401,8 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `ccArgs.seasProfileName`                        | SEAS Profile Name                                   |                                          |
 | `ccArgs.seasPersistentConnection`               | SEAS Persistent Connection required or not          | `N`                                      |
 | `ccArgs.seasSecureProtocol`                     | SEAS Secure Protocol name                           |                                          |
+| `ccArgs.otel.enabled`                           | OTEL Service is enabled or not                      | `false`                                  |
+| `ccArgs.otel.endpoints`                         | OTEL Service's endpoints containing array with address and  protocols |                        |
 | `dashboard.enabled`                             | For making monitoring dashboard enabled             |                                          |
 | `persistentVolumeCCM.enabled`                   | persistent volume for all volumes except user input | `true`                                   |
 | `persistentVolumeCCM.useDynamicProvisioning`    | To use storage classes to dynamically create PV     | `false`                                  |
@@ -511,13 +513,13 @@ The following tables lists the configurable parameters of the IBM Control Center
 Specify each parameter in values.yaml to `helm install`. For example,
 
 ```bash
-helm install my-release -f values.yaml ibm-sccm-4.0.14.tgz
+helm install my-release -f values.yaml ibm-sccm-4.2.1.tgz
 ```
 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. You can create a copy of values.yaml file e.g. my-values.yaml and edit the values that you need to override. Use the my-values.yaml file for installation. For example,
 
 ```bash
-helm install <release-name> -f my-values.yaml ibm-sccm-4.0.14.tgz
+helm install <release-name> -f my-values.yaml ibm-sccm-4.2.1.tgz
 ```
 > **Tip**: You can use the default [values.yaml](values.yaml)
 
@@ -550,7 +552,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-sccm-4.0.14.gz
+helm upgrade my-release -f values.yaml ibm-sccm-4.2.1.gz
 ```
 
 Refer [RELEASENOTES.md](RELEASENOTES.md) for Fix history.
@@ -629,7 +631,7 @@ Use `networkPolicy` to control traffic flow at the port level.
 
 1. All sensitive application data at rest is stored in binary format so user cannot decrypt it. This chart does not support Encryption of user data at rest by default. Administrator can configure storage encryption to encrypt all data at rest.
 
-2. Data in motion is encrypted using transport layer security(TLS 1.2). For more information please see product [Knowledge center link]( https://www.ibm.com/docs/en/control-center/6.4.0?topic=sterling-control-center-monitor-640 )
+2. Data in motion is encrypted using transport layer security(TLS 1.2). For more information please see product [Knowledge center link]( https://www.ibm.com/docs/en/control-center/6.4.2?topic=sterling-control-center-monitor-642 )
 
 
 ## Storage
@@ -652,4 +654,4 @@ IBM Sterling Control Center Helm chart supports both dynamic and pre-created per
 
 ## Documentation
 
-[IBM Sterling Control Center](https://www.ibm.com/docs/en/control-center/6.4.0?topic=sterling-control-center-monitor-640)
+[IBM Sterling Control Center](https://www.ibm.com/docs/en/control-center/6.4.2?topic=sterling-control-center-monitor-642)
