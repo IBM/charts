@@ -33,34 +33,113 @@ The installation environment has the following prerequisites:
 
 ## Installing the Chart
 
-### Installing the operator
+### Installation Options
 
-To install the operator, run the following command:
+The Event Streams operator supports two installation models:
 
-```
+1. **Standard Installation (Default)**: Installs both cluster-scoped resources (CRDs, ClusterRoles) and namespace-scoped resources (operator deployment) in a single Helm release.
+
+2. **Split Installation**: Installs cluster-scoped and namespace-scoped resources as separate Helm releases, useful for multi-tenant environments where CRDs are shared across multiple operator instances.
+
+### Standard Installation
+
+To install the operator with both cluster-scoped and namespace-scoped resources:
+
+```bash
 helm install \
     <release-name> ibm-eventstreams-operator-<helm-chart-version>.tgz \
     -n "<namespace>" \
     --set watchAnyNamespace=<true/false>
 ```
 
-Where
+Where:
 - `<release-name>` is the name you provide to identify your operator.
 - `ibm-eventstreams-operator-<helm-chart-version>.tgz` is the Helm chart you downloaded earlier.
 - `-n "<namespace>"` is the name of the namespace where you want to install the operator.
-- `--set watchAnyNamespace=<true/false>` determines whether the operator manages instances of {{site.data.reuse.short_name}} in any namespace or only a single namespace (default is `false` if not specified).
 
-  Set to `true` for the operator to manage instances in any namespace, or do not specify if you want the operator to only manage instances in a single namespace.
 
-For example, to install the operator on a cluster where it will manage all instances of {{site.data.reuse.short_name}}, run the command as follows:
+- `--set watchAnyNamespace=<true/false>` determines whether the operator manages instances in any namespace or only a single namespace (default is `false`).
 
-`helm install eventstreams ibm-eventstreams-operator-3.1.0.tgz -n "my-namespace" --set watchAnyNamespace=true`
+**Example**: Install operator managing all namespaces:
+```bash
+helm install eventstreams ibm-eventstreams-operator-3.1.0.tgz -n "my-namespace" --set watchAnyNamespace=true
+```
 
-For example, to install the operator that will manage {{site.data.reuse.short_name}} instances in only the `eventstreams` namespace, run the command as follows:
+**Example**: Install operator managing only its own namespace:
+```bash
+helm install eventstreams ibm-eventstreams-operator-3.1.0.tgz -n "my-eventstreams"
+```
 
-`helm install eventstreams ibm-eventstreams-operator-3.1.0.tgz -n "my-eventstreams"`
+### Split Installation (Multi-Tenant)
 
-**Note:** If you are installing any subsequent operators in the same cluster, ensure you run the `helm install` command with the `--set createGlobalResources=false` option (as these resources have already been installed).
+For multi-tenant environments, you can install cluster-scoped resources once and then install multiple operator instances that share those resources.
+
+**Step 1**: Install cluster-scoped resources (CRDs, ClusterRoles):
+```bash
+helm install \
+    <release-name> ibm-eventstreams-operator-<helm-chart-version>.tgz \
+    -n "<namespace>" \
+    --set namespaceScopedResources=false
+```
+
+**Step 2**: Install namespace-scoped resources (operator) in each tenant namespace:
+```bash
+helm install \
+    <release-name> ibm-eventstreams-operator-<helm-chart-version>.tgz \
+    -n "<namespace>" \
+    --set clusterScopedResources=false \
+    --set watchAnyNamespace=<true/false>
+```
+
+**Example**: Install cluster-scoped resources:
+```bash
+helm install es-crds ibm-eventstreams-operator-<helm-chart-version>.tgz \
+    -n es-system \
+    --create-namespace \
+    --set namespaceScopedResources=false
+```
+
+**Example**: Install operator managing only its own namespace:
+```bash
+helm install es-operator-team-a ibm-eventstreams-operator-<helm-chart-version>.tgz \
+    -n team-a \
+    --create-namespace \
+    --set clusterScopedResources=false \
+    --set watchAnyNamespace=true
+```
+
+
+Repeat Step 2 for additional tenant namespaces as needed.
+
+### Configuration Parameters
+
+#### Resource Scope Parameters
+
+- `clusterScopedResources` (default: `true`): Controls installation of cluster-scoped resources (CRDs, ClusterRoles, ClusterRoleBindings).
+  - Set to `false` when installing namespace-scoped resources in a split installation.
+  
+- `namespaceScopedResources` (default: `true`): Controls installation of namespace-scoped resources (operator deployment, RoleBindings, ConfigMaps).
+  - Set to `false` when installing only cluster-scoped resources in a split installation.
+
+- `createGlobalResources` (deprecated): Legacy parameter for backward compatibility. Use `clusterScopedResources` instead.
+
+#### Other Parameters
+
+- `watchAnyNamespace` (default: `false`): When `true`, the operator manages Event Streams instances in all namespaces. When `false`, it only manages instances in its own namespace.
+
+- `watchNamespaces` (default: `[]`): List of specific namespaces to watch. Leave empty to watch only the release namespace.
+
+### Upgrading Existing Installations
+
+Existing installations will continue to work without changes. The new parameter names are backward compatible:
+
+```bash
+# Both commands are equivalent and will install all resources
+helm upgrade eventstreams ibm-eventstreams-operator-<helm-chart-version>.tgz -n "my-namespace"
+helm upgrade eventstreams ibm-eventstreams-operator-<helm-chart-version>.tgz -n "my-namespace" --set clusterScopedResources=true
+```
+
+**Note**: Migration from a standard installation to a split installation is not supported. Use the split installation model only for new deployments.
 
 ### Verifying the Chart
 
