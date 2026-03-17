@@ -1,4 +1,4 @@
-# Cognos Analytics Certified Containers 12.1.1
+# Cognos Analytics Certified Containers 12.1.2
 
 
 ## Introduction
@@ -46,13 +46,14 @@ Statefulsets
 
 The following is a list of the Cognos Analytics services that will appear when Cognos is deployed.
 
-- CA Ingress Service
+- CA Proxy Service
 - Content Manager Service
 - Reporting Service
 - Rest Service
 - UI Service
 - Smarts Service
 - Data Service
+- Agentic Service(optional) 
        
 ## Resources Required 
 
@@ -62,20 +63,21 @@ The minimum required to deploy Cognos Analytics Certified containers is
 - Cores: 16 
 - Memory: 32 GiB 
 
-The following is an estimation of the compute resources for each of the Cognos Analytics services
-
-| Pod    | Cpu       | Cpu     | Memory    | Memory  |
-|        | Requests  | Limits  | Requests  | Limits  |
-|--------|-----------|---------|-----------|---------|
-| CM     |     4200m |   8400m |    4200Mi |  8800Mi |
-| RS     |     2200m |   6400m |    4200Mi | 11800Mi |
-| Rest   |     2200m |   4400m |    4200Mi |  6800Mi |
-| UI     |     3200m |   3400m |    4200Mi |  6800Mi |
-| Smarts |     2200m |   5400m |    5200Mi |  8800Mi |
-| DSS    |     2200m |   6400m |    6200Mi | 11800Mi |
-| CAProxy|      400m |   1000m |     200Mi |   800Mi |
-
-| Total  |    16300m |  35400m |   28400Mi | 53600Mi | 
+## The following is an estimation of the compute resources for each of the Cognos Analytics services
+ 
+|  Pod Name              | Cpu Requests | Cpu Limits | Mem Requests | Mem Limits |
+|:---|---:|---:|---:|---:|
+| ca-cm                  |     4,200m    |   8,400m    |    4,200Mi    |  8,800Mi    |
+| ca-reporting           |     2,200m    |   6,400m    |    4,200Mi    | 11,800Mi    |
+| ca-rest                |     2,200m    |   4,400m    |    4,200Mi    |  6,800Mi    |
+| ca-ui                  |     3,200m    |   3,400m    |    4,200Mi    |  6,800Mi    |
+| ca-smarts              |     2,200m    |   5,400m    |    5,200Mi    |  8,800Mi    |
+| ca-dss                 |     2,200m    |   6,400m    |    6,200Mi    | 11,800Mi    |
+| caproxy                |      400m    |   1,000m    |     200Mi    |   8,00Mi    |
+| ca-agentic-ai (optional)|    2,000m    |   5,000m    |    5,120Mi    | 10,240Mi    |
+|              |              |            |              |            |
+| Total (Required)       |    16,300m    |  35,400m    |   28,400Mi    | 53,600Mi    |
+| Total (with Agentic AI)        |    18,300m    |  40,400m    |   33,520Mi    | 63,840Mi    |
 
 ## Red Hat OpenShift SecurityContextConstraints Requirements
 Custom SecurityContextConstraints definition:
@@ -124,6 +126,70 @@ $ kubectl create secret generic ca-openid-credentials-secret   --from-literal=us
 ```
 
 Note for the OpenId secret, use the ClientId for the Username, and the ClientSecret as the password.
+
+If you plan on plan have Agentic-AI service, create the following secret
+
+```
+kubectl create secret generic ca-opensearch-credentials-secret --from-literal=username="admin" --from-literal=password="YourSecurePassword123!" --type=kubernetes.io/basic-auth -n ${NAMESPACE}
+```
+
+Note for the OpenSearch secret: users can modify the password, but it must be sufficiently complex; otherwise, OpenSearch will report an error.
+
+#### TLS Certificate Setup for HTTPS Deployment (Optional)
+
+If you plan to enable HTTPS and agentic serivce, you need to configure TLS certificates using your own certificate and key:
+
+Step 1: Export Certificate and Key Paths
+
+```bash
+export TLS_CERT_PATH="<path_to_your_certificate_file>"
+export TLS_KEY_PATH="<path_to_your_private_key_file>"
+```
+
+Step 2: Create TLS Secret for caproxy-frontdoor Service
+
+This secret is used by the caproxy-frontdoor service to enable HTTPS connections:
+
+```bash
+kubectl delete secret frontdoor-tls-cert -n ${NAMESPACE} 2>/dev/null || true
+kubectl create secret tls frontdoor-tls-cert \
+    --cert="${TLS_CERT_PATH}" \
+    --key="${TLS_KEY_PATH}" \
+    -n ${NAMESPACE}
+
+if [ $? -eq 0 ]; then
+    echo "✓ TLS secret 'frontdoor-tls-cert' created successfully"
+else
+    echo "Error: Failed to create TLS secret"
+    exit 1
+fi
+```
+
+Step 3: Create CA Bundle ConfigMap for Agentic AI Pod
+
+This ConfigMap allows the ca-agentic-ai pod to trust the custom certificate chain when making HTTPS requests to CA services:
+
+```bash
+kubectl delete configmap ca-certificates -n ${NAMESPACE} 2>/dev/null || true
+kubectl create configmap ca-certificates \
+    --from-file=ca-bundle.crt="${TLS_CERT_PATH}" \
+    -n ${NAMESPACE}
+
+if [ $? -eq 0 ]; then
+    echo "✓ ConfigMap 'ca-certificates' created successfully"
+    echo "Note: ca-agentic-ai pod will mount this to trust the custom certificate chain"
+else
+    echo "Warning: Failed to create CA bundle ConfigMap"
+fi
+```
+
+Certificate Requirements:
+- Certificate must include all necessary SANs (Subject Alternative Names) for your services, including the caproxy-frontdoor-service hostname
+- Certificate should contain the full chain: server cert + intermediate CA + root CA
+- This works with any enterprise or customer-signed certificates (IBM, DigiCert, etc.)
+- Ensure the certificate is in PEM format
+
+
 
 ### 2. Accessing IBM Container Registry
 You can pull Cognos Analytics Certified Container images from the IBM Cloud Container Registry. You need to setup the environment to be able to access IBM Cloud Registry for this deployment.
@@ -225,6 +291,10 @@ services:
     ncDbPort: 1433
     ncAdvancedProperties: "securityMechanism=3"
 
+    # CA Agentic AI service
+    agenticAIService:
+      enabled: true
+
 ```
 Copy and paste the sample yaml into a file named caConfiguration.yaml. The sample yaml file references the secrets that were created in Pre-installation steps.
 
@@ -275,6 +345,115 @@ $ kubectl delete secret ca-ldapbind-credentials-secret   -n ${NAMESPACE}
 $ kubectl delete secret ca-openid-credentials-secret     -n ${NAMESPACE}
 ```
 
+## Artifact PVC Deployment Structure
+A simple artifact deployment can be created to provide JDBC drivers, Certificates, Fonts, Images. The folder structure must be the following 
+```
+/artifacts/certs            # Provide certificate files with an extension of *.arm, *.cer, *.pem, *.crt 
+/artifacts/csdrivers        # Provide updates to Content Store Drivers. Will consume files with an extension of *.jar
+/artifacts/cjap             # Provide a Custom Java Authentication Provider. Will consume files with an extension of *.jar
+/artifacts/configuration    # Provide additional Configuration files with an extension of *.properties, *.json
+/artifacts/dsdrivers        # Provide Data Store Drivers. Will consume files with an extension of *.jar
+/artifacts/fonts            # Referenced by Reporting Service. Will consume files with an extension of *.ttf
+/artifacts/images           # Referenced by Reporting Service. Will consume files with an extension of  *.gif, *.jpg, *.jpeg
+```
+
+To register the Artifact deployment with CACC instance, simply provide the PVC from the Artifact deployment in the configs.pvcArtifactsRootFolder setting. When CACC deploys, 
+the artifacts will be automatically ingested into CACC services. 
+
+Note the Artifact PVC must be created with a ReadWriteOnce access mode.
+https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes
+
+Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the deployment and report an error, similar to the following
+
+Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/artifactsObjectCheck.yaml:24:10): The provided PVC artifact-pvc does NOT exist in the namespace <namespace>
+
+
+```
+The Content Service, Reporting Service, DSS Service and Smarts Service will only read from the following mount points.
+    artifacts/certs
+    artifacts/csdrivers
+    artifacts/cjap
+    artifacts/configuration
+    artifacts/dsdrivers
+    artifacts/fonts
+    artifacts/images
+```   
+
+
+## Configuration Data PVC
+The Configuration data is an optional PVC. When enabled, it will persist the configuration/data. The PVC must be created with an accessMode of ReadWriteMany. Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the deployment and report an error. 
+
+Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the deployment and report an error, similar to the following
+
+Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/configDataCheck.yaml:24:10): The provided PVC configdata-pvc does NOT exist in the namespace <namespace>
+
+```
+configs:
+  pvcConfigData:
+```
+
+## Deployment PVC
+The Deployment PVC is an optional PVC. The PVC can be preloaded with Cognos Analytics deployment file and will available to import into CA content store. In addition, CA content can also be exported and the resultant file will be written to the deployment folder. The PVC must be created with an accessMode of ReadWriteMany.
+
+Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the deployment and report an error, similar to the following
+
+Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/deploymentCheck.yaml:24:10): The provided PVC deployment-pvc does NOT exist in the namespace cacc <namespace>
+
+```
+configs:
+  pvcDeployment:
+``` 
+## External Object Storage PVC
+The External Object Storage (EOS) is an optional PVC. You can configure Content Manager to store report output and datasets to a Network drive (is NFS) or S3 storage via a PVC. Report output is available through the portal and IBM® Cognos® SDK, but the report output is not stored in the content store database. The PVC must be created with an accessMode of ReadWriteMany
+
+Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the deployment and report an error, similar to the following
+
+Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/eosCheck.yaml:24:10): The provided PVC eos-pvc does NOT exist in the namespace <namespace>
+
+```
+configs:
+  pvcExternalObjectStorage:
+```
+## Powercube PVC 
+The Powercube is an option PVC. You can provide Cognos Powercubes (*.mdc) which be made available to the Reporting service. Note, the Report Service will need to be configured to 32-bit. 
+The PVC must be created with an accessMode of ReadWriteOnce
+
+Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the deployment and report an error, similar to the following
+
+Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/powercubeObjectCheck.yaml:25:10): The provided PVC powercubes-pvc does NOT exist in the namespace <namespace>
+
+```
+configs:
+  pvcPowercubes:
+```
+## Additional Olap Properties
+The Olap Properties is an optional ConfigMap. For example, if additional configuration properties are required to query to Planning Analytics (TM1), a configmap can be created. Here's an example of passing specific properties to 
+
+Include the properties in a properties file (tm1RestCustom.properties)
+
+```
+# Force MDX operators like FilterSet to be processed by the Database/Native MDX engine even when Local processing LOLAP is turned on
+v5.enableFilterSetOptimization=true
+
+# If the dataset size exceeds the configurable threshold then allow the MDX operator to be processed by the 
+# Database/Native MDX engine even when Local processing LOLAP is turned on
+v5.topCountFunctionsOptimization.datasetSize=10000
+```
+
+```
+kubectl create configmap customproperties --from-file=tm1RestCustom.properties -n <namespace>
+```
+
+Once the configmap is created, provide the configmap name in the override yaml file.
+
+Note if a configmap is specified, and the configmap doesn't not exist, Helm will stop the deployment and report an error, similar to the following
+
+Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/customConfigCheck.yaml:24:10): The provided ConfigMap customproperties does NOT exist in the namespace <namespace>
+
+```
+configs:
+  configMapCustomProperties:
+```
 
 ## Configuration
 
@@ -288,10 +467,17 @@ The following tables lists the configurable parameters of the ibm-cacc chart and
 |image.registry|Repository where CA images will be pulled from. Can be set to reference private repository.|cp.icr.io/cp/cognos|
 |imagePullSecrets.name|Kubernetes Secret used to pull images from repository.|regcred|
 |configs.mailServerConfiguration|Mail Server Configuration|false|
-|configs.mailServerHostPort|specify the location of the mail server: host:port|""|
+|configs.mailServerHostPort|Specify the location of the mail server: host:port|""|
 |configs.mailServerUseSsl|Is SSL required|false|
 |configs.mailServerDefaultSender|Specifies the email address for Reply-To|"notifications@cognos.ibm.com"|
 |configs.gatewayUri|Default Gateway URI|"http://localhost:9300/bi/v1/disp"|
+|configs.pvcArtifactsRootFolder|Specify a PVC that references an artifact endpoint. Used to pass in JDBC Drivers, Fonts, Images, ...|""|
+|configs.pvcExternalObjectStorage|Specify a PVC that references external storage where CA objects will be stored|""|
+|configs.pvcDeployment|Specify a PVC that references where Cognos Analytics deployments can be read/written to|""|
+|configs.pvcPowercubes|Specify a PVC that references where Cognos Powercubes can be read from|""|
+|configs.pvcConfigData|Specify a PVC that references where Cognos Configuration data can be persisted to|""|
+|configs.configMapCustomProperties|Specify a ConfigMap that references additional configuration properties for CA services|""|
+|              |              |            |              
 |global.globalDefaultFont|Default font to use|"Andale"|
 |global.globalEmailEncoding|Default encoding used by the system|"UTF-8"|
 |global.globalServerTimeZoneID|What timezone should be specified for the system|"America/New_York"|
@@ -300,8 +486,14 @@ The following tables lists the configurable parameters of the ibm-cacc chart and
 |global.globalCookiePath|Cookie Path|""|
 |global.globalCookieSecure|Set secure cookie|""|
 |global.globalHealthCheckDetails|Health Check details|false|
-|serviceMonitors.createMonitors|Defines which services should be monitored and how|true|
-|securityContext.openshiftContext|Defines the privileges and access control settings for a pod or container|true|
+
+## Service Monitors and Openshift Security Context Constraints (SCC)
+OpenShift Security Context Constraints (SCCs) are critical objects that define policies controlling pod/container permissions and security settings, such as running as root, accessing host volumes, or using specific user IDs.
+&nbsp;
+| Parameter                  | Description                                     | Default                                                    |
+| -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
+|serviceMonitors.createMonitors|The ServiceMonitor specifies how groups of application services should be monitored and scraped for metrics by Prometheus.|true|
+|securityContext.openshiftContext|Defines the privileges and access control settings for a pod or container. Set to false if deploying in a Kubernetes environment.|true|
 
 ## Secrets configuration settings
 These configuration settings serve as a mapping table for secrets. The default values for each of the secrets is in the table below. If Corporate standard is a different naming convention, you can create the appropriate the secret name (as per corporate standard) and set the secret to reflect the new secret name.
@@ -310,13 +502,14 @@ These configuration settings serve as a mapping table for secrets. The default v
 
 | Parameter                  | Description                                     | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
-|secretNames.cs_creds|Description|ca-cs-credentials-secret|
-|secretNames.audit_creds|Description|ca-audit-credentials-secret|
-|secretNames.nc_creds|Description|ca-nc-credentials-secret|
-|secretNames.openid_creds|Description|ca-openid-credentials-secret|
-|secretNames.ldapbind_creds|Description|ca-ldapbind-credentials-secret|
-|secretNames.mailserver_creds|Description|ca-mailserver-credentials-secret|
+|secretNames.cs_creds|Secret that contains Content Store Credentials|ca-cs-credentials-secret|
+|secretNames.audit_creds|Secret that contains Audit Store Credentials|ca-audit-credentials-secret|
+|secretNames.nc_creds|Secret that contains NoticeCast Credentials|ca-nc-credentials-secret|
+|secretNames.openid_creds|Secret that contains ClientId and Client Secret for OpenId provider|ca-openid-credentials-secret|
+|secretNames.ldapbind_creds|Secret that contains LDAP Bind Credentials|ca-ldapbind-credentials-secret|
+|secretNames.mailserver_creds|Secret that contains MailServer credentials|ca-mailserver-credentials-secret|
 
+Note if a secret is specified, and the secret doesn't not exist, Helm will stop the deployment and report an error
 
 ## Ingress configuration settings
 These configuration settings serve as ...
@@ -355,26 +548,50 @@ These configuration settings can be enabled to configure the Content Manager ser
 | Parameter                  | Description                                     | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
 |services.contentManagerService.pullPolicy|Configure the update policy for the container images. Acceptable values are Always, Never, or IfNotPresents.|IfNotPresent|
+|services.contentManagerService.digest|Modify only if asked to do so by Cognos Support person|Current image digest is included in the Helm chart|
 |services.contentManagerService.aaaAllowAnonymous|Specifies whether anonymous access is allowed|false|
 |services.contentManagerService.aaaInactivityTimeout|Specifies the maximum number of seconds that a user's session can remain inactive before they must re-authenticate.|3600|
 |services.contentManagerService.aaaAdvancedProperties|Specifies a set of advanced properties|""|
 
 
-### Content Manager Service CJAP configuration settings
+## Content Manager Service CJAP configuration settings
+These configuration settings can be provided to enable a Custom Java Authentication Provider (CJAP) as an authentication source. Refer to the Artifact section on how to 
+include the CJAP implementation (*.jar) and configuration files.
 
 &nbsp;
 
 | Parameter                  | Description                                     | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
 |services.contentManagerService.cjapConfiguration|Defines a group of properties that allow the product to use a custom Java authentication provider for user authentication|false|
+|services.contentManagerService.cjapAdvancedProperties|Specifies a set of advanced properties|" "|
 |services.contentManagerService.cjapInstanceName|Namepace name|""|
 |services.contentManagerService.cjapNamespaceID|Specifies a unique identifier for the authentication namespace|""|
 |services.contentManagerService.cjapAuthModule|Specify which authentication module the CJAP uses|""|
 |services.contentManagerService.cjapTenantIdMapping|Specifies how namespace users are mapped to tenant IDs|""|
 |services.contentManagerService.cjapTenantBoundingSetMapping|Specifies how the tenant bounding set is determined for a user.|""|
 
+## Content Manager Service CJAP Adapter configuration settings
+These configuration settings can be provided to enable a Custom Java Authentication Provider (CJAP) Adapter service as an authentication source. Refer to the Artifact section on how to 
+include the CJAP implementation (*.jar) and configuration files. The CJAP Adapter provides a mechanism to export a CJAP as an OpenId provider.
 
-### Content Manager Service LDAP configuration settings
+&nbsp;
+
+| Parameter                  | Description                                     | Default                                                    |
+| -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
+|services.contentManagerService.cjapAdapterServiceConfiguration|Defines a group of properties that allow the product to use a custom Java authentication Adapter provider for user authentication|false|
+|services.contentManagerService.cjapAdapterServiceId|Namepace name|""|
+|services.contentManagerService.cjapAdapterServiceName|Specifies a unique identifier for the authentication namespace|""|
+|services.contentManagerService.cjapAdapterServiceClass|Specify which authentication module the CJAP uses|""|
+|services.contentManagerService.cjapAdapterServiceIssuer|The issuer URL uniquely identifies the provider in tokens (iss claim), allowing applications to verify that a token came from a trusted source.|""|
+|services.contentManagerService.cjapAdapterServiceClientId|A unique, public string that identifies a specific application (client) to an OpenID Connect (OIDC) provider|""|
+|services.contentManagerService.cjapAdapterServiceSecret|A confidential, unique code used to authenticate a client application with an authorization server (Identity Provider)|""|
+|services.contentManagerService.cjapAdapterServiceRedirectUri|Is the specific URL or location in your application where the authorization server (OpenID Provider) sends the user back after they have successfully authenticated and granted the requested permissions|""|
+|services.contentManagerService.cjapAdapterServiceEnablePasswordGrant|Enables Password grant behaviour|"false"|
+
+
+
+## Content Manager Service LDAP configuration settings
+These configuration settings can be provided to enable a Lightweight Directory Access Protocol (LDAP) V3 as an authentication source.
 
 &nbsp;
 
@@ -383,20 +600,50 @@ These configuration settings can be enabled to configure the Content Manager ser
 |services.contentManagerService.ldapConfiguration|Defines a group of properties that allows the product to access an LDAP server for user authentication|false|
 |services.contentManagerService.ldapInstanceName|Specifies the name of the LDAP instance|"LDAP"|
 |services.contentManagerService.ldapNamespaceID|Specifies a unique identifier for the authentication namespace|"LDAP"|
-|services.contentManagerService.ldapHostname|Specifies the host namedirectory server|"localhost"|
+|services.contentManagerService.ldapHostname|Specifies the hostname directory server|"localhost"|
 |services.contentManagerService.ldapPort|Specifies the port of the directory server|389|
 |services.contentManagerService.ldapBaseDistinguishedName|Specifies the base distinguished name of the LDAP server|"dc=example,dc=com"|
 |services.contentManagerService.ldapUserLookup|Specifies the user lookup used for binding to the LDAP directory server|"(uid=${userID})"|
 |services.contentManagerService.ldapUseBindCredentialsForSearch|Specifies whether to use the bind credentials to perform a search|true|
 |services.contentManagerService.ldapSecure|Enable or disable encryption for the LDAP connections|false|
-|services.contentManagerService.ldapTimeout:|Specifies the number of seconds permitted to perform a search request|0|
+|services.contentManagerService.ldapTimeout|Specifies the number of seconds permitted to perform a search request|0|
 |services.contentManagerService.ldapTenantIdMapping|Specifies how namespace users are mapped to tenant IDs|" "|
 |services.contentManagerService.ldapTenantBoundingSetMapping|Specifies how the tenant bounding set is determined for a user|" "|
 |services.contentManagerService.ldapAdvancedProperties|Specifies a set of advanced properties|" "|
 |services.contentManagerService.ldapCustomProperties|Specifies a set of custom properties|" "|
+|services.contentManagerService.ldapUserExternalIdentity|Specifies whether to use the identity from an external source for user authentication.| false|
+|services.contentManagerService.ldapSizeLimit|Specifies the maximum number of responses permitted for a search request.| 1|
+|services.contentManagerService.ldapAllowEmptyPassword|Specifies whether empty passwords are allowed for user authentication.| false|
+|services.contentManagerService.ldapCamIdAttribute|Specifies the value used to uniquely identify objects stored in the LDAP directory server.| "dn"|
+|services.contentManagerService.ldapDataEncoding|Specifies the encoding of the data stored in the LDAP directory server.| "UTF-8"|
+|services.contentManagerService.ldapSelectableForAuth|Specifies whether the namespace is selectable for authentication.| true|
+|services.contentManagerService.ldapAccountObjectClass|Specifies the name of the LDAP object class used to identify an account.| "inetorgperson"|
+|services.contentManagerService.ldapAccountBusinessPhone|Specifies the LDAP attribute used for the "businessPhone" property for an account.| "telephonenumber"|
+|services.contentManagerService.ldapAccountContentLocale|Specifies the LDAP attribute used for the "contentLocale" property for an account.| "preferredlanguage"|
+|services.contentManagerService.ldapAccountDescription|Specifies the LDAP attribute used for the "description" property for an account.| "description"|
+|services.contentManagerService.ldapAccountEmail|Specifies the LDAP attribute used for the "email" address of the account.| "mail"|
+|services.contentManagerService.ldapAccountFaxPhone|Specifies the LDAP attribute used for the "faxPhone" property for an account.| "facsimiletelephonenumber"|
+|services.contentManagerService.ldapAccountGivenName|Specifies the LDAP attribute used for the "givenName" property for an account.| "givenname"|
+|services.contentManagerService.ldapAccountHomePhone|Specifies the LDAP attribute used for the "homePhone" property for an account.| "homephone"|
+|services.contentManagerService.ldapAccountMobilePhone|Specifies the LDAP attribute used for the "mobilePhone" property for an account.| "mobile"|
+|services.contentManagerService.ldapAccountName|Specifies the LDAP attribute used for the "name" property for an account.| "cn"|
+|services.contentManagerService.ldapAccountPagerPhone|Specifies the LDAP attribute used for the "pagerPhone" property for an account.| "pager"|
+|services.contentManagerService.ldapAccountPassword|Specifies the LDAP attribute used for the "password" property for an account.| "userPassword"|
+|services.contentManagerService.ldapAccountPostalAddress|Specifies the LDAP attribute used for the "postalAddress" property for an account.| "postaladdress"|
+|services.contentManagerService.ldapAccountProductLocale|Specifies the LDAP attribute used for the "productLocale" property for an account.| "preferredlanguage"|
+|services.contentManagerService.ldapAccountSurname|Specifies the LDAP attribute used for the "surname" property for an account.| "sn"|
+|services.contentManagerService.ldapAccountUserName|Specifies the LDAP attribute used for the "userName" property for an account.| "uid"|
+|services.contentManagerService.ldapFolderObjectClass|Specifies the name of the LDAP object class used to identify a folder.| "organizationalunit"|
+|services.contentManagerService.ldapFolderDescription|Specifies the LDAP attribute used for the "description" property of a folder.| "description"|
+|services.contentManagerService.ldapFolderName|Specifies the LDAP attribute used for the "name" property of a folder.| "ou"|
+|services.contentManagerService.ldapGroupObjectClass|Specifies the name of the LDAP object class used to identify a group.| "groupofuniquenames"|
+|services.contentManagerService.ldapGroupDescription|Specifies the LDAP attribute used for the "description" property of a group.| "description"|
+|services.contentManagerService.ldapGroupMembers|Specifies the LDAP attribute used to identify the members of a group.| "uniquemember"|
+|services.contentManagerService.ldapGroupName|Specifies the LDAP attribute used for the "name" property of a group.| "cn"|
 
 
-### Content Manager Service OpenId configuration settings
+## Content Manager Service OpenId configuration settings
+These configuration settings can be provided to enable an OpenID Provider as an authentication source.
 
 &nbsp;
 
@@ -410,10 +657,13 @@ These configuration settings can be enabled to configure the Content Manager ser
 |services.contentManagerService.openIdAcDescription|Specifies the OIDC claim used for the "description" property for an account|" "|
 |services.contentManagerService.openIdAcEmail|Specifies the OIDC claim used for the "email" property for an account|"email"|
 |services.contentManagerService.openIdAcEncoding|Configure the character encoding of the account|" "|
+|services.contentManagerService.openIdAcFaxPhone|Specifies the OIDC claim used for the "faxPhone" property for an account.|No Default|
 |services.contentManagerService.openIdAcGivenName|Specifies the OIDC claim used for the "givenName" property for an account|"given_name"|
 |services.contentManagerService.openIdAcHomePhone|Specifies the OIDC claim used for the "homePhone" property for an account|" "|
+|services.contentManagerService.openIdAcMemberOf|Specifies the OIDC claim used for the "memberOf" property for an account.|No Default|
 |services.contentManagerService.openIdAcMobilePhone|Specifies the OIDC claim used for the "mobilePhone" property for an account|" "|
 |services.contentManagerService.openIdAcName|Specifies the OIDC claim used for the "name" property for an account|"name"|
+|services.contentManagerService.openIdAcPagerPhone|Specifies the OIDC claim used for the "pagerPhone" property for an account|"name"|
 |services.contentManagerService.openIdAcPostalAddr|Specifies the OIDC claim used for the "postalAddress" property for an account|" "|
 |services.contentManagerService.openIdAcProductLocale|Specifies the OIDC claim used for the "productLocale" property for an account|" "|
 |services.contentManagerService.openIdAcSurname|Specifies the OIDC claim used for the "surname" property for an account|"family_name"|
@@ -423,7 +673,7 @@ These configuration settings can be enabled to configure the Content Manager ser
 |services.contentManagerService.openIdAuthScope|Specifies the scope parameter values provided to the authorize endpoint|"email"|
 |services.contentManagerService.openIdCertificateFile|Specify the client certificate file for OpenID communication|" "|
 |services.contentManagerService.openIdCustomProperties|Specifies a set of custom properties. Format is "name=value;name=value"|" "|
-|services.contentManagerService.openIdDiscEndpoint|Specifies the OpenID Connect discovery endpoint|" "|
+|services.contentManagerService.openIdDiscEndpoint|Specifies the OpenID Connect discovery endpoint. Provides automatic discovery of authorization endpoints, token endpoints, supported scopes, and public keys for signing, eliminating manual configuration. |" "|
 |services.contentManagerService.openIdInstanceName|Namepace name|" "|
 |services.contentManagerService.openIdIssuer|Specifies the implementation of an OpenID Connect identity provider|" "|
 |services.contentManagerService.openIdKeyLocation|Specify the location of the OpenID provider's public key|"jwks_uri"|
@@ -438,9 +688,6 @@ These configuration settings can be enabled to configure the Content Manager ser
 |services.contentManagerService.openIdTokenEndpointAuthStrategy|Configure the authentication strategy for the token endpoint in OpenID connections|"client_secret_post"|
 |services.contentManagerService.openIdUserInfoEndpoint|Specify the user information endpoint URL for the OpenID connections|" "|
 |services.contentManagerService.openIdUseDiscEndpoint|Specify whether to use the discovery endpoint for retrieving the OpenID provider's configuration information|false|
-|services.contentManagerService.openIdAcFaxPhone|Specifies the OIDC claim used for the "faxPhone" property for an account.|No Default|
-|services.contentManagerService.openIdAcMemberOf|Specifies the OIDC claim used for the "memberOf" property for an account.|No Default|
-|services.contentManagerService.openIdAcPagerPhone|Specifies the OIDC claim used for the "pagerPhone" property for an account.|No Default|
 |services.contentManagerService.openIdPrivateKeyFile|Specifies the file that contains the private signing key. The file that contains the private signing key in PKCS8 format. It must contain a single private RSA key of length 2048 bit|No Default|
 |services.contentManagerService.openIdPrivateKeyId|Specifies the key identifier that should be placed in the JWT header. The key identifier that will be set in the JWT 'kid' header. Use this configuration item if your identity provider requires a 'kid'. Leave this value blank if your identity provider does not require a 'kid'.|No Default|
 |services.contentManagerService.openIdPgStrategy|Specifies how to get the user's identity when using the password grant flow. Set this value to 'ID token' if all user claims are returned in the id_token. Set this value to 'ID token and userinfo endpoint' if an id_token is returned from the password grant flow but does not contain all of the user claims. Set this value to 'Userinfo endpoint' if the id_token does not contain any user claims and if the user claims should be retrieved from the userinfo endpoint. Set this value to 'Unsupported' if the Identity Provider does not support the password grant flow.|idToken / idTokenUserinfo / unsupported / userinfo|
@@ -451,7 +698,8 @@ These configuration settings can be enabled to configure the Content Manager ser
 |services.contentManagerService.restrictAccessToCRN|Allows administrators to restrict user access to the application. When this parameter is enabled, users can only access the application if they belong to at least one group or role within the built-in namespace (does not include the group "All Authenticated Users").|False / True|
 
 
-### Content Manager Service DB Store configuration settings
+## Content Manager Service DB Store configuration settings
+These configuration settings are required to deploy CACC.
 
 &nbsp;
 
@@ -496,32 +744,34 @@ These configuration settings can be enabled to configure the Content Manager ser
 |services.contentManagerService.rsMaxProcesses|Specify the maximum number of processes for the request service|8|
 |services.contentManagerService.rsAffine|Specify the number of affine processes for the request service|2|
 |services.contentManagerService.rsNonAffine|Specify the number of non-affine processes for the request service|8|
-|services.contentManagerService.tempDirPVCenabled|Set to true if wanting to mount temp location to a pvc|false|
-|services.contentManagerService.tempDirPVCStorageClassName|Description|"default"|
-|services.contentManagerService.tempDirPVCStorageAccessModes|Description|"ReadWriteOnce"|
-|services.contentManagerService.tempDirPVCStorageSize|Description|10Gi|
-|services.contentManagerService.dataDirPVCenabled|Set to true if wanting to mount data location to a pvc|false|
-|services.contentManagerService.dataDirPVCStorageClassName|Description|"default"|
-|services.contentManagerService.dataDirPVCStorageAccessModes|Description|"ReadWriteOnce"|
-|services.contentManagerService.dataDirPVCStorageSize|Description|10Gi|
-|services.contentManagerService.deploymentDirPVCenabled|Set to true if wanting to mount deployment location to a pvc|false|
-|services.contentManagerService.deploymentDirPVCStorageClassName|Description|"default"|
-|services.contentManagerService.deploymentDirPVCStorageAccessModes|Description|"ReadWriteOnce"|
-|services.contentManagerService.deploymentDirPVCStorageSize|Description|10Gi|
-|services.contentManagerService.deploymentDirGKECloudStorageEnabled|Set to true if wanting to mount deployment location to a Google Bucket. Only applicable for Google Cloud storage|false|
-|services.contentManagerService.deploymentDirGKECloudStorageBucketName|Name of the Google bucket|eca_deployment|
-|services.contentManagerService.deploymentDirGKECloudStorageVolumeName|Name of the volume to use. The default is deployment-volume|deployment-volume|
-|services.contentManagerService.deploymentDirGKECloudStorageMountOptions|Storage Mount Options|"implicit-dirs"|
 
-
-## Reporting Service configuration settings
-These configuration settings can be enabled to configure the 
+## Content Manager additional content configuration properties
+These configuration settings are optional to deploy CACC.
 
 &nbsp;
 
-| Parameter                  | Description                                     | Default                                                    |
+| Parameter                  | Description                                                        | Default                                                    |
+| -----------------------    | ---------------------------------------------                      | ---------------------------------------------------------- |
+|services.contentManagerService.p2pdDeployDefaultsDispatcherCmPoolsize|Configure the Dispatcher CM Pool size|30|
+|services.contentManagerService.p2pdDeployDefaultsWpCacheSize|Configure the WP Cache size|30|
+|services.contentManagerService.xtsPropertiesFunctionCacheSize|Configure the XTS Function Cache size|30|
+|services.contentManagerService.xtsPropertiesLogicSheetCacheSize|Configure the XTS Logic Sheet Cache size |60|
+|services.contentManagerService.xtsPropertiesNodeopCacheSize|Configure the XTS NodeOp Cache size|30|
+|services.contentManagerService.xtsPropertiesRequestCacheSize|Configure the XTS Request Cache size |30|
+|services.contentManagerService.xtsPropertiesTemplateCacheSize|Configure the XTS Template Cache size |100|
+|services.contentManagerService.xtsPropertiesTransformCacheSize|Configure the XTS Transform Cache size |45|
+|services.contentManagerService.enableExternalObjectStore|Enable External Object Storage. Requires associated PVC configs.pvcExternalObjectStorage to be provided|false|
+|services.contentManagerService.removeDeploymentSamples|If enabled, will removed the CA provided samples from deployment folder|false|
+
+## Reporting Service configuration settings
+These configuration settings can be enabled to modify the execution profile of the Reporting Service
+
+&nbsp;
+
+| Parameter                  |                                      | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
 |services.reportingService.pullPolicy|Configure the update policy for the container images. Acceptable values are Always, Never, or IfNotPresents.|IfNotPresent|
+|services.reportingService.digest|Modify only if asked to do so by Cognos Support person|Current image digest is included in the Helm chart|
 |services.reportingService.dispatcherMemory|Specifies the maximum amount of memory in MB that can be used by the process|6144|
 |services.reportingService.dispatcherCoreThreads|represents the number of threads that the WLP server starts up with|200|
 |services.reportingService.dispatcherExecutorThread|represents the maximum number of threads that can be associated with the WLP server|-1|
@@ -533,15 +783,7 @@ These configuration settings can be enabled to configure the
 |services.reportingService.limitsMemory|Set the memory limit for the container|10Gi|
 |services.reportingService.limitsEphemeralStorage|Set the ephemeral storage limit for the container|10Gi|
 |services.reportingService.verboseStartupLogging|Enable or disable detailed startup logging|false|
-|services.reportingService.rsvpMode|Specifies the Report Server execution mode.|"64-bit"|
-|services.reportingService.tempDirPVCenabled|Set to true if wanting to mount temp location to a pvc|false|
-|services.reportingService.tempDirPVCStorageClassName|Description|"default"|
-|services.reportingService.tempDirPVCStorageAccessModes|Acceptatble values are ReadWriteOnce, ReadOnlyMany, ReadWriteMany, or ReadWriteOncePod|"ReadWriteOnce"|
-|services.reportingService.tempDirPVCStorageSize|Description|10Gi|
-|services.reportingService.dataDirPVCenabled|Set to true if wanting to mount data location to a pvc|false|
-|services.reportingService.dataDirPVCStorageClassName|Description|"default"|
-|services.reportingService.dataDirPVCStorageAccessModes|Description|"ReadWriteOnce"|
-|services.reportingService.dataDirPVCStorageSize|Description|10Gi|
+|services.reportingService.rsvpMode|Specifies the Report Server execution mode. Value can be either 32-bit or 64-bit|"64-bit"|
 |services.reportingService.replicas|Number of Reporting service replicas to use on startup|1|
 |services.reportingService.enableAutoscaling|Enable auto Horizontal Pod Autoscaling (HPA)|false|
 |services.reportingService.minReplicas|The minimum number of replicas to which the autoscaler may scale.|1|
@@ -555,24 +797,30 @@ These configuration settings can be enabled to configure the
 |services.reportingService.scaleUpStabilizationWindowSeconds|This helps prevent unnecessary scaling if metrics are fluctuating. For example, a stabilizationWindowSeconds of 300 means the HPA will wait 300 seconds before scaling down pods to the new, desired number of replicas.|0|
 |services.reportingService.scaleUpWindowPolicyValue|Refers to a scaling policy that allows you to configure how many pods can be removed based on a percentage of the total number of pods at each scaling iteration|80|
 |services.reportingService.scaleUpWindowPolicySeconds|This helps prevent unnecessary scaling if metrics are fluctuating. For example, a stabilizationWindowSeconds of 300 means the HPA will wait 300 seconds before scaling down pods to the new, desired number of replicas.|30|
+|services.reportingService.rsvpPropertiesLocalCacheOutputSize|Configure RSVP Local Cache Output size |70|
+|services.reportingService.rsvpPropertiesSessionCacheSize|Configure RSVP Session Cache Size |70|
+|services.reportingService.rsAsyncWaitTimeoutMs|Configure RSVP Asynchronous Wait Timeouts (Milliseconds)|120000|
+|services.reportingService.rsMaxProcesses|Configure RSVP Max Processes |16|
+|services.reportingService.brsMaxProcesses|Configure RSVP Batch Max Processes |16|
 
 
 ## Rest Service configuration settings
-These configuration settings can be enabled to configure the 
+These configuration settings can be enabled to modify the execution profile of the Rest Service
 
 &nbsp;
 
-| Parameter                  | Description                                     | Default                                                    |
+| Parameter                  |                                      | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
 |services.restService.pullPolicy|Configure the update policy for the container images. Acceptable values are Always, Never, or IfNotPresents.|IfNotPresent|
+|services.restService.digest|Modify only if asked to do so by Cognos Support person|Current image digest is included in the Helm chart|
 |services.restService.dispatcherMemory|Description|6144|
 |services.restService.dispatcherCoreThreads|Description|200|
 |services.restService.dispatcherExecutorThread|Description|-1|
-|services.restService.requestsCpu|Description|"2000m"|
-|services.restService.requestsMemory|Description|4Gi|
-|services.restService.requestsEphemeralStorage|Description|5Gi|
-|services.restService.limitsCpu|Description|"4000m"
-|services.restService.limitsMemory|Description|6Gi|
+|services.restService.requestsCpu|Set the CPU request for the container|"2000m"|
+|services.restService.requestsMemory|Set the memory request for the container|4Gi|
+|services.restService.requestsEphemeralStorage|DescriptionSet the ephemeral storage request for the container|5Gi|
+|services.restService.limitsCpu|Set the CPU limit for the container|"4000m"
+|services.restService.limitsMemory|Set the memory limit for the container|6Gi|
 |services.restService.limitsEphemeralStorage|Description|10Gi|
 |services.restService.verboseStartupLogging|Description|false|
 |services.restService.replicas|Number of Rest service replicas to use on startup|1|
@@ -591,13 +839,14 @@ These configuration settings can be enabled to configure the
 
 
 ## User Interface Service configuration settings
-These configuration settings can be enabled to configure the 
+These configuration settings can be enabled to modify the execution profile of the User Interface Service
 
 &nbsp;
 
 | Parameter                  | Description                                     | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
 |services.uiService.pullPolicy|Configure the update policy for the container images. Acceptable values are Always, Never, or IfNotPresents.|IfNotPresent|
+|services.uiService.digest|Modify only if asked to do so by Cognos Support person|Current image digest is included in the Helm chart|
 |services.uiService.dispatcherMemory|Description|6144|
 |services.uiService.dispatcherCoreThreads|Description|200|
 |services.uiService.dispatcherExecutorThread|Description|-1|
@@ -623,13 +872,14 @@ These configuration settings can be enabled to configure the
 |services.uiService.scaleUpWindowPolicySeconds|This helps prevent unnecessary scaling if metrics are fluctuating. For example, a stabilizationWindowSeconds of 300 means the HPA will wait 300 seconds before scaling down pods to the new, desired number of replicas.|30|
 
 ## Smarts Service configuration settings
-These configuration settings can be enabled to configure the 
+These configuration settings can be enabled to modify the execution profile of the Smarts Service
 
 &nbsp; 
 
 | Parameter                  | Description                                     | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
 |services.smartsService.pullPolicy|Configure the update policy for the container images. Acceptable values are Always, Never, or IfNotPresents.|IfNotPresent|
+|services.smartsService.digest|Modify only if asked to do so by Cognos Support person|Current image digest is included in the Helm chart|
 |services.smartsService.dispatcherMemory|Description|6144|
 |services.smartsService.dispatcherCoreThreads|Description|200|
 |services.smartsService.dispatcherExecutorThread|Description|-1|
@@ -654,27 +904,96 @@ These configuration settings can be enabled to configure the
 |services.smartsService.scaleUpWindowPolicyValue|Refers to a scaling policy that allows you to configure how many pods can be removed based on a percentage of the total number of pods at each scaling iteration|80|
 |services.smartsService.scaleUpWindowPolicySeconds|This helps prevent unnecessary scaling if metrics are fluctuating. For example, a stabilizationWindowSeconds of 300 means the HPA will wait 300 seconds before scaling down pods to the new, desired number of replicas.|30|
 
+## Agentic AI Service configuration settings
+These configuration settings can be enabled to configure the BA Agentic AI Service with OpenSearch and Redis sidecars.
+
+&nbsp;
+
+| Parameter                  | Description                                     | Default                                                    |
+| -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
+|services.agenticAIService.enabled|Enable or disable the Agentic AI Service|true|
+|services.agenticAIService.pullPolicy|Configure the update policy for the container images. Acceptable values are Always, Never, or IfNotPresents.|IfNotPresent|
+|services.agenticAIService.name|Name of the Agentic AI service container|ba-agentic-ai|
+|services.agenticAIService.digest|Modify only if asked to do so by Cognos Support person|Current image digest is included in the Helm chart|
+|services.agenticAIService.tag|Image tag for the Agentic AI service|12.1.2|
+|services.agenticAIService.requestsCpu|Set the CPU request for the container|"500m"|
+|services.agenticAIService.requestsMemory|Set the memory request for the container|2Gi|
+|services.agenticAIService.requestsEphemeralStorage|Set the ephemeral storage request for the container|2Gi|
+|services.agenticAIService.limitsCpu|Set the CPU limit for the container|"2"|
+|services.agenticAIService.limitsMemory|Set the memory limit for the container|4Gi|
+|services.agenticAIService.limitsEphemeralStorage|Set the ephemeral storage limit for the container|4Gi|
+|services.agenticAIService.replicas|Number of Agentic AI service replicas to use on startup|1|
+|services.agenticAIService.servicePort|Service port for the Agentic AI service|9000|
+|services.agenticAIService.targetPort|Target port for the Agentic AI service container|8000|
+|services.agenticAIService.logLevel|Log level for the Agentic AI service (debug, info, warning, error)|info|
+|services.agenticAIService.workers|Number of worker processes for the Agentic AI service|4|
+
+## Agentic AI Service - OpenSearch Sidecar configuration settings
+These configuration settings control the OpenSearch sidecar container that provides search capabilities for the Agentic AI service.
+
+&nbsp;
+
+| Parameter                  | Description                                     | Default                                                    |
+| -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
+|services.agenticAIService.useOpenSearchSidecar|Enable or disable the OpenSearch sidecar container|true|
+|services.agenticAIService.openSearchName|Name of the OpenSearch sidecar container|opensearch|
+|services.agenticAIService.openSearchDigest|Image digest for the OpenSearch container|Current image digest is included in the Helm chart|
+|services.agenticAIService.openSearchTag|Image tag for the OpenSearch container|3.4.0|
+|services.agenticAIService.openSearchDisableSecurity|Disable OpenSearch security features (set to "true" or "false")|"false"|
+|services.agenticAIService.openSearchUseSSL|Enable SSL for OpenSearch connections (set to "true" or "false")|"true"|
+|services.agenticAIService.openSearchVerifyCerts|Verify SSL certificates for OpenSearch (set to "true" or "false")|"false"|
+|services.agenticAIService.openSearchUser|Default admin user for OpenSearch|"admin"|
+|services.agenticAIService.openSearchJavaHeapSize|Java heap size for OpenSearch (e.g., "2g", "4g")|"2g"|
+|services.agenticAIService.openSearchRequestsCpu|Set the CPU request for the OpenSearch sidecar|"1"|
+|services.agenticAIService.openSearchRequestsMemory|Set the memory request for the OpenSearch sidecar|2Gi|
+|services.agenticAIService.openSearchLimitsCpu|Set the CPU limit for the OpenSearch sidecar|"2"|
+|services.agenticAIService.openSearchLimitsMemory|Set the memory limit for the OpenSearch sidecar|4Gi|
+|services.agenticAIService.openSearchPvcEnabled|Enable persistent storage for OpenSearch data|false|
+|services.agenticAIService.openSearchPvcStorageClassName|Storage class name for OpenSearch PVC|"default"|
+|services.agenticAIService.openSearchPvcStorageSize|Storage size for OpenSearch PVC|10Gi|
+
+## Agentic AI Service - Redis Sidecar configuration settings
+These configuration settings control the Redis sidecar container that provides caching capabilities for the Agentic AI service.
+
+&nbsp;
+
+| Parameter                  | Description                                     | Default                                                    |
+| -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
+|services.agenticAIService.redisName|Name of the Redis sidecar container|redisearch|
+|services.agenticAIService.redisDigest|Image digest for the Redis container|Current image digest is included in the Helm chart|
+|services.agenticAIService.redisTag|Image tag for the Redis container|2.6.0|
+|services.agenticAIService.redisRequestsCpu|Set the CPU request for the Redis sidecar|"500m"|
+|services.agenticAIService.redisRequestsMemory|Set the memory request for the Redis sidecar|1Gi|
+|services.agenticAIService.redisLimitsCpu|Set the CPU limit for the Redis sidecar|"1"|
+|services.agenticAIService.redisLimitsMemory|Set the memory limit for the Redis sidecar|2Gi|
+|services.agenticAIService.redisPvcEnabled|Enable persistent storage for Redis data|false|
+|services.agenticAIService.redisPvcStorageClassName|Storage class name for Redis PVC|"default"|
+|services.agenticAIService.redisPvcStorageSize|Storage size for Redis PVC|5Gi|
+|services.agenticAIService.labels|Used to add any labels to agenticAIService deployment only|No default|
+|services.agenticAIService.annotations|Used to add any annotations to agenticAIService deployment only|No default|
+|services.agenticAIService.extraEnv|Used to add any extra environment variables to agenticAIService deployment|No default|
 
 ## Data Service configuration settings
-These configuration settings can be enabled to configure the 
+These configuration settings can be enabled to modify the execution profile of the DataSet Service 
 
 &nbsp;
 
 | Parameter                  | Description                                     | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
 |services.dataService.pullPolicy|Configure the update policy for the container images. Acceptable values are Always, Never, or IfNotPresents.|IfNotPresent|
-|services.dataService.dispatcherMemory|Description|6144|
-|services.dataService.dispatcherCoreThreads|Description|200|
-|services.dataService.dispatcherExecutorThread|Description|-1|
+|services.dataService.digest|Modify only if asked to do so by Cognos Support person|Current image digest is included in the Helm chart|
+|services.dataService.dispatcherMemory|Specifies the maximum amount of memory in MB that can be used by the process|6144|
+|services.dataService.dispatcherCoreThreads|Specify the number of core threads for the dispatcher service|200|
+|services.dataService.dispatcherExecutorThread|Specify the number of executor threads for the dispatcher service|-1|
 |services.dataService.dqMaxMemory|Adjust memory for Dynamic Query process|5120|
 |services.dataService.dqCoreThreads|Adjust core threads for Dynamic Query process|200|
 |services.dataService.dqExecutorThreads|Adjust executor threads for Dynamic Query process|-1|
 |services.dataService.flintMaxMemory|Adjust memory for Flint process|1024m|
-|services.dataService.requestsCpu|Description|"2000m"|
-|services.dataService.requestsMemory|Description|12Gi|
-|services.dataService.requestsEphemeralStorage|Description|5Gi|
-|services.dataService.limitsCpu|Description|"6000m"
-|services.dataService.limitsMemory|Description|16Gi|
+|services.dataService.requestsCpu|Set the CPU request for the container|"2000m"|
+|services.dataService.requestsMemory|Set the memory request for the container|12Gi|
+|services.dataService.requestsEphemeralStorage|Set the ephemeral storage request for the container|5Gi|
+|services.dataService.limitsCpu|Set the CPU limit for the containe|"6000m"
+|services.dataService.limitsMemory|Set the memory limit for the container|16Gi|
 |services.dataService.limitsEphemeralStorage|Description|10Gi|
 |services.dataService.verboseStartupLogging|Description|false|
 |services.dataService.replicas|Number of Data service replicas to use on startup|1|
@@ -690,6 +1009,31 @@ These configuration settings can be enabled to configure the
 |services.dataService.scaleUpStabilizationWindowSeconds|This helps prevent unnecessary scaling if metrics are fluctuating. For example, a stabilizationWindowSeconds of 300 means the HPA will wait 300 seconds before scaling down pods to the new, desired number of replicas.|0|
 |services.dataService.scaleUpWindowPolicyValue|Refers to a scaling policy that allows you to configure how many pods can be removed based on a percentage of the total number of pods at each scaling iteration|80|
 |services.dataService.scaleUpWindowPolicySeconds|This helps prevent unnecessary scaling if metrics are fluctuating. For example, a stabilizationWindowSeconds of 300 means the HPA will wait 300 seconds before scaling down pods to the new, desired number of replicas.|30|
+
+## Data Service additional configuration settings
+These additional parameters are available to modify the execution/connectity profile (query execution, timeout properties and enabling diagnostics) when connecting to DSS Olap/PA Features
+
+&nbsp;
+
+| Parameter                  | Description                                     | Default                                                    |
+| -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
+|services.dataService.pullPolicy|Configure the update policy for the container images. Acceptable values are Always, Never, or IfNotPresents.|IfNotPresent|
+|services.dataService.enableDiagnosticsLogging|    |false|
+|services.dataService.loadHierarchyNamedSets| |true|
+|services.dataService.paUseFillerMember|Configure to determine whether filler members (often indicated by a caret symbol ^ in data trees) are shown when dealing with parent members that do not have direct children, or when a user lacks access to specific root members.|true|
+|services.dataService.paUseRootMembers|Configuration setting used to ensure that the root members in a Planning Analytics (TM1) data source match those shown in the TM1 client|false|
+|services.dataService.paEnableHierarchyLocalization| |true|
+|services.dataService.paUseStreamsForSetFunctions| |false|
+|services.dataService.paAsyncWaitTimeoutSeconds|This parameter defines the maximum number of seconds XQE waits (seconds) for a response from backend systems, such as TM1 instances. |32|
+|services.dataService.paAsyncRequestTimeoutSeconds|This parameter define the default asynchronous request timeout (seconds) specifically for the proxy waiting on backend services |300|
+|services.dataService.tm1RestClientSocketTimeout|If Cognos Analytics is the client experiencing the timeout, the default timeout seconds) |300| 
+|services.dataService.tm1RestClientIdleConnectionTimeout|Specifies a timeout limit for idle client connections (milliseconds).|200|  
+|services.dataService.tm1RestClientConnectionTimeout|The tm1RestClientConnectionTimeout parameter sets the timeout value (milliseconds) for authentication sessions for the Planning Analytics REST API. |5000|
+|services.dataService.trustAllTm1RestCertificates| |false|
+|services.dataService.useProviderCrossJoinThreshold|Enabling useProviderCrossJoinThreshold controls whether combinations of members on an edge, which have no measure values, are retrieved from the Planning Analytics database. UseProviderCrossJoinThreshold is enabled when it has a value greater than 0. |10000|
+|services.dataService.useFiddlerProxyForTm1RestClient|Enable to monitor and debug traffic between a TM1 REST Client |false|
+|services.dataService.validateTm1RestPaSubsets|Enable to validate subsets in IBM Planning Analytics (TM1) via the REST API involves querying the TM1 REST API endpoint to check for the existence of a subset within a dimension, or validating its MDX definition. |true|
+|services.dataService.validateTm1RestSelfSignedCertificates|To validate TM1 REST API self-signed certificates in Planning Analytics, you must import the TM1 server's self-signed certificate into the trust stores of the applications or clients connecting to it.|true|
 
 
 ## Limitations
