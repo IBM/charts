@@ -12,7 +12,7 @@ For additional high-level overview of the ITX Runtime Server product, please ref
 
 ## Prerequisites
 
-This distribution is tested on Red Hat OpenShift 4.18. The OCP project must have access to "redis" to run maps in fenced mode or asynchronously. This deployment is tested with redis-operator 7.22.0 which has been provisioned from OpenShift's OperatorHub.
+This distribution is tested on Red Hat OpenShift 4.20. The OCP project must have access to "redis" to run maps in fenced mode or asynchronously. This deployment is tested with redis-operator 7.22.0 which has been provisioned from OpenShift's OperatorHub.
 
 Installing a PodDisruptionBudget
 
@@ -38,7 +38,7 @@ spec:
 
 This chart requires a `SecurityContextConstraints` to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
 
-The predefined `SecurityContextConstraints` name: [`anyuid`](https://docs.openshift.com/container-platform/4.18/authentication/managing-security-context-constraints.html) has been verified for this chart.  If your target namespace is bound to this `SecurityContextConstraints` resource, you can proceed to install the chart.
+The predefined `SecurityContextConstraints` name: [`anyuid`](https://docs.openshift.com/container-platform/4.20/authentication/managing-security-context-constraints.html) has been verified for this chart.  If your target namespace is bound to this `SecurityContextConstraints` resource, you can proceed to install the chart.
 
 Below is a custom `SecurityContextConstraints` which can be used for fine control of the permissions and capabilities needed to deploy this chart. You can enable this custom `SecurityContextConstraints` resource using these instructions.
 
