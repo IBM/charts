@@ -81,13 +81,11 @@ kubectl delete crd/appconnect.ibm.com_traces.yaml
 |-----|------|---------|-------------|
 | namespace | string | `"appconnect"` | Namespace where you wish to deploy the operator |
 | operator.deployment.image | string | `"appconnect-operator"` | Operator image name |
-| operator.deployment.nodeSelector | object | `{}` | Node selector to control what nodes the operator pod is scheduled on |
 | operator.deployment.pullPolicy | string | `"Always"` | PullPolicy for the operator image (Always, IfNotPresent, or Never) |
 | operator.deployment.repository | string | `"icr.io/cpopen"` | Remote repository where you will pull the operator pod  |
-| operator.deployment.resources | object | `{"limits":{"cpu":null,"ephemeral-storage":"512Mi","memory":"1Gi"},"requests":{"cpu":"100m","ephemeral-storage":"50Mi","memory":"128Mi"}}` | Resource limits to apply to the operator pod |
+| operator.deployment.resources | object | `{"limits":{"ephemeral-storage":"512Mi","memory":"1Gi"},"requests":{"cpu":"100m","ephemeral-storage":"50Mi","memory":"128Mi"}}` | Resource limits to apply to the operator pod |
 | operator.deployment.sha | string | `nil` | SHA value of the operator image |
 | operator.deployment.tag | string | `nil` | Tag value for the operator image (optional) ignored if you supply SHA value |
-| operator.deployment.tolerations | list | `[]` | Tolerations to control what nodes the operator pod can be scheduled on |
 | operator.env | object | `{}` | Environment variables that you wish to pass to the operator pod e.g key: "value" |
 | operator.imagePullSecrets | list | `[]` | Names of secrets which allow pulling from authenticated registries |
 | operator.installMode | string | `"OwnNamespace"` | installMode for the operator to determine at what scope it operates (OwnNamespace|AllNamespaces) |
