@@ -2,7 +2,7 @@
 
 ## Introduction
 
-[DevOps Plan](https://ibm.com/docs/en/devops-plan/3.0.6) is a change management platform designed for enterprise-level scalability, customizable processes, and enhanced project control. It accelerates project delivery and improves developer productivity..
+[DevOps Plan](https://ibm.com/docs/en/devops-plan/3.0.7) is a change management platform designed for enterprise-level scalability, customizable processes, and enhanced project control. It accelerates project delivery and improves developer productivity..
 
 ## Chart Details
 
@@ -10,7 +10,7 @@
 
 ## Product Documentation
 
-- [DevOps Plan Product Documentation](https://ibm.com/docs/en/devops-plan/3.0.6)
+- [DevOps Plan Product Documentation](https://ibm.com/docs/en/devops-plan/3.0.7)
 
 ## Prerequisites
 
@@ -131,12 +131,6 @@ Set OpenShift DNS name for the domain name:
 DOMAIN=$(oc get --namespace=openshift-ingress-operator ingresscontroller/default -ojsonpath='{.status.domain}')
 ```
 
-Download ibm-devopsplan-prod chart from devops-plan repository and unpack it in local directory.
-
-```bash
-helm pull ibm-helm/ibm-devopsplan-prod --untar
-```
-
 Install the helm chart:
 
 ```bash
@@ -156,13 +150,13 @@ helm install ibm-devopsplan ibm-helm/ibm-devopsplan-prod \
 
 ### Install on Local Kubernetes cluster
 
-Download ibm-devopsplan-prod chart from devops-plan repository and unpack it in local directory.
+**Steps 1.** Download ibm-devopsplan-prod chart from devops-plan repository and unpack it in local directory.
 
 ```bash
 helm pull ibm-helm/ibm-devopsplan-prod --untar
 ```
 
-Install the helm chart:
+**Steps 2.** Install
 
 ```bash
 helm install ibm-devopsplan ibm-helm/ibm-devopsplan-prod \
@@ -241,7 +235,7 @@ kubectl create namespace $NAMESPACE
 ```
 
 ```bash
-  helm pull ibm-helm/ibm-devopsplan-prod --untar \
+  helm pull ibm-helm/ibm-devopsplan-prod --untar
   chmod +x ibm-devopsplan-prod/files/*.sh \
   && bash ibm-devopsplan-prod/files/certificate.sh -n $NAMESPACE -s ingress $DOMAIN
 ```
@@ -376,20 +370,47 @@ global:
 
 ## **Enable External Access to the Internal PostgreSQL Database**
 
-If you plan to install DevOps Plan using the internal PostgreSQL database and need to access it through DevOps Plan Designer or other supported PostgreSQL tools such as pgAdmin 4, you must enable external PostgreSQL access in the `helm install` or `helm upgrade` command:
+If you plan to install **DevOps Plan** using the **internal PostgreSQL** database and need to access it from **DevOps Plan Designer** or other supported PostgreSQL tools (such as **pgAdmin 4**), you must enable external PostgreSQL access and configure the exposed port during installation or upgrade.
+
+Use the following options with the `helm install` or `helm upgrade` command:
 
 ```bash
---set postgresql.enableExternalAccess=true 
+--set postgresql.enableExternalAccess=true
+--set postgresql.service.exposePort=30106
+--set control.postgresql.port=30106
 ```
 
-After enabling this setting, run the helm status command to view the configuration values required for connecting to the PostgreSQL database.
+**Note:** If the external IP address is **not the same as the Kubernetes node IP**, you must explicitly provide the node’s internal IP address when running `helm install` or `helm upgrade`.
+
+Step 1: Retrieve the node internal IP address 
+
+```bash
+NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+```
+
+Step 2: Pass the node IP to Helm
+
+Include the following option in your `helm install` or `helm upgrade` command:
+
+```bash
+--set postgresql.service.nodeInternalIP=${NODE_IP}
+```
+
+After enabling external access, run the following command to view the PostgreSQL connection details required to connect to the database:
+
+```bash
+helm status <release-name>
+```
+
+This output includes the host, port, and other configuration values needed to connect to the internal PostgreSQL instance.
 
 ### Connection Details
 
 - **Host:**
   - Use **global.domain** if installing on an OpenShift cluster or using an Emissary-ingress Load Balancer.
   - Use the **VM IP address** if installing on a local Kubernetes cluster.
-- **Port:** Use the value of **postgresql.externalAccessPort**.
+  - Use the **Kubernetes node internal IP address** if the global.domain **IP address** or the **VM IP address** is **not the same** as the node’s internal IP address.
+- **Port:** Use the value of **postgresql.service.exposePort**.
   Defualt value is **30106**.
 - **Database:** *postgres*
 - **Username:** *postgres*
@@ -399,6 +420,16 @@ After enabling this setting, run the helm status command to view the configurati
   ```bash
   kubectl get secret --namespace devopsplan devopsplan-postgresql -o jsonpath="{.data.tenant-datastore-password}" | base64 -d; echo 
   ```
+
+### Retrieve Connection Details from DevOps Plan UI
+
+You can also retrieve the PostgreSQL connection details from the DevOps Plan TeamSpace page by following these steps:
+
+1. Open the Tenant Management page.
+2. Select the desired Tenant.
+3. In the TeamSpace panel on the right, select the Details tab.
+4. Click Show connection properties.
+5. View the PostgreSQL connection details for the selected Tenant TeamSpace.
 
 ---
 
@@ -450,10 +481,10 @@ Add `-f keycloak.yaml` to your `helm install` or `helm upgrade` command.
 
 DevOps Control offers Git hosting and collaboration features based on Gitea.
 
-
 ### **Steps to Install**
 
 1. Install DevOps Plan on OpenShift cluster or Emissary-ingress (see *Install on OpenShift cluster* and *Install with Emissary-ingress Load Balancer* sections for details).
+
 2. Make sure you download ibm-devopsplan-prod chart from devops-plan repository and unpack it in local directory.
 
 ```bash
@@ -1019,14 +1050,44 @@ You can rollback to the previous release using *helm rollback* command.
 1. Use Helm to install the chart as described in section **Installing the Chart**.
 2. Use Helm to upgrade the chart to new release as described in section **Rolling upgrade release**.
 
+**Important: Rollback Limitation (Starting from v3.0.7)**
+
+Beginning with DevOps **Plan v3.0.7**, the bundled OpenSearch and OpenSearch Dashboards versions were upgraded.
+
+During this upgrade, OpenSearch creates or migrates internal indices using a newer index format that is not backward compatible with earlier OpenSearch versions.
+
+As a result:
+
+  - **Rollback from DevOps Plan v3.0.7 to any previous release (e.g., v3.0.6) is not supported.**
+  - Attempting to roll back may cause OpenSearch to fail to start due to incompatible index formats.
+
+**Recommended Actions**
+
+Before upgrading to **DevOps Plan v3.0.7** or later, ensure a backup is created.
+
+DevOps Plan supports **Backup and Restore using Velero**. If a downgrade to a previous release (such as **v3.0.6**) is required, you must restore the cluster state from a backup that was taken **before the upgrade**.
+
+**Recommended workflow:**
+
+1. Create a backup of the DevOps Plan environment using Velero before performing the upgrade.
+
+2. Proceed with the upgrade to **v3.0.7 or later**.
+
+3. If you need to revert to a previous release:
+
+    - Roll back the application version.
+    - Restore the cluster resources and persistent volumes from the **Velero backup taken prior to the upgrade**.
+
+⚠️ Downgrading without restoring from a pre-upgrade backup may cause OpenSearch to fail to start due to incompatible index formats.
+
 **Procedure:**
-1. Run *helm history* command to see revision numbers of your helm chart release. You should have min two revision numbers. revision 1 for install and revision 2 for the upgrade that you execute in **Before you begin** section. Example below shows you have a helm chart release name *ibm-devopsplan1* with revision 1 installed the helm chart *ibm-devopsplan1-3.0.3* for release 3.0.6 and revision 2 upgraded the helm chart *ibm-devopsplan2-3.0.6* to release 3.0.6.
+1. Run *helm history* command to see revision numbers of your helm chart release. You should have min two revision numbers. revision 1 for install and revision 2 for the upgrade that you execute in **Before you begin** section. Example below shows you have a helm chart release name *ibm-devopsplan1* with revision 1 installed the helm chart *ibm-devopsplan1-3.0.3* for release 3.0.7 and revision 2 upgraded the helm chart *ibm-devopsplan2-3.0.7* to release 3.0.7.
 
   ```bash
   $ helm history ibm-devopsplan1 --namespace dev
   REVISION        UPDATED                         STATUS          CHART           APP VERSION     DESCRIPTION
   1               Thu Nov 20 21:58:13 2024        superseded      ibm-devopsplan1-3.0.3          Install complete
-  2               Thu Nov 20 22:13:56 2024        deployed        ibm-devopsplan2-3.0.6          Upgrade complete
+  2               Thu Nov 20 22:13:56 2024        deployed        ibm-devopsplan2-3.0.7          Upgrade complete
   ```
 
 2. Rollback helm chart using *helm rollback* command. Example below will rollback helm chart release *ibm-devopsplan1* from revision 2 to revision 1.
@@ -1042,11 +1103,11 @@ You can rollback to the previous release using *helm rollback* command.
   $ helm history ibm-devopsplan1 --namespace dev
   REVISION        UPDATED                         STATUS          CHART           APP VERSION     DESCRIPTION
   1               Thu Nov 20 21:58:13 2024        superseded      ibm-devopsplan1-3.0.3          Install complete
-  2               Thu Nov 20 22:13:56 2024        deployed        ibm-devopsplan2-3.0.6          Upgrade complete
+  2               Thu Nov 20 22:13:56 2024        deployed        ibm-devopsplan2-3.0.7          Upgrade complete
   3               Thu Nov 20 22:30:32 2024        deployed        ibm-devopsplan1-3.0.3          Rollback to 1
   ```
 
-- The OpenSearch version has been upgraded from 2.18.0 to 3.1.0 as part of the DevOps Plan 3.0.6 release. OpenSearch 2.18.0 is based on Lucene 9, whereas OpenSearch 3.1.0 is based on Lucene 10. This Rollback constitutes a major version change; therefore, in-place rolling back are not supported. To complete the rollback, either a full cluster restart or a migration involving reindexing is required. For detailed guidance, refer to the official OpenSearch documentation.
+- The OpenSearch version has been upgraded from 2.18.0 to 3.1.0 as part of the DevOps Plan 3.0.7 release. OpenSearch 2.18.0 is based on Lucene 9, whereas OpenSearch 3.1.0 is based on Lucene 10. This Rollback constitutes a major version change; therefore, in-place rolling back are not supported. To complete the rollback, either a full cluster restart or a migration involving reindexing is required. For detailed guidance, refer to the official OpenSearch documentation.
 
 ---
 
@@ -1082,7 +1143,7 @@ The Helm chart has the following values that can be overridden using the *--set 
 | **auth.jwt.refreshTokenValiditySeconds** | Duration for which a JWT refresh token remains valid, in seconds. | `86400` (1 day) |
 
 ### Parameters for creating TeamSpace and Applications
-The PostgreSQL database requires to create TeamSpace and Applications. The helm chart is installed with the internal PostgreSQL database by default. If you plan to install/upgrade the helm charts with an external database, then you need to set the *postgresql.enabled* to *false* and set the *spring.datastore* and *tenant.datastore* configuration settings based on your external database parameters. PostgreSQL database is supported for release 3.0.6.
+The PostgreSQL database requires to create TeamSpace and Applications. The helm chart is installed with the internal PostgreSQL database by default. If you plan to install/upgrade the helm charts with an external database, then you need to set the *postgresql.enabled* to *false* and set the *spring.datastore* and *tenant.datastore* configuration settings based on your external database parameters. PostgreSQL database is supported for release 3.0.7.
 
 | **Parameter** | **Description** | **Default value** |
 | --- | --- | --- |
@@ -1120,7 +1181,7 @@ The helm chart installs the Analytics feature on a separate pod by default. you 
 | **analytics.urlMapping** | URL mapping. <br>- The mapping URL format should be *https:[mapping-name].com*.  | "" |
 | **analytics.replicaCount** | Number of replica Analytics Pods. This parameter is needed if analytics.service *=true.* | 1 |
 | **analytics.image.repository** | Analytics docker Image repository path. This parameter is needed if analytics.service *=true.* | cp/devops-plan/devopsplan-analytics |
-| **analytics.image.tag** | Analytics Image tag. This parameter is needed if *analytics.service=true.* | 3.0.6 |
+| **analytics.image.tag** | Analytics Image tag. This parameter is needed if *analytics.service=true.* | 3.0.7 |
 | **analytics.image.pullPolicy** | Analytics image pull policy. This parameter is needed if *analytics.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **analytics.hostname** | Analytics hostname | analytics |
 
@@ -1131,7 +1192,7 @@ The helm chart is installed with the internal postgresql database by default.
 | --- | --- | --- |
 | **postgresql.enabled** | This parameter enables or disables devopsplan-postgresql database service. Accepted values are:<br>- *true* to enable postgresql database service.<br>- *false* to disable postgresql database service. | true |
 | **postgresql.repository** | Postgresql database docker Image repository path. This parameter is needed if *postgresql.enabled=true.* | cp/devops-plan/devopsplan-postgresql |
-| **postgresql.tag** | Postgresql database Image tag.This parameter is needed if *postgresql.enabled=true.* | 3.0.6 |
+| **postgresql.tag** | Postgresql database Image tag.This parameter is needed if *postgresql.enabled=true.* | 3.0.7 |
 | **postgresql.pullPolicy** | Postgresql database image pull policy.This parameter is needed if *postgresql.enabled=true*Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent |
  **postgresql.service.type** | postgresql service type  | LoadBalancer |
 | **postgresql.service.exposePort** | postgresql service port  | "" |
@@ -1150,13 +1211,13 @@ The dashboards analytics configuration setting options set by default for dashbo
 | **nginx.urlMapping** | URL mapping. <br>- The mapping URL format should be *https:[mapping-name].com*.  | "" |
 | **nginx.replicaCount** | Number of replica nginx Pods. This parameter is needed if nginx.service *=true.* | 1 |
 | **nginx.image.repository** | Nginx docker Image repository path. This parameter is needed if nginx.service *=true.* | cp/devops-plan/devopsplan-nginx |
-| **nginx.image.tag** | Nginx Image tag. This parameter is needed if *nginx.service=true.* | 3.0.6 |
+| **nginx.image.tag** | Nginx Image tag. This parameter is needed if *nginx.service=true.* | 3.0.7 |
 | **nginx.image.pullPolicy** | Nginx image pull policy. This parameter is needed if *nginx.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **nginx.hostname** | Nginx hostname | nginx |
 | **dashboards.service** | This parameter enables or disables dashboards service. Accepted values are:<br>- *true* to enable Nginx service.<br>- *false* to disable dashboards service.<br>This parameter is needed if you plan to use Dashboard features for Business Analytics. | true |
 | **dashboards.replicaCount** | Number of replica dashboards Pods. This parameter is needed if dashboards.service *=true.* | 1 |
 | **dashboards.image.repository** | Opensearch-dashboards docker Image repository path. This parameter is needed if dashboards.service *=true.* | cp/devops-plan/devopsplan-dashboards |
-| **dashboards.image.tag** | Opensearch-dashboards Image tag. This parameter is needed if *dashboards.service=true.* | 3.0.6 |
+| **dashboards.image.tag** | Opensearch-dashboards Image tag. This parameter is needed if *dashboards.service=true.* | 3.0.7 |
 | **dashboards.image.pullPolicy** | Opensearch-dashboards image pull policy. This parameter is needed if *dashboards.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **dashboards.hostname** | Dashboards hostname | dashboards |
 | **dashboards.username** | Opensearch Dashboards username | "admin" |
@@ -1164,7 +1225,7 @@ The dashboards analytics configuration setting options set by default for dashbo
 | **logstash.service** | This parameter enables or disables devopsplan-logstash service. Accepted values are:<br>- *true* to enable Nginx service.<br>- *false* to disable devopsplan-logstash service.<br>This parameter is needed if you plan to use Dashboard features for Business Analytics. | true |
 | **logstash.replicaCount** | Number of replica devopsplan-logstash pods. This parameter is needed if logstash.service *=true.* | 1 |
 | **logstash.image.repository** | logstash docker Image repository path. This parameter is needed if logstash.service *=true.* | cp/devops-plan/devopsplan-logstash |
-| **logstash.image.tag** | devopsplan-logstash Image tag. This parameter is needed if *logstas.service=true.* | 3.0.6 |
+| **logstash.image.tag** | devopsplan-logstash Image tag. This parameter is needed if *logstas.service=true.* | 3.0.7 |
 | **logstash.image.pullPolicy** | Opensearch-logstash image pull policy. This parameter is needed if *logstas.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **logstash.port** | logstash port | 5011 |
 | **logstash.username** | logstash username | "logstash" |
@@ -1172,7 +1233,7 @@ The dashboards analytics configuration setting options set by default for dashbo
 | **opensearch.service** | This parameter enables or disables opensearch service. Accepted values are:<br>- *true* to enable Nginx service.<br>- *false* to disable opensearch service.<br>This parameter is needed if you plan to use Dashboard features for Business Analytics. | true |
 | **opensearch.replicaCount** | Number of replica opensearch pods. This parameter is needed if opensearch.service *=true.* | 1 |
 | **opensearch.image.repository** | Opensearch docker Image repository path. This parameter is needed if opensearch.service *=true.* | cp/devops-plan/devopsplan-opensearch |
-| **opensearch.image.tag** | Opensearch Image tag. This parameter is needed if *opensearch.service=true.* | 3.0.6 |
+| **opensearch.image.tag** | Opensearch Image tag. This parameter is needed if *opensearch.service=true.* | 3.0.7 |
 | **opensearch.image.pullPolicy** | Opensearch image pull policy. This parameter is needed if *opensearch.service=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent | 
 | **opensearch.hostname** | Opensearch hostname | opensearch |
 | **opensearch.hash** | Opensearch password hash | "" |
@@ -1197,7 +1258,7 @@ Single-Sign-On functionality by default is set to disable. If the admin plans to
 | **keycloak.jsonFile.configMapName** | This is the configMap file name that contains the keycloak.json file. This parameter is needed if keycloak.jsonFile.enabled *=true.* | keycloak-json |
 | **keycloaksrv.enabled** | This parameter enables or disables Keycloak service in Helm Chart for Single-Sign-On service. Accepted values are:<br>- *true* to enable Keycloak service.<br>- *false* to disable Keycloak service.<br>This parameter is needed if you plan to use Single-Sign-On feature and deploy Keycloak with Helm chart. | false |
 | **keycloaksrv.image.repository** | keycloak docker Image repository path. | devops-plan/devopsplan-keycloak |
-| **keycloaksrv.image.tag** | Keycloak Image tag. | 3.0.6 |
+| **keycloaksrv.image.tag** | Keycloak Image tag. | 3.0.7 |
 | **keycloaksrv.image.pullPolicy** | Keycloak image pull policy. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent |
 | **keycloaksrv.service.type** | Specify the nodePort values for the LoadBalancer and NodePort service types. | LoadBalancer |
 | **keycloaksrv.service.nodePorts.http** | Keycloak service HTTP port. | 30107 |
@@ -1369,7 +1430,7 @@ The following steps describe how enabled/disabled mounting the windows product p
 | --- | --- | --- |
 | **winInstall.enabled** | This parameter enables or disables mounting the windows product package in DevOps Plan Server. Accepted values are:<br>- *true* to enable mounting the windows product package.<br>- *false* to disable mounting the windows product package. | true |
 | **winInstall.image.repository** | win-install docker Image repository path. This parameter is needed if *winInstall.enabled=true*. | ibm-devopsplan-win-install |
-| **winInstall.image.tag** | win-install image tag. This parameter is needed if *winInstall.enabled=*true* | 3.0.6 |
+| **winInstall.image.tag** | win-install image tag. This parameter is needed if *winInstall.enabled=*true* | 3.0.7 |
 | **winInstall.image.pullPolicy** | win-install image pull policy. This parameter is needed if *winInstall.enabled=true*. Accepted values are:<br>- *IfNotPresent*<br>- *Always* | IfNotPresent |
 | **winInstall.accessModes** | win-install persistence Volume access modes. This parameter is needed if *winInstall.enabled=rtue*. | ReadWriteOnce |
 | **winInstall.size** | win-install persistence Volume size. This parameter is needed if *winInstall.enabled=true*. | 2Gi |
@@ -1411,8 +1472,8 @@ By default, the backoffLimit set to 1. You can increase to 5:
 <details><summary>Downloads and Useful Links</summary>
 <p>
 
-- [DevOps Plan](https://ibm.com/docs/en/devops-plan/3.0.6)
-- [Getting started with DevOps Plan Helm Chart](https://www.ibm.com/docs/en/devops-plan/3.0.6?topic=plan-getting-started-devops-helm-chart-openshift)
+- [DevOps Plan](https://ibm.com/docs/en/devops-plan/3.0.7)
+- [Getting started with DevOps Plan Helm Chart](https://www.ibm.com/docs/en/devops-plan/3.0.7?topic=plan-getting-started-devops-helm-chart-openshift)
 
 </p>
 </details>
