@@ -6,9 +6,9 @@ IBM DevOps Test Hub brings together test data, test environments, and test runs 
 
 ### Resources Required
 
-* [RedHat OpenShift Container Platform](https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/release_notes/ocp-4-18-release-notes) v4.18 or later (x86_64)
-* [Dynamic Volume Provisioning](https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/storage/dynamic-provisioning) supporting accessModes ReadWriteOnce (RWO) and ReadWriteMany (RWX).
-* [Jaeger Operator](https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/service_mesh/service-mesh-2-x#installing-ossm) (Optional) If tests should contribute trace information and Jaeger based reports are required.
+* [RedHat OpenShift Container Platform](https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/release_notes/ocp-4-19-release-notes) v4.19 or later (x86_64)
+* [Dynamic Volume Provisioning](https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/storage/dynamic-provisioning) supporting accessModes ReadWriteOnce (RWO) and ReadWriteMany (RWX).
+* [Jaeger Operator](https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/service_mesh/service-mesh-2-x#installing-ossm) (Optional) If tests should contribute trace information and Jaeger based reports are required.
 
 
 
@@ -24,7 +24,7 @@ To install the product you will need cluster administrator privileges.
 
 ## Red Hat OpenShift SecurityContextConstraints Requirements
 
-The product is compatible with the `restricted` and `restricted-v2` [SecurityContextConstraint](https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/authentication_and_authorization/managing-pod-security-policies).
+The product is compatible with the `restricted` and `restricted-v2` [SecurityContextConstraint](https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/authentication_and_authorization/managing-pod-security-policies).
 
 If you would prefer to use the custom ibm-devops-restricted SCC, please do the following before installation:
 
@@ -96,8 +96,8 @@ This change propagates after a couple of minutes. [Further reading](https://clou
 
 ### Local Machine
 
-* [oc](https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/cli_tools/openshift-cli-oc)
-* [helm v3.18.5 or later](https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/building_applications/working-with-helm-charts#installing-helm)
+* [oc](https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/cli_tools/openshift-cli-oc)
+* [helm v4.0.4 or later](https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/building_applications/working-with-helm-charts#installing-helm)
 
 ### Storage
 
@@ -128,7 +128,7 @@ The pod [`fsGroup`](https://kubernetes.io/docs/tasks/configure-pod-container/sec
 Fetch chart for install:
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-prod --version 11.0.700
+helm pull --untar ibm-helm/ibm-devops-prod --version 11.0.800
 cd ibm-devops-prod
 ```
 
@@ -150,6 +150,7 @@ helm upgrade --install $HELM_NAME . -n $NAMESPACE \
   --create-namespace \
   --set global.domain=$INGRESS_DOMAIN \
   -f values-openshift.yaml \
+  -f values-dedicated-nodes.yaml \
   --set global.persistence.rwxStorageClass=ibmc-file-gold \
   --set-literal passwordSeed=$PASSWORD_SEED \
   --set signup=true \
@@ -159,9 +160,15 @@ helm upgrade --install $HELM_NAME . -n $NAMESPACE \
 ```
 * When the ingress domain is accessible to untrusted parties, `signup` must be set to `false`.
 * The password seed is used to generate default passwords and should be stored securely. Its required again to restore from a backup.
+* Only use `values-dedicated-nodes.yaml` if you have labeled and tainted specific nodes or pools to run test assets.
 
 * The rwxStorageClass is cloud provider dependent, the value provided is only an example.
 
+
+### Troubleshooting
+If in doubt run `oc get pods -A` to see what is not running followed by `oc describe pod` for more detail.
+
+If pods are `Pending` and `describe` gives no clues, check you're not waiting on storage: `oc get pvc -n $NAMESPACE`
 
 ### Configuration
 
@@ -190,7 +197,6 @@ helm upgrade --install $HELM_NAME . -n $NAMESPACE \
 | `networkPolicy.egress.enable`                  | When `network.policy` is enabled create a rule to narrow egress from the product. | false |
 | `networkPolicy.enabled`                        | Deny other software, installed in the cluster, access to the product. | true |
 | `passwordSeed`                                 | The seed used to generate all passwords. | REQUIRED |
-| `postgresql.migrate.enabled`                   | Enable Postgresql version migration on start when coming from v10.5.3. Migration is disabled to avoid an unnecessary image pull. | false |
 | `priorityClassName`                            | The products pods (excluding dynamic workload) will have this priorityClass. | '' |
 | `priorityClassValue`                           | When set a priorityClass named `priorityClassName` is created with the set priority value. | |
 | `router.allowedOrigin`                         | A comma separated list of allowed origins for CORS. For example `*.domain.com,*.test.com,10.10.*.*`  | '' |
@@ -459,6 +465,5 @@ This methods should also be used when restoring a backup made where different se
 
 * `helm rollback` is not currently supported. Move back to a previous release by restoring a backup taken before the upgrade.
 * `helm upgrade` is only supported for specific versions. See [Upgrade](#upgrade) for details.
-* It is not currently possible to edit test assets. This must be done in DevOps Test Workbench.
 * In each namespace, only one instance of the product can be installed.
 * The replica count configuration enables a maximum of 50 active concurrent users. This configuration can not be changed.
