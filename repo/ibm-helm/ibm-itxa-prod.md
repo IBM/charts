@@ -1,14 +1,13 @@
 
-IBM Transformation Extender Advanced v10.0.2.1
+IBM Transformation Extender Advanced v10.0.1.12
 
-## What's New 
+## What's New
 
-ITXA 10.0.2.1 Certified Container release.
-See IBM ITXA Documentation for a full list of [what's new in ITXA 10.0.2.1.](https://www.ibm.com/docs/en/stea/10.0.0?topic=welcome-whats-new-in-version-1002)
+ITXA 10.0.1.12 Certified Container release.
+See IBM ITXA Documentation for a full list of [what's new in ITXA 10.0.1.12.](https://www.ibm.com/docs/en/stea/10.0?topic=welcome-whats-new-in-version-10011)
 
 ## Introduction
 [IBM Transformation Extender Advanced (ITXA)](https://www.ibm.com/docs/en/stea/10.0) includes support for Enveloping, De-enveloping, and processing of Standards based documents.  This includes validation and acknowledgement generation.  It also supports tranformation via either the IBM Transformation Extender (ITX) or Sterling B2BI Integrator core engines.  ITXA can also leverage the ITX Financial Payment, Supply Chain, or HealthCare packs to support industry specific standards.
-
 ## Notes
 * ITXA user passwords are stored in the database. It is highly recommend that encryption is enabled for the database used for ITXA.
 
@@ -29,7 +28,7 @@ This chart deploys Transformation Extender Advanced on a container management pl
 
 Note: The steps below are for a new install.  To upgrade from a previous non-containerized install or containerized deployment of ITXA, see [Upgrading the Chart](#upgrading-the-chart) below.
 
-1. Redhat Openshift Container Platform version 4.18, 4.19 and 4.20 or Kubernetes Cluster version 1.31 to 1.33 is available.
+1. Redhat Openshift Container Platform version 4.19, 4.20 and 4.21 or Kubernetes Cluster version 1.32 to 1.34 is available.
 2. Ensure that all images are downloaded from the IBM Entitled Registry and pushed to an image registry accessible by the cluster.  See [Downloading Artifacts](https://www.ibm.com/docs/en/stea/10.0?topic=images-downloading-artifacts) for more details.
 3. [Download the helm chart](https://www.ibm.com/docs/en/stea/10.0?topic=da-downloading-certified-container-helm-charts-from-chart-repository) from the IBM Charts repository and Extract to a working directory.
 4. If integrating ITXA with B2BI, it is recommended to install ITXA and B2BI in the same namespace.  If not you will need to duplicate the Persistent Volume (PV) and create separate Persistent Volume Claims (PVCs) in each namespace.
@@ -38,8 +37,7 @@ Note: The steps below are for a new install.  To upgrade from a previous non-con
 7. Create The following Kubernetes Secrets per [the instructions below](#install-persistent-related-objects-in-openshift): itxa-db-secret, tls-itxa-secret, itxa-ingress-secret and itxa-user-secret.
 8. Create Role, RBAC, Pod Security Policy, Cluster Role, Cluster Rolebinding, and Security Context Constraint [using sample yamls below](#podsecuritypolicy-requirements)
     **Red Hat OpenShift SecurityContextConstraints Requirements** and **PodSecurityPolicy Requirements**
-9. Configure the proper JDBC driver to match the Database you are using. Populate `global.database.dbDriver` in values.yaml with valid values `ojdbc11.jar`, `db2jcc4.jar` or `mssql-jdbc-11.2.0.jre17.jar` for supported databases Oracle, DB2 or MSSQL respectively. 
-For detailed instructions see [Specifying the proper database driver](#specifying-the-proper-database-driver) below.
+9. Configure the proper JDBC driver to match the Database you are using. Populate global.database.dbDriver in values.yaml with valid values ojdbc8.jar, db2jcc4.jar or mssql-jdbc-13.2.1.jre8.jar for supported databases Oracle, DB2 or MSSQL respectively. For detailed instructions see [Specifying the proper database driver](#specifying-the-proper-database-driver) below.
 10. Populate necessary sections in the values.yaml that is included with the helm chart.
     1.  Set License to true.
     2.  Add proper images and tags and pull secret for your repo.
@@ -58,9 +56,7 @@ After modifying itxa-init-db image, you can install dbinit and UI server at the 
 Configure image repository to pull the image. Please see [Configuring the image repository either at global level or Image level](#Configuring-the-image-repository-either-at-global-level-or-Image-level) below.
 
 Set itxadbinit to true. 
-
 Set the itxaUI to true
-
 Set the packs to true under deployPacks for any pack you want to install or upgrade.
 
 ```
@@ -77,6 +73,9 @@ itxadatasetup:
     fsp: true
     hc: true
 ```	
+
+Before installing, you should dry run your configuration to validate the generated manifests and verify them against the cluster:
+`helm install <releasename> -f ibm-itxa-prod/values.yaml ./ibm-itxa-prod --timeout 3600s --debug --dry-run`
 
 Then run helm install pointing to the values.yaml you've been editing. For example to use the values.yaml and helm charts in the default ibm-itxa-prod directory run:  
 `helm install <releasename> -f ibm-itxa-prod/values.yaml ./ibm-itxa-prod --timeout 3600s --debug`.  
@@ -98,7 +97,7 @@ Prepare a custom values.yaml file based on the [Configuration](#Configuration) s
 
 Note:
 
-1. Ensure that all the sections in values.yaml like global, itxauiserver, itxadatasetup and metering need to be populated before installing ITXA UI Server. The sample values.yaml is provided in the helm charts.
+1. Ensure that all the sections in values.yaml like global, itxauiserver, itxadatasetup and metering are correctly populated before installing ITXA UI Server. A sample values.yaml is provided in the helm charts.
 
 
 ### Helm Install
@@ -127,11 +126,10 @@ Also the rwx permissions are 770.
 
 # Install Persistent related objects in Openshift
 
-- Note - The charts are bundled with sample files as templates , you can use these to plugin in your configuration and
-  create pre-req objects. They are packaged in prereqs.zip along with the chart.
+- Note - The charts are bundled with sample files as templates , you can use these to plugin in your configuration and create pre-req objects. They are packaged in prereqs.zip along with the chart.
 
 1. Download the charts from IBM site.
-2. Create a storage class and persistent volume with access mode as 'Read write many' with minimum 12GB space.
+2. Create a storage class and persistent volume with access mode as 'Read Write Many' with minimum 12GB space.
 
 - Create persistent volume, itxa_pv.yaml file as below -
 
@@ -207,10 +205,10 @@ You will need to mention this secret name in Values.global.tlskeystoresecret fie
 
 4. If you choose to create a self signed certificate for ingress, please follow below steps. 
   Create certificate and key for ingress - ingress.crt and key ingress.key
-  This is for create cert for ingress object to enable https for ITXA.
+  This is for creating the cert allowing the ingress object to enable HTTPS for ITXA.
   Prereq is to select a ingress host for launching ITXA.
   
-  e.g. ingress host  your machine specific.
+  e.g. machine-specific ingress host.
   Pleae note the ingress host should end in the subdomain name of your machine.
  
   cmd - 
@@ -221,14 +219,14 @@ You will need to mention this secret name in Values.global.tlskeystoresecret fie
  * You need to refer this secret name into values.yaml - itxauiserver.ingress.ssl.secretname
  * Also enable ssl by setting itxauiserver.ingress.ssl.enabled to true.
 
-For **production environments** it is strongly recommended to obtain a CA certified TLS certificate and create a secret manually as below.
+For **production environments** it is strongly recommended to obtain a CA certified TLS certificate and create a secret manually such as in the steps below.
 
  1. Obtain a CA certified TLS certificate for the given `itxauiserver.ingress.host` in the form of key and certificate files.
- 2. Create a secret from the above key and certificate files by running below command
+ 2. Create a secret from the above key and certificate files by running:
 ```
 	oc create secret tls <release-name>-ingress-secret --key <file containing key> --cert <file containing certificate> -n <namespace>
 ```
- 3. Use the above created secret as the value of the parameter `itxauiserver.ingress.ssl.secretname`.
+ 3. Use the created secret as the value for the parameter `itxauiserver.ingress.ssl.secretname`.
 
  4. Set the following variables in the values.yaml
     1. Set the Registry from where you will pull the images-
@@ -271,15 +269,15 @@ For **production environments** it is strongly recommended to obtain a CA certif
 
 ### To install the chart with the release name `my-release` via cmd line:
 
-1. Ensure that the chart is downloaded locally by following the instructions given [here.](https://www.ibm.com/support/knowledgecenter/SS4QMC_10.0.0/installation/ITXARHOC_downloadHelmchart.html)
+1. Ensure that the chart is downloaded locally by following the instructions given [here.](https://www.ibm.com/docs/en/stea/10.0?topic=da-downloading-certified-container-helm-charts-from-chart-repository)
 2. Check the settings are good in values.yaml by simulating the install chart.
    cmd - helm template --name=my-release [chartpath]
    This should give you all kubernetes objects which would be getting deployed on Openshift.
    This cmd won't actually install kubernetes objects.
 
-3. You can install ITXA initdb and UI application at the same time by setting the 'enabled' flag to 'true' for that applications. You can also install the application one by one by setting the 'enabled' flag to 'true' for specific application.
+3. You can install ITXA initdb and UI application at the same time by setting both 'global.install.itxaUI.enabled' and 'global.install.itxadbinit.enabled' to 'true'. You can also install the applications individually by setting the 'enabled' flags to 'true' for specific applications.
    
-4. To install initdb and UI Application at the same time, run below command
+4. To install initdb and UI Application at the same time, run the following command:
 
 ```
 helm install my-release [chartpath] --timeout 3600 --set global.license=true, global.install.itxaUI.enabled=true, global.install.itxadbinit.enabled=true
@@ -427,12 +425,11 @@ oc adm policy add-scc-to-user anyuid system:serviceaccount:[namespace]:[servicea
 	
 ```
 
-
-Alternatively, you can use a custom `SecurityContextConstraints.` Ensure that you bind the `SecurityContextConstraints` resource to the target namespace prior to installation.
+Alternatively, you can use a custom `SecurityContextConstraints`. Ensure that you bind the `SecurityContextConstraints` resource to the target namespace prior to installation.
 
 ### SecurityContextConstraints Requirements
 
-Custom SecurityContextConstraints definition:
+Below is a sample custom SecurityContextConstraints definition:
 
 ```yaml
 apiVersion: security.openshift.io/v1
@@ -478,7 +475,7 @@ volumes:
 priority: 0
 ```
 
-To create a custom `SecurityContextConstraints`, create a yaml file with the custom `SecurityContextConstraints` definition and run the following command:
+To create the custom `SecurityContextConstraint`, create a yaml file with the custom `SecurityContextConstraint` definition and run the following command:
 
 ```
 kubectl create -f <custom-scc.yaml>
@@ -486,14 +483,11 @@ kubectl create -f <custom-scc.yaml>
 
 ## Red Hat OpenShift Seccomp Profile Support
 Helm chart introduces support for enabling a default Seccomp Profile (`restricted` or `restricted-v2`) through the `defaultSeccompProfile.enabled` property in `values.yaml`.
-
 To ensures proper file permissions and avoids failures when container is running under `restricted` SCCs, patch the namespace to use UID `1001` and GID `0`.
-
 ```
 oc patch namespace <namespace> -p '{"metadata": {"annotations": {"openshift.io/sa.scc.uid-range": "1001/10000"}}}'
 oc patch namespace <namespace> -p '{"metadata": {"annotations": {"openshift.io/sa.scc.supplemental-groups": "0/10000"}}}'
 ```
-
 ## Configuration
 
 ### Configuring the image repository either at global level or Image level
@@ -539,12 +533,9 @@ The jdbc jars are bundled in the image "itxa-resources". These jars will be avai
 Populate following fields in values.yaml to use these jdbc jars present inside the containers.
 a. Set global.resourcesInit.enabled to true.
 b. Provide image name and tag for "itxa-resources".
-c. Comment the following fields for S3 storage:
-```
-   #global.database.s3host 
-   #global.database.s3bucket 
-   #global.database.dbDriver
-```
+c. For S3 storage, uncomment the following fields:
+global.database.s3host, global.database.s3bucket, global.database.dbDriver
+
 Example resourcesInit section in values.yaml:
 
 ```
@@ -554,10 +545,10 @@ image:
 name: itxa-resources
 tag: <tag_name>
 #digest: sha256:1d9045511c1203e6d6d25ed32c700dfca230076412915857c2c40b1409151b7c
-pullPolicy: "Always"
+pullPolicy: "IfNotPresent"
 ```
 
-If you are using S3 Object or store in NFS Share and not "itxa-resources", then you need to download the required jdbc jar for the database and copy it on S3 storage or NFS share. For more details on jdbc version for the database you are using, please see [ here ](https://www.ibm.com/docs/en/stea/10.0.2?topic=prerequisites-database-configuration-parameters) 
+If you are using S3 Object or store in NFS Share and not "itxa-resources", then you need to download the required jdbc jar for the database and copy it on S3 storage or NFS share. For more details on jdbc version for the database you are using, please see [ here ](https://www.ibm.com/docs/en/stea/10.0.1?topic=prerequisites-database-configuration-parameters) 
 
 ### Installation of new database
 
@@ -565,7 +556,7 @@ This will create the required database tables and factory data in the database.
 
 
 1. Create db2 database user.
-2. Create db2 database and grant the necessary priviledges. For more details on creation of database with multiple schema, please see [ here ](https://www.ibm.com/docs/en/stea/10.0.2?topic=prerequisites-database-configuration-parameters) 
+2. Create db2 database and grant the necessary priviledges. For more details on creation of database with multiple schema, please see [ here ](https://www.ibm.com/docs/en/stea/10.0.1?topic=prerequisites-database-configuration-parameters) 
 3. Add following properties in `itxa-db-secret.yaml` file.
 
 ```yaml
@@ -627,51 +618,51 @@ Then run helm install command to install database.
 ## Upgrading the Chart
 
 Please note,
-
-1. For any upgrade, loadFactoryData needs to be install
-2. deployPacks works only if loadFactoryData is install
+1. For any upgrade, loadFactoryData needs to be installed
+2. deployPacks works only if loadFactoryData is installed
 3. loadFactoryData set to donotinstall or blank when you are on same version of ITXA and just want to refresh image for security or moving from IIM to container of the same version without any changes in the packs.
-
 ### ITXA Upgrade Scenarios
-
 | Scenarios and Example                                   | Current Setup of ITXA | ITXA Upgrade | Packs Change | itxadatasetup.loadFactoryData | itxadatasetup.deployPacks|
 |---------------------------------------------------------|------------------------|--------------|-------------|-------------------------------|--------------------------|
-| 1. IIM / Container to Container 10.0.1.11               | Container / IIM       | Yes          | Yes          | install                       | true                     |
-| 2. IIM / Container to Container 10.0.1.11               | Container / IIM       | Yes          | No           | install                       | false                    |
-| 3. IIM / Container 10.0.1.11 to Container 10.0.1.11     | Container / IIM       | No           | Yes          | install                       | true                     |
+| 1. IIM / Container to Container 10.0.1.12               | Container / IIM       | Yes          | Yes          | install                       | true                     |
+| 2. IIM / Container to Container 10.0.1.12               | Container / IIM       | Yes          | No           | install                       | false                    |
+| 3. IIM / Container 10.0.1.12 to Container 10.0.1.12     | Container / IIM       | No           | Yes          | install                       | true                     |
 | 4. Image Refresh for security issues                    | Container only        | No           | No           | donotinstall or blank         | false                    |
-| 5. IIM 10.0.1.11 to Container 10.0.1.11                 | IIM only              | No           | No           | donotinstall or blank         | false                    |
-
+| 5. IIM 10.0.1.12 to Container 10.0.1.12                 | IIM only              | No           | No           | donotinstall or blank         | false                    |
 ### Upgrading the Chart from a Non-Containerized Install
 
 These charts do support upgrading from a non containerized install.  The differences from a new install are listed below.  The container will be installed on a Kubernetes or OCP worker node, but can use the same database as the non containerized deployment. Any db schema changes for the new version are done as part of the upgrade and connot be rolled back.
 
-If you are on 10.0.1.7 and earlier version of non-containerized ITXA : 
+If you are on a 10.0.1.7 or earlier version of non-containerized ITXA : 
 
-1.  Make a backup of the database so it can be rolled back if issues occur.
+1.  Make a backup of the database so it can be rolled back if issues occur. Different databases and database configurations may have varying steps on backing them up so it is important to refer to your database provider's instructions for this step.
 2.  Follow Steps 1-11 in the [Quick Start Checklist](#quickstart-checklist) above.  When filling out the itxa-db-secret in step 7, make sure to use the same schema, credentials and connection info as your current ITXA database including admin user password in itxa-user-secret file. 
-3.  As part of upgrade, you need to use new ITX pack version supported by ITXA 10.0.2.1. Follow the instructions in Step 12 as listed and create a new dbinit image including new packs.  
+3.  As part of upgrade, you need to use new ITX pack version supported by ITXA 10.0.1.12. Follow the instructions in Step 12 as listed and create a new dbinit image including new packs.  
 4.  Continue with Step 13 after dbinit is done to deploy the ITXA UI.
 
-If you are already on 10.0.2.1 non-containerized ITXA : 
+If you are already on 10.0.1.12 non-containerized ITXA : 
 
-1. Make a backup of the database. 
+1. Make a backup of the database. Different databases and database configurations may have varying steps on backing them up so it is important to refer to your database provider's instructions for this step.
 2. Follow Steps 1-11 in the [Quick Start Checklist](#quickstart-checklist) above.  When filling out the itxa-db-secret in step 7, make sure to use the same schema, credentials and connection info as your current ITXA database including admin user password in itxa-user-secret file. 
-3. As you are already on 10.0.2.1, you don't need to deploy dbinit and directly proceed to deploy ITXA UI by setting `itxadatasetup.loadFactoryData` parameter  to `donotinstall` or blank,  and set  `itxadatasetup.deployPacks` parameter to true for packs visibility in UI as per entitlement. 
+3. As you are already on 10.0.1.12, you don't need to deploy dbinit and directly proceed to deploy ITXA UI by setting `itxadatasetup.loadFactoryData` parameter  to `donotinstall` or blank,  and set  `itxadatasetup.deployPacks` parameter to true for packs visibility in UI as per entitlement. 
 
 
-### Upgrading the chart to apply config changes or new ITXA patched images without updating the version of ITXA.
+### Upgrading the chart to apply configuration file changes or new ITXA patched images without updating the ITXA version
 
-Often security patches will be released that do not change the core version of ITXA being used so do not require any db schema changes.
+Often security patches are released that do not change the core ITXA version and therefore do not require any database schema changes.
 
-You would want to upgrade your deployment when you have a new docker image for application server or a change in configuration, for e.g. new application servers to be deployed/started.
+You may want to upgrade your deployment when:
+- you have updated one or more configuration files such as `customer_overrides.properties`, `dbprops.cfg`, `itxa-ui-jvm.options`, or `itxa-ui-server.xml`
+- you want to apply patched container image for application server for the same ITXA version
 
-1. Ensure that the chart is downloaded locally by following the instructions given [here.](https://www.ibm.com/support/knowledgecenter/SS4QMC_10.0.0/installation/ITXARHOC_downloadHelmchart.html)
+Update the following entries in `values.yaml` :
+1. Set `itxadatasetup.loadFactoryData` to `donotinstall` or leave it blank.
+2. Set `global.install.itxadbinit.enabled` to `false` so that the DB setup job is not started.
 
-2. Ensure that the `itxadatasetup.loadFactoryData` parameter is set to `donotinstall` or blank. Run the following command to upgrade your deployments.
+Then run the following command to upgrade your deployment:
 
 ```
-helm upgrade my-release -f values.yaml [chartpath] --timeout 3600 --tls
+helm upgrade my-release -f values.yaml [chartpath] --timeout 3600
 ```
 ## Adding ITXA Packs
 
@@ -1198,4 +1189,4 @@ Create Busybox deployment and set proper access on ITXA file share.
 
 ## Resources Required
 
-Redhat Openshift Container Platform version 4.18, 4.19 and 4.20 or Kubernetes Cluster version 1.31 to 1.33
+Redhat Openshift Container Platform version 4.19, 4.20 and 4.21 or Kubernetes Cluster version 1.32 to 1.34
