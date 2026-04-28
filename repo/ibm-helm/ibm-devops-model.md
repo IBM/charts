@@ -63,13 +63,13 @@ Fetch chart for install:
 
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-model --version 5.1.1+20260312
+helm pull --untar ibm-helm/ibm-devops-model --version 5.1.2
 ```
 
 
 ```bash
 #Pull ibm helm charts
-CHART_VERSION=5.1.1+20260312
+CHART_VERSION=5.1.2
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
 helm pull --untar ibm-helm/ibm-devops-model --version ${CHART_VERSION}
 #
@@ -276,13 +276,13 @@ Fetch chart for install:
 
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-model --version 5.1.1+20260312
+helm pull --untar ibm-helm/ibm-devops-model --version 5.1.2
 ```
 
 
 ```bash
 #Pull ibm helm charts
-CHART_VERSION=5.1.1+20260312
+CHART_VERSION=5.1.2
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
 helm pull --untar ibm-helm/ibm-devops-model --version ${CHART_VERSION}
 #
@@ -409,21 +409,23 @@ Note: This will hang if the namespace contains workload which has not terminated
 
 ### Configuration
 
-| Parameter                         | Description                                                                                 | Default  |
-|-----------------------------------|---------------------------------------------------------------------------------------------|----------|
-| `license`                         | Confirmation that the License has been accepted. Must be `true`                             | REQUIRED |
-| `global.domain`                   | Domain is the ingress domain which is used to create routes                                 | REQUIRED |
-| `global.rationalLicenseKeyServer` | Where floating licenses are hosted to entitle use of the product. For example `@ip-address` | REQUIRED |
-| `global.k5.identity.url`          | Keycloak URL (including `/auth` path if needed)                                             | OPTIONAL |
-| `global.k5.identity.realm`        | Keycloak Realm that will be created during installation                                     | OPTIONAL |
-| `global.k5.identity.username`     | Keycloak Admin username                                                                     | OPTIONAL |
-| `global.k5.identity.password`     | Keycloak Admin password                                                                     | OPTIONAL |
-| `global.k5.autoscaling.enabled`   | Enable/disable Horizontal Pod Autoscaling (if disabled 1 pod per service is created)        | `false`  |
-| `global.k5.runtime.enabled`       | Enable/disable default runtime components                                                   | `false`  |
-| `database.enabled`                | Enable/disable installation of included database (if false an own mongoDB must be provided) | `false`  |
-| `rbac.create`                     | Enable/disable creation of needed ServiceAccounts, RoleBindings and Roles                   | `false`  |
-| `runtime.aggregateRoles.create`   | Enable/disable creation of aggregation roles (needed for runtime)                           | `false`  |
-| `runtime.crds.create`             | Enable/disable creation of CustomResourceDefinitions (needed for runtime)                   | `false`  |
-| `networkPolicy.create`            | Enable/disable default Ingress Network Policy                                               | `false`  |
-| `runtime.scc.create`              | Enable/disable creation of Security Context Constraints (needed for runtime)                | `false`  |
-| `truststore.create`               | Enable/disable creation of Default Truststore                                               | `true`   |
+| Parameter                                                   | Description                                                                                                                        | Default  |
+|-------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------|----------|
+| `license`                                                   | Confirmation that the License has been accepted. Must be `true`                                                                    | REQUIRED |
+| `global.domain`                                             | Domain is the ingress domain which is used to create routes                                                                        | REQUIRED |
+| `global.rationalLicenseKeyServer`                           | Where floating licenses are hosted to entitle use of the product. For example `@ip-address`                                        | REQUIRED |
+| `global.k5.identity.url`                                    | Keycloak URL (including `/auth` path if needed)                                                                                    | OPTIONAL |
+| `global.k5.identity.realm`                                  | Keycloak Realm that will be created during installation                                                                            | OPTIONAL |
+| `global.k5.identity.username`                               | Keycloak Admin username                                                                                                            | OPTIONAL |
+| `global.k5.identity.password`                               | Keycloak Admin password                                                                                                            | OPTIONAL |
+| `global.k5.autoscaling.enabled`                             | Enable/disable Horizontal Pod Autoscaling (if disabled 1 pod per service is created)                                               | `false`  |
+| `global.k5.runtime.enabled`                                 | Enable/disable default runtime components                                                                                          | `false`  |
+| `global.k5.featureFlags.designAssistantChatbotFeatureFlag`  | Enable/disable Design Assistant feature, if enabled the following configuration is needed, see AI Credentials for Design Assistant | `false`  |
+| `global.k5.featureFlags.enableHeritageStacks`               | Enable/disable Managed Stacks (Deprecated), for this feature global.k5.runtime.enabled is needed                                   | `false`  |
+| `database.enabled`                                          | Enable/disable installation of included database (if false an own mongoDB must be provided)                                        | `false`  |
+| `rbac.create`                                               | Enable/disable creation of needed ServiceAccounts, RoleBindings and Roles                                                          | `false`  |
+| `runtime.aggregateRoles.create`                             | Enable/disable creation of aggregation roles (needed for runtime)                                                                  | `false`  |
+| `runtime.crds.create`                                       | Enable/disable creation of CustomResourceDefinitions (needed for runtime)                                                          | `false`  |
+| `networkPolicy.create`                                      | Enable/disable default Ingress Network Policy                                                                                      | `false`  |
+| `runtime.scc.create`                                        | Enable/disable creation of Security Context Constraints (needed for runtime)                                                       | `false`  |
+| `truststore.create`                                         | Enable/disable creation of Default Truststore                                                                                      | `true`   |
