@@ -19,7 +19,7 @@ Use the Platform UI to manage the following components:
 ## Prerequisites
 
 - Helm v3
-- Kubernetes cluster '>=1.30.0 <1.33.0'
+- Kubernetes cluster '>=1.30.0 <1.34.0'
 
 ## Resources Required
 
