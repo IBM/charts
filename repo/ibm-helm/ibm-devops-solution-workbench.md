@@ -63,13 +63,13 @@ Fetch chart for install:
 
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-solution-workbench --version 5.1.2
+helm pull --untar ibm-helm/ibm-devops-solution-workbench --version 5.1.2+20260428
 ```
 
 
 ```bash
 #Pull ibm helm charts
-CHART_VERSION=5.1.2
+CHART_VERSION=5.1.2+20260428
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
 helm pull --untar ibm-helm/ibm-devops-solution-workbench --version ${CHART_VERSION}
 #
@@ -279,13 +279,13 @@ Fetch chart for install:
 
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-solution-model --version 5.1.2
+helm pull --untar ibm-helm/ibm-devops-solution-model --version 5.1.2+20260428
 ```
 
 
 ```bash
 #Pull ibm helm charts
-CHART_VERSION=5.1.2
+CHART_VERSION=5.1.2+20260428
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
 helm pull --untar ibm-helm/ibm-devops-solution-workbench --version ${CHART_VERSION}
 #
