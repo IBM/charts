@@ -1,4 +1,4 @@
-# Cognos Analytics Certified Containers 12.1.2
+# Cognos Analytics Certified Containers 12.1.2.1
 
 
 ## Introduction
@@ -313,9 +313,9 @@ In an editor, open the caConfiguration.yaml file and update the fields to repres
 * Once you have cloned the IBM Charts repo, navigate to the Cognos Analytics helm chart folder and initiate the install
 
 $ export NAMESPACE=ns1
-$ export HELM_CHART_VERSION=1.1.0
+$ export HELM_CHART_VERSION=1.1.2+20260506.000000
 
-$ helm install -f ${OVERRIDE_FILE} ca-instance https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm/ibm-cacc-prod-{HELM_CHART_VERSION}.tgz  --version {HELM_CHART_VERSION} --namespace ${NAMESPACE}
+$ helm install -f ${OVERRIDE_FILE} ca-instance https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm/ibm-cacc-prod-${HELM_CHART_VERSION}.tgz  --version ${HELM_CHART_VERSION} --namespace ${NAMESPACE}
 ```
 
 
@@ -345,41 +345,6 @@ $ kubectl delete secret ca-ldapbind-credentials-secret   -n ${NAMESPACE}
 $ kubectl delete secret ca-openid-credentials-secret     -n ${NAMESPACE}
 ```
 
-## Artifact PVC Deployment Structure
-A simple artifact deployment can be created to provide JDBC drivers, Certificates, Fonts, Images. The folder structure must be the following 
-```
-/artifacts/certs            # Provide certificate files with an extension of *.arm, *.cer, *.pem, *.crt 
-/artifacts/csdrivers        # Provide updates to Content Store Drivers. Will consume files with an extension of *.jar
-/artifacts/cjap             # Provide a Custom Java Authentication Provider. Will consume files with an extension of *.jar
-/artifacts/configuration    # Provide additional Configuration files with an extension of *.properties, *.json
-/artifacts/dsdrivers        # Provide Data Store Drivers. Will consume files with an extension of *.jar
-/artifacts/fonts            # Referenced by Reporting Service. Will consume files with an extension of *.ttf
-/artifacts/images           # Referenced by Reporting Service. Will consume files with an extension of  *.gif, *.jpg, *.jpeg
-```
-
-To register the Artifact deployment with CACC instance, simply provide the PVC from the Artifact deployment in the configs.pvcArtifactsRootFolder setting. When CACC deploys, 
-the artifacts will be automatically ingested into CACC services. 
-
-Note the Artifact PVC must be created with a ReadWriteOnce access mode.
-https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes
-
-Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the deployment and report an error, similar to the following
-
-Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/artifactsObjectCheck.yaml:24:10): The provided PVC artifact-pvc does NOT exist in the namespace <namespace>
-
-
-```
-The Content Service, Reporting Service, DSS Service and Smarts Service will only read from the following mount points.
-    artifacts/certs
-    artifacts/csdrivers
-    artifacts/cjap
-    artifacts/configuration
-    artifacts/dsdrivers
-    artifacts/fonts
-    artifacts/images
-```   
-
-
 ## Configuration Data PVC
 The Configuration data is an optional PVC. When enabled, it will persist the configuration/data. The PVC must be created with an accessMode of ReadWriteMany. Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the deployment and report an error. 
 
@@ -387,6 +352,7 @@ Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the de
 
 Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/configDataCheck.yaml:24:10): The provided PVC configdata-pvc does NOT exist in the namespace <namespace>
 
+When the Configuration PVC is provided, the configuration0.properties file, which holds advanced properties set via the "Manage > Configuration > System" UI (Glass URI) in Cognos Analytics and facilitates synchronization across distributed servers, will be persisted. If the Configuration PVC is not configured, the CM configuration data will NOT be persisted and will be lost when the CM pod restarts.
 ```
 configs:
   pvcConfigData:
@@ -399,6 +365,7 @@ Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the de
 
 Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/deploymentCheck.yaml:24:10): The provided PVC deployment-pvc does NOT exist in the namespace cacc <namespace>
 
+The Cognos Analytics PVC is the designated repository for importing and exporting content archives (compressed .zip files) between environments. It serves as the central bridge for content mobility, enabling the transfer of packages, reports, folders, and configuration data across environments, such as from development to testing or production.
 ```
 configs:
   pvcDeployment:
@@ -414,20 +381,196 @@ Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/e
 configs:
   pvcExternalObjectStorage:
 ```
-## Powercube PVC 
-The Powercube is an option PVC. You can provide Cognos Powercubes (*.mdc) which be made available to the Reporting service. Note, the Report Service will need to be configured to 32-bit. 
+## Powercube PVC
+The Powercube is an optional PVC. You can provide Cognos Powercubes (*.mdc) which be made available to the Reporting service. Note, the Report Service will need to be configured to 32-bit.
 The PVC must be created with an accessMode of ReadWriteOnce
 
 Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the deployment and report an error, similar to the following
 
 Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/powercubeObjectCheck.yaml:25:10): The provided PVC powercubes-pvc does NOT exist in the namespace <namespace>
 
+Cognos Analytics supports external object storage (such as Amazon S3, Azure Blob Storage, or IBM Cloud Object Storage) to manage data and optimize performance. Users can create connections, store uploaded files, save data sets as parquet files, store SSL certificates for data servers, and archive report outputs. It enhances scalability and reduces content store size.
 ```
 configs:
   pvcPowercubes:
 ```
+## Artifacts PVC
+The Artifacts PVC is an optional PVC that provides JDBC drivers, certificates, fonts, images, templates, UDFs, webcontent, and other resources to CACC services. When configured, artifacts are automatically mounted to Content Manager, DSS, Reporting, Smarts, and UI services at `/opt/ibm/cognos/artifacts/`.
+
+**Access Mode:** The PVC can be created with either `ReadWriteOnce` (RWO) or `ReadWriteMany` (RWX) access mode. Use RWX for multi-node deployments with block storage, or RWO for single-node or NFS-based storage.
+https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes
+
+**Note:** If a PVC is specified and does not exist, Helm will stop the deployment and report an error:
+```
+Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/artifactsObjectCheck.yaml:24:10): The provided PVC artifact-pvc does NOT exist in the namespace <namespace>
+```
+
+To register the Artifacts PVC with your CACC instance, provide the PVC name in the `configs.pvcArtifactsRootFolder` setting. When CACC deploys, the artifacts will be automatically ingested into the services.
+
+### Required Folder Structure
+The artifacts PVC must contain the following directories:
+```
+/artifacts/certs            # Certificate files (*.arm, *.cer, *.pem, *.crt)
+/artifacts/cjap             # Custom Java Authentication Provider (*.jar)
+/artifacts/configuration    # Configuration folders/files (*.properties, *.json)
+/artifacts/csdrivers        # Content Store Drivers (*.jar)
+/artifacts/dsdrivers        # Data Store Drivers (*.jar)
+/artifacts/fonts            # Fonts for Reporting Service (*.ttf)
+/artifacts/images           # Images for Reporting Service (*.gif, *.jpg, *.jpeg)
+/artifacts/templates        # Custom templates (all folders and files copied to analytics/templates)
+/artifacts/udfs             # User Defined Functions for DSS Service (*.jar)
+/artifacts/webcontent       # Custom webcontent (all folders and files copied to analytics/webcontent)
+```
+
+### Quick Setup
+1. Create the PVC (choose RWO or RWX based on your storage and deployment architecture):
+```bash
+kubectl create -f - <<EOF
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: artifact-pvc
+  namespace: <namespace>
+spec:
+  accessModes:
+    - ReadWriteMany  # Use ReadWriteOnce for single-node or NFS; ReadWriteMany for multi-node with block storage
+  storageClassName: <storage-class>
+  resources:
+    requests:
+      storage: 5Gi
+EOF
+```
+
+2. Create Artifacts Manager Deployment:
+```bash
+kubectl create -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: artifacts-manager
+  namespace: <namespace>
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: artifacts-manager
+  template:
+    metadata:
+      labels:
+        app: artifacts-manager
+    spec:
+      containers:
+      - name: artifacts-container
+        image: icr.io/cp/cognos/ubi:latest
+        command: ["/bin/sh", "-c", "sleep infinity"]
+        volumeMounts:
+        - name: artifact-volume
+          mountPath: /artifacts
+      volumes:
+      - name: artifact-volume
+        persistentVolumeClaim:
+          claimName: artifact-pvc
+EOF
+```
+
+3. Create folder structure and populate artifacts:
+```bash
+# Wait for pod to be ready
+kubectl wait --for=condition=ready pod -l app=artifacts-manager -n <namespace> --timeout=120s
+
+# Get pod name
+POD_NAME=$(kubectl get pods -n <namespace> -l app=artifacts-manager -o jsonpath='{.items[0].metadata.name}')
+
+# Create folder structure
+for dir in certs cjap configuration csdrivers dsdrivers fonts images templates udfs webcontent; do
+  kubectl exec ${POD_NAME} -n <namespace> -- mkdir -p /artifacts/${dir}
+done
+
+# Populate the artifact pvc with various objects(examples) 
+kubectl cp ./drivers/db2jcc4.jar ${POD_NAME}:/artifacts/dsdrivers/db2jcc4.jar -n <namespace>
+kubectl cp ./fonts/custom.ttf ${POD_NAME}:/artifacts/fonts/custom.ttf -n <namespace>
+```
+
+4. Configure Helm values:
+```yaml
+configs:
+  pvcArtifactsRootFolder: artifact-pvc
+```
+
+5. Deploy/upgrade CACC - artifacts will be automatically ingested into services.
+```bash
+helm upgrade -f ${OVERRIDE_FILE} ca-instance \
+https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm/ibm-cacc-prod-{HELM_CHART_VERSION}.tgz \
+--version {HELM_CHART_VERSION} \
+--namespace ${NAMESPACE}
+```
+   
+
+
+## Temporary Storage PVC
+Cognos Analytics services generate temporary files during operation (session data, report outputs, data processing). By default, these files use ephemeral container storage, which can lead to:
+- Excessive ephemeral storage consumption
+- Pod evictions due to storage pressure
+- Loss of temporary data during pod restarts
+
+To address these issues, you can configure persistent temporary storage using the following optional PVC parameters. All temporary storage PVCs must be created with an accessMode of ReadWriteOnce.
+
+### Content Manager Temporary Storage (pvcCmTmp)
+Optional PVC for Content Manager temporary storage (session data, temp files). When not configured, temporary files use ephemeral container storage.
+- **Mount Path:** `/opt/ibm/cognos/analytics/temp`
+- **Access Mode:** ReadWriteOnce
+- **Recommended Size:** 10-20Gi
+
+Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the deployment and report an error, similar to the following
+
+Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/tmpPvcChecks.yaml:24:10): The provided PVC cm-tmp-pvc does NOT exist in the namespace <namespace>
+
+```
+configs:
+  pvcCmTmp:
+```
+
+### Reporting Service Temporary Storage (pvcReportingTmp)
+Optional PVC for Reporting Service temporary storage (report outputs, temp processing). Recommended for high-volume reporting environments. Fast SSD storage recommended.
+- **Mount Path:** `/opt/ibm/cognos/analytics/temp`
+- **Access Mode:** ReadWriteOnce
+- **Recommended Size:** 20-50Gi
+
+Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the deployment and report an error, similar to the following
+
+Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/tmpPvcChecks.yaml:24:10): The provided PVC reporting-tmp-pvc does NOT exist in the namespace <namespace>
+
+```
+configs:
+  pvcReportingTmp:
+```
+
+### Dataset Service Temporary Storage (pvcDssTmp)
+Optional PVC for Dataset Service temporary storage (data processing, temp datasets). Recommended for high-volume data processing. Fast SSD storage recommended.
+- **Mount Path:** `/opt/ibm/cognos/analytics/temp`
+- **Access Mode:** ReadWriteOnce
+- **Recommended Size:** 20-50Gi
+
+Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the deployment and report an error, similar to the following
+
+Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/tmpPvcChecks.yaml:24:10): The provided PVC dss-tmp-pvc does NOT exist in the namespace <namespace>
+
+```
+configs:
+  pvcDssTmp:
+```
+
+**Benefits of Persistent Temporary Storage:**
+- Better storage management and monitoring
+- Persistent temporary storage across pod restarts
+- Reduced ephemeral storage pressure
+- Easier maintenance and cleanup operations
+
 ## Additional Olap Properties
-The Olap Properties is an optional ConfigMap. For example, if additional configuration properties are required to query to Planning Analytics (TM1), a configmap can be created. Here's an example of passing specific properties to 
+
+> **⚠️ DEPRECATION NOTICE:** Using ConfigMap for configuration properties is deprecated. ConfigMap does not support subfolders and has limitations with complex configurations. **It is recommended to use the Artifacts PVC `/artifacts/configuration` folder instead**, which supports both files and subfolders. See the [Artifacts PVC](#artifacts-pvc) section for details.
+
+The Olap Properties is an optional ConfigMap (deprecated - use Artifacts PVC instead). For example, if additional configuration properties are required to query to Planning Analytics (TM1), a configmap can be created. Here's an example of passing specific properties to
 
 Include the properties in a properties file (tm1RestCustom.properties)
 
@@ -476,6 +619,9 @@ The following tables lists the configurable parameters of the ibm-cacc chart and
 |configs.pvcDeployment|Specify a PVC that references where Cognos Analytics deployments can be read/written to|""|
 |configs.pvcPowercubes|Specify a PVC that references where Cognos Powercubes can be read from|""|
 |configs.pvcConfigData|Specify a PVC that references where Cognos Configuration data can be persisted to|""|
+|configs.pvcCmTmp|Specify a PVC for Content Manager temporary storage (session data, temp files). Optional. Recommended size: 10-20Gi|""|
+|configs.pvcReportingTmp|Specify a PVC for Reporting Service temporary storage (report outputs, temp processing). Optional. Recommended size: 20-50Gi. Fast SSD recommended|""|
+|configs.pvcDssTmp|Specify a PVC for Dataset Service temporary storage (data processing, temp datasets). Optional. Recommended size: 20-50Gi. Fast SSD recommended|""|
 |configs.configMapCustomProperties|Specify a ConfigMap that references additional configuration properties for CA services|""|
 |              |              |            |              
 |global.globalDefaultFont|Default font to use|"Andale"|
@@ -575,18 +721,6 @@ These configuration settings can be provided to enable a Custom Java Authenticat
 include the CJAP implementation (*.jar) and configuration files. The CJAP Adapter provides a mechanism to export a CJAP as an OpenId provider.
 
 &nbsp;
-
-| Parameter                  | Description                                     | Default                                                    |
-| -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
-|services.contentManagerService.cjapAdapterServiceConfiguration|Defines a group of properties that allow the product to use a custom Java authentication Adapter provider for user authentication|false|
-|services.contentManagerService.cjapAdapterServiceId|Namepace name|""|
-|services.contentManagerService.cjapAdapterServiceName|Specifies a unique identifier for the authentication namespace|""|
-|services.contentManagerService.cjapAdapterServiceClass|Specify which authentication module the CJAP uses|""|
-|services.contentManagerService.cjapAdapterServiceIssuer|The issuer URL uniquely identifies the provider in tokens (iss claim), allowing applications to verify that a token came from a trusted source.|""|
-|services.contentManagerService.cjapAdapterServiceClientId|A unique, public string that identifies a specific application (client) to an OpenID Connect (OIDC) provider|""|
-|services.contentManagerService.cjapAdapterServiceSecret|A confidential, unique code used to authenticate a client application with an authorization server (Identity Provider)|""|
-|services.contentManagerService.cjapAdapterServiceRedirectUri|Is the specific URL or location in your application where the authorization server (OpenID Provider) sends the user back after they have successfully authenticated and granted the requested permissions|""|
-|services.contentManagerService.cjapAdapterServiceEnablePasswordGrant|Enables Password grant behaviour|"false"|
 
 
 
@@ -802,6 +936,9 @@ These configuration settings can be enabled to modify the execution profile of t
 |services.reportingService.rsAsyncWaitTimeoutMs|Configure RSVP Asynchronous Wait Timeouts (Milliseconds)|120000|
 |services.reportingService.rsMaxProcesses|Configure RSVP Max Processes |16|
 |services.reportingService.brsMaxProcesses|Configure RSVP Batch Max Processes |16|
+|services.reportingService.idleProcessCheckIntervalMs|Interval in milliseconds to check for idle processes|60000|
+|services.reportingService.idleProcessMaxIdleTicks|Maximum number of idle ticks before a process is considered idle|10|
+|services.reportingService.defaultProcessUseLimit|Default limit for process usage|100|
 
 
 ## Rest Service configuration settings
