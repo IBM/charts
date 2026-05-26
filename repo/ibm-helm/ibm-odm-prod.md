@@ -4,7 +4,7 @@ The [IBM® Operational Decision Manager](https://www.ibm.com/products/operationa
 
 ## Introduction
 
-ODM is a tool for capturing, automating, and governing repeatable business decisions. You identify situations about your business and then automate the actions to take as a result of the insight you gained about your policies and customers. For more information, see [ODM in knowledge center](https://www.ibm.com/docs/en/odm/9.5.0).
+ODM is a tool for capturing, automating, and governing repeatable business decisions. You identify situations about your business and then automate the actions to take as a result of the insight you gained about your policies and customers. For more information, see [ODM in knowledge center](https://www.ibm.com/docs/en/odm/9.0.0).
 
 **Table of Content**
 
@@ -44,7 +44,7 @@ The following architectures are supported:
 
 ## Prerequisites
 
-- Kubernetes 1.28+
+- Kubernetes 1.25+
 - Helm aligned with the Kubernetes version.
 - One PersistentVolume needs to be created prior to installing the chart if `internalDatabase.persistence.enabled=true` and `internalDatabase.persistence.dynamicProvisioning=false`. In that case, it is required that the securityContext.fsGroup 26 has read and write permissions on the postgres data directory. You can update the permissions by mounting the volume temporarily or accessing the host machine and performing the following commands:
 
@@ -61,7 +61,7 @@ The following architectures are supported:
           --from-literal=db-password=<password>
   ```
 
-  For details, refer to [Configuring the database](https://www.ibm.com/docs/en/odm/9.5.0?topic=production-configuring-database).
+  For details, refer to [Configuring the database](https://www.ibm.com/docs/en/odm/9.0.0?topic=production-configuring-database).
 
 - Ensure you have a good understanding of the underlying concepts and technologies:
   - Docker, container
@@ -137,41 +137,26 @@ The following instructions should be executed as namespace administrator.
     ```
     ```console
     NAME                    CHART VERSION	APP VERSION	DESCRIPTION                     
-    ibm-helm/ibm-odm-prod   25.1.0       	9.5.0.1   	IBM Operational Decision Manager  License By in...
+    ibm-helm/ibm-odm-prod	24.1.0       	9.0.0.1   	IBM Operational Decision Manager  License By in...
     ```
 
 4. Install the chart
 
     A release must be configured before it can be installed.
-    
-    Create a `my-values.yaml` file with the following parameters:
-    ```yaml
-    license: true
-    image: 
-      repository: cp.icr.io/cp/cp4a/odm
-      pullSecrets: 
-      - icregistry-secret
-    usersPassword: my-password
-    internalDatabase: 
-      secretCredentials: my-odm-db-secret
-      populateSampleData: true
-    ```
 
-    To install a release with a release name of `my-odm-prod-release`, use the following command:
+    To install a release with the default configuration and a release name of `my-odm-prod-release`, use the following command:
+
     ```console
-    helm install my-odm-prod-release -f my-values.yaml ibm-helm/ibm-odm-prod
+    helm install my-odm-prod-release \
+      --set license=true \
+      --set image.pullSecrets=icregistry-secret \
+      --set usersPassword=my-password \
+      --set internalDatabase.secretCredentials=my-odm-db-secret \
+      --set internalDatabase.populateSampleData=true \
+      ibm-helm/ibm-odm-prod
     ```
 
-    > Note: In OpenShift, you must set the following parameters `--set customization.runAsUser='' --set internalDatabase.runAsUser=''` and you can also set the parameter `--set service.enableRoute=true`. Alternatively, you can set these parameters in `my-values.yaml`:
-    ```yaml
-    internalDatabase:
-      runAsUser: ""
-    customization:
-      runAsUser: ""
-    service:
-      enableRoute: true
-    ```
-    Refer to [Required Parameters](#required-parameters) for more information.
+    > Note: In OpenShift, you must set the following parameters `--set customization.runAsUser='' --set internalDatabase.runAsUser=''` and you can also set the parameter `--set service.enableRoute=true`. Refer to [Required Parameters](#required-parameters) for more information.
 
 The package is deployed asynchronously in a matter of minutes, and is composed of several services.
 The release is an instance of the `ibm-odm-prod` chart: all the ODM components are now running in a  Kubernetes cluster.
@@ -180,7 +165,7 @@ The release is an instance of the `ibm-odm-prod` chart: all the ODM components a
 
 - Review the [product license](LICENSES/LICENSE-EN) and set `license=true` to accept the license agreement.
 
-- If you want to use the default user access, you **must** define a password to be used by the default users like *odmAdmin* by setting the parameter `usersPassword`. Refer to [Configuring user access](https://www.ibm.com/docs/en/odm/9.5.0?topic=production-configuring-user-access) to provide customized user access.
+- If you want to use the default user access, you **must** define a password to be used by the default users like *odmAdmin* by setting the parameter `usersPassword`. Refer to [Configuring user access](https://www.ibm.com/docs/en/odm/9.0.0?topic=production-configuring-user-access) to provide customized user access.
 
 - Specify the name of the secret, created in [Prerequisites](#prerequisites) section, as the value for the parameters `internalDatabase.secretCredentials` or `externalDatabase.secretCredentials`, depending on the type of database you use.
 
@@ -188,25 +173,21 @@ The release is an instance of the `ibm-odm-prod` chart: all the ODM components a
 
 - Similarly, if you use the internal database, `internalDatabase.runAsUser` should be set empty. For more information, refer to the [Red Hat OpenShift SecurityContextConstraints Requirements](#red-hat-openshift-securitycontextconstraints-requirements) section.
 
-- Here is an example of `my-values.yaml` to install ODM on Openshift including a PostgreSQL internal database with samples:
-  ```yaml
-  license: true
-  image: 
-    repository: cp.icr.io/cp/cp4a/odm
-    pullSecrets: 
-    - icregistry-secret
-  usersPassword: my-password
-  internalDatabase: 
-    secretCredentials: my-odm-db-secret
-    populateSampleData: true
-    runAsUser: ""
-  customization:
-    runAsUser: ""
-  service:
-    enableRoute: true
+Here is an example to install ODM on Openshift including a PostgreSQL internal database with samples:
+  ```console
+  helm install my-odm-prod-release \
+    --set license=true \
+    --set image.pullSecrets=icregistry-secret \
+    --set usersPassword=my-password \
+    --set internalDatabase.secretCredentials=my-odm-db-secret \
+    --set internalDatabase.populateSampleData=true \
+    --set internalDatabase.runAsUser='' \
+    --set customization.runAsUser='' \
+    --set service.enableRoute=true \
+    ibm-helm/ibm-odm-prod
   ```
   
-Refer to the [Configuration](#configuration) section for advanced configuration. You can find the default values of all parameters in the [ODM for production configuration parameters](https://www.ibm.com/docs/en/odm/9.5.0?topic=reference-odm-production-configuration-parameters).
+Refer to the [Configuration](#configuration) section for advanced configuration. You can find the default values of all parameters in the [ODM for production configuration parameters](https://www.ibm.com/docs/en/odm/9.0.0?topic=reference-odm-production-configuration-parameters).
 
 ### Using helm template
 
@@ -226,7 +207,7 @@ kubectl apply -f my-values.yaml
 
 ### Verifying the Chart
 
-Navigate to your release and view the service details. For details, refer to [Completing post-deployment tasks](https://www.ibm.com/docs/en/odm/9.5.0?topic=production-completing-post-deployment-tasks).
+Navigate to your release and view the service details. For details, refer to [Completing post-deployment tasks](https://www.ibm.com/docs/en/odm/9.0.0?topic=production-completing-post-deployment-tasks).
 
 ### Getting started with business rules
 
@@ -362,23 +343,15 @@ The service account should be granted the appropriate `SecurityContextConstraint
 
 You can also configure the chart to use a custom service account. In this case, a cluster administrator can create the custom service account, and the namespace administrator can configure the chart to use this service account by setting the `serviceAccountName` parameter:
 
-```yaml
-license: true
-# Set a custom service account
-serviceAccountName: ibm-odm-prod-service-account
-image: 
-  repository: cp.icr.io/cp/cp4a/odm
-  pullSecrets: 
-  - icregistry-secret
-usersPassword: my-password
-internalDatabase: 
-  secretCredentials: my-odm-db-secret
-  populateSampleData: true
-```
-
-Run the following command to install:
 ```console
-helm install my-odm-prod-release -f my-values.yaml ibm-helm/ibm-odm-prod
+helm install my-odm-prod-release \
+  --set license=true \
+  --set serviceAccountName=ibm-odm-prod-service-account \
+  --set image.pullSecrets=icregistry-secret \
+  --set usersPassword=my-password \
+  --set internalDatabase.secretCredentials=my-odm-db-secret \
+  --set internalDatabase.populateSampleData=true \
+  ibm-helm/ibm-odm-prod
 ```
 
 ### Pod Security
@@ -504,21 +477,21 @@ If you are upgrading from older Kubernetes versions to v1.25 and above, refer to
 
 ## Configuration
 
-- To use the default user access, you **must** define a password to be used by the default users like *odmAdmin* by setting the parameter `usersPassword`. If you want to provide customized user access, read [Configuring user access](https://www.ibm.com/docs/en/odm/9.5.0?topic=production-configuring-user-access).
+- To use the default user access, you **must** define a password to be used by the default users like *odmAdmin* by setting the parameter `usersPassword`. If you want to provide customized user access, read [Configuring user access](https://www.ibm.com/docs/en/odm/9.0.0?topic=production-configuring-user-access).
 
-- If you want to use a custom security certificate, read [Defining the security certificate](https://www.ibm.com/docs/en/odm/9.5.0?topic=production-defining-security-certificate)
+- If you want to use a custom security certificate, read [Defining the security certificate](https://www.ibm.com/docs/en/odm/9.0.0?topic=production-defining-security-certificate)
 
-- If you want to create your own decision services from scratch, you need to install Rule Designer from the [Eclipse Marketplace](https://marketplace.eclipse.org/content/ibm-operational-decision-manager-developers-v95x-rule-designer).
+- If you want to create your own decision services from scratch, you need to install Rule Designer from the [Eclipse Marketplace](https://marketplace.eclipse.org/content/ibm-operational-decision-manager-developers-v900-rule-designer).
 
-You can find all configuration settings in the topic [Customizing ODM for production](https://www.ibm.com/docs/en/odm/9.5.0?topic=production-customizing-odm). For more details, check out the list of available [ODM for production configuration parameters](https://www.ibm.com/docs/en/odm/9.5.0?topic=reference-odm-production-configuration-parameters).
+You can find all configuration settings in the topic [Customizing ODM for production](https://www.ibm.com/docs/en/odm/9.0.0?topic=production-customizing-odm). For more details, check out the list of available [ODM for production configuration parameters](https://www.ibm.com/docs/en/odm/9.0.0?topic=reference-odm-production-configuration-parameters).
 
 ## Limitations
 
 The following ODM on premises features are not supported:
-[Features not included](https://www.ibm.com/docs/en/odm/9.5.0?topic=kubernetes-decision-features-not-included)
+[Features not included](https://www.ibm.com/docs/en/odm/9.0.0?topic=kubernetes-decision-features-not-included)
 
 ## Documentation
 
-See [ODM on Certified Kubernetes in knowledge center](https://www.ibm.com/docs/en/odm/9.5.0?topic=operational-decision-manager-certified-kubernetes-950).
+See [ODM on Certified Kubernetes in knowledge center](https://www.ibm.com/docs/en/odm/9.0.0?topic=operational-decision-manager-certified-kubernetes-900).
 
 You can find step-by-step guides on how to deploy an Operational Decision Manager (ODM) instance on different platforms (Amazon Elastic Kubernetes Service (EKS), Google Kubernetes Engine (GKE), Azure kubernetes Service (AKS), and Red Hat OpenShift Kubernetes Service on IBM Cloud (ROKS)) and configure ODM with custom SSO like Okta, in the [DecisionsDev/odm-docker-kubernetes](https://github.com/DecisionsDev/odm-docker-kubernetes/blob/master/README.md) repository.
