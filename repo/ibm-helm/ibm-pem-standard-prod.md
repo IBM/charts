@@ -7,9 +7,9 @@ This chart deploys IBM Partner Engagement Manager Standard cluster on a containe
 
 ## Prerequisites
 
-1. Kubernetes version >= 1.30 and <= 1.34
+1. Kubernetes version >= 1.31 and <= 1.34
 
-2. Red Hat OpenShift Container Platform version >= 4.16
+2. Red Hat OpenShift Container Platform version >= 4.18
 
 3. Helm version >= 3.19.x
 
@@ -429,7 +429,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | Parameter                | Description             | Default        |
 | ------------------------ | ----------------------- | -------------- |
 | `image.name` | Provide the value in double quotes | `"cp.icr.io/cp/ibm-pem/pem"` |
-| `image.tag` | Specify the tag name | `"6.2.4.4_standard"` |
+| `image.tag` | Specify the tag name | `"6.2.4.4.1_standard"` |
 | `image.pullPolicy` |  | `null` |
 | `image.pullSecret` | Provide the pull secret name | `""` |
 | `arch` | Specify architecture (amd64, s390x) | `"amd64"` |
@@ -699,7 +699,7 @@ The following table lists the configurable parameters of the Ibm-pem-standard ch
 | `communitymanager.install` |  | `true` |
 | `communitymanager.image.repository` | Specify the repository | `"cp.icr.io/cp/ibm-pem/pem"` |
 | `communitymanager.image.pullPolicy` | Specify te image pull policy | `null` |
-| `communitymanager.image.tag` | Specify the tag name | `"6.2.4.4"` |
+| `communitymanager.image.tag` | Specify the tag name | `"6.2.4.4.1"` |
 | `communitymanager.image.pullSecret` | Provide the pull secret name | `null` |
 | `communitymanager.prod.enable` | If you are want to proceed for prod pcm installation then you have to mention it as true or else false | `true` |
 | `communitymanager.prod.setupfile.time_zone` | Specify the timezone EX:America/New_York (Country/city) | `null` |
