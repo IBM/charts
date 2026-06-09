@@ -1,4 +1,4 @@
-# IBM Sterling File Gateway Enterprise Edition v6.2.0.6
+# IBM Sterling File Gateway Enterprise Edition v6.2.1.2
 ## Introduction
 
 IBM Sterling File Gateway lets organizations transfer files between partners by using different protocols, conventions for naming files, and file formats. A scalable and security-enabled gateway, Sterling File Gateway enables companies to consolidate all their internet-based file transfers on a single edge gateway, which helps secure your B2B collaboration network and the data flowing through it. To find out more, see [IBM Sterling File Gateway](https://www.ibm.com/products/file-gateway) on IBM Marketplace.
@@ -19,12 +19,12 @@ Services
 ## Prerequisites
 
 1. Red Hat OpenShift Container Platform
-   Version 4.17.0 or later fixes
    Version 4.18.0 or later fixes
    Version 4.19.0 or later fixes
    Version 4.20.0 or later fixes
+   Version 4.21.0 or later fixes
 
-2. Kubernetes version >= 1.31 and <= 1.35
+2. Kubernetes version >= 1.32 and <= 1.36
 
 3. Helm version >= 3.20.x
 
@@ -36,7 +36,7 @@ Services
 
 7. When `appResourcesPVC.enabled` is `true`, create a persistent volume for application resources with access mode as 'Read Only Many' and place the database driver jar, Key store and trust store files in case of SSL connection to database or MQ server in the mapped volume location.
 
-8. When `logs.enableAppLogOnConsole` is `false, create a persistent volume for application logs with access mode as 'Read Write Many'.
+8.  When `logs.enableAppLogOnConsole` is `false`, create a persistent volume for application logs with access mode as 'Read Write Many'.
 
 9. When `appDocumentsPVC.enabled` is `true`, create a persistent volume for application document storage with access mode as 'Read Write Many'.
 
@@ -60,7 +60,7 @@ Services
 
 15. Automatically installing ibm-licensing-operator with a stand-alone IBM Containerized Software using Operator Lifecycle Manager (OLM) 
 Use the automatic script to install License Service on any Kubernetes-orchestrated cloud. The script creates an instance and validates the steps. It was tested to work on OpenShift Container Platform 4.2+, vanilla Kubernetes custer, 
-and is available for download at https://www.ibm.com/docs/en/b2b-integrator/6.2.0?topic=dcca-downloading-certified-container-helm-charts-from-chart-repository
+and is available for download at https://www.ibm.com/docs/en/b2b-integrator/6.2.1?topic=dcca-downloading-certified-container-helm-charts-from-chart-repository
  - pre-install/license/ibm_licensing_operator_install.sh
  Post-installation steps: 
  - https://github.com/IBM/ibm-licensing-operator/blob/master/README.md#post-installation-steps
@@ -345,7 +345,7 @@ Parameter                                      | Description                    
 `global.license`                               | Accept B2BI/SFG license                                              | `false`
 `global.licenseType`                           | Specify the license edition as per license agreement.                | prod
 `global.image.repository`                      | Repository for B2B docker images                                     | 
-`global.image.tag          `                   | Docker image tag                                                     | `6.2.0.6`
+`global.image.tag          `                   | Docker image tag                                                     | `6.2.1.2`
 `global.image.digest          `                | Docker image digest. Takes precedence over tag                       | 
 `global.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `global.image.pullSecret `         			   | Pull secret for repository access                                    | 
@@ -361,7 +361,6 @@ Parameter                                      | Description                    
 `customizationInit.enabled`                        | Enable customization init container                                      | false
 `customizationInit.dataSetup.enabled`          | Enable data setup for customization init container                                      | false
 `customizationInit.dataSetup.includeServicePackages`  | Custom service packages to include during data setup for customization init container             | `all`
-
 `customizationInit.image.repository`               | Repository for customization init container image                        |
 `customizationInit.image.tag`                      | Docker image tag                                                     |
 `customizationInit.image.digest`                   | Docker image digest. Takes precedence over tag                       |
@@ -458,6 +457,8 @@ Parameter                                      | Description                    
 `setupCfg.licenseAcceptEnableFileOperation`    | Consent for accepting license to enable File Operation               | false
 `setupCfg.systemPassphraseSecret`              | System passphrase secret name                                        | 
 `setupCfg.enableFipsMode`                      | Enable FIPS mode                                                     | false
+`setupCfg.fipsCustomProfileName`               | FIPS custom Profile Name                                             | 
+`setupCfg.fipsCustomProfileFileName`           | FIPS custom Profile File Name                                        | 
 `setupCfg.nistComplianceMode`                  | NIST 800-131a compliance mode                                        | `off`
 `setupCfg.dbVendor`                            | Database vendor - DB2/Oracle/MSSQL                                   | 
 `setupCfg.dbHost`                              | Database host                                                        | 
@@ -724,12 +725,12 @@ name	                                         |
 `fullnameOverride`                             | Chart resource full name override                                    | 
 `dashboard.enabled`                            | Enable sample Grafana dashboard                                      | false
 `test.image.repository`                        | Repository for docker image used for helm test and cleanup           | 'ibmcom/opencontent-common-utils'
-`test.image.tag          `                     | helm test and cleanup docker image tag                               | `1.1.65`
+`test.image.tag          `                     | helm test and cleanup docker image tag                               | `1.1.70`
 `test.image.digest          `                  | helm test and cleanup docker image digest. Takes precedence over tag | 
 `test.image.pullPolicy`                        | Pull policy for helm test image repository                           | `IfNotPresent`
 `purge.enabled`                                | Enable external purge job                                            | 'false'
 `purge.image.repository          `             | External purge docker image repository                               | `purge`
-`purge.image.tag          `                    | External purge image tag                                             | `6.2.0.6`
+`purge.image.tag          `                    | External purge image tag                                             | `6.2.1.2`
 `purge.image.digest          `                 | External purge image digest. Takes precedence over tag               | 
 `purge.image.pullPolicy`                       | Pull policy for external purge docker image                          | `IfNotPresent`
 `purge.image.pullSecret`                       | Pull secret for repository access                                    | 
@@ -783,6 +784,27 @@ name	                                         |
 |`documentService.connectionPoolConfig.keepAlive`                    |   keep Alive for documentService Pod.                                                                                                                                                   | 300000     |
 |`documentService.connectionPoolConfig.retryCount`                   |   number of re try documentService                                                                                                                                                   |  2    |
 |`documentService.connectionPoolConfig.disableContentCompression`     |  disable Content compression for documentService                                                                                                                                                    | true     |
+`as4Service.enabled`                               | Enable integration with AS4 microservice                             |false     |
+`as4Service.license`                               | Accept AS4/SFG license                                               | `false`
+`as4Service.licenseType`                           | Specify the license edition as per license agreement.                | non-prod
+`as4Service.image.repository`                      | Repository for AS4 docker images                                     |
+`as4Service.image.tag          `                   | Docker image tag                                                     | `6.2.1.2`
+`as4Service.image.digest          `                | Docker image digest. Takes precedence over tag                       |
+`as4Service.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
+`as4Service.image.pullSecret `                     | Pull secret for repository access                              |
+`as4Service.dataSetup.enabled`                           | Enable database setup job execution                                  | true
+`as4Service.dbSetup.dbVendor`                            | Database vendor - DB2/Oracle/MSSQL                                   |
+`as4Service.dbSetup.dbHost`                              | Database host                                                        |
+`as4Service.dbSetup.dbPort`                              | Database port                                                        |
+`as4Service.dbSetup.dbDrivers`                           | Database driver jar name                                             |
+`as4Service.dbSetup.dbSecret`                            | Database user secret name                                            |
+`as4Service.mqSetup.mqHost`                              | MQ Server host                                                       |
+`as4Service.mqSetup.mqPort`                              | MQ Server port                                                       |
+`as4Service.mqSetup.mqServerChannel`                     | MQ Server Channel Name                                               |
+`as4Service.mqSetup.mqServerQueueManager`                | MQ Server Queue Manager Name                                         |
+`as4Service.mqSetup.mqSecret`                            | MQ Server user secret Name                                           |
+`as4Service.as4operational.ingress.internal.host`        | Internal Host name for ingress resource                              |
+`as4Service.as4informational.ingress.internal.host`      | Internal Host name for ingress resource                              |
 
 ## Upgrading the Chart
 
