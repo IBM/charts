@@ -506,7 +506,7 @@ The following table lists the configurable parameters of the Ibm-pem-essential c
 
 | Parameter                | Description             | Default        |
 | ------------------------ | ----------------------- | -------------- |
-| `image.name` | Provide the value in double quotes | `"cp.icr.io/cp/ibm-pem/pem"` |
+| `image.name` | Provide the value in double quotes | `"cp.icr.io/cp/ibm-pem-ng/pemng"` |
 | `image.tag` | Specify the tag name | `"6.3.0.0"` |
 | `image.pullPolicy` |  | `null` |
 | `image.pullSecret` | Provide the pull secret name | `""` |
