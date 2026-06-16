@@ -13,10 +13,7 @@
 ## Prerequisites
 
 1. Kubernetes 1.19.0+/OpenShift 4.6.0+; kubectl and oc CLI; Helm 3;
-  * Install and setup oc/kubectl CLI depending on your architecture.
-    * [ppc64le](https://mirror.openshift.com/pub/openshift-v4/ppc64le/clients/ocp/stable/openshift-client-linux.tar.gz)
-    * [s390x](https://mirror.openshift.com/pub/openshift-v4/s390x/clients/ocp/stable/openshift-client-linux.tar.gz)
-    * [x86_64](https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/stable/openshift-client-linux.tar.gz)
+  * [Install and setup oc/kubectl CLI](https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/stable/openshift-client-linux.tar.gz).
   * [Install and setup the Helm 3 CLI](https://helm.sh/docs/intro/install/).
 
 2. Accessing the container Image - The DevOps Deploy agent image is accessed via the IBM Entitled Registry.
