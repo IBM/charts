@@ -43,7 +43,7 @@ See [Installing and uninstalling the IBM MQ Operator on Amazon EKS](https://ibm.
 |-----|------|---------|-------------|
 | operator.env | object | `{}` | Environment variables to pass to the IBM MQ Operator  (e.g. `{env1: "value1",env2: "value2"}`) |
 | operator.deployment.repository | string | `"cpopen/ibm-mq-operator"` | Remote repository for the IBM MQ Operator image |
-| operator.deployment.sha | string | `"sha256:a62c6c91c4d0acccc8231e8639ecb5da9a49ba8475a2c38655446a2fc22e0fcf"` | SHA value of the IBM MQ Operator image |
+| operator.deployment.sha | string | `"sha256:960fe02890558d2ab6ce673a005090c762bad705475dd391594d37cd3dfeb13d"` | SHA value of the IBM MQ Operator image |
 | operator.deployment.tag | string | `nil` | Tag value for the IBM MQ Operator image (`optional - ignored when a SHA value is provided`) |
 | operator.deployment.pullPolicy | string | `"IfNotPresent"` | Image pull policy for the IBM MQ Operator (`"IfNotPresent"`/ `"Always"` / `"Never"`)) |
 | operator.deployment.resources.requests.cpu | string | `"1"` | CPU requests setting for the IBM MQ Operator |
@@ -61,13 +61,13 @@ See [Installing and uninstalling the IBM MQ Operator on Amazon EKS](https://ibm.
 
 ### Prerequisites
 
-The IBM MQ Operator deploys queue manager images that are pulled from a container registry that performs a license entitlement check. Follow [these instructions](https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=upgrading-preparing-use-kubernetes-by-creating-pull-secret) to get an entitlement key and create a pull secret.
+The IBM MQ Operator deploys queue manager images that are pulled from a container registry that performs a license entitlement check. Follow [these instructions](https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=upgrading-preparing-use-kubernetes-by-creating-pull-secret) to get an entitlement key and create a pull secret.
 
 > **Note**: The entitlement key is not required if only IBM MQ Advanced for Developers (Non-Warranted) queue managers are going to be deployed.
 
 ### Creating an IBM MQ Queue Manager
 
-To deploy a queue manager, see [Deploying and configuring queue managers using the IBM MQ Operator](https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=configuring-deploying-queue-managers-using-mq-operator).  Queue managers can be installed by a namespace administrator.
+To deploy a queue manager, see [Deploying and configuring queue managers using the IBM MQ Operator](https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=configuring-deploying-queue-managers-using-mq-operator).  Queue managers can be installed by a namespace administrator.
 
 **Important:** When deploying an IBM MQ queue manager on Amazon Elastic Kubernetes Service (Amazon EKS), all Red Hat OpenShift Container Platform features **MUST** be explicitly disabled as follows:
 
@@ -96,7 +96,7 @@ To upgrade an installed and running queue manager, update the following field of
 For some upgrades, you may also need to update the license:
 - `spec.license.license`
 
-See [Current license versions](https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=reference-licensing-api-references-mq-operator) for more details.
+See [Current license versions](https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-licensing-api-references-mq-operator) for more details.
 
 To upgrade, update the field(s) in the Queue Manager yaml by, for example, running: 
 
