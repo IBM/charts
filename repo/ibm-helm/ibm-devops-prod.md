@@ -6,9 +6,9 @@ IBM DevOps Test Hub brings together test data, test environments, and test runs 
 
 ### Resources Required
 
-* [RedHat OpenShift Container Platform](https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/release_notes/ocp-4-19-release-notes) v4.19 or later (x86_64)
-* [Dynamic Volume Provisioning](https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/storage/dynamic-provisioning) supporting accessModes ReadWriteOnce (RWO) and ReadWriteMany (RWX).
-* [Jaeger Operator](https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/service_mesh/service-mesh-2-x#installing-ossm) (Optional) If tests should contribute trace information and Jaeger based reports are required.
+* [RedHat OpenShift Container Platform](https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/release_notes/ocp-4-20-release-notes) v4.20 or later (x86_64)
+* [Dynamic Volume Provisioning](https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/storage/dynamic-provisioning) supporting accessModes ReadWriteOnce (RWO) and ReadWriteMany (RWX).
+* [Jaeger Operator](https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/service_mesh/service-mesh-2-x#installing-ossm) (Optional) If tests should contribute trace information and Jaeger based reports are required.
 
 
 
@@ -24,7 +24,7 @@ To install the product you will need cluster administrator privileges.
 
 ## Red Hat OpenShift SecurityContextConstraints Requirements
 
-The product is compatible with the `restricted` and `restricted-v2` [SecurityContextConstraint](https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/authentication_and_authorization/managing-pod-security-policies).
+The product is compatible with the `restricted` and `restricted-v2` [SecurityContextConstraint](https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/authentication_and_authorization/managing-pod-security-policies).
 
 If you would prefer to use the custom ibm-devops-restricted SCC, please do the following before installation:
 
@@ -96,8 +96,8 @@ This change propagates after a couple of minutes. [Further reading](https://clou
 
 ### Local Machine
 
-* [oc](https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/cli_tools/openshift-cli-oc)
-* [helm v4.0.4 or later](https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/building_applications/working-with-helm-charts#installing-helm)
+* [oc](https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/cli_tools/openshift-cli-oc)
+* [helm v4.1.4 or later](https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/building_applications/working-with-helm-charts#installing-helm)
 
 ### Storage
 
@@ -128,7 +128,7 @@ The pod [`fsGroup`](https://kubernetes.io/docs/tasks/configure-pod-container/sec
 Fetch chart for install:
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-prod --version 11.0.800
+helm pull --untar ibm-helm/ibm-devops-prod --version 11.0.900
 cd ibm-devops-prod
 ```
 
@@ -140,6 +140,7 @@ cd ibm-devops-prod
 NAMESPACE=devops-system
 HELM_NAME=main
 
+INGRESS_PROXY_ADDRESSES=$(oc get configmap subnet-config -n kube-system -o json | jq -r '.data["subnets.json"] | fromjson | map(.cidrs) | join(",")')
 INGRESS_DOMAIN=devops.$(oc get -n openshift-ingress-operator ingresscontroller default -ojsonpath='{.status.domain}')
 PASSWORD_SEED= # secure seed required to generate passwords - unrecoverable so keep it safe
 
@@ -152,6 +153,7 @@ helm upgrade --install $HELM_NAME . -n $NAMESPACE \
   -f values-openshift.yaml \
   -f values-dedicated-nodes.yaml \
   --set global.persistence.rwxStorageClass=ibmc-file-gold \
+  --set ingress.proxy.addresses=$INGRESS_PROXY_ADDRESSES \
   --set-literal passwordSeed=$PASSWORD_SEED \
   --set signup=true \
   --set-literal global.ibmImagePullPassword=$ENTITLEMENT_REGISTRY_KEY \
@@ -191,6 +193,8 @@ If pods are `Pending` and `describe` gives no clues, check you're not waiting on
 | `imageRegistry`                                | The location of container images to use. See [move-images](lib/airgap/move-images.sh) | cp.icr.io/cp |
 | `ingress.cert.create`                          | Create an self-signed certificate matching the ingress domain if none exists in secret `global.ibmCertSecretName`. | true |
 | `ingress.cert.selfSigned`                      | If the ingress domain certificate is not signed by a globally trusted CA. | PLATFORM specifc |
+| `ingress.proxy.addresses`                      | Comma-separated list of trusted proxy IP addresses. When set, only requests from these addresses are trusted to provide X-Forwarded-For headers. | '' |
+| `ingress.proxy.count`                          | Number of trusted proxies between the client and the gateway for X-Forwarded-For parsing. Adjust per environment: 1 for ingress only, 2 for external load balancer. | 1 |
 | `keycloak.truststoreFileHostnameVerificationPolicy` | HTTPS hostname cerificate verifcation policy. ANY (hostname is not verified), WILDCARD (allows wildcards in subdomain names) or STRICT (the Common Name (CN) must match the hostname exactly). | WILDCARD |
 | `license`                                      | Confirmation that the EULA has been accepted. For example `true` | false |
 | `networkPolicy.egress.cidrs`                   | Network ranges to allow access to. This does not include access to github.com where helm test resources are stored. | [ 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 ] |
@@ -206,7 +210,7 @@ If pods are `Pending` and `describe` gives no clues, check you're not waiting on
 
 ## Upgrade
 
-Upgrading from releases prior to v11.0.3 is not support - for older versions first upgrade to an intermediate release.
+Releases prior to v11.0.8 cannot be upgraded directly; you must first upgrade to an intermediate release.
 
 Before performing your upgrade RabbitMQ flags must be enabled on a running install:
 
@@ -237,11 +241,11 @@ Install [velero v14.0.1 or later](https://velero.io/docs/v1.14/basic-install/) a
 
 
 
-#### [S3](https://github.com/vmware-tanzu/velero-plugin-for-aws)
+#### [S3](https://github.com/velero-io/velero-plugin-for-aws)
 
 Prepare the cluster to use CSI Snapshots by installing the [CSI Snapshotter](https://github.com/kubernetes-csi/external-snapshotter?tab=readme-ov-file#usage).
 
-Provision S3 storage with your cloud provider. As an example we'll use [MinIO](https://min.io/).
+Provision S3 storage with your cloud provider. As an example we'll use [MinIO](https://www.min.io/).
 
 To use velero with S3 storage, the AWS storage plugin must be used with a `credentials` file in the following form:
 
