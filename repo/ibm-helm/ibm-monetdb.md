@@ -1,19 +1,21 @@
 
-## Install MonetDb (dedicated page)
+# Install MonetDb
 
-`helm install  <RELEASE NAME> ./ibm-monetdb  --namespace <YOUR NAMESPACE> -f sample-monet.yml` 
+## Docker images (for airgap env)
 
-
-
-### Configuration options
-You can override following settings in the value file
+If you are using mirrored images you need change the registry url.
+You can also change image digest (i.e. replace it with a tag)
 
 ```
-# image and registry
 images: 
   registry: 'my.companyregistry.io'
   monet: 'processmining-monet:20260413-2038'
+```
 
+## Configuration options
+You can optionally override following settings in the value file
+
+```
 # storage options
 storage:
   #size in Gb
@@ -21,7 +23,7 @@ storage:
   # storageClass, if empty the cluster default will be used
   class: ''
   # create or not the PVC
-  # if false a nanem of an existing one must be privided
+  # if false a name of an existing one must be privided
   create: true
   name:  ''
 
@@ -36,3 +38,7 @@ resources:
     memory: "18Gi"
     ephemeralstorage: "8Gi"
 ```
+
+## Install MonetDb release
+
+`helm install  <RELEASE NAME> ./ibm-monetdb  --namespace <YOUR NAMESPACE> -f sample-monet.yml` 
