@@ -43,7 +43,7 @@ See [Installing and uninstalling the IBM MQ Operator on Amazon EKS](https://ibm.
 |-----|------|---------|-------------|
 | operator.env | object | `{}` | Environment variables to pass to the IBM MQ Operator  (e.g. `{env1: "value1",env2: "value2"}`) |
 | operator.deployment.repository | string | `"cpopen/ibm-mq-operator"` | Remote repository for the IBM MQ Operator image |
-| operator.deployment.sha | string | `"sha256:4e30ce0ea71340c43bd78260e830e4861c4781a208dd4dc963726906b755e4b9"` | SHA value of the IBM MQ Operator image |
+| operator.deployment.sha | string | `"sha256:f6a1cea8bec4dff516ee8d18088b3186a2b1c4106bed2f3b185603307a9cb83b"` | SHA value of the IBM MQ Operator image |
 | operator.deployment.tag | string | `nil` | Tag value for the IBM MQ Operator image (`optional - ignored when a SHA value is provided`) |
 | operator.deployment.pullPolicy | string | `"IfNotPresent"` | Image pull policy for the IBM MQ Operator (`"IfNotPresent"`/ `"Always"` / `"Never"`)) |
 | operator.deployment.resources.requests.cpu | string | `"1"` | CPU requests setting for the IBM MQ Operator |
