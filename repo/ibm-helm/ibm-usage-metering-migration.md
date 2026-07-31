@@ -1,17 +1,56 @@
-# OLM-based deployment to a Helm-based deployment migration chart
+# IBM Usage Metering Helm Chart
 
-To facilitate the migration from an OLM-based deployment to a Helm-based deployment, a dedicated migration Helm chart is introduced. It runs a job that removes the following resources:
-- Subscriptions,
-- CSVs,
-- Operator Deployment
-- Roles, RoleBindings, ServiceAccounts
+## Overview
 
-Note: Migration from multiple instances is not supported. If you have UMS instances deployed across multiple namespaces (e.g. `product-namespace-1` and `product-namespace-2`), migration to a Helm-based deployment is not possible.
+A Helm chart for IBM Usage Metering installation. IBM products can integrate with Usage Metering Service (UMS) to capture two types of product usage metrics: contractual metrics for compliance purposes, and adoption metrics for various scenarios related to usage analysis.
 
-## How to use
+
+## Installation
+
+### Fresh Installation
 
 ```bash
-helm install ibm-usage-metering ./helm-migration --namespace ibm-usage-metering --take-ownership # Run migration job, that will remove OLM resources
-helm install ibm-usage-metering-cluster-scoped ./helm-cluster-scoped --namespace ibm-usage-metering --take-ownership # Install UMS cluster scoped resources
-helm upgrade ibm-usage-metering ./helm --namespace ibm-usage-metering --take-ownership # Install UMS
+# Install cluster-scoped resources
+helm install ibm-usage-metering-cluster-scoped <ibm-usage-metering-cluster-scoped-chart> 
+
+# Install IBM Usage Metering
+helm install ibm-usage-metering <ibm-usage-metering-chart>  \
+  --namespace <target-namespace> \
+  --create-namespace
 ```
+
+### Migration from OLM
+
+For migration from OLM-based deployment, see [helm-migration/README.md](../helm-migration/README.md).
+
+## Configuration
+
+### Main Chart Parameters (ibm-usage-metering Helm chart)
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `global.licenseAccept` | Accept IBM license agreement | `true` |
+| `global.imagePullPrefix` | Image registry prefix | `icr.io` |
+| `global.imagePullSecret` | Image pull secret name | `ibm-entitlement-key` |
+| `global.operatorNamespace` | Namespace where the operator is installed | `""` |
+| `global.instanceNamespace` | Namespace where the IBM Usage Metering instance is created | `""` |
+| `ibmUsageMetering.spec` | Custom IBM Usage Metering resource specification | `{}` |
+| `ibmUsageMetering.imageRegistryNamespaceOperator` | Operator image registry namespace | `cpopen` |
+| `ibmUsageMetering.imageRegistryNamespaceOperand` | Operand image registry namespace | `cpopen/cpfs` |
+| `ibmUsageMetering.enableRoutes` | Enable OpenShift routes | `true` |
+| `ibmUsageMetering.createRBAC` | Create RBAC resources required by the chart | `true` |
+
+### Cluster-Scoped Chart Parameters (ibm-usage-metering-cluster-scoped Helm chart)
+
+The cluster-scoped chart does not expose any configurable Helm values.
+
+## Uninstalling
+
+```bash
+helm uninstall ibm-usage-metering --namespace <target-namespace>
+helm uninstall ibm-usage-metering-cluster-scoped
+```
+
+## Documentation
+
+- [IBM Usage Metering Service](https://ibm.biz/usage_metering_service)
