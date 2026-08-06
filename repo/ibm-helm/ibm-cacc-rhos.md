@@ -261,9 +261,9 @@ services:
     ncDbPort: 1433
     ncAdvancedProperties: "securityMechanism=3"
 
-    # CA Agentic AI service
-    agenticAIService:
-      enabled: true
+  # CA Agentic AI service
+  agenticAIService:
+    enabled: true
 
 ```
 Copy and paste the sample yaml into a file named caConfiguration.yaml. The sample yaml file references the secrets that were created in Pre-installation steps.
@@ -1374,15 +1374,11 @@ kubectl logs -l app=ca-agentic-ai -n <namespace> --tail=50 | grep -i opensearch
 
 ## Agentic AI Service - Redis Sidecar configuration settings
 These configuration settings control the Redis sidecar container that provides caching capabilities for the Agentic AI service.
-
-
-> **Note (12.1.3):** The Redis sidecar image has been updated from `redisearch:2.8.0` to `redis:8.2`. The `redisName` parameter controls the image name used in the image path.
-
 | Parameter                  | Description                                     | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
-|services.agenticAIService.redisName|Name of the Redis sidecar container|redis|
+|services.agenticAIService.redisName|Name of the Redis sidecar container|redisearch|
 |services.agenticAIService.redisDigest|Image digest for the Redis container|Current image digest is included in the Helm chart|
-|services.agenticAIService.redisTag|Image tag for the Redis container|8.2|
+|services.agenticAIService.redisTag|Image tag for the Redis container|2.6.0|
 |services.agenticAIService.redisRequestsCpu|Set the CPU request for the Redis sidecar|"500m"|
 |services.agenticAIService.redisRequestsMemory|Set the memory request for the Redis sidecar|1Gi|
 |services.agenticAIService.redisLimitsCpu|Set the CPU limit for the Redis sidecar|"1"|
