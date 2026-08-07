@@ -23,7 +23,8 @@ This chart deploys IBM Sterling Control Center Monitor on a container management
    * Version 4.18.0 or later fixes
    * Version 4.19.0 or later fixes
    * Version 4.20.0 or later fixes
-2. Kubernetes version >= 1.31 and <=1.34 with beta APIs enabled.
+   * Version 4.21.0 or later fixes
+2. Kubernetes version >= 1.31 and <=1.35 with beta APIs enabled.
 3. Helm version >= 3.18.x and 4.0.0
 4. Ensure that one of the supported database server (Oracle/DB2/MSSQL) is installed and the database is accessible from inside the cluster.
 5. Ensure that the docker images for IBM Sterling Control Center Monitor from IBM Entitled Registry are downloaded and pushed to an image registry accessible to the cluster.
@@ -326,7 +327,7 @@ Ensure that the chart is downloaded locally and available.
 Run the below command
 
 ```bash
-$ helm install my-release -f values.yaml ibm-sccm-4.2.9.tgz
+$ helm install my-release -f values.yaml ibm-sccm-4.2.10.tgz
 ```
 
 Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 6-7 minutes for Installing Control Center.
@@ -506,6 +507,7 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `ingress.tls.enabled`                           | TLS is enabled or disabled for ingress resource     | `false`                                  |
 | `ingress.tls.secretName`                        | TLS secret name if enabled                          |                                          |
 | `consoleLogEnabled`                             | To enable engine logs to redirect to console        | `false`                                  |
+| `terminationGracePeriodSeconds`                 | To shut down pod gracefully with this value         | `120`                                    |
 
 > **Tip**: If `ccArgs.dbinit` flag is true, then Only Monitored server activities will be deleted. Change this to true only if you need to delete all the monitored servers' activities. Even when this flag is true, no summary data (CC_PROCESS, CC_FILE_TRANSFER) will be deleted. Also, no configuration data such as Rules, SLCs, Monitored servers connection details will be deleted.
 
@@ -514,13 +516,13 @@ The following tables lists the configurable parameters of the IBM Control Center
 Specify each parameter in values.yaml to `helm install`. For example,
 
 ```bash
-helm install my-release -f values.yaml ibm-sccm-4.2.9.tgz
+helm install my-release -f values.yaml ibm-sccm-4.2.10.tgz
 ```
 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. You can create a copy of values.yaml file e.g. my-values.yaml and edit the values that you need to override. Use the my-values.yaml file for installation. For example,
 
 ```bash
-helm install <release-name> -f my-values.yaml ibm-sccm-4.2.9.tgz
+helm install <release-name> -f my-values.yaml ibm-sccm-4.2.10.tgz
 ```
 > **Tip**: You can use the default [values.yaml](values.yaml)
 
@@ -553,7 +555,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-sccm-4.2.9.gz
+helm upgrade my-release -f values.yaml ibm-sccm-4.2.10.gz
 ```
 
 Refer [RELEASENOTES.md](RELEASENOTES.md) for Fix history.
