@@ -1,7 +1,7 @@
 # Name
 
-Helm Chart for IBM&reg; Sterling Transformation Extender Launcher Container 11.0.2
-<br>&copy; Copyright IBM Corporation 2025 All rights reserved.
+Helm Chart for IBM&reg; Sterling Transformation Extender Launcher Container 11.0.3
+<br>&copy; Copyright IBM Corporation 2025, 2026 All rights reserved.
 <br>Program Number : 5724-Q23
 
 ## Introduction
@@ -10,7 +10,7 @@ IBM&reg; Sterling Transformation Extender (ITX) provides a unified solution for 
 
 IBM&reg; Sterling Transformation Extender Launcher Container, also referred to as ITX Launcher Server (ITX LS), is a containerized distribution of ITX. It enables maps and systems to be executed within a cluster of worker nodes on the cloud. Maps are designed using ITX Design Studio and systems are defined with ITX Integration Flow Designer. Both ITX Design Studio and Integration Flow Designer are components that are separate from ITX LS. They must be installed and run locally on a Windows host. When you obtain access to the ITX LS component, you will be provided with instructions on how to obtain the ITX Design Studio and Integration Flow Designer components as well.
 
-For additional high-level overview of the ITX Launcher Container product, refer to this [support page](https://www.ibm.com/support/pages/node/7244607).
+For additional high-level overview of the ITX Launcher Container product, refer to this [support page](https://www.ibm.com/support/pages/node/7274355).
 
 ## Features
 
@@ -28,7 +28,7 @@ The following is a list of high-level features provided by the ITX LS:
 
 ## Prerequisites
 
-ITX LS supports Red Hat OpenShift cluster version 4.18. It runs on Linux 64 clusters only. When compiling maps in ITX Design Studio, you must choose the option to compile them for Linux 64 platform. Alternatively, you can use multi-platform composite maps, at the cost of increased map size. 
+ITX LS supports Red Hat OpenShift cluster version 4.20. It runs on Linux 64 clusters only. When compiling maps in ITX Design Studio, you must choose the option to compile them for Linux 64 platform. Alternatively, you can use multi-platform composite maps, at the cost of increased map size. 
 
 ### Installing a PodDisruptionBudget
 
@@ -49,7 +49,7 @@ spec:
 ```
 ### SecurityContextConstraints Requirements
 
-This chart requires a specific type of `SecurityContextConstraints` to be defined and bound to the user or service account of the installation. The predefined `SecurityContextConstraints`, [`nonroot-v2`](https://docs.openshift.com/container-platform/4.18/authentication/managing-security-context-constraints.html), has been verified for this chart.  If your user or service account is bound to this `SecurityContextConstraints` resource, you can proceed to install the chart.
+This chart requires a specific type of `SecurityContextConstraints` to be defined and bound to the user or service account of the installation. The predefined `SecurityContextConstraints`, [`nonroot-v2`](https://docs.openshift.com/container-platform/4.20/authentication/managing-security-context-constraints.html), has been verified for this chart.  If your user or service account is bound to this `SecurityContextConstraints` resource, you can proceed to install the chart.
 
 Below is a `SecurityContextConstraints` (SCC) which can be used for finer control of the permissions and capabilities needed to install this chart. It is modeled after the predefined `nonroot-v2` SCC but with the added restriction of only permitting user and group ID, 1001, which is required by ITX Launcher Server.
 
@@ -131,7 +131,7 @@ NOTE: The above suggested configuration settings should be adjusted based on you
 
 ## Limitations
 
-* ITX Launcher Server is supported on OpenShift 4.18, and on Linux 64 only. This means that any maps designed to run on other platforms, such as those using adapters supported on Windows operating system only, will not be able run in ITX LS.
+* ITX Launcher Server is supported on OpenShift 4.20, and on Linux 64 only. This means that any maps designed to run on other platforms, such as those using adapters supported on Windows operating system only, will not be able run in ITX LS.
 * Because of the unique characteristics of running workloads in Kubernetes environments compared to running them in on-prem environments, existing ITX maps may require adjustments before they can be run in ITX LS, especially if they rely on invoking custom tools or applications, or are making assumptions about the underlying host's operating system, network, local storage or other system-level resources.
 * Any files referenced by the maps must assume /data/maps path as the map directory. If a map writes to a file without specifying its path, the file will be created in the /data/maps directory.
 
@@ -139,7 +139,7 @@ NOTE: The above suggested configuration settings should be adjusted based on you
 
 ITX Launcher Server can be installed in an online (connected) cluster using command line tools. Download and install `oc` and `helm` command line tools. 
 
-  - [oc](https://docs.openshift.com/container-platform/4.18/cli_reference/openshift_cli/getting-started-cli.html) - for interacting with the OpenShift Cluster
+  - [oc](https://docs.openshift.com/container-platform/4.20/cli_reference/openshift_cli/getting-started-cli.html) - for interacting with the OpenShift Cluster
   - [helm](https://helm.sh/docs/intro/install/) - for installing and configuring the embedded chart
 
 Run the following command, after replacing the `<target_namespace>` placeholder with the name of the namespace to which you wish to install the helm chart.
@@ -177,8 +177,8 @@ Whenever changes are made to the below parameters during a Helm upgrade, the pod
 | -------------------------------------- | --------------------------------------------------------------- | --------------- |
 | `image.registry`                       | Image registry and namespace                                    | `"cp.icr.io/cp"`   |
 | `image.repository`                     | Image repository                                                | `"ibm-itx-ls"` |
-| `image.digest`                         | Image digest                                                    | `"sha256:77c7a91a8537ff45a126a51e4d82c410cdc0e12b10f4bfb6eb9a79541298426c"` |
-| `image.tag`                            | Image tag                                                       | `"11.0.2.0.20250926"` |
+| `image.digest`                         | Image digest                                                    | `"sha256:8e242d20d31d9664eaa7436dffbfdd7b03aedf3312a71d9d45ac1f8a2784ff87"` |
+| `image.tag`                            | Image tag                                                       | `"11.0.3.0.20260625"` |
 | `image.pullSecret`                     | Image pull secret                                               | `"ibm-encryption-key"` |
 | `image.pullPolicy`                     | Image pull policy                                               | `"Always"`       |
 | `image.pullPolicyOverride`             | Use pullPolicy instead of 'Always' when using tag               | `false`       |
@@ -276,7 +276,8 @@ Whenever changes are made to the below parameters during a Helm upgrade, the pod
 | -------------------------------------- | --------------------------------------------------------------- | --------------- |
 | `route.enabled`                        | Create route for outside access to the service                  | `true` |
 | `route.host`                           | Explicit host name of the route                                 | `""` |
-|                                        |                                                                 |                                                                |
+| `route.annotations`                    | Add route annotation for backend timeout                        | `{}` |
+|                                        |                                                                 |      |
 
 ### Ingress parameters 
 
@@ -399,6 +400,15 @@ Whenever changes are made to the below parameters during a Helm upgrade, the pod
 |                                          |                                                               |       |
 
 The "config.yaml" settings that are not listed above can also be overridden by providing the "camel" case equivalent. See the "config.yaml" template file for exact field names. 
+
+### Service Mesh parameters
+
+| Parameter                                | Description                                                   | Default    |
+| ---------------------------------------- | ------------------------------------------------------------- | ---------- |
+| `istio.enabled`                          | Enable service mesh                                           | `false` <sup>1</sup> |
+|                                          |                                                               |            |
+
+<sup>1</sup> See `values.yaml` for detailed configuration parameters and customizations.
 
 ## HTTP/S connectivity
 
@@ -702,6 +712,7 @@ As a reference, this table lists the ITX LS product versions and their correspon
 
 | ITX product version    | Helm chart version |
 | ---------------------- | ------------------ |
+| `11.0.3`               | `3.2.*`            |
 | `11.0.2`               | `3.1.*`            |
 | `10.1.2`               | `2.0.*`            |
 
@@ -742,7 +753,7 @@ ITX Launcher Server enables an organization to integrate industry-based customer
 
 CIS Benchmarks are best practices for the secure configuration of a target system. CIS Benchmarks are developed through a unique consensus-based process comprised of cybersecurity professionals and subject matter experts around the world. CIS benchmark guides are developed and accepted by government, business, industry, and academia.
 
-CIS Benchmarks for Kubernetes and Red Hat OpenShift Container platform environments are available for download from the [CIS Benchmarks website](https://learn.cisecurity.org/benchmarks). These benchmark guides provide information on hardening the master and worker nodes in the OpenShift cluster. Guidance on hardening the Red Hat Enterprise Linux OS can be found in the [Red Hat documentation](https://docs.openshift.com/container-platform/4.18/security/container_security/security-hardening.html). 
+CIS Benchmarks for Kubernetes and Red Hat OpenShift Container platform environments are available for download from the [CIS Benchmarks website](https://learn.cisecurity.org/benchmarks). These benchmark guides provide information on hardening the master and worker nodes in the OpenShift cluster. Guidance on hardening the Red Hat Enterprise Linux OS can be found in the [Red Hat documentation](https://docs.openshift.com/container-platform/4.20/security/container_security/security-hardening.html). 
 
 ITX Launcher Server has been hardened to a level that satisfies the IBM certification requirements for Container Software. Users are responsible for hardening of the nodes in the cluster that meets their security policies and requirements. 
 
@@ -760,8 +771,8 @@ You do not need to complete any manual actions to prepare the license audit snap
 
 For general information about the IBM Sterling Transformation Extender product portfolio, check the [Overview]( https://www.ibm.com/products/transformation-extender) page.
 
-For more technical details about IBM Sterling Transformation Extender in general, including the design of maps and flows with the ITX Design Studio and ITX Integration Flow Designer for use with ITX LS, refer to the ITX [Knowledge Center](https://www.ibm.com/docs/en/ste/11.0.2).
+For more technical details about IBM Sterling Transformation Extender in general, including the design of maps and flows with the ITX Design Studio and ITX Integration Flow Designer for use with ITX LS, refer to the ITX [Knowledge Center](https://www.ibm.com/docs/en/ste/11.0.3).
 
-For additional information about the IBM Sterling Transformation Extender Launcher Container product, refer to this [support page](https://www.ibm.com/support/pages/node/7244607).
+For additional information about the IBM Sterling Transformation Extender Launcher Container product, refer to this [support page](https://www.ibm.com/support/pages/node/7274355).
 
 ---
