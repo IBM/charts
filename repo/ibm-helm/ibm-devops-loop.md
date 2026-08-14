@@ -53,6 +53,11 @@ enabled, set the following value in the installation script:
 HARBOR_ENABLED=true
 ```
 
+The installer runs the base Loop install with Harbor disabled first. If
+`HARBOR_ENABLED=false`, it exits after the base install; if
+`HARBOR_ENABLED=true`, it waits for release jobs before the Harbor enablement
+upgrade.
+
 Harbor requires S3-compatible object storage. Set these values before running
 the installer:
 
@@ -145,9 +150,9 @@ The SCC is not automatically rendered by Helm because it is stored under
 checks that the SCC exists and is bound correctly before enabling Harbor, but it
 does not silently create or modify the SCC.
 
-If `https://harbor.${DOMAIN}` is not resolvable in your OpenShift environment,
-set `HARBOR_EXTERNAL_URL` to a DNS-resolvable OpenShift router-wildcard URL for
-Harbor before running the installer.
+For OpenShift, set `HARBOR_EXTERNAL_URL` to the full HTTPS URL for the fixed
+Harbor Route hostname when one is required. The hostname must resolve through
+the OpenShift router wildcard DNS.
 
 ## Install
 
@@ -243,7 +248,7 @@ HARBOR_OIDC_ADMIN_GROUP=
 #Required
 NAMESPACE=devops-loop
 HELM_NAME=devops-loop
-LOOP_CHART_VERSION=2.0.200
+LOOP_CHART_VERSION=2.0.201
 
 #Optional Additional Helm options
 ADDITIONAL_HELM_OPTIONS=""
@@ -374,6 +379,15 @@ run_install() {
     echo "Harbor is disabled. DevOps Loop installation completed."
     return 0
   fi
+
+  echo "Waiting for release jobs to complete before enabling Harbor..."
+  for job in $(kubectl get jobs -n "${NAMESPACE}" \
+    -l "app.kubernetes.io/instance=${HELM_NAME}" \
+    -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'); do
+    kubectl get job "${job}" -n "${NAMESPACE}" >/dev/null 2>&1 || continue
+    kubectl wait --for=condition=complete "job/${job}" -n "${NAMESPACE}" --timeout=900s 2>/dev/null || \
+    { kubectl get job "${job}" -n "${NAMESPACE}" >/dev/null 2>&1 && return 1 || continue; }
+  done
 
   echo "Validating Harbor prerequisites..."
 
@@ -588,12 +602,12 @@ Fetch chart for install:
 
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-loop --version 2.0.200
+helm pull --untar ibm-helm/ibm-devops-loop --version 2.0.201
 ```
 
 ```bash
 #Pull ibm helm charts
-LOOP_CHART_VERSION=2.0.200
+LOOP_CHART_VERSION=2.0.201
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
 helm pull --untar ibm-helm/ibm-devops-loop --version ${LOOP_CHART_VERSION}
 #
@@ -687,8 +701,8 @@ HARBOR_TRIVY_STORAGE_CLASS=
 # Users in this group become Harbor system administrators.
 HARBOR_OIDC_ADMIN_GROUP=
 
-# Optional Harbor external URL. Set this when the default harbor.${DOMAIN}
-# hostname is not resolvable by cluster DNS.
+# Optional Harbor external URL. Leave empty unless a fixed external Harbor URL
+# must be passed to the Harbor chart.
 HARBOR_EXTERNAL_URL=
 
 # OpenShift SCC preflight values for optional Harbor integration.
@@ -697,10 +711,6 @@ HARBOR_SERVICE_ACCOUNT="${HARBOR_SERVICE_ACCOUNT:-harbor}"
 HARBOR_SCC_NAME="${HARBOR_SCC_NAME:-harbor-uid-10000-${NAMESPACE}}"
 
 ROOT_DIR=./ibm-devops-loop
-# Patch DevOps Deploy agent helm chart role.yaml for Loop v2.0.200
-ROLE_FILE=${ROOT_DIR}/charts/ibm-ucda-prod/templates/role.yaml
-sed -i.bak -e '/resources: \["routes"\]/s/resources: \["routes"\]/resources: \["routes", "routes\/custom-host"\]/' ${ROLE_FILE}
-rm -f ${ROLE_FILE}.bak
 
 wait_for_secret() {
   local secret_name="$1"
@@ -887,6 +897,15 @@ run_install() {
     return 0
   fi
 
+  echo "Waiting for release jobs to complete before enabling Harbor..."
+  for job in $(kubectl get jobs -n "${NAMESPACE}" \
+    -l "app.kubernetes.io/instance=${HELM_NAME}" \
+    -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'); do
+    kubectl get job "${job}" -n "${NAMESPACE}" >/dev/null 2>&1 || continue
+    kubectl wait --for=condition=complete "job/${job}" -n "${NAMESPACE}" --timeout=900s 2>/dev/null || \
+    { kubectl get job "${job}" -n "${NAMESPACE}" >/dev/null 2>&1 && return 1 || continue; }
+  done
+
   echo "Validating Harbor prerequisites..."
 
   if [ -z "${HARBOR_S3_BUCKET}" ]; then
@@ -990,8 +1009,7 @@ run_install() {
 
   echo "DevOps Loop + Harbor installation completed."
   echo ""
-  echo "Harbor URL:"
-  echo "  https://harbor.${DOMAIN}"
+  echo "Harbor is available from the DevOps Loop application switcher."
   echo ""
   echo "Monitor Harbor pods:"
   echo "  oc get pods -n ${NAMESPACE} | grep harbor"
