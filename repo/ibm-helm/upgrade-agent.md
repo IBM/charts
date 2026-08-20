@@ -13,7 +13,8 @@ The IBM Z Upgrade agent enables system programmers to perform z/OS upgrades thro
 Lists software instance details | Shows detailed metadata of a given software instance such as its Name, Description, Global Zone, Target Zone, and so on.
 Retrieves missing FIXCATs by software instance | Identifies missing FIXCAT Updates for specific software instances and systems.
 Retrieves missing FIXCATs by software product | Identifies missing FIXCAT updates for software instances associated with the specified products and systems.
-Retrieves missing CRITICAL updates by software instance | Identifies missing  CRITICAL Updates such as HIPERs and PEs for specific software instances and systems.
+Retrieves missing CRITICAL updates by software instance | Identifies missing CRITICAL updates such as HIPERs and PEs for specific software instances and systems.
+Retrieves missing CRITICAL updates by HOLD class | Filters and retrieves missing critical fixes by specific HOLD class — HIPERs, PEs, or SECINT — for a given software instance or system.
 Acquires missing FIXCAT and CRITICAL updates | Retrieves the required PTFs for the specified RESOLVERS or FIXCAT names.
 Monitors PTF acquisition job status| Tracks the progress and current status of background jobs initiated to acquire PTFs.
 Installs the acquired PTFs | Begins the installation or update process for the requested PTFs.
@@ -332,6 +333,10 @@ After deployment, the agent becomes active and is available for selection in the
       - Can you show software instance available for system AQFT?
 
       - Can you retrieve missing fixcat updates for software instance Watsonx-Testing on system S2?
+
+      - Can you retrieve missing HIPERs for software instance Watsonx-Testing on system S2?
+
+      - Can you show missing SECINTs for software instance Watsonx-Testing on system S2?
 
     Responses are displayed either in a tabular format or as a sentence, depending on the context.
 
