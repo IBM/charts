@@ -358,6 +358,7 @@ The Helm chart has the following values.
 |          | dbVolume.size | If createDatasbase equals "true", specifies the size of the persistent volume used by the database. | |
 | secureConnections  | required | Specify whether DevOps Deploy server connections are required to be secure | Default value is "true" |
 |                    | tlsSecret | Name of Kubernetes TLS secret that contains the signed certificate for the Deploy server | |
+|                    | disableHTTP2 | Specify whether to disable HTTP2 connections to the DevOps Deploy server | Default value is "false" |
 | secret | name | Kubernetes secret which defines required DevOps Deploy passwords. | You may leave this blank to use default name of HelmReleaseName-secrets where HelmReleaseName is the name of your Helm Release, otherwise specify the secret name here. If name is left blank and HelReleaseName-secrets does not exist in the namepace, then a default secret will be automatically created with randomized values for the passwords. |
 | license | accept | Set to true to indicate you have read and agree to license agreements : https://ibm.biz/devops-deploy-license | false |
 |  | serverURL | Information required to connect to the DevOps Deploy license server. | Empty (default) to begin a 60-day evaluation license period.|
