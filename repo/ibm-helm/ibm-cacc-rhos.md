@@ -82,7 +82,7 @@ Custom SecurityContextConstraints definition:
 ## Installing the Chart
 
 IBM Cognos Analytics Certified Containers helm chart is located at https://github.com/IBM/charts/tree/master/repo/ibm-helm.  
-The name of the chart is ibm-cacc-prod-{HELM_CHART_VERSION}.tgz where HELM_CHART_VERSION is ibm-cacc-prod chart version starting from 1.0.0
+The name of the chart is ibm-cacc-rhos-{HELM_CHART_VERSION}.tgz where HELM_CHART_VERSION is ibm-cacc-rhos chart version starting from 1.0.0
 
 ### 1. Pre-install cluster configuration
 Create a namespace of your desired name
@@ -284,7 +284,7 @@ In an editor, open the caConfiguration.yaml file and update the fields to repres
 $ export NAMESPACE=ns1
 $ export HELM_CHART_VERSION=1.1.0
 
-$ helm install -f ${OVERRIDE_FILE} ca-instance https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm/ibm-cacc-prod-{HELM_CHART_VERSION}.tgz  --version {HELM_CHART_VERSION} --namespace ${NAMESPACE}
+$ helm install -f ${OVERRIDE_FILE} ca-instance https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm/ibm-cacc-rhos-{HELM_CHART_VERSION}.tgz  --version {HELM_CHART_VERSION} --namespace ${NAMESPACE}
 ```
 ## Verifying the Chart
 See the instruction (from NOTES.txt within chart) after the helm installation completes for chart verification. The instruction can also be viewed by running the command: helm status my-release.
@@ -310,7 +310,7 @@ The Configuration data is an optional PVC. When enabled, it will persist the con
 
 Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the deployment and report an error, similar to the following
 
-Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/configDataCheck.yaml:24:10): The provided PVC configdata-pvc does NOT exist in the namespace <namespace>
+Error: INSTALLATION FAILED: execution error at (ibm-cacc-rhos/templates/checks/configDataCheck.yaml:24:10): The provided PVC configdata-pvc does NOT exist in the namespace <namespace>
 
 When the Configuration PVC is provided, the configuration0.properties file, which holds advanced properties set via the "Manage > Configuration > System" UI (Glass URI) in Cognos Analytics and facilitates synchronization across distributed servers, will be persisted. If the Configuration PVC is not configured, the CM configuration data will NOT be persisted and will be lost when the CM pod restarts.
 ```
@@ -322,7 +322,7 @@ The Deployment PVC is an optional PVC. The PVC can be preloaded with Cognos Anal
 
 Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the deployment and report an error, similar to the following
 
-Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/deploymentCheck.yaml:24:10): The provided PVC deployment-pvc does NOT exist in the namespace cacc <namespace>
+Error: INSTALLATION FAILED: execution error at (ibm-cacc-rhos/templates/checks/deploymentCheck.yaml:24:10): The provided PVC deployment-pvc does NOT exist in the namespace cacc <namespace>
 
 The Cognos Analytics PVC is the designated repository for importing and exporting content archives (compressed .zip files) between environments. It serves as the central bridge for content mobility, enabling the transfer of packages, reports, folders, and configuration data across environments, such as from development to testing or production.
 ```
@@ -334,7 +334,7 @@ The External Object Storage (EOS) is an optional PVC. You can configure Content 
 
 Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the deployment and report an error, similar to the following
 
-Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/eosCheck.yaml:24:10): The provided PVC eos-pvc does NOT exist in the namespace <namespace>
+Error: INSTALLATION FAILED: execution error at (ibm-cacc-rhos/templates/checks/eosCheck.yaml:24:10): The provided PVC eos-pvc does NOT exist in the namespace <namespace>
 ```
 configs:
   pvcExternalObjectStorage:
@@ -345,7 +345,7 @@ The PVC must be created with an accessMode of ReadWriteOnce
 
 Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the deployment and report an error, similar to the following
 
-Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/powercubeObjectCheck.yaml:25:10): The provided PVC powercubes-pvc does NOT exist in the namespace <namespace>
+Error: INSTALLATION FAILED: execution error at (ibm-cacc-rhos/templates/checks/powercubeObjectCheck.yaml:25:10): The provided PVC powercubes-pvc does NOT exist in the namespace <namespace>
 
 Cognos Analytics supports external object storage (such as Amazon S3, Azure Blob Storage, or IBM Cloud Object Storage) to manage data and optimize performance. Users can create connections, store uploaded files, save data sets as parquet files, store SSL certificates for data servers, and archive report outputs. It enhances scalability and reduces content store size.
 ```
@@ -360,7 +360,7 @@ https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes
 
 **Note:** If a PVC is specified and does not exist, Helm will stop the deployment and report an error:
 ```
-Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/artifactsObjectCheck.yaml:24:10): The provided PVC artifact-pvc does NOT exist in the namespace <namespace>
+Error: INSTALLATION FAILED: execution error at (ibm-cacc-rhos/templates/checks/artifactsObjectCheck.yaml:24:10): The provided PVC artifact-pvc does NOT exist in the namespace <namespace>
 ```
 
 To register the Artifacts PVC with your CACC instance, provide the PVC name in the `configs.pvcArtifactsRootFolder` setting. When CACC deploys, the artifacts will be automatically ingested into the services.
@@ -455,7 +455,7 @@ configs:
 5. Deploy/upgrade CACC - artifacts will be automatically ingested into services.
 ```bash
 helm upgrade -f ${OVERRIDE_FILE} ca-instance \
-https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm/ibm-cacc-prod-{HELM_CHART_VERSION}.tgz \
+https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm/ibm-cacc-rhos-{HELM_CHART_VERSION}.tgz \
 --version {HELM_CHART_VERSION} \
 --namespace ${NAMESPACE}
 ```
@@ -474,7 +474,7 @@ Optional PVC for Content Manager temporary storage (session data, temp files). W
 
 Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the deployment and report an error, similar to the following
 
-Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/tmpPvcChecks.yaml:24:10): The provided PVC cm-tmp-pvc does NOT exist in the namespace <namespace>
+Error: INSTALLATION FAILED: execution error at (ibm-cacc-rhos/templates/checks/tmpPvcChecks.yaml:24:10): The provided PVC cm-tmp-pvc does NOT exist in the namespace <namespace>
 
 ```
 configs:
@@ -488,7 +488,7 @@ Optional PVC for Reporting Service temporary storage (report outputs, temp proce
 
 Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the deployment and report an error, similar to the following
 
-Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/tmpPvcChecks.yaml:24:10): The provided PVC reporting-tmp-pvc does NOT exist in the namespace <namespace>
+Error: INSTALLATION FAILED: execution error at (ibm-cacc-rhos/templates/checks/tmpPvcChecks.yaml:24:10): The provided PVC reporting-tmp-pvc does NOT exist in the namespace <namespace>
 ```
 configs:
   pvcReportingTmp:
@@ -501,7 +501,7 @@ Optional PVC for Dataset Service temporary storage (data processing, temp datase
 
 Note if a PVC is specified, and the PVC doesn't not exist, Helm will stop the deployment and report an error, similar to the following
 
-Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/tmpPvcChecks.yaml:24:10): The provided PVC dss-tmp-pvc does NOT exist in the namespace <namespace>
+Error: INSTALLATION FAILED: execution error at (ibm-cacc-rhos/templates/checks/tmpPvcChecks.yaml:24:10): The provided PVC dss-tmp-pvc does NOT exist in the namespace <namespace>
 ```
 configs:
   pvcDssTmp:
@@ -533,7 +533,7 @@ Once the configmap is created, provide the configmap name in the override yaml f
 
 Note if a configmap is specified, and the configmap doesn't not exist, Helm will stop the deployment and report an error, similar to the following
 
-Error: INSTALLATION FAILED: execution error at (ibm-cacc-prod/templates/checks/customConfigCheck.yaml:24:10): The provided ConfigMap customproperties does NOT exist in the namespace <namespace>
+Error: INSTALLATION FAILED: execution error at (ibm-cacc-rhos/templates/checks/customConfigCheck.yaml:24:10): The provided ConfigMap customproperties does NOT exist in the namespace <namespace>
 ```
 configs:
   configMapCustomProperties:
@@ -849,6 +849,101 @@ For a complete list of available advanced properties, refer to the IBM Cognos An
 |global.globalCookieSecure|Set secure cookie|""|
 |global.cookieCAMPassportHttpOnly|Set HTTP-only flag for CAM Passport cookie to prevent client-side script access.|false|
 |global.globalHealthCheckDetails|Health Check details|false|
+
+## Pod Scheduling (Affinity, Anti-Affinity, Node Selector, Tolerations)
+
+The chart supports configuring pod scheduling rules so that CA pods can be pinned to specific nodes, spread across availability zones, or co-located with related workloads. All settings are optional — leaving them empty uses the default Kubernetes scheduler behaviour.
+
+> **Important:** The chart always enforces a built-in `nodeAffinity` rule requiring `kubernetes.io/arch: amd64` on every pod, regardless of any user-supplied scheduling values. User-supplied `scheduling.nodeAffinity` terms are **merged** with this built-in rule, not replaced.
+
+> **Warning:** Using `requiredDuringSchedulingIgnoredDuringExecution` for pod anti-affinity requires every node in the cluster to carry the `topologyKey` label. Pods will fail to schedule if any node is missing that label.
+
+### Global scheduling parameters
+
+These values apply to all core CA service pods. Per-service overrides are documented in the next section.
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `scheduling.nodeSelector` | Key/value node labels. All CA pods are only scheduled onto nodes that match every label. | `{}` |
+| `scheduling.tolerations` | List of tolerations. Allows CA pods to be scheduled on nodes carrying matching taints. | `[]` |
+| `scheduling.podAffinity` | Pod affinity rules. Attracts CA pods toward nodes already running pods matching the selector. | `{}` |
+| `scheduling.podAntiAffinity` | Pod anti-affinity rules. Spreads CA pods away from nodes running matching pods. | `{}` |
+| `scheduling.nodeAffinity` | Additional node affinity terms merged with the built-in `kubernetes.io/arch=amd64` rule. | `{}` |
+
+### Per-service scheduling overrides
+
+Each core CA service also accepts the following four keys inside its `services.<svcName>` section. When set (non-empty), the per-service value takes precedence over the global `scheduling.*` value for that pod only.
+
+| Parameter pattern | Description | Default |
+|---|---|---|
+| `services.<svcName>.nodeSelector` | Node selector override for this pod only. | `{}` |
+| `services.<svcName>.tolerations` | Tolerations override for this pod only. | `[]` |
+| `services.<svcName>.podAffinity` | Pod affinity override for this pod only. | `{}` |
+| `services.<svcName>.podAntiAffinity` | Pod anti-affinity override for this pod only. | `{}` |
+
+Where `<svcName>` is one of: `contentManagerService`, `reportingService`, `restService`, `uiService`, `smartsService`, `dataService`, `agenticAIService`, `caIngressService`.
+
+### Example 1 — Spread reporting pods across availability zones (soft anti-affinity)
+
+```yaml
+scheduling:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: ibm-ca
+          topologyKey: topology.kubernetes.io/zone
+```
+
+### Example 2 — Restrict all CA pods to a dedicated node pool (node selector + hard node affinity)
+
+```yaml
+scheduling:
+  nodeSelector:
+    node-pool: cognos
+
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: node-pool
+              operator: In
+              values:
+                - cognos
+```
+
+### Example 3 — Allow CA pods to run on tainted memory-optimised nodes
+
+```yaml
+scheduling:
+  tolerations:
+    - key: "workload-type"
+      operator: "Equal"
+      value: "memory-optimised"
+      effect: "NoSchedule"
+```
+
+### Example 4 — Override scheduling for the reporting pod only
+
+```yaml
+services:
+  reportingService:
+    nodeSelector:
+      node-pool: reporting
+    tolerations:
+      - key: "dedicated"
+        operator: "Equal"
+        value: "reporting"
+        effect: "NoSchedule"
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app: ca-reporting
+          topologyKey: kubernetes.io/hostname
+```
 
 ## Service Monitors and Openshift Security Context Constraints (SCC)
 OpenShift Security Context Constraints (SCCs) are critical objects that define policies controlling pod/container permissions and security settings, such as running as root, accessing host volumes, or using specific user IDs.
@@ -1343,7 +1438,7 @@ services:
 Or via command line:
 
 ```bash
-helm upgrade <release-name> ibm-cacc-prod \
+helm upgrade <release-name> ibm-cacc-rhos \
   --set services.agenticAIService.enableExternalOpenSearch=true \
   -n <namespace>
 ```
@@ -1463,7 +1558,7 @@ services:
 Or via command line:
 
 ```bash
-helm upgrade <release-name> ibm-cacc-prod \
+helm upgrade <release-name> ibm-cacc-rhos \
   --set services.agenticAIService.enableExternalRedis=true \
   -n <namespace>
 ```
@@ -1515,7 +1610,7 @@ kubectl create secret generic ca-external-redis-credentials-secret \
   -n "$NAMESPACE"
 
 # Step 4: Enable external Redis
-helm upgrade ca-instance ibm-cacc-prod \
+helm upgrade ca-instance ibm-cacc-rhos \
   --set services.agenticAIService.enableExternalRedis=true \
   -n "$NAMESPACE"
 
@@ -1634,7 +1729,7 @@ litellm:
 Deploy or upgrade your CACC instance with LiteLLM enabled:
 
 ```bash
-helm upgrade ca-instance ./ibm-cacc-prod \
+helm upgrade ca-instance ./ibm-cacc-rhos \
   -f your-values.yaml \
   -n ${NAMESPACE}
 ```
@@ -1665,6 +1760,119 @@ All model configurations are stored in the PostgreSQL database and managed throu
 
 
 
+
+## Embedding Service configuration settings
+
+The Embedding Service (`ba-embedding-service`) hosts HuggingFace embedding models in a dedicated pod so that the Agentic AI service no longer loads them in-process. Requests flow as:
+
+```
+ba-agentic-ai → litellm-proxy → embedding-service (port 8120)
+```
+
+The service must be enabled together with `litellm.enabled=true` and `services.agenticAIService.enabled=true`.
+
+### Configuration Parameters
+
+| Parameter | Description | Default |
+| --------- | ----------- | ------- |
+|services.embeddingService.enabled|Enable or disable the Embedding Service|false|
+|services.embeddingService.pullPolicy|Image pull policy. Acceptable values: Always, Never, IfNotPresent|IfNotPresent|
+|services.embeddingService.name|Container image name for the embedding service|ba-embedding-service|
+|services.embeddingService.digest|Image digest. Modify only if instructed by Cognos Support|Current digest is included in the Helm chart|
+|services.embeddingService.tag|Image tag|latest|
+|services.embeddingService.registry|Override registry for the embedding image. Leave empty to use `image.registry`|""|
+|services.embeddingService.replicas|Number of embedding service replicas. Two replicas are recommended for rolling-update availability.|2|
+|services.embeddingService.targetPort|Container port the embedding service listens on|8120|
+|services.embeddingService.serviceTargetType|Transport protocol inside the container. `https` sets `SSL_ENABLED=true` in the container and enables TLS; `http` disables SSL.|http|
+|services.embeddingService.certsDir|Directory inside the container where TLS certificates are mounted (only used when `serviceTargetType: https`)|/app/certs|
+|services.embeddingService.requestsCpu|CPU request for the embedding service container|"1"|
+|services.embeddingService.requestsMemory|Memory request for the embedding service container|2Gi|
+|services.embeddingService.limitsCpu|CPU limit for the embedding service container|"4"|
+|services.embeddingService.limitsMemory|Memory limit for the embedding service container|4Gi|
+|services.embeddingService.supportedModelIds|JSON array of embedding models baked into the image. Passed as the `SUPPORTED_MODEL_IDS` env var.|See values.yaml|
+
+### How SSL works
+
+When `serviceTargetType: https` is set the chart injects `SSL_ENABLED=true` and `CERTS_DIR` into the container. The container's `entrypoint.sh` reads `SSL_ENABLED` and starts uvicorn with `--ssl-certfile` / `--ssl-keyfile` from `certsDir`. The Kubernetes readiness/liveness probes automatically switch to `scheme: HTTPS`, and the `EMBEDDING_SERVICE_URL` passed to litellm switches to `https://`.
+
+On the litellm side, an init container (`build-combined-ca`) concatenates the certifi system CA bundle already in the litellm image with the shared `ca-certificates` ConfigMap bundle, producing a combined bundle. When `litellm.sslVerify: true`, litellm uses this combined bundle to verify the embedding service certificate without losing trust of public CAs.
+
+### Prerequisites
+
+Before enabling the Embedding Service ensure the following are also enabled:
+
+- `services.agenticAIService.enabled: true`
+- `litellm.enabled: true`
+
+For HTTP (default) no Secrets are required.
+
+For HTTPS, the `ca-certificates` ConfigMap must already exist (see [TLS Certificate Setup](#tls-certificate-setup-for-https-deployment-optional)), plus the embedding pod TLS secret must be created **before** `helm install`/`helm upgrade`:
+
+```bash
+kubectl create secret tls <RELEASE_NAME>-embedding-certs \
+    --cert=<path_to_server.crt> \
+    --key=<path_to_server.key> \
+    -n ${NAMESPACE}
+```
+
+### Override Example 1: Local embedding only (HTTP, no TLS)
+
+The simplest configuration — plain HTTP, no Secrets required.
+
+```yaml
+services:
+  agenticAIService:
+    enabled: true
+    caBaseUrl: "http://caproxy-frontdoor-service.<namespace>.svc:9300/bi/v1"
+
+  embeddingService:
+    enabled: true   # serviceTargetType defaults to http
+
+litellm:
+  enabled: true
+```
+
+### Override Example 2: Local embedding with HTTPS
+
+**Step 1 — create embedding TLS secret (before helm deploy):**
+```bash
+RELEASE=<your-release-name>
+NAMESPACE=<your-namespace>
+
+kubectl create secret tls ${RELEASE}-embedding-certs \
+    --cert=<path_to_server.crt> \
+    --key=<path_to_server.key> \
+    -n ${NAMESPACE}
+```
+
+**Step 2 — override values:**
+```yaml
+services:
+  agenticAIService:
+    enabled: true
+
+  embeddingService:
+    enabled: true
+    serviceTargetType: https   # sets SSL_ENABLED=true in container, switches probes to HTTPS
+    certsDir: /app/certs       # must contain tls.crt and tls.key from secret above
+    replicas: 2
+    requestsCpu: "1"
+    requestsMemory: 2Gi
+    limitsCpu: "4"
+    limitsMemory: 4Gi
+
+litellm:
+  enabled: true
+  sslVerify: true              # verify embedding-service cert using ca-certificates ConfigMap
+```
+
+### Resource Sizing Reference
+
+| Pod | Replicas | CPU Request | CPU Limit | Memory Request | Memory Limit |
+|:----|:--------:|------------:|----------:|---------------:|-------------:|
+| ca-embedding-service | 2 | 1 | 4 | 2Gi | 4Gi |
+
+Two replicas are recommended so one is always available during rolling updates. Both replicas pre-load the models independently — the service is fully stateless.
 
 ## Data Service configuration settings
 These configuration settings can be enabled to modify the execution profile of the DataSet Service 
