@@ -850,6 +850,101 @@ For a complete list of available advanced properties, refer to the IBM Cognos An
 |global.cookieCAMPassportHttpOnly|Set HTTP-only flag for CAM Passport cookie to prevent client-side script access.|false|
 |global.globalHealthCheckDetails|Health Check details|false|
 
+## Pod Scheduling (Affinity, Anti-Affinity, Node Selector, Tolerations)
+
+The chart supports configuring pod scheduling rules so that CA pods can be pinned to specific nodes, spread across availability zones, or co-located with related workloads. All settings are optional — leaving them empty uses the default Kubernetes scheduler behaviour.
+
+> **Important:** The chart always enforces a built-in `nodeAffinity` rule requiring `kubernetes.io/arch: amd64` on every pod, regardless of any user-supplied scheduling values. User-supplied `scheduling.nodeAffinity` terms are **merged** with this built-in rule, not replaced.
+
+> **Warning:** Using `requiredDuringSchedulingIgnoredDuringExecution` for pod anti-affinity requires every node in the cluster to carry the `topologyKey` label. Pods will fail to schedule if any node is missing that label.
+
+### Global scheduling parameters
+
+These values apply to all core CA service pods. Per-service overrides are documented in the next section.
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `scheduling.nodeSelector` | Key/value node labels. All CA pods are only scheduled onto nodes that match every label. | `{}` |
+| `scheduling.tolerations` | List of tolerations. Allows CA pods to be scheduled on nodes carrying matching taints. | `[]` |
+| `scheduling.podAffinity` | Pod affinity rules. Attracts CA pods toward nodes already running pods matching the selector. | `{}` |
+| `scheduling.podAntiAffinity` | Pod anti-affinity rules. Spreads CA pods away from nodes running matching pods. | `{}` |
+| `scheduling.nodeAffinity` | Additional node affinity terms merged with the built-in `kubernetes.io/arch=amd64` rule. | `{}` |
+
+### Per-service scheduling overrides
+
+Each core CA service also accepts the following four keys inside its `services.<svcName>` section. When set (non-empty), the per-service value takes precedence over the global `scheduling.*` value for that pod only.
+
+| Parameter pattern | Description | Default |
+|---|---|---|
+| `services.<svcName>.nodeSelector` | Node selector override for this pod only. | `{}` |
+| `services.<svcName>.tolerations` | Tolerations override for this pod only. | `[]` |
+| `services.<svcName>.podAffinity` | Pod affinity override for this pod only. | `{}` |
+| `services.<svcName>.podAntiAffinity` | Pod anti-affinity override for this pod only. | `{}` |
+
+Where `<svcName>` is one of: `contentManagerService`, `reportingService`, `restService`, `uiService`, `smartsService`, `dataService`, `agenticAIService`, `caIngressService`.
+
+### Example 1 — Spread reporting pods across availability zones (soft anti-affinity)
+
+```yaml
+scheduling:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: ibm-ca
+          topologyKey: topology.kubernetes.io/zone
+```
+
+### Example 2 — Restrict all CA pods to a dedicated node pool (node selector + hard node affinity)
+
+```yaml
+scheduling:
+  nodeSelector:
+    node-pool: cognos
+
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: node-pool
+              operator: In
+              values:
+                - cognos
+```
+
+### Example 3 — Allow CA pods to run on tainted memory-optimised nodes
+
+```yaml
+scheduling:
+  tolerations:
+    - key: "workload-type"
+      operator: "Equal"
+      value: "memory-optimised"
+      effect: "NoSchedule"
+```
+
+### Example 4 — Override scheduling for the reporting pod only
+
+```yaml
+services:
+  reportingService:
+    nodeSelector:
+      node-pool: reporting
+    tolerations:
+      - key: "dedicated"
+        operator: "Equal"
+        value: "reporting"
+        effect: "NoSchedule"
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app: ca-reporting
+          topologyKey: kubernetes.io/hostname
+```
+
 ## Service Monitors and Openshift Security Context Constraints (SCC)
 OpenShift Security Context Constraints (SCCs) are critical objects that define policies controlling pod/container permissions and security settings, such as running as root, accessing host volumes, or using specific user IDs.
 | Parameter                  | Description                                     | Default                                                    |
@@ -1665,6 +1760,119 @@ All model configurations are stored in the PostgreSQL database and managed throu
 
 
 
+
+## Embedding Service configuration settings
+
+The Embedding Service (`ba-embedding-service`) hosts HuggingFace embedding models in a dedicated pod so that the Agentic AI service no longer loads them in-process. Requests flow as:
+
+```
+ba-agentic-ai → litellm-proxy → embedding-service (port 8120)
+```
+
+The service must be enabled together with `litellm.enabled=true` and `services.agenticAIService.enabled=true`.
+
+### Configuration Parameters
+
+| Parameter | Description | Default |
+| --------- | ----------- | ------- |
+|services.embeddingService.enabled|Enable or disable the Embedding Service|false|
+|services.embeddingService.pullPolicy|Image pull policy. Acceptable values: Always, Never, IfNotPresent|IfNotPresent|
+|services.embeddingService.name|Container image name for the embedding service|ba-embedding-service|
+|services.embeddingService.digest|Image digest. Modify only if instructed by Cognos Support|Current digest is included in the Helm chart|
+|services.embeddingService.tag|Image tag|latest|
+|services.embeddingService.registry|Override registry for the embedding image. Leave empty to use `image.registry`|""|
+|services.embeddingService.replicas|Number of embedding service replicas. Two replicas are recommended for rolling-update availability.|2|
+|services.embeddingService.targetPort|Container port the embedding service listens on|8120|
+|services.embeddingService.serviceTargetType|Transport protocol inside the container. `https` sets `SSL_ENABLED=true` in the container and enables TLS; `http` disables SSL.|http|
+|services.embeddingService.certsDir|Directory inside the container where TLS certificates are mounted (only used when `serviceTargetType: https`)|/app/certs|
+|services.embeddingService.requestsCpu|CPU request for the embedding service container|"1"|
+|services.embeddingService.requestsMemory|Memory request for the embedding service container|2Gi|
+|services.embeddingService.limitsCpu|CPU limit for the embedding service container|"4"|
+|services.embeddingService.limitsMemory|Memory limit for the embedding service container|4Gi|
+|services.embeddingService.supportedModelIds|JSON array of embedding models baked into the image. Passed as the `SUPPORTED_MODEL_IDS` env var.|See values.yaml|
+
+### How SSL works
+
+When `serviceTargetType: https` is set the chart injects `SSL_ENABLED=true` and `CERTS_DIR` into the container. The container's `entrypoint.sh` reads `SSL_ENABLED` and starts uvicorn with `--ssl-certfile` / `--ssl-keyfile` from `certsDir`. The Kubernetes readiness/liveness probes automatically switch to `scheme: HTTPS`, and the `EMBEDDING_SERVICE_URL` passed to litellm switches to `https://`.
+
+On the litellm side, an init container (`build-combined-ca`) concatenates the certifi system CA bundle already in the litellm image with the shared `ca-certificates` ConfigMap bundle, producing a combined bundle. When `litellm.sslVerify: true`, litellm uses this combined bundle to verify the embedding service certificate without losing trust of public CAs.
+
+### Prerequisites
+
+Before enabling the Embedding Service ensure the following are also enabled:
+
+- `services.agenticAIService.enabled: true`
+- `litellm.enabled: true`
+
+For HTTP (default) no Secrets are required.
+
+For HTTPS, the `ca-certificates` ConfigMap must already exist (see [TLS Certificate Setup](#tls-certificate-setup-for-https-deployment-optional)), plus the embedding pod TLS secret must be created **before** `helm install`/`helm upgrade`:
+
+```bash
+kubectl create secret tls <RELEASE_NAME>-embedding-certs \
+    --cert=<path_to_server.crt> \
+    --key=<path_to_server.key> \
+    -n ${NAMESPACE}
+```
+
+### Override Example 1: Local embedding only (HTTP, no TLS)
+
+The simplest configuration — plain HTTP, no Secrets required.
+
+```yaml
+services:
+  agenticAIService:
+    enabled: true
+    caBaseUrl: "http://caproxy-frontdoor-service.<namespace>.svc:9300/bi/v1"
+
+  embeddingService:
+    enabled: true   # serviceTargetType defaults to http
+
+litellm:
+  enabled: true
+```
+
+### Override Example 2: Local embedding with HTTPS
+
+**Step 1 — create embedding TLS secret (before helm deploy):**
+```bash
+RELEASE=<your-release-name>
+NAMESPACE=<your-namespace>
+
+kubectl create secret tls ${RELEASE}-embedding-certs \
+    --cert=<path_to_server.crt> \
+    --key=<path_to_server.key> \
+    -n ${NAMESPACE}
+```
+
+**Step 2 — override values:**
+```yaml
+services:
+  agenticAIService:
+    enabled: true
+
+  embeddingService:
+    enabled: true
+    serviceTargetType: https   # sets SSL_ENABLED=true in container, switches probes to HTTPS
+    certsDir: /app/certs       # must contain tls.crt and tls.key from secret above
+    replicas: 2
+    requestsCpu: "1"
+    requestsMemory: 2Gi
+    limitsCpu: "4"
+    limitsMemory: 4Gi
+
+litellm:
+  enabled: true
+  sslVerify: true              # verify embedding-service cert using ca-certificates ConfigMap
+```
+
+### Resource Sizing Reference
+
+| Pod | Replicas | CPU Request | CPU Limit | Memory Request | Memory Limit |
+|:----|:--------:|------------:|----------:|---------------:|-------------:|
+| ca-embedding-service | 2 | 1 | 4 | 2Gi | 4Gi |
+
+Two replicas are recommended so one is always available during rolling updates. Both replicas pre-load the models independently — the service is fully stateless.
 
 ## Data Service configuration settings
 These configuration settings can be enabled to modify the execution profile of the DataSet Service 
