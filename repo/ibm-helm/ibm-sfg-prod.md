@@ -1,4 +1,4 @@
-# IBM Sterling File Gateway Enterprise Edition v6.2.2.1
+# IBM Sterling File Gateway Enterprise Edition v6.2.2.1_1
 ## Introduction
 
 IBM Sterling File Gateway lets organizations transfer files between partners by using different protocols, conventions for naming files, and file formats. A scalable and security-enabled gateway, Sterling File Gateway enables companies to consolidate all their internet-based file transfers on a single edge gateway, which helps secure your B2B collaboration network and the data flowing through it. To find out more, see [IBM Sterling File Gateway](https://www.ibm.com/products/file-gateway) on IBM Marketplace.
@@ -19,10 +19,10 @@ Services
 ## Prerequisites
 
 1. Red Hat OpenShift Container Platform 
-   Version 4.18.0 or later fixes
    Version 4.19.0 or later fixes
-  Version 4.20.0 or later fixes
-  Version 4.21.0 or later fixes
+   Version 4.20.0 or later fixes
+   Version 4.21.0 or later fixes
+   Version 4.22.0 or later fixes
 
 2. Kubernetes version >= 1.33 and <= 1.36
 
@@ -381,7 +381,7 @@ Parameter                                      | Description                    
 `global.license`                               | Accept B2BI/SFG license                                              | `false`
 `global.licenseType`                           | Specify the license edition as per license agreement.                | prod
 `global.image.repository`                      | Repository for B2B docker images                                     | 
-`global.image.tag          `                   | Docker image tag                                                     | `6.2.2.1`
+`global.image.tag          `                   | Docker image tag                                                     | `6.2.2.1_1`
 `global.image.digest          `                | Docker image digest. Takes precedence over tag                       | 
 `global.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `global.image.pullSecret `         			   | Pull secret for repository access                                    | `ibm-entitlement-key`
@@ -444,7 +444,7 @@ Parameter                                      | Description                    
 `dataSetup.enabled`                            | Enable database setup job execution                                  | true
 `dataSetup.upgrade`                            | Upgrade an older release                                             | false
 `dataSetup.image.repository`                 | DB setup container image repository                                   | 
-`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.2.2.1`
+`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.2.2.1_1`
 `dataSetup.image.digest'                      | Docker image digest. Takes precedence over tag                       |
 `dataSetup.image.pullPolicy`                 | Pull policy for repository                                           | `IfNotPresent`
 `dataSetup.image.pullSecret`         		  | Pull secret for repository access                                    |  `ibm-entitlement-key` 
@@ -826,7 +826,7 @@ name	                                         |
 `test.extraAnnotations`                   | Extra or custom Annotations                                    |
 `purge.enabled`                                | Enable external purge job                                            | 'false'
 `purge.image.repository          `             | External purge docker image repository                               | `purge`
-`purge.image.tag          `                    | External purge image tag                                             | `6.2.2.1`
+`purge.image.tag          `                    | External purge image tag                                             | `6.2.2.1_1`
 `purge.image.digest          `                 | External purge image digest. Takes precedence over tag               |
 `purge.image.pullPolicy`                       | Pull policy for external purge docker image                          | `IfNotPresent`
 `purge.image.pullSecret`                       | Pull secret for repository access                                    | `ibm-entitlement-key`
@@ -885,7 +885,7 @@ name	                                         |
 `as4Service.license`                               | Accept AS4/SFG license                                               | `false`
 `as4Service.licenseType`                           | Specify the license edition as per license agreement.                | non-prod
 `as4Service.image.repository`                      | Repository for AS4 docker images                                     |
-`as4Service.image.tag          `                   | Docker image tag                                                     | `6.2.2.1`
+`as4Service.image.tag          `                   | Docker image tag                                                     | `6.2.2.1_1`
 `as4Service.image.digest          `                | Docker image digest. Takes precedence over tag                       |
 `as4Service.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `as4Service.image.pullSecret `                     | Pull secret for repository access                              | 
@@ -907,7 +907,7 @@ name	                                         |
 `identityService.license`                               | Accept Identity/SFG license                                          |false
 `identityService.replicaCount`                             | Identity Service deployment replica count         | 1
 `identityService.image.repository`                      | Repository for Identity docker images                                     |
-`identityService.image.tag          `                   | Docker image tag                                                     | `1.0.0.2`
+`identityService.image.tag          `                   | Docker image tag                                                     | `1.0.0.2.1`
 `identityService.image.digest          `                | Docker image digest. Takes precedence over tag                       |
 `identityService.image.pullPolicy`                      | Pull policy for repository                                      | `IfNotPresent`
 `identityService.image.pullSecret `                     | Pull secret for repository access                              |
