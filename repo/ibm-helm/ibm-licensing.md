@@ -1,4 +1,4 @@
-# Helm-based deployment of IBM Licensing Service (ILS) cluster-scoped resources
+# Helm-based deployment of IBM Licensing Service (ILS) namespace-scoped resources
 
 **Important:**
 - If you are using the IBM Licensing Operator as part of an IBM Cloud Pak, see the documentation for that IBM Cloud Pak to learn more about how to install and use the operator service. For the link to your IBM Cloud Pak documentation, see [IBM Cloud Paks that use Common Services](https://ibm.biz/BdyGwb).
@@ -14,18 +14,21 @@ Red Hat OpenShift Container Platform 4.10 or newer installed on Linux x86_64, Li
 
 ## Prerequisites
 
-Prerequisites depend on the integration of the License Service with an IBM Cloud Pak or IBM Containerized Software. For more information, see the applicable IBM Cloud Pak documentation or [ibm-licensing-operator for stand-alone IBM Containerized Software](https://ibm.biz/BdyGwh).
+The cluster-scoped resources (CRDs, ClusterRoles, ClusterRoleBindings) must be installed first
+via the companion `ibm-licensing-cluster-scoped` chart. For more information, see the applicable
+IBM Cloud Pak documentation or [ibm-licensing-operator for stand-alone IBM Containerized Software](https://ibm.biz/BdyGwh).
 
 ---
 
 ## Chart contents
 
-This chart installs **only cluster-scoped resources** that must be applied once per cluster:
+This chart installs **namespace-scoped resources** for the IBM Licensing Operator:
 
-- **CRDs** – `IBMLicensing` and optional CRDs for custom-resources feature
-- **ClusterRoles / ClusterRoleBindings** – operator control-plane role, operand roles (unrestricted and restricted/nss variants), default-reader role, and optional OperandRequests role
-
-Namespace-scoped resources (Deployment, ServiceAccounts, Roles/RoleBindings, IBMLicensing CR) are managed by the companion `ibm-licensing` chart.
+- **Deployment** – the operator pod
+- **ServiceAccounts** – `ibm-licensing-operator`, `ibm-license-service`, `ibm-license-service-restricted`, `ibm-licensing-default-reader`
+- **Roles / RoleBindings** – namespace-scoped RBAC for the operator and operand service accounts
+- **Roles / RoleBindings in watched namespaces** – per-namespace watch RBAC when `nssEnabled` is true
+- **IBMLicensing CR** – the operand configuration custom resource
 
 ## How to use
 
