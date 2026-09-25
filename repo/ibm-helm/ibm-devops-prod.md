@@ -6,9 +6,9 @@ IBM DevOps Test Hub brings together test data, test environments, and test runs 
 
 ### Resources Required
 
-* [RedHat OpenShift Container Platform](https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/release_notes/ocp-4-20-release-notes) v4.20 or later (x86_64)
-* [Dynamic Volume Provisioning](https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/storage/dynamic-provisioning) supporting accessModes ReadWriteOnce (RWO) and ReadWriteMany (RWX).
-* [Jaeger Operator](https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/service_mesh/service-mesh-2-x#installing-ossm) (Optional) If tests should contribute trace information and Jaeger based reports are required.
+* [RedHat OpenShift Container Platform](https://docs.redhat.com/en/documentation/openshift_container_platform/4.21/html/release_notes/ocp-4-21-release-notes) v4.21 or later (x86_64)
+* [Dynamic Volume Provisioning](https://docs.redhat.com/en/documentation/openshift_container_platform/4.21/html/storage/dynamic-provisioning) supporting accessModes ReadWriteOnce (RWO) and ReadWriteMany (RWX).
+* [Jaeger Operator](https://docs.redhat.com/en/documentation/openshift_container_platform/4.21/html/service_mesh/service-mesh-2-x#installing-ossm) (Optional) If tests should contribute trace information and Jaeger based reports are required.
 
 
 
@@ -24,7 +24,7 @@ To install the product you will need cluster administrator privileges.
 
 ## Red Hat OpenShift SecurityContextConstraints Requirements
 
-The product is compatible with the `restricted` and `restricted-v2` [SecurityContextConstraint](https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/authentication_and_authorization/managing-pod-security-policies).
+The product is compatible with the `restricted` and `restricted-v2` [SecurityContextConstraint](https://docs.redhat.com/en/documentation/openshift_container_platform/4.21/html/authentication_and_authorization/managing-pod-security-policies).
 
 If you would prefer to use the custom ibm-devops-restricted SCC, please do the following before installation:
 
@@ -96,8 +96,8 @@ This change propagates after a couple of minutes. [Further reading](https://clou
 
 ### Local Machine
 
-* [oc](https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/cli_tools/openshift-cli-oc)
-* [helm v4.1.4 or later](https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/building_applications/working-with-helm-charts#installing-helm)
+* [oc](https://docs.redhat.com/en/documentation/openshift_container_platform/4.21/html/cli_tools/openshift-cli-oc)
+* [helm v4.1.4 or later](https://docs.redhat.com/en/documentation/openshift_container_platform/4.21/html/building_applications/working-with-helm-charts#installing-helm)
 
 ### Storage
 
@@ -128,7 +128,7 @@ The pod [`fsGroup`](https://kubernetes.io/docs/tasks/configure-pod-container/sec
 Fetch chart for install:
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-prod --version 11.0.900
+helm pull --untar ibm-helm/ibm-devops-prod --version 12.0.000
 cd ibm-devops-prod
 ```
 
@@ -148,6 +148,7 @@ ENTITLEMENT_REGISTRY_KEY= # from https://myibm.ibm.com/products-services/contain
 RATIONAL_LICENSE_FILE=@rlks.localdomain
 
 helm upgrade --install $HELM_NAME . -n $NAMESPACE \
+  --server-side=true --force-conflicts \
   --create-namespace \
   --set global.domain=$INGRESS_DOMAIN \
   -f values-openshift.yaml \
