@@ -849,6 +849,9 @@ For a complete list of available advanced properties, refer to the IBM Cognos An
 |global.globalCookieSecure|Set secure cookie|""|
 |global.cookieCAMPassportHttpOnly|Set HTTP-only flag for CAM Passport cookie to prevent client-side script access.|false|
 |global.globalHealthCheckDetails|Health Check details|false|
+|global.enableFips|Enable FIPS 140-3 cryptographic mode for Cognos Analytics.|false|
+|global.cryptoStandardConformance|Specifies the cryptographic standard conformance level. Valid values: `NIST_SP_800_131A`, `FIPS_140`.|"NIST_SP_800_131A"|
+|global.extraEnv|List of additional environment variables to inject into all CA service containers. Accepts a YAML list of `name`/`value` pairs.|(empty)|
 
 ## Pod Scheduling (Affinity, Anti-Affinity, Node Selector, Tolerations)
 
@@ -959,8 +962,13 @@ These configuration settings serve as a mapping table for secrets. The default v
 |secretNames.audit_creds|Secret that contains Audit Store Credentials|ca-audit-credentials-secret|
 |secretNames.nc_creds|Secret that contains NoticeCast Credentials|ca-nc-credentials-secret|
 |secretNames.openid_creds|Secret that contains ClientId and Client Secret for OpenId provider|ca-openid-credentials-secret|
+|secretNames.openidProxy_creds|Secret that contains ClientId and Client Secret for the OpenId Proxy provider|ca-openidproxy-credentials-secret|
 |secretNames.ldapbind_creds|Secret that contains LDAP Bind Credentials|ca-ldapbind-credentials-secret|
 |secretNames.mailserver_creds|Secret that contains MailServer credentials|ca-mailserver-credentials-secret|
+|secretNames.opensearch_creds|Secret that contains OpenSearch credentials (username and password) used by the Agentic AI service|ca-opensearch-credentials-secret|
+|secretNames.external_redis_creds|Secret that contains an external Redis connection URL (`url` key). Used when `services.agenticAIService.enableExternalRedis` is true|ca-external-redis-credentials-secret|
+|secretNames.external_opensearch_creds|Secret that contains external OpenSearch connection details (`url`, `username`, `password` keys). Used when `services.agenticAIService.enableExternalOpenSearch` is true|ca-external-opensearch-credentials-secret|
+|secretNames.ca_certs|Optional secret that contains CA certificate bundle for TLS trust|(empty)|
 
 Note if a secret is specified, and the secret doesn't not exist, Helm will stop the deployment and report an error
 ## Ingress configuration settings
@@ -968,6 +976,7 @@ These configuration settings serve as ...
 | Parameter                  | Description                                     | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
 |ingress.createRoute|If set to true will Helm will create a Route. Mainly for Openshift. If deploying in Kubernetes, set this setting to false|true|
+|ingress.createRouteAltera|If set to true, Helm will create an additional (Altera) Route for a second private frontdoor ingress. Mainly for OpenShift.|false|
 |ingress.createLoadBalancer|If set to true, will create a load balancer object for route traffic in to CACC instance. Mainly for Kubernetes (IKS, EKS, AKS, GKE, ...)|false|
 |ingress.overrideHost|If set to true, Helm will override the hostname with the value specified below. Mainly for Openshift. |false|
 |ingress.routeDomain|Provide a domain name for the route. Mainly for Openshift.|" "
@@ -984,6 +993,50 @@ If deploying CACC as a non admin user, will need to have the cluster administrat
 |deploy.createCognosRole|If set to true, Helm will create the CognosRole. To manage the Cognos Role creation outside of Helm, set the value to false|true|
 |deploy.createServiceAccount|If set to true, Helm will create the ServiceAccount. To manage the Service Account creation outside of Helm, set the value to false|true|
 |deploy.serviceAccount|Name of the service account. The default name is cognos-account|cognos-account|
+|deploy.swHubDeployment|Set to true when deploying inside IBM Software Hub (SWHub). Enables SWHub-specific behaviour.|false|
+
+## CA Ingress Service configuration settings
+These configuration settings control the primary frontdoor CA Proxy service that provides ingress into Cognos Analytics.
+| Parameter                  | Description                                     | Default                                                    |
+| -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
+|services.caIngressService.pullPolicy|Configure the update policy for the container images. Acceptable values are Always, Never, or IfNotPresent.|IfNotPresent|
+|services.caIngressService.digest|Modify only if asked to do so by Cognos Support person|Current image digest is included in the Helm chart|
+|services.caIngressService.podName|Pod name for the frontdoor public ingress deployment|ca-proxy-frontdoor-public|
+|services.caIngressService.replicas|Number of CA Ingress service replicas to use on startup|1|
+|services.caIngressService.allowCaApi|Set to false to block all CA REST API requests at the frontdoor, returning HTTP 503. Internal sidecar (pod-to-pod) traffic is not affected.|true|
+|services.caIngressService.enableAutoscaling|Enable Horizontal Pod Autoscaling (HPA)|false|
+|services.caIngressService.minReplicas|The minimum number of replicas to which the autoscaler may scale.|1|
+|services.caIngressService.maxReplicas|The maximum number of replicas to which the autoscaler may scale.|2|
+|services.caIngressService.requestsCpu|Set the CPU request for the container|"100m"|
+|services.caIngressService.requestsMemory|Set the memory request for the container|200Mi|
+|services.caIngressService.limitsCpu|Set the CPU limit for the container|"200m"|
+|services.caIngressService.limitsMemory|Set the memory limit for the container|800Mi|
+|services.caIngressService.pdb.minAvailable|Minimum number of pods that must be available during voluntary disruptions.|1|
+|services.caIngressService.labels|Used to add any labels to caIngressService deployment only|No default|
+|services.caIngressService.annotations|Used to add any annotations to caIngressService deployment only|No default|
+|services.caIngressService.extraEnv|Used to add any extra environment variables to caIngressService deployment|No default|
+
+## CA Ingress Altera Service configuration settings
+These configuration settings control the optional secondary (Altera/private) frontdoor CA Proxy service. Enable via `ingress.createRouteAltera: true` and `services.caIngressAlteraService.enableAlteraIngress: true`.
+| Parameter                  | Description                                     | Default                                                    |
+| -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
+|services.caIngressAlteraService.enableAlteraIngress|Enable or disable the Altera ingress (second private frontdoor) service.|false|
+|services.caIngressAlteraService.pullPolicy|Configure the update policy for the container images. Acceptable values are Always, Never, or IfNotPresent.|IfNotPresent|
+|services.caIngressAlteraService.digest|Modify only if asked to do so by Cognos Support person|Current image digest is included in the Helm chart|
+|services.caIngressAlteraService.podName|Pod name for the frontdoor private ingress deployment|ca-proxy-frontdoor-private|
+|services.caIngressAlteraService.replicas|Number of CA Ingress Altera service replicas to use on startup|1|
+|services.caIngressAlteraService.allowCaApi|Set to false to block all CA REST API requests at the Altera frontdoor, returning HTTP 503. Internal sidecar (pod-to-pod) traffic is not affected.|true|
+|services.caIngressAlteraService.enableAutoscaling|Enable Horizontal Pod Autoscaling (HPA)|false|
+|services.caIngressAlteraService.minReplicas|The minimum number of replicas to which the autoscaler may scale.|1|
+|services.caIngressAlteraService.maxReplicas|The maximum number of replicas to which the autoscaler may scale.|2|
+|services.caIngressAlteraService.requestsCpu|Set the CPU request for the container|"100m"|
+|services.caIngressAlteraService.requestsMemory|Set the memory request for the container|200Mi|
+|services.caIngressAlteraService.limitsCpu|Set the CPU limit for the container|"200m"|
+|services.caIngressAlteraService.limitsMemory|Set the memory limit for the container|800Mi|
+|services.caIngressAlteraService.pdb.minAvailable|Minimum number of pods that must be available during voluntary disruptions.|1|
+|services.caIngressAlteraService.labels|Used to add any labels to caIngressAlteraService deployment only|No default|
+|services.caIngressAlteraService.annotations|Used to add any annotations to caIngressAlteraService deployment only|No default|
+|services.caIngressAlteraService.extraEnv|Used to add any extra environment variables to caIngressAlteraService deployment|No default|
 
 ## Content Manager Service configuration settings
 These configuration settings can be enabled to configure the Content Manager service.
@@ -1001,6 +1054,7 @@ include the CJAP implementation (*.jar) and configuration files.
 | Parameter                  | Description                                     | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
 |services.contentManagerService.cjapConfiguration|Defines a group of properties that allow the product to use a custom Java authentication provider for user authentication|false|
+|services.contentManagerService.cjapSelectableForAuth|Specifies whether the CJAP namespace is selectable for authentication.|true|
 |services.contentManagerService.cjapAdvancedProperties|Specifies a set of advanced properties|" "|
 |services.contentManagerService.cjapInstanceName|Namepace name|""|
 |services.contentManagerService.cjapNamespaceID|Specifies a unique identifier for the authentication namespace|""|
@@ -1017,6 +1071,7 @@ These configuration settings can be provided to enable a Lightweight Directory A
 | Parameter                  | Description                                     | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
 |services.contentManagerService.ldapConfiguration|Defines a group of properties that allows the product to access an LDAP server for user authentication|false|
+|services.contentManagerService.ldapSelectableForAuth|Specifies whether the LDAP namespace is selectable for authentication.|true|
 |services.contentManagerService.ldapInstanceName|Specifies the name of the LDAP instance|"LDAP"|
 |services.contentManagerService.ldapNamespaceID|Specifies a unique identifier for the authentication namespace|"LDAP"|
 |services.contentManagerService.ldapHostname|Specifies the hostname directory server|"localhost"|
@@ -1036,7 +1091,6 @@ These configuration settings can be provided to enable a Lightweight Directory A
 |services.contentManagerService.ldapAllowEmptyPassword|Specifies whether empty passwords are allowed for user authentication.| false|
 |services.contentManagerService.ldapCamIdAttribute|Specifies the value used to uniquely identify objects stored in the LDAP directory server.| "dn"|
 |services.contentManagerService.ldapDataEncoding|Specifies the encoding of the data stored in the LDAP directory server.| "UTF-8"|
-|services.contentManagerService.ldapSelectableForAuth|Specifies whether the namespace is selectable for authentication.| true|
 |services.contentManagerService.ldapAccountObjectClass|Specifies the name of the LDAP object class used to identify an account.| "inetorgperson"|
 |services.contentManagerService.ldapAccountBusinessPhone|Specifies the LDAP attribute used for the "businessPhone" property for an account.| "telephonenumber"|
 |services.contentManagerService.ldapAccountContentLocale|Specifies the LDAP attribute used for the "contentLocale" property for an account.| "preferredlanguage"|
@@ -1068,6 +1122,7 @@ These configuration settings can be provided to enable an OpenID Provider as an 
 | Parameter                  | Description                                                        | Default                                                    |
 | -----------------------    | ---------------------------------------------                      | ---------------------------------------------------------- |
 |services.contentManagerService.openIdConfiguration|Defines a group of properties that allows the product to use an OpenID Connect identity provider for user authentication|false|
+|services.contentManagerService.openIdSelectableForAuth|Specifies whether the OpenID namespace is selectable for authentication.|true|
 |services.contentManagerService.openIdAccountClaims|Specifies if the id_token contains all of the account claims|"userinfo"|
 |services.contentManagerService.openIdAccountCamIdProperty|Specify a property that contains a unique identifier for the user account|"email"|
 |services.contentManagerService.openIdAcBusinessPhone|Specifies the OIDC claim used for the "businessPhone" property for an account|" "|
@@ -1106,6 +1161,8 @@ These configuration settings can be provided to enable an OpenID Provider as an 
 |services.contentManagerService.openIdTokenEndpointAuthStrategy|Configure the authentication strategy for the token endpoint in OpenID connections|"client_secret_post"|
 |services.contentManagerService.openIdUserInfoEndpoint|Specify the user information endpoint URL for the OpenID connections|" "|
 |services.contentManagerService.openIdUseDiscEndpoint|Specify whether to use the discovery endpoint for retrieving the OpenID provider's configuration information|false|
+|services.contentManagerService.openIdProxyConfiguration|Enable or disable OpenID Proxy configuration|false|
+|services.contentManagerService.openIdProxySelectableForAuth|Specify whether OpenID Proxy is selectable for authentication|true|
 |services.contentManagerService.openIdProxyAccountClaims|Specify claims that the user account information must include for OpenID Proxy|"userinfo"|
 |services.contentManagerService.openIdProxyCustomProperties|Specify custom properties for OpenID Proxy connections|" "|
 |services.contentManagerService.openIdProxyAuthScope|Specify the authentication scope for OpenID Proxy connections|"email"|
@@ -1113,8 +1170,8 @@ These configuration settings can be provided to enable an OpenID Provider as an 
 |services.contentManagerService.openIdProxyClass|Specify the class for OpenID Proxy|" "|
 |services.contentManagerService.openIdProxyClientId|Specify the client ID for OpenID Proxy connections|" "|
 |services.contentManagerService.openIdProxyClientSecret|Specify the client secret for OpenID Proxy connections|" "|
-|services.contentManagerService.openIdProxyConfiguration|Enable or disable OpenID Proxy configuration|false|
 |services.contentManagerService.openIdProxyId|Specify the ID for OpenID Proxy|" "|
+|services.contentManagerService.openIdPrivateKeyPassword|Specify the private key password used for OpenID Connect signing|" "|
 |services.contentManagerService.openIdProxyIdentityProviderType|Specify the identity provider type for OpenID Proxy|" "|
 |services.contentManagerService.openIdProxyCertificateFile|Specify the IDP certificate file for OpenID Proxy|" "|
 |services.contentManagerService.openIdProxyIssuer|Specify the issuer for OpenID Proxy connections|" "|
@@ -1132,7 +1189,6 @@ These configuration settings can be provided to enable an OpenID Provider as an 
 |services.contentManagerService.openIdProxyPrivateKeyPassword|Specify the private key password for OpenID Proxy|" "|
 |services.contentManagerService.openIdProxyRedirectNsID|Specify the redirect namespace ID for OpenID Proxy|" "|
 |services.contentManagerService.openIdProxyReturnUrl|Specify the return URL for OpenID Proxy connections|"https://localhost:443/bi/completeAuth.jsp"|
-|services.contentManagerService.openIdProxySelectableForAuth|Specify whether OpenID Proxy is selectable for authentication|true|
 |services.contentManagerService.openIdProxyTcAccountClaims|Specify claims that the user account information must include for OpenID Proxy|"userinfo"|
 |services.contentManagerService.openIdProxyTcStrategy|Specify the token strategy for OpenID Proxy connections|"refreshToken"|
 |services.contentManagerService.openIdProxyTokenEndpoint|Specify the token endpoint URL for OpenID Proxy connections|" "|
@@ -1154,26 +1210,29 @@ These configuration settings are required to deploy CACC.
 | Parameter                  | Description                                                        | Default                                                    |
 | -----------------------    | ---------------------------------------------                      | ---------------------------------------------------------- |
 |services.contentManagerService.auditDbClass|Specify the audit database. Possible values are "Microsoft", "Oracle", "DB2", "Informix", "PostgreSQL"|"Microsoft"|
-|services.contentManagerService.auditDbName|Provide a name for the audit database|"audit""
-|services.contentManagerService.auditDboracleSpecifier|Configure settings specific to Oracle|" "|
+|services.contentManagerService.auditDbName|Provide a name for the audit database|"audit"|
+|services.contentManagerService.auditOracleSpecifier|Configure settings specific to Oracle for the audit database|" "|
+|services.contentManagerService.auditPostgreSqlSchema|Specify the PostgreSQL schema for the audit database|" "|
 |services.contentManagerService.auditDbSsl|Enable or disable the SSL/TLS encryption for connections to the audit database|false|
 |services.contentManagerService.auditDbHostname|Specify the hostname for the audit database|"ca-audit-store"|
 |services.contentManagerService.auditDbPort|Specify the port number for connections to the audit database|1433|
 |services.contentManagerService.auditAdvancedProperties|Provide advanced settings for the audit database configuration. Format is "name=value;name=value"|"securityMechanism=3"|
 |services.contentManagerService.contentDbClass|Specify the Content Store database. Possible values are "Microsoft", "Oracle", "DB2", "Informix", "PostgreSQL"|"Microsoft"|
 |services.contentManagerService.contentDbName|Provide a name for the Content Store database|"cm"|
-|services.contentManagerService.contentDboracle_specifier|Configure settings specific to Oracle|" "|
+|services.contentManagerService.csOracleSpecifier|Configure settings specific to Oracle for the Content Store|" "|
+|services.contentManagerService.csPostgreSqlSchema|Specify the PostgreSQL schema for the Content Store|" "|
 |services.contentManagerService.contentDbSsl|Enable or disable the SSL/TLS encryption for connections to the Content Store database|false|
 |services.contentManagerService.contentDbHostname|Specify the hostname for the Content Store|"ca-cs"|
 |services.contentManagerService.contentDbPort|Specify the port number for connections to the Content Store database|1433|
 |services.contentManagerService.contentAdvancedProperties|Provide advanced settings for the Content Store database configuration. Format is "name=value;name=value"|"securityMechanism=3"|
 |services.contentManagerService.ncDbClass|Specify the Notice Cast database. Possible values are "Microsoft", "Oracle", "DB2", "Informix", "PostgreSQL"|"Microsoft"|
-|services.contentManagerService.ncDbName|Provide a name for the Novice Cast database|"cm"|
-|services.contentManagerService.ncDboracle_specifier|Configure settings specific to Oracle|" "|
-|services.contentManagerService.ncDbSsl|Enable or disable the SSL/TLS encryption for connections to the Novice Cast database|false|
-|services.contentManagerService.ncDbHostname|Specify the hostname for the Novice Cast database|"ca-cs"|
-|services.contentManagerService.ncDbPort|Specify the port number for connections to the Novice Cast database|1433|
-|services.contentManagerService.ncAdvancedProperties|Provide advanced settings for the Novice Cast database configuration. Format is "name=value;name=value"|"securityMechanism=3"|
+|services.contentManagerService.ncDbName|Provide a name for the Notice Cast database|"cm"|
+|services.contentManagerService.ncOracleSpecifier|Configure settings specific to Oracle for the Notice Cast database|" "|
+|services.contentManagerService.ncPostgreSqlSchema|Specify the PostgreSQL schema for the Notice Cast database|" "|
+|services.contentManagerService.ncDbSsl|Enable or disable the SSL/TLS encryption for connections to the Notice Cast database|false|
+|services.contentManagerService.ncDbHostname|Specify the hostname for the Notice Cast database|"ca-cs"|
+|services.contentManagerService.ncDbPort|Specify the port number for connections to the Notice Cast database|1433|
+|services.contentManagerService.ncAdvancedProperties|Provide advanced settings for the Notice Cast database configuration. Format is "name=value;name=value"|"securityMechanism=3"|
 |services.contentManagerService.dispatcherMemory|Specify the maximum amount of memory in MB for the dispatcher service|6144|
 |services.contentManagerService.dispatcherCoreThreads|Specify the number of core threads for the dispatcher service|200|
 |services.contentManagerService.dispatcherExecutorThread|Specify the number of executor threads for the dispatcher service|-1|
@@ -1351,7 +1410,9 @@ These configuration settings can be enabled to modify the execution profile of t
 These configuration settings can be enabled to configure the BA Agentic AI Service with OpenSearch and Redis sidecars.
 | Parameter                  | Description                                     | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
-|services.agenticAIService.enabled|Enable or disable the Agentic AI Service|true|
+|services.agenticAIService.caBaseUrl|Base URL of the Cognos Analytics instance used by the Agentic AI service for internal API calls|""|
+|services.agenticAIService.licenseKey|License key for the Agentic AI service|""|
+|services.agenticAIService.enabled|Enable or disable the Agentic AI Service|false|
 |services.agenticAIService.pullPolicy|Configure the update policy for the container images. Acceptable values are Always, Never, or IfNotPresents.|IfNotPresent|
 |services.agenticAIService.name|Name of the Agentic AI service container|ba-agentic-ai|
 |services.agenticAIService.digest|Modify only if asked to do so by Cognos Support person|Current image digest is included in the Helm chart|
@@ -1471,9 +1532,9 @@ kubectl logs -l app=ca-agentic-ai -n <namespace> --tail=50 | grep -i opensearch
 These configuration settings control the Redis sidecar container that provides caching capabilities for the Agentic AI service.
 | Parameter                  | Description                                     | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
-|services.agenticAIService.redisName|Name of the Redis sidecar container|redisearch|
+|services.agenticAIService.redisName|Name of the Redis sidecar container|redis|
 |services.agenticAIService.redisDigest|Image digest for the Redis container|Current image digest is included in the Helm chart|
-|services.agenticAIService.redisTag|Image tag for the Redis container|2.6.0|
+|services.agenticAIService.redisTag|Image tag for the Redis container|8.2|
 |services.agenticAIService.redisRequestsCpu|Set the CPU request for the Redis sidecar|"500m"|
 |services.agenticAIService.redisRequestsMemory|Set the memory request for the Redis sidecar|1Gi|
 |services.agenticAIService.redisLimitsCpu|Set the CPU limit for the Redis sidecar|"1"|
@@ -1910,13 +1971,12 @@ These configuration settings can be enabled to modify the execution profile of t
 
 |services.dataService.scaleUpWindowPolicySeconds|This helps prevent unnecessary scaling if metrics are fluctuating. For example, a stabilizationWindowSeconds of 300 means the HPA will wait 300 seconds before scaling down pods to the new, desired number of replicas.|30|
 
-## Data Service additional configuration settings
-These additional parameters are available to modify the execution/connectity profile (query execution, timeout properties and enabling diagnostics) when connecting to DSS Olap/PA Features
+## Data Service — PA/TM1/DSS additional configuration settings
+These additional parameters are available to modify the execution/connectivity profile (query execution, timeout properties and enabling diagnostics) when connecting to DSS OLAP/PA features. See also the **Dataset Service (DSS) configuration settings** section above.
 | Parameter                  | Description                                     | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
-|services.dataService.pullPolicy|Configure the update policy for the container images. Acceptable values are Always, Never, or IfNotPresents.|IfNotPresent|
-|services.dataService.enableDiagnosticsLogging|    |false|
-|services.dataService.loadHierarchyNamedSets| |true|
+|services.dataService.enableDiagnosticsLogging|Enable diagnostics logging for the Dataset Service|false|
+|services.dataService.loadHierarchyNamedSets|Load hierarchy named sets from PA/TM1 cubes|true|
 |services.dataService.paUseFillerMember|Configure to determine whether filler members (often indicated by a caret symbol ^ in data trees) are shown when dealing with parent members that do not have direct children, or when a user lacks access to specific root members.|true|
 |services.dataService.paUseRootMembers|Configuration setting used to ensure that the root members in a Planning Analytics (TM1) data source match those shown in the TM1 client|false|
 |services.dataService.paEnableHierarchyLocalization| |true|

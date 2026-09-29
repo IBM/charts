@@ -1,8 +1,8 @@
-# IBM Sterling Control Center Monitor V6.3.1.0
+# IBM Sterling Control Center Monitor V6.4.2.0
 
 ## Introduction
 
-IBM▒ Control Center Monitor is a centralized monitoring and management system. It gives operations personnel the capability to continuously monitor the status of Configuration Managers, engines, and adapters across the enterprise for the following server types from one central location: IBM Sterling Connect:Direct▒, IBM Sterling Connect:Enterprise▒, IBM Sterling B2B Integrator, IBM Sterling File Gateway, IBM Global High Availability Mailbox, IBM Sterling Connect:Express, IBM QuickFile, IBM MQ Managed File Transfer and Many FTP servers. To find out more, see the Knowledge Center for [IBM Sterling Control Center Monitor](  https://www.ibm.com/docs/en/control-center/6.3.1?topic=sterling-control-center-monitor-631).
+IBM▒ Control Center Monitor is a centralized monitoring and management system. It gives operations personnel the capability to continuously monitor the status of Configuration Managers, engines, and adapters across the enterprise for the following server types from one central location: IBM Sterling Connect:Direct▒, IBM Sterling Connect:Enterprise▒, IBM Sterling B2B Integrator, IBM Sterling File Gateway, IBM Global High Availability Mailbox, IBM Sterling Connect:Express, IBM QuickFile, IBM MQ Managed File Transfer and Many FTP servers. To find out more, see the Knowledge Center for [IBM Sterling Control Center Monitor](  https://www.ibm.com/docs/en/control-center/6.4.2?topic=sterling-control-center-monitor-642).
 
 ## Chart Details
 
@@ -18,12 +18,15 @@ This chart deploys IBM Sterling Control Center Monitor on a container management
 ## Prerequisites
 
 1. Red Hat OpenShift Container Platform 
-   * Version 4.14.0 or later fixes
-   * Version 4.15.0 or later fixes
    * Version 4.16.0 or later fixes
    * Version 4.17.0 or later fixes
-2. Kubernetes version >= 1.27 and <=1.32 with beta APIs enabled.
-3. Helm version >= 3.18.x
+   * Version 4.18.0 or later fixes
+   * Version 4.19.0 or later fixes
+   * Version 4.20.0 or later fixes
+   * Version 4.21.0 or later fixes
+   * Version 4.22.0 or later fixes
+2. Kubernetes version >= 1.31 and <=1.36 with beta APIs enabled.
+3. Helm version >= 3.18.x and <=4.3.0
 4. Ensure that one of the supported database server (Oracle/DB2/MSSQL) is installed and the database is accessible from inside the cluster.
 5. Ensure that the docker images for IBM Sterling Control Center Monitor from IBM Entitled Registry are downloaded and pushed to an image registry accessible to the cluster.
 6. Database driver files can be passed using any one of the following ways:
@@ -52,122 +55,106 @@ Configure this pull secret in the service account used for deployment using this
 kubectl patch serviceaccount <service-account-name> -p '{"imagePullSecrets": [{"name": "<pull-secret-name>"}]}'
 ```
 
-It is recommended to configure the pull secret in the service account as it automatically binds as a pull secret for all application pods. If the pull secret is added to the service account then the image pullSecret configurations in the helm configuration file are not required.
+> **Note**: It is recommended to configure the pull secret in the service account as it automatically binds as a pull secret for all application pods. If the pull secret is added to the service account then the <b>image.imageSecrets</b> configurations in the helm configuration file are not required.
 
-### PodSecurityPolicy Requirements
+### Pod Security Admission (PSA) Requirements
 
-With Kubernetes v1.25, Pod Security Policy (PSP) API has been removed and replaced with Pod Security Admission (PSA) contoller. Kubernetes PSA conroller enforces predefined Pod Security levels at the namespace level. The Kubernetes Pod Security Standards defines three different levels: privileged, baseline, and restricted. Refer to Kubernetes [`Pod Security Standards`] (https://kubernetes.io/docs/concepts/security/pod-security-standards/) documentation for more details. This chart is compatible with the restricted security level. 
+Pod Security Admission (PSA) is a built-in Kubernetes admission controller that enforces security standards on Pods during creation and updates. It helps prevent insecure pod configurations from running in a Kubernetes cluster.
 
-For users upgrading from older Kubernetes version to v1.29 or higher, refer to Kubernetes [`Migrate from PSP`](https://kubernetes.io/docs/tasks/configure-pod-container/migrate-from-psp/) documentation to help with migrating from PodSecurityPolicies to the built-in Pod Security Admission controller.
+PSA replaces the deprecated PodSecurityPolicy (PSP) mechanism and enforces predefined Pod Security Standards (PSS) across namespaces.
 
-For users continuing on older Kubernetes versions (<1.25) and using PodSecurityPolicies, choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you. This chart is compatible with most restrictive policies.
-Below is an optional custom PSP definition based on the IBM restricted PSP.
+IBM Sterling Control Center supports all three Pod Security Standards.
 
-* Predefined PodSecurityPolicy name: [`ibm-restricted-psp`](https://ibm.biz/cpkspec-psp)
- 
-- From the user interface or command line, you can copy and paste the following snippets to create and enable the below custom PodSecurityPolicy based on IBM restricted PSP.
-	- Custom PodSecurityPolicy definition:
+PSA is configured at the namespace level using labels. Whenever a Pod is created or updated, Kubernetes validates its specification against the security policy defined for the target namespace.
 
-	```
-	apiVersion: policy/v1beta1
-	kind: PodSecurityPolicy
-	metadata:
-	  name: ibm-sccm-psp
-	  labels:
-	    app: "ibm-sccm-psp"
-	spec:
-	  privileged: false
-	  allowPrivilegeEscalation: false
-	  hostPID: false
-	  hostIPC: false
-	  hostNetwork: false
-	  allowedCapabilities:
-	  requiredDropCapabilities:
-	  - ALL
-	  allowedHostPaths:
-	  runAsUser:
-	    rule: MustRunAsNonRoot
-	  runAsGroup:
-	    rule: MustRunAs
-	    ranges:
-	    - min: 1
-              max: 4294967294
-	  seLinux:
-	    rule: RunAsAny
-	  supplementalGroups:
-	    rule: MustRunAs
-	    ranges:
-	    - min: 1
-	      max: 4294967294
-	  fsGroup:
-	    rule: MustRunAs
-	    ranges:
-	    - min: 1
-	      max: 4294967294
-	  volumes:
-	  - configMap
-	  - emptyDir
-	  - projected
-	  - secret
-	  - downwardAPI
-	  - persistentVolumeClaim
-	  - nfs
-	  forbiddenSysctls:
-	  - "*"
-	```
+PSA supports three enforcement modes:
 
-	- Custom ClusterRole for the custom PodSecurityPolicy:
+- <b>enforce</b>: Blocks Pods that violate the configured security policy.
+- <b>audit</b>: Allows the Pod but records policy violations in the audit logs.
+- <b>warn</b>: Allows the Pod but displays warning messages to the user about policy violations.
 
-	```
-	apiVersion: rbac.authorization.k8s.io/v1
-	kind: ClusterRole
-	metadata:
-	  name: "ibm-sccm-psp"
-	  labels:
-	    app: "ibm-sccm-psp"
-	rules:
-	- apiGroups:
-	  - policy
-	  resourceNames:
-	  - ibm-sccm-psp
-	  resources:
-	  - podsecuritypolicies
-	  verbs:
-	  - use
-	```
-	
-	- Custom Role binding for the custom PodSecurityPolicy:
-	
-	```
-	apiVersion: rbac.authorization.k8s.io/v1beta1
-	kind: RoleBinding
-	metadata:
-	  name: "ibm-sccm-psp"
-	  labels:
-	    app: "ibm-sccm-psp"
-	roleRef:
-	  apiGroup: rbac.authorization.k8s.io
-	  kind: ClusterRole
-	  name: "ibm-sccm-psp"
-	subjects:
-	- apiGroup: rbac.authorization.k8s.io
-	  kind: Group
-	  name: system:serviceaccounts
-	  namespace: {{ NAMESPACE }}
-	```
+#### Pod Security Standards
 
+Kubernetes defines the following security levels:
 
-- From the command line, you can run the setup scripts included under pak_extensions (untar the downloaded archive to extract the pak_extensions directory)
+1. <b>Privileged</b>
+	<p>The least restrictive security profile.</p>
 
-  As a cluster admin the pre-install script is located at:
-  - pre-install/clusterAdministration/createSecurityClusterPrereqs.sh
+	- Allows nearly all Pod capabilities.
+	- Suitable for infrastructure and system-level workloads.
+	- Commonly used for CNI plugins, storage drivers, monitoring agents, and other privileged components.
 
-  As team admin the namespace scoped pre-install script is located at:
-  - pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh
+2. <b>Baseline</b>
+	<p>Provides protection against common privilege escalation risks while maintaining compatibility with most applications.</p>
+
+	- Disallows privileged containers.
+	- Prevents use of host networking.
+	- Prevents access to the host PID namespace.
+	- Restricts Linux capabilities.
+
+3. <b>Restricted</b>
+	<p>Provides the highest level of security and is recommended for most application workloads.</p>
+
+	- Requires containers to run as non-root users.
+	- Disallows privileged containers.
+	- Minimizes Linux capabilities.
+	- Restricts allowed volume types.
+	- Requires a Seccomp profile.
+
+Applying PSA to a Namespace
+PSA policies can be applied to a namespace using either the command line or a Kubernetes manifest.
+
+<b>Using the Command Line</b>
+``` 
+kubectl label --overwrite ns <my-project-namespace> \
+  pod-security.kubernetes.io/enforce=<Pod-Security-Standard> 
+```
+
+Example
+``` 
+kubectl label --overwrite ns my-project-namespace \
+  pod-security.kubernetes.io/enforce=baseline 
+```
+
+<b>Using a Kubernetes Manifest</b>
+
+Create a file named apply-psa.yaml with the following content:
+
+```
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: my-project-namespace
+  labels:
+    # Enforce the baseline policy
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: latest
+
+    # Generate warnings for workloads that do not meet the restricted policy
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+
+    # Record audit events for workloads that do not meet the restricted policy
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+
+```
+
+Apply the manifest using:
+```
+kubectl apply -f apply-psa.yaml
+```
+
+<p>For a complete description of Pod Security Standards and supported controls, refer to the official Kubernetes documentation:
+
+- [Pod Security Standards](https://kubernetes.io/docs/concepts/security/pod-security-standards/)
+- [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/)
+
+These documents provide detailed guidance on policy requirements, enforcement behavior, and best practices for securing Kubernetes workloads.</p>
 
 ### SecurityContextConstraints Requirements
 
-Red Hat OpenShift provides a pre-defined or default set of SecurityContextConstraints (SCC). These SCCs are used to control permissions for pods. These permissions include actions that a pod can perform and what resources it can access. You can use SCCs to define a set of conditions that a pod must run with to be accepted into the system. Refer to OpenShift [`Managing Security Context Constraints`](https://docs.openshift.com/container-platform/4.14/authentication/managing-security-context-constraints.html#default-sccs_configuring-internal-oauth) documentation for more details on the default SCCs. This chart is compatible with **nonroot-v2** (added in OpenShift v4.11) default SCCs and does not require a custom SCC to be defined explicity.
+Red Hat OpenShift provides a pre-defined or default set of SecurityContextConstraints (SCC). These SCCs are used to control permissions for pods. These permissions include actions that a pod can perform and what resources it can access. You can use SCCs to define a set of conditions that a pod must run with to be accepted into the system. Refer to OpenShift [`Managing Security Context Constraints`](https://docs.openshift.com/container-platform/4.14/authentication/managing-security-context-constraints.html#default-sccs_configuring-internal-oauth) documentation for more details on the default SCCs. This chart is compatible with most restricted scc  **restricted-v2** (added in OpenShift v4.11) that is default SCC and does not require a custom SCC to be defined explicity.
 
 For OpenShift, choose either a predefined SCC or have your cluster administrator create a custom SCC for you as per the security profile and policies adopted for all OpenShift deployments. This chart is compatible with most restrictive security context constraints.
 Below is an optional custom SCC definition based on the IBM restricted SCC.
@@ -278,9 +265,6 @@ Below is an optional custom SCC definition based on the IBM restricted SCC.
   As team admin the namespace scoped pre-install script is located at:
   - pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh
  
-  As team admin the namespace scoped pre-install script for adding **nonroot-v2** is located at:
-  - pre-install/namespaceAdministration/addNonrootSCCNamespacePrereqs.sh
-  
 ### Installing a PodDisruptionBudget
 
 * defaultPodDisruptionBudget.enabled - If true, It will create a pod disruption budget for IBM Sterling Control Center Monitor pods.
@@ -315,7 +299,7 @@ This chart uses the following resources by default:
 ## Agreement to IBM Control Center License
 
 You must read the IBM Sterling Control Center License agreement terms before installation, using the below link:
-[License](https://www.ibm.com/support/customer/csol/terms/?id=L-QZDV-G39NEP&lc=en) (L/N: L-QZDV-G39NEP)
+[License](https://www.ibm.com/support/customer/csol/terms/?id=L-LNLL-JTKJ77&lc=en) (L/N: L-LNLL-JTKJ77)
 
 ## Installing the Chart
 
@@ -328,7 +312,7 @@ Ensure that the chart is downloaded locally and available.
 Run the below command
 
 ```bash
-$ helm install my-release -f values.yaml ibm-sccm-3.1.25.tgz
+$ helm install my-release -f values.yaml ibm-sccm-4.2.11.tgz
 ```
 
 Depending on the capacity of the kubernetes worker node and database network connectivity, chart deployment can take on average 6-7 minutes for Installing Control Center.
@@ -345,11 +329,15 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `image.tag`                                     | Image tag                                           |                                          |
 | `image.imageSecrets`                            | Image pull secrets                                  |                                          |
 | `image.pullPolicy`                              | Image pull policy                                   | `IfNotPresent`                           |
+| `image.digest.enabled`                          | Flag to use image using digest value                | `true`                                   |
+| `image.digest.value`                            | Image digest value                                  | ``                                       |
+| `name`                                          | To override default name                            | ``                                       |
+| `fullnameOverride`                              | To override default full name                       | ``                                       |
 | `ccArgs.ccInterval`                             | Interval Time between pod restart                   | `2h`                                     |
 | `ccArgs.devEnvDropTables`                       | Flag for dropping table in dev environment          | `false`                                  |
 | `ccArgs.enableAutoRebalanceServers`             | Auto rebalancing of monitored servers between EPs   | `true`                                   |
 | `ccArgs.engineNamePrefix`                       | Engine Name Prefix for EPs                          |                                          |
-| `ccArgs.productEntitilement`                    | Product Entitlement                                 |                                          |
+| `ccArgs.productEntitlement`                     | Product Entitlement                                 |                                          |
 | `ccArgs.dbType`                                 | Database Type                                       |                                          |
 | `ccArgs.dbHost`                                 | Database Hostname                                   |                                          |
 | `ccArgs.dbPort`                                 | Database Port number                                |                                          |
@@ -359,8 +347,12 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `ccArgs.dbInit`                                 | Database Initialization Flag                        | `true`                                   |
 | `ccArgs.dbPartition`                            | Database Partitioning Flag                          | `false`                                  |
 | `ccArgs.dbDrivers`                              | Database drivers                                    |                                          |
+| `ccArgs.dbPasswordVaultEnable`                  | Database Password Vault Flag                        | `false`                                  |
+| `ccArgs.dbPasswordVaultTimeout`                 | Database Password Vault Timeout                     | `60`                                     |
+| `ccArgs.dbPasswordVaultRetryWaitTime`           | Database Password Vault Retry Time                  | `15`                                     |
+| `ccArgs.dbPasswordVaultScriptLocation`          | Database Password Vault Script Path                 |                                          |
+| `ccArgs.dbPasswordVaultRetries`                 | Database Password Vault Retries Count               | `10`                                     |
 | `ccArgs.mssqlGlobal`                            | Database Globalization Flag                         | `false`                                  |
-| `ccArgs.weblistenAddress`                       | Web Listen Address                                  | `0.0.0.0.`                               |
 | `ccArgs.webHost`                                | Web Hostname                                        |                                          |
 | `ccArgs.autoStopJavaWebAppServer`               | Auto stop Java web server                           | `true`                                   |
 | `ccArgs.eventRepositoryAuth`                    | Event Repository Autentication                      | `false`                                  |
@@ -399,6 +391,8 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `ccArgs.seasProfileName`                        | SEAS Profile Name                                   |                                          |
 | `ccArgs.seasPersistentConnection`               | SEAS Persistent Connection required or not          | `N`                                      |
 | `ccArgs.seasSecureProtocol`                     | SEAS Secure Protocol name                           |                                          |
+| `ccArgs.otel.enabled`                           | OTEL Service is enabled or not                      | `false`                                  |
+| `ccArgs.otel.endpoints`                         | OTEL Service's endpoints containing array with address and  protocols |                   |
 | `dashboard.enabled`                             | For making monitoring dashboard enabled             |                                          |
 | `persistentVolumeCCM.enabled`                   | persistent volume for all volumes except user input | `true`                                   |
 | `persistentVolumeCCM.useDynamicProvisioning`    | To use storage classes to dynamically create PV     | `false`                                  |
@@ -421,6 +415,7 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `service.loadBalancerSourceRanges`              | Load Balancer sources                               | `[]`                                     |
 | `service.externalTrafficPolicy`                 | For passing external Traffic Policy                 | `Local`                                  |
 | `service.sessionAffinity`                       | For giving session Affinity                         | `ClientIP`                               |
+| `service.annotations`                           | Annotations needed for Service resource             | `{}`                                     |
 | `service.swingConsole.name`                     | Swing Console name                                  | `swing-console`                          |
 | `service.swingConsole.port`                     | Swing Console port number                           | `58080`                                  |
 | `service.swingConsole.protocol`                 | Swing Console Protocol for service                  | `TCP`                                    |
@@ -437,40 +432,41 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `service.webConsoleSecure.port`                 | Secure Web Console port number                      | `58083`                                  |
 | `service.webConsoleSecure.protocol`             | Secure Web Console Protocol for service             | `TCP`                                    |
 | `service.webConsoleSecure.allowIngressTraffic`  | Allowing Ingress traffic for Secure Web Console     | `true`                                   |
-| `service.externalIP`                            | External IP for service discovery                   |                                          |
 | `storageSecurity.fsGroup`                       | Used for controlling access to block storage        |                                          |
-| `storageSecurity.fsGroupChangePolicy`           | Used for controlling access to block storage        | `OnRootMismatch`                         |
+| `storageSecurity.fsGroupChangePolicy`           | Used for controlling access to block storage        | `fsGroupChangePolicy: "OnRootMismatch"`  |
 | `storageSecurity.supplementalGroups`            | Groups IDs are used for controlling access          | `[]`                                     |
 | `storageSecurity.runAsUser`                     | UID for container user                              | `1010`                                   |
 | `secret.secretName`                             | Secret name for Secure Parameters                   |                                          |
 | `secret.certsSecretName`                        | Secret name for certificates                        |                                          |
 | `resources.limits.cpu`                          | Container CPU limit                                 | `3000m`                                  |
 | `resources.limits.memory`                       | Container memory limit                              | `8Gi`                                    |
+| `resources.limits.ephemeral-storage`            | Ephemeral Storage limit                             | `4Gi`                                    |
 | `resources.requests.cpu`                        | Container CPU requested                             | `1500m`                                  |
 | `resources.requests.memory`                     | Container Memory requested                          | `4Gi`                                    |
+| `resources.requests.ephemeral-storage`          | Ephemeral Storage requested                         | `2Gi`                                    |
 | `initResources.limits.cpu`                      | Container CPU limit                                 | `250m`                                   |
 | `initResources.limits.memory`                   | Container memory limit                              | `1Gi`                                    |
 | `initResources.requests.cpu`                    | Container CPU requested                             | `250m`                                   |
 | `initResources.requests.memory`                 | Container Memory requested                          | `1Gi`                                    |
-| `serviceAccount.create`                         | Enable/disable service account creation             | `false`                                   |
-| `serviceAccount.name`                           | Name of Service Account to use  for container       | `default`                                         |
-| `affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution` | k8s PodSpec.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity"                                          |                                      |
-| `affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution` | k8s PodSpec.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity"                                          |                                      |
-| `affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution` | k8s PodSpec.podAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity"                                          |                                      |
-| `affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution` | k8s PodSpec.podAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity"                                          |                                      |
-| `affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution` | k8s PodSpec.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity"                                          |                                      |
-| `affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution` | k8s PodSpec.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity"                                          |                                      |
+| `serviceAccount.create`                         | Enable/disable service account creation             | `false`                                  |
+| `serviceAccount.name`                           | Name of Service Account to use  for container       | `default`                                |
+| `affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution` | k8s PodSpec.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity"   |                                          |
+| `affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution` | k8s PodSpec.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity"  |                                          |
+| `affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution` | k8s PodSpec.podAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity" |                                          |
+| `affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution` | k8s PodSpec.podAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity"         |                                          |
+| `affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution` | k8s PodSpec.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity"  |                                          |
+| `affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution` | k8s PodSpec.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution. Refer section "Affinity" |                                          |
 | `autoscaling.enabled`                           | Autoscaling is enabled or not                       | `false`                                  |
 | `autoscaling.minReplicas`                       | minimum pod replica                                 | `1`                                      |
 | `autoscaling.maxReplicas`                       | Maximum pod replica                                 | `2`                                      |
 | `autoscaling.targetCPUUtilizationPercentage`    | Traget CPU Utilization                              | `60`                                     |
 | `autoscaling.targetMemoryUtilizationPercentage` | Traget Memory Utilization                           | `60`                                     |
-| `livenessProbe.initialDelaySeconds`             | Initial delays for liveness                         | `175`                                    |
-| `livenessProbe.timeoutSeconds`                  | Timeout for liveness                                | `45'                                     |
-| `livenessProbe.periodSeconds`                   | Time period for liveness                            | `120`                                    |
-| `readinessProbe.initialDelaySeconds`            | Initial delays for readiness                        | `175`                                    |
-| `readinessProbe.timeoutSeconds`                 | Timeout for readiness                               | `15`                                     |
-| `readinessProbe.periodSeconds`                  | Time period for readiness                           | `120`                                    |
+| `livenessProbe.initialDelaySeconds`             | Initial delays for liveness                         | `60`                                     |
+| `livenessProbe.timeoutSeconds`                  | Timeout for liveness                                | `45`                                     |
+| `livenessProbe.periodSeconds`                   | Time period for liveness                            | `60`                                     |
+| `readinessProbe.initialDelaySeconds`            | Initial delays for readiness                        | `60`                                     |
+| `readinessProbe.timeoutSeconds`                 | Timeout for readiness                               | `45`                                     |
+| `readinessProbe.periodSeconds`                  | Time period for readiness                           | `60`                                     |
 | `networkPolicy.egress.enabled`                  | Network Policy egress rules will be enabled or not  | `false`                                  |
 | `networkPolicy.egress.ports`                    | Network Policy egress ports                         |                                          |
 | `networkPolicy.egress.toSelectors`              | Network Policy egress selectors                     |                                          |
@@ -478,19 +474,22 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `networkPolicy.ingress.ports`                   | Network Policy ingress ports                        |                                          |
 | `networkPolicy.ingress.fromSelectors`           | Network Policy ingress selectors                    |                                          |
 | `route.enabled`                                 | Route for OpenShift Enabled/Disabled                | `false`                                  |
+| `route.host`                                    | hostname to access Control Center Application       |                                          |
+| `route.internalRouteHost`                       | hostname to access Control Center Application       |                                          |
 | `secComp.type`                                  | seccomp profile type                                | `RuntimeDefault`                         |
-| `secComp.profile`                               | seccomp profile filepath                            | ``                                       |
+| `secComp.profile`                               | seccomp profile filepath                            |                                          |
 | `timeZone`                                      | This flag is used for setting TimeZone of container | `Asia/Calcutta`                          |
 | `debugScripts`                                  | This flag is used for debugging and troubleshooting | `false`                                  |
 | `extraInitContainers.name`                      | This will be used as name of init container         | `copy-resources`                         |
-| `extraInitContainers.repository`                | Image respository for init container                | ``                                       |
-| `extraInitContainers.tag`                       | Image respository tag for init container            | ``                                       |
-| `extraInitContainers.imageSecrets`              | Image secrets for init container                    | ``                                       |
+| `extraInitContainers.repository`                | Image respository for init container                |                                          |
+| `extraInitContainers.tag`                       | Image respository tag for init container            |                                          |
+| `extraInitContainers.imageSecrets`              | Image secrets for init container                    |                                          |
 | `extraInitContainers.pullPolicy`                | Image pull policy used for init container           | `Always`                                 |
-| `extraInitContainers.command`                   | command used for running init container             | ``                                       |
+| `extraInitContainers.command`                   | command used for running init container             |                                          |
 | `extraInitContainers.digest.enabled`            | Flag for using digest for images of init container  | `false`                                  |
-| `extraInitContainers.digest.value`              | Image digest value used for init container          | ``                                       |
+| `extraInitContainers.digest.value`              | Image digest value used for init container          |                                          |
 | `extraInitContainers.userInput.enabled`         | user input should be shared volume or not           | `false`                                  |
+| `hostAliases`                                   | Adding entry of hostname with IP Address in /etc/hosts file | `[]`                     |
 | `defaultPodDisruptionBudget.enabled`            | This flag will be used to enable or disable         | `false`                                  |
 | `defaultPodDisruptionBudget.minAvailable`       | Minimum replicas required for pod disruption budget | `0`                                      |
 | `ingress.enabled`                               | Flag to eanble or disable ingress                   | `false`                                  |
@@ -499,7 +498,10 @@ The following tables lists the configurable parameters of the IBM Control Center
 | `ingress.annotations`                           | annotation for ingress resource                     | `[]`                                     |
 | `ingress.tls.enabled`                           | TLS is enabled or disabled for ingress resource     | `false`                                  |
 | `ingress.tls.secretName`                        | TLS secret name if enabled                          |                                          |
+| `license`                                       | Application license acceptance                      | `false`                                  |
+| `licenseType`                                   | Application license type                            | `non-prod`                               |
 | `consoleLogEnabled`                             | To enable engine logs to redirect to console        | `false`                                  |
+| `terminationGracePeriodSeconds`                 | To shut down pod gracefully with this value         | `30`                                     |
 
 > **Tip**: If `ccArgs.dbinit` flag is true, then Only Monitored server activities will be deleted. Change this to true only if you need to delete all the monitored servers' activities. Even when this flag is true, no summary data (CC_PROCESS, CC_FILE_TRANSFER) will be deleted. Also, no configuration data such as Rules, SLCs, Monitored servers connection details will be deleted.
 
@@ -508,13 +510,13 @@ The following tables lists the configurable parameters of the IBM Control Center
 Specify each parameter in values.yaml to `helm install`. For example,
 
 ```bash
-helm install my-release -f values.yaml ibm-sccm-3.1.25.tgz
+helm install my-release -f values.yaml ibm-sccm-4.2.11.tgz
 ```
 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. You can create a copy of values.yaml file e.g. my-values.yaml and edit the values that you need to override. Use the my-values.yaml file for installation. For example,
 
 ```bash
-helm install <release-name> -f my-values.yaml ibm-sccm-3.1.25.tgz
+helm install <release-name> -f my-values.yaml ibm-sccm-4.2.11.tgz
 ```
 > **Tip**: You can use the default [values.yaml](values.yaml)
 
@@ -547,7 +549,7 @@ You would want to upgrade your deployment when you have a new docker image for a
 2. Run the following command to upgrade your deployments.
 
 ```sh
-helm upgrade my-release -f values.yaml ibm-sccm-3.1.25.gz
+helm upgrade my-release -f values.yaml ibm-sccm-4.2.11.gz
 ```
 
 Refer [RELEASENOTES.md](RELEASENOTES.md) for Fix history.
@@ -626,7 +628,7 @@ Use `networkPolicy` to control traffic flow at the port level.
 
 1. All sensitive application data at rest is stored in binary format so user cannot decrypt it. This chart does not support Encryption of user data at rest by default. Administrator can configure storage encryption to encrypt all data at rest.
 
-2. Data in motion is encrypted using transport layer security(TLS 1.2). For more information please see product [Knowledge center link]( https://www.ibm.com/docs/en/control-center/6.3.1?topic=sterling-control-center-monitor-631 )
+2. Data in motion is encrypted using transport layer security(TLS 1.2). For more information please see product [Knowledge center link]( https://www.ibm.com/docs/en/control-center/6.4.2?topic=sterling-control-center-monitor-642 )
 
 
 ## Storage
@@ -641,7 +643,12 @@ IBM Sterling Control Center Helm chart supports both dynamic and pre-created per
 
 - High availability and scalability are supported in traditional way of Control Center deployment using Kubernetes load balancer service.
 - IBM Control Center Monitor chart supports only amd64,ppc64le architecture.
+- In a containerized environment, the following certificate management features are not supported:
+  - Keystore certificate management
+  - Truststore certificate management
+  - Certificate management using Venafi
+- SSP reports will not run in container enironment
 
 ## Documentation
 
-[IBM Sterling Control Center](https://www.ibm.com/docs/en/control-center/6.3.1?topic=sterling-control-center-monitor-631)
+[IBM Sterling Control Center](https://www.ibm.com/docs/en/control-center/6.4.2?topic=sterling-control-center-monitor-642)
