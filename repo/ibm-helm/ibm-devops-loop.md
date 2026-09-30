@@ -14,7 +14,7 @@ IBM DevOps Loop is a cloud-based continuous integration platform built on modern
   
   3. A valid public certificates issued by trusted Certificate Authorities (CAs).
 
-  4. For installation instructions and requisite requirements, see Installation of DevOps Loop at <https://www.ibm.com/docs/en/devops-loop/2.0.2?topic=administration-installation-devops-loop>
+  4. For installation instructions and requisite requirements, see Installation of DevOps Loop at <https://www.ibm.com/docs/en/devops-loop/3.0.0?topic=administration-installation-devops-loop>
   
   5. Image and Helm Chart - The DevOps Loop images and helm chart can be accessed via the Entitled Registry and public Helm repository.
 
@@ -37,6 +37,40 @@ IBM DevOps Loop is a cloud-based continuous integration platform built on modern
 If the cluster default StorageClass does not support the ReadWriteMany (RWX) accessMode, an alternative class must be specified using the following additional helm value: global.persistence.rwxStorageClass  For example, ibmc-file-gold-gid.
 
 ReadWriteOnce (RWO) access mode storage can be configured with the following helm value: global.persistence.rwoStorageClass  For example, ibmc-block-gold.
+
+### MongoDB Provisioning
+
+Bitnami MongoDB provisioning has been removed. Managed installs use the
+official `library/mongo:8.0.28` image by default because DevOps
+Loop 3.0.0 includes Velocity 5.3.0, and Velocity 5.2.x supports MongoDB
+Community/Enterprise 7.0 and 8.0. MongoDB 6.0 is not supported for Velocity
+5.1.8 or later, and MongoDB 8.2.x is not currently listed as supported for
+Velocity 5.2.x.
+
+Installers create or validate `mongodb-url-secret` with key `password` and pass
+`--set ibm-ucv-prod.secrets.database=mongodb-url-secret` to the Loop chart.
+Existing secrets are reused unless `MONGO_FORCE_RECREATE_SECRET=true` is set.
+For air-gapped installs, mirror `docker.io/library/mongo:8.0.28` into a private
+registry. OpenShift internal-registry installs can use split image components:
+
+```bash
+MONGO_INSTALL_MODE=airgap
+MONGO_REGISTRY=image-registry.openshift-image-registry.svc:5000
+MONGO_IMAGE_REPO=devops-loop/mongo
+MONGO_IMAGE_TAG=8.0.28
+MONGO_PULLSECRET=default-dockercfg-qxkr6
+```
+
+The existing full private repository style is also valid:
+
+```bash
+MONGO_INSTALL_MODE=airgap
+MONGO_IMAGE_REPO=${DEST_REGISTRY}/mongo
+MONGO_IMAGE_TAG=8.0.28
+MONGO_IMAGE_PULL_SECRET=<private-registry-pull-secret>
+```
+
+Or set `MONGO_INSTALL_MODE=external` and pre-create `mongodb-url-secret`.
 
 ### Licensing
 
@@ -158,7 +192,7 @@ the OpenShift router wildcard DNS.
 
 This installation includes locally deployed databases.  This includes a sample install of MongoDB.
 
-Before you begin, follow requisite steps and configuration at Installation of DevOps Loop:  <https://www.ibm.com/docs/en/devops-loop/2.0.2?topic=administration-installation-devops-loop>
+Before you begin, follow requisite steps and configuration at Installation of DevOps Loop:  <https://www.ibm.com/docs/en/devops-loop/3.0.0?topic=administration-installation-devops-loop>
 
 Fetch chart for install:
 
@@ -171,7 +205,7 @@ helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/
 #External fully qualified domain name of the cluster
 #
 #See Installation of DevOps Loop documentation for more details:
-#https://www.ibm.com/docs/en/devops-loop/2.0.2?topic=administration-installation-devops-loop
+#https://www.ibm.com/docs/en/devops-loop/3.0.0?topic=administration-installation-devops-loop
 DOMAIN=
 
 #Required
@@ -204,7 +238,7 @@ PASSWORD_SEED=
 #Specify the TLS secret name in your namespace as necessary.
 #
 #See Installation of DevOps Loop documentation for more details:
-#https://www.ibm.com/docs/en/devops-loop/2.0.2?topic=administration-installation-devops-loop
+#https://www.ibm.com/docs/en/devops-loop/3.0.0?topic=administration-installation-devops-loop
 TLS_CERT_SECRET_NAME=
 
 #Set SELF_SIGNED=true to generate and use a self-signed certificate for the
@@ -248,10 +282,20 @@ HARBOR_OIDC_ADMIN_GROUP=
 #Required
 NAMESPACE=devops-loop
 HELM_NAME=devops-loop
-LOOP_CHART_VERSION=2.0.201
+LOOP_CHART_VERSION=3.0.0
 
 #Optional Additional Helm options
 ADDITIONAL_HELM_OPTIONS=""
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+MONGODB_HELPER_SCRIPT="${MONGODB_HELPER_SCRIPT:-${ROOT_DIR}/scripts/mongodb.sh}"
+if [ ! -f "${MONGODB_HELPER_SCRIPT}" ]; then
+  echo "ERROR: MongoDB helper not found at ${MONGODB_HELPER_SCRIPT}."
+  echo "Set ROOT_DIR to the extracted DevOps Loop helm chart directory or set MONGODB_HELPER_SCRIPT."
+  exit 1
+fi
+. "${MONGODB_HELPER_SCRIPT}"
 
 wait_for_secret() {
   local secret_name="$1"
@@ -278,45 +322,12 @@ run_install() {
     kubectl  create namespace ${NAMESPACE} || { echo "Failed to create namespace"; return 1; }
   fi
 
-  if ! kubectl get secret mongodb-url-secret --namespace ${NAMESPACE} > /dev/null 2>&1; then
-
-    MONGO_CHART_VERSION="${MONGO_CHART_VERSION:-14.13.0}"
-    MONGO_IMAGE_TAG="${MONGO_IMAGE_TAG:-6.0}"
-    MONGO_IMAGE_REPO="${MONGO_IMAGE_REPO:-bitnamilegacy/mongodb}"
-    MONGO_HELM_RELEASE_NAME="${MONGO_HELM_RELEASE_NAME:-devops-loop-mongo}"
-    MONGO_NAMESPACE="${MONGO_NAMESPACE:-${NAMESPACE}}"
-    MONGO_PVC_SIZE=${MONGO_PVC_SIZE:-20Gi}
-
-    helm repo add bitnami https://charts.bitnami.com/bitnami --force-update 1> /dev/null
-
-    MONGO_INSTALL_OPTIONS="\
-      --set image.repository=${MONGO_IMAGE_REPO} \
-      --set image.tag=${MONGO_IMAGE_TAG} \
-      --set persistence.size=${MONGO_PVC_SIZE}
-    "
-
-    if [ -n "${RWO_STORAGE_CLASS}" ]; then
-      MONGO_INSTALL_OPTIONS="${MONGO_INSTALL_OPTIONS} --set persistence.storageClass=${RWO_STORAGE_CLASS}"
-    fi
-
-    if [ -n "${MONGO_ADDITIONAL_INSTALL_OPTIONS}" ]; then
-      MONGO_INSTALL_OPTIONS="${MONGO_INSTALL_OPTIONS} ${MONGO_ADDITIONAL_INSTALL_OPTIONS}"
-    fi
-
-    helm upgrade --install ${MONGO_HELM_RELEASE_NAME} \
-      --version ${MONGO_CHART_VERSION} \
-      ${MONGO_INSTALL_OPTIONS} \
-      --namespace=${MONGO_NAMESPACE} \
-      --create-namespace \
-      bitnami/mongodb 1> /dev/null || { echo "Failed to install MongoDB"; return 1; }
-
-    MONGODB_ROOT_PASSWORD=$(kubectl  get secret --namespace ${NAMESPACE} ${MONGO_HELM_RELEASE_NAME}-mongodb -o jsonpath="{.data.mongodb-root-password}" | base64 -d)
-
-    MONGO_URL="mongodb://root:${MONGODB_ROOT_PASSWORD}@${MONGO_HELM_RELEASE_NAME}-mongodb:27017/admin"
-
-    kubectl create secret generic mongodb-url-secret --namespace ${NAMESPACE} --from-literal=password="${MONGO_URL}" 1> /dev/null || { echo "Failed to create MongoDB secret"; return 1; }
-
-  fi
+  # Bitnami MongoDB provisioning has been removed. The helper deploys MongoDB
+  # using the official library/mongo image by default, with MONGO_IMAGE_TAG=8.0.28 because
+  # Velocity 5.2.x supports MongoDB 7.0 and 8.0. MongoDB 6.0 is unsupported for
+  # Velocity 5.1.8 and later, and MongoDB 8.2.x is not currently listed as
+  # supported for Velocity 5.2.x.
+  KUBE_CMD=kubectl ensure_mongodb_url_secret || return 1
 
   if [ "${SELF_SIGNED}" = "true" ]; then
     export TLS_CERT_SECRET_NAME=devops-loop-tls-secret
@@ -372,6 +383,7 @@ run_install() {
   HELM_OPTIONS="${HELM_OPTIONS} ${ADDITIONAL_HELM_OPTIONS}"
 
   helm upgrade --install ${HELM_NAME} ibm-helm/ibm-devops-loop --version ${LOOP_CHART_VERSION} ${HELM_OPTIONS} \
+    --set ibm-ucv-prod.secrets.database=mongodb-url-secret \
     --set harbor.enabled=false \
     -n ${NAMESPACE} || return 1
 
@@ -449,7 +461,8 @@ run_install() {
 
   HARBOR_HELM_OPTIONS="${HELM_OPTIONS} \
 --set harbor.enabled=true \
---set platform.harbor.enabled=true \									
+--set platform.harbor.enabled=true \
+--set ibm-ucv-prod.secrets.database=mongodb-url-secret \
 --set-string harbor.externalURL=${HARBOR_URL} \
 --set-string harbor.oidc.adminGroup=${HARBOR_OIDC_ADMIN_GROUP} \
 --set-string harbor.redis.external.password=${REDIS_PASSWORD} \
@@ -596,18 +609,18 @@ See IBM Rational License Key Server documentation for more details.
 
 This installation includes locally deployed databases.  This includes a sample install of MongoDB.
 
-Before you begin, follow requisite steps and configuration at Installation of DevOps Loop: https://www.ibm.com/docs/en/devops-loop/2.0.2?topic=administration-installation-devops-loop
+Before you begin, follow requisite steps and configuration at Installation of DevOps Loop: https://www.ibm.com/docs/en/devops-loop/3.0.0?topic=administration-installation-devops-loop
 
 Fetch chart for install:
 
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-loop --version 2.0.201
+helm pull --untar ibm-helm/ibm-devops-loop --version 3.0.0
 ```
 
 ```bash
 #Pull ibm helm charts
-LOOP_CHART_VERSION=2.0.201
+LOOP_CHART_VERSION=3.0.0
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
 helm pull --untar ibm-helm/ibm-devops-loop --version ${LOOP_CHART_VERSION}
 #
@@ -621,7 +634,7 @@ helm pull --untar ibm-helm/ibm-devops-loop --version ${LOOP_CHART_VERSION}
 # qualified name associated with your cluster.
 #
 #See Installation of DevOps Loop documentation for more details:
-#https://www.ibm.com/docs/en/devops-loop/2.0.2?topic=administration-installation-devops-loop
+#https://www.ibm.com/docs/en/devops-loop/3.0.0?topic=administration-installation-devops-loop
 DOMAIN=$(oc get -n openshift-ingress-operator ingresscontroller default -o jsonpath='{.status.domain}')
 
 #Required
@@ -654,7 +667,7 @@ PASSWORD_SEED=
 #Specify the TLS secret name in your namespace as necessary.
 #
 #See Installation of DevOps Loop documentation for more details:
-#https://www.ibm.com/docs/en/devops-loop/2.0.2?topic=administration-installation-devops-loop
+#https://www.ibm.com/docs/en/devops-loop/3.0.0?topic=administration-installation-devops-loop
 TLS_CERT_SECRET_NAME=
 
 #Set SELF_SIGNED=true to generate and use a self-signed certificate for the
@@ -711,6 +724,15 @@ HARBOR_SERVICE_ACCOUNT="${HARBOR_SERVICE_ACCOUNT:-harbor}"
 HARBOR_SCC_NAME="${HARBOR_SCC_NAME:-harbor-uid-10000-${NAMESPACE}}"
 
 ROOT_DIR=./ibm-devops-loop
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+MONGODB_HELPER_SCRIPT="${MONGODB_HELPER_SCRIPT:-${ROOT_DIR}/scripts/mongodb.sh}"
+if [ ! -f "${MONGODB_HELPER_SCRIPT}" ]; then
+  echo "ERROR: MongoDB helper not found at ${MONGODB_HELPER_SCRIPT}."
+  echo "Set ROOT_DIR to the extracted DevOps Loop helm chart directory or set MONGODB_HELPER_SCRIPT."
+  exit 1
+fi
+. "${MONGODB_HELPER_SCRIPT}"
 
 wait_for_secret() {
   local secret_name="$1"
@@ -793,46 +815,12 @@ run_install() {
     oc create namespace ${NAMESPACE} || { echo "Failed to create namespace"; return 1; }
   fi
 
-  if ! oc get secret mongodb-url-secret --namespace ${NAMESPACE} > /dev/null 2>&1; then
-
-    MONGO_CHART_VERSION="${MONGO_CHART_VERSION:-14.13.0}"
-    MONGO_IMAGE_TAG="${MONGO_IMAGE_TAG:-6.0}"
-    MONGO_IMAGE_REPO="${MONGO_IMAGE_REPO:-bitnamilegacy/mongodb}"
-    MONGO_HELM_RELEASE_NAME="${MONGO_HELM_RELEASE_NAME:-devops-loop-mongo}"
-    MONGO_NAMESPACE="${MONGO_NAMESPACE:-${NAMESPACE}}"
-    MONGO_PVC_SIZE=${MONGO_PVC_SIZE:-20Gi}
-
-    helm repo add bitnami https://charts.bitnami.com/bitnami --force-update 1> /dev/null
-
-    MONGO_INSTALL_OPTIONS="\
-      --set image.repository=${MONGO_IMAGE_REPO} \
-      --set image.tag=${MONGO_IMAGE_TAG} \
-      --set persistence.size=${MONGO_PVC_SIZE} \
-      --set global.compatibility.openshift.adaptSecurityContext=auto
-    "
-
-    if [ -n "${RWO_STORAGE_CLASS}" ]; then
-      MONGO_INSTALL_OPTIONS="${MONGO_INSTALL_OPTIONS} --set persistence.storageClass=${RWO_STORAGE_CLASS}"
-    fi
-
-    if [ -n "${MONGO_ADDITIONAL_INSTALL_OPTIONS:-}" ]; then
-      MONGO_INSTALL_OPTIONS="${MONGO_INSTALL_OPTIONS} ${MONGO_ADDITIONAL_INSTALL_OPTIONS}"
-    fi
-
-    helm upgrade --install ${MONGO_HELM_RELEASE_NAME} \
-      --version ${MONGO_CHART_VERSION} \
-      ${MONGO_INSTALL_OPTIONS} \
-      --namespace=${MONGO_NAMESPACE} \
-      --create-namespace \
-      bitnami/mongodb 1> /dev/null || { echo "Failed to install MongoDB"; return 1; }
-
-    MONGODB_ROOT_PASSWORD=$(oc get secret --namespace ${NAMESPACE} ${MONGO_HELM_RELEASE_NAME}-mongodb -o jsonpath="{.data.mongodb-root-password}" | base64 -d)
-
-    MONGO_URL="mongodb://root:${MONGODB_ROOT_PASSWORD}@${MONGO_HELM_RELEASE_NAME}-mongodb:27017/admin"
-
-    oc create secret generic mongodb-url-secret --namespace ${NAMESPACE} --from-literal=password="${MONGO_URL}" 1> /dev/null || { echo "Failed to create MongoDB secret"; return 1; }
-
-  fi
+  # Bitnami MongoDB provisioning has been removed. The helper deploys MongoDB
+  # using the official library/mongo image by default, with MONGO_IMAGE_TAG=8.0.28 because
+  # Velocity 5.2.x supports MongoDB 7.0 and 8.0. MongoDB 6.0 is unsupported for
+  # Velocity 5.1.8 and later, and MongoDB 8.2.x is not currently listed as
+  # supported for Velocity 5.2.x.
+  KUBE_CMD=oc ensure_mongodb_url_secret || return 1
 
   if [ "${SELF_SIGNED}" = "true" ]; then
     export TLS_CERT_SECRET_NAME=devops-loop-tls-secret
@@ -889,6 +877,7 @@ run_install() {
   echo "Installing DevOps Loop..."
 
   helm upgrade --install ${HELM_NAME} ${ROOT_DIR} ${HELM_OPTIONS} \
+    --set ibm-ucv-prod.secrets.database=mongodb-url-secret \
     --set harbor.enabled=false \
     -n ${NAMESPACE} -f ${ROOT_DIR}/values-openshift.yaml || return 1
 
@@ -979,6 +968,7 @@ run_install() {
   HARBOR_HELM_OPTIONS="${HELM_OPTIONS} \
 --set harbor.enabled=true \
 --set platform.harbor.enabled=true \
+--set ibm-ucv-prod.secrets.database=mongodb-url-secret \
 --set-string harbor.serviceAccountName=${HARBOR_SERVICE_ACCOUNT} \
 --set-string harbor.nginx.serviceAccountName=${HARBOR_SERVICE_ACCOUNT} \
 --set-string harbor.portal.serviceAccountName=${HARBOR_SERVICE_ACCOUNT} \
