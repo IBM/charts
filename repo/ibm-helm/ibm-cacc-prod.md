@@ -1724,7 +1724,7 @@ The BYO-LLM implementation includes:
 
 Before enabling BYO-LLM, you need:
 
-1. **A running PostgreSQL database** - Either deploy the included PostgreSQL chart or use an existing PostgreSQL instance
+1. **A running PostgreSQL database** - Provide an existing PostgreSQL instance accessible from the Kubernetes cluster
 2. **LLM provider API credentials** - Obtain API keys from your chosen LLM provider(s) (e.g., IBM watsonx.ai, AWS Bedrock, OpenAI, Azure OpenAI)
 
 **Note**: Model configuration is done through the Cognos Analytics UI after deployment, not in Helm values.
