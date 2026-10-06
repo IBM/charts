@@ -9,7 +9,7 @@ This chart deploys IBM Partner Engagement Manager Essential cluster on a contain
 
 1. Kubernetes version >=1.32 and <=1.36
 
-2. Red Hat OpenShift Container Platform Version 4.22 or later fixes
+2. Red Hat OpenShift Container Platform Version 4.19, 4.20, 4.21 and 4.22 or later fixes
 
 3. Helm version >= 3.21.x
 
@@ -507,7 +507,7 @@ The following table lists the configurable parameters of the ibm-pem-ng-essentia
 | Parameter                | Description             | Default        |
 | ------------------------ | ----------------------- | -------------- |
 | `image.name` | Provide the value in double quotes | `"cp.icr.io/cp/ibm-pem-ng/pemng"` |
-| `image.tag` | Specify the tag name | `"6.3.0.3"` |
+| `image.tag` | Specify the tag name | `"6.3.0.4"` |
 | `image.pullPolicy` |  | `null` |
 | `image.pullSecret` | Provide the pull secret name | `""` |
 | `arch` | Specify architecture (amd64, s390x) | `"amd64"` |
@@ -810,7 +810,7 @@ The following table lists the configurable parameters of the ibm-pem-ng-essentia
 `identityService.license`                               | Accept Identity/PEM license                                          |false
 `identityService.replicaCount`                          | Identity Service deployment replica count            | 1
 `identityService.image.repository`                      | Repository for Identity docker images                                     |
-`identityService.image.tag          `                   | Docker image tag                                                     | `1.0.1.3`
+`identityService.image.tag          `                   | Docker image tag                                                     | `1.0.1.4`
 `identityService.image.digest          `                | Docker image digest. Takes precedence over tag                       |
 `identityService.image.pullPolicy`                      | Pull policy for repository                                      | `IfNotPresent`
 `identityService.image.pullSecret `                     | Pull secret for repository access                              |
