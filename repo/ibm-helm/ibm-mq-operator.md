@@ -12,8 +12,7 @@ It uses message queues to facilitate the exchanges of information and offers
 a single messaging solution for cloud, mobile, Internet of Things (IoT) and on-premises
 environments.
 
-The IBM MQ Operator for Amazon Elastic Kubernetes Service (Amazon EKS) provides
-an easy way to manage the life cycle of IBM MQ queue managers.
+The IBM MQ Operator provides an easy way to manage the life cycle of IBM MQ queue managers on Red Hat&reg; OpenShift&reg; Container Platform (OCP) and Amazon Elastic Kubernetes Service (Amazon EKS).
 
 # Chart Details
 
@@ -24,7 +23,10 @@ needs to be installed by a cluster administrator.
 ## Prerequisites
 
 * Helm v3 or v4
-* Amazon EKS cluster versions 1.29 onwards
+* An OCP or Amazon EKS cluster at a supported version
+  * OCP versions are subject to their own support dates. See [Red Hat OpenShift Container Platform Life Cycle Dates](https://access.redhat.com/support/policy/updates/openshift) for more details.
+  * Kubernetes versions on Amazon EKS are subject to their own support dates. See [Understand the Kubernetes version lifecycle on EKS](https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html) for more details.
+  * For more information, see the Containers tab of the relevant [IBM MQ](https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=overview-where-find-product-requirements-support-information) system requirements page.
 * If persistence is enabled you need to ensure a Storage Class is defined in your cluster
 
 ### Resources Required
@@ -35,15 +37,17 @@ needs to be installed by a cluster administrator.
 
 ## Installing the Chart
 
-See [Installing and uninstalling the IBM MQ Operator on Amazon EKS](https://ibm.biz/BdbUmT)
+* See [Installing and upgrading the IBM MQ Operator on Red Hat OpenShift by using Helm](https://www.ibm.com/docs/en/SSYHRD_10.0.0/container/ctr_install_upgrade_operator_helm.html)
+* See [Installing and uninstalling the IBM MQ Operator on Amazon EKS](https://ibm.biz/BdbUmT)
 
 ## Chart Configuration
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | operator.env | object | `{}` | Environment variables to pass to the IBM MQ Operator  (e.g. `{env1: "value1",env2: "value2"}`) |
+| operator.deployment.replicas | integer | `1` | Number of IBM MQ Operator replicas (Values limited to `1` or `2`) |
 | operator.deployment.repository | string | `"cpopen/ibm-mq-operator"` | Remote repository for the IBM MQ Operator image |
-| operator.deployment.sha | string | `"sha256:1109597707dfb3fbde274e39698f08a9011f13ca75746a30414e246459571930"` | SHA value of the IBM MQ Operator image |
+| operator.deployment.sha | string | `"sha256:ed9a217869637c8749270fd485517ea62c8dffbd198a8f7090042ebbeb5bd127"` | SHA value of the IBM MQ Operator image |
 | operator.deployment.tag | string | `nil` | Tag value for the IBM MQ Operator image (`optional - ignored when a SHA value is provided`) |
 | operator.deployment.pullPolicy | string | `"IfNotPresent"` | Image pull policy for the IBM MQ Operator (`"IfNotPresent"`/ `"Always"` / `"Never"`)) |
 | operator.deployment.resources.requests.cpu | string | `"1"` | CPU requests setting for the IBM MQ Operator |
@@ -69,7 +73,9 @@ The IBM MQ Operator deploys queue manager images that are pulled from a containe
 
 To deploy a queue manager, see [Deploying and configuring queue managers using the IBM MQ Operator](https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=configuring-deploying-queue-managers-using-mq-operator).  Queue managers can be installed by a namespace administrator.
 
-**Important:** When deploying an IBM MQ queue manager on Amazon Elastic Kubernetes Service (Amazon EKS), all Red Hat OpenShift Container Platform features **MUST** be explicitly disabled as follows:
+**Important:** The following configuration applies only when deploying on Amazon Elastic Kubernetes Service (Amazon EKS), **not** to deployments on Red Hat&reg; OpenShift&reg; Container Platform (OCP).
+
+When deploying an IBM MQ queue manager on Amazon EKS, all Red Hat OpenShift Container Platform features **MUST** be explicitly disabled as follows:
 
 ```
 # QueueManager YAML snippet
@@ -98,7 +104,13 @@ For some upgrades, you may also need to update the license:
 
 See [Current license versions](https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-licensing-api-references-mq-operator) for more details.
 
-To upgrade, update the field(s) in the Queue Manager yaml by, for example, running: 
+To upgrade, update the field(s) in the Queue Manager yaml by, for example, running on OCP:
+
+```
+oc edit queuemanager <Queue Manager's metadata.name> -n <namespace>
+```
+
+or, on Amazon EKS:
 
 ```
 kubectl edit queuemanager <Queue Manager's metadata.name> -n <namespace>
