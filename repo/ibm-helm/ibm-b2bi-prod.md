@@ -1,4 +1,4 @@
-# IBM Sterling B2B Integrator Enterprise Edition v6.2.1.3
+# IBM Sterling B2B Integrator Enterprise Edition v6.2.2.2
 ## Introduction
 
 IBM Sterling B2B Integrator helps companies integrate complex B2B EDI processes with their partner communities. Organizations get a single, flexible B2B platform that supports most communication protocols, helps secure your B2B network and data, and achieves high-availability operations. The offering enables companies to reduce costs by consolidating EDI and non-EDI any-to-any transmissions on a single B2B platform and helps automate B2B processes across enterprises, while providing governance and visibility over those processes.
@@ -356,6 +356,11 @@ Application Server Independent (ASI) pod  |       4 Gi        |     8 Gi     |  
 Adapter Container (AC) pod                |       4 Gi        |     8 Gi     |      2        |    4
 Liberty API server (API) pod              |       2 Gi        |     4 Gi     |      2        |    4
 External Purge (API) pod                  |       0.5 Gi      |     1 Gi     |      0.1      |    0.5
+Resources init container (`resources-init`)         | 128 Mi   |    256 Mi    |     100m      |   500m
+Customization init container (`customization-init`) | 128 Mi   |    256 Mi    |     100m      |   500m
+ITX integration init container (`itx-init`)         | 128 Mi   |    256 Mi    |     100m      |   500m
+ITXA integration init container (`itxa-init`)       | 128 Mi   |    256 Mi    |     100m      |   500m
+ITXA resources init container (`itxa-resources-init`) | 128 Mi |    256 Mi    |     100m      |   500m
 
 ## Installing the Chart
 
@@ -383,7 +388,7 @@ Parameter                                      | Description                    
 `global.license`                               | Accept B2BI/SFG license                                              | `false`
 `global.licenseType`                           | Specify the license edition as per license agreement.                | prod
 `global.image.repository`                      | Repository for B2B docker images                                     | 
-`global.image.tag          `                   | Docker image tag                                                     | `6.2.1.3`
+`global.image.tag          `                   | Docker image tag                                                     | `6.2.2.2`
 `global.image.digest          `                | Docker image digest. Takes precedence over tag                       | 
 `global.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `global.image.pullSecret `         			   | Pull secret for repository access                                    | `ibm-entitlement-key`
@@ -401,6 +406,10 @@ Parameter                                      | Description                    
 `resourcesInit.image.digest`                   | Docker image digest. Takes precedence over tag                       |
 `resourcesInit.image.pullPolicy`               | Pull policy for repository                                           | `IfNotPresent`
 `resourcesInit.command`                        | Command to be executed in the resource init container                |
+`resourcesInit.resources.requests.cpu`         | CPU request for the resource init container (`resources-init`)       | `100m`
+`resourcesInit.resources.requests.memory`      | Memory request for the resource init container (`resources-init`)    | `128Mi`
+`resourcesInit.resources.limits.cpu`           | CPU limit for the resource init container (`resources-init`)         | `500m`
+`resourcesInit.resources.limits.memory`         | Memory limit for the resource init container (`resources-init`)      | `256Mi`
 `customizationInit.enabled`                        | Enable customization init container                                      | false
 `customizationInit.dataSetup.enabled`          | Enable data setup for customization init container                                      | false
 `customizationInit.dataSetup.includeServicePackages`  | Custom service packages to include during data setup for customization init container             | `all`
@@ -409,6 +418,10 @@ Parameter                                      | Description                    
 `customizationInit.image.digest`                   | Docker image digest. Takes precedence over tag                       |
 `customizationInit.image.pullPolicy`               | Pull policy for repository                                           | `IfNotPresent`
 `customizationInit.command`                        | Command to be executed during customization init container startup               |
+`customizationInit.resources.requests.cpu`         | CPU request for the customization init container (`customization-init`) | `100m`
+`customizationInit.resources.requests.memory`      | Memory request for the customization init container (`customization-init`) | `128Mi`
+`customizationInit.resources.limits.cpu`           | CPU limit for the customization init container (`customization-init`) | `500m`
+`customizationInit.resources.limits.memory`         | Memory limit for the customization init container (`customization-init`) | `256Mi`
 `persistence.enabled`                          | Enable storage access to persistent volumes                          | true
 `persistence.useDynamicProvisioning`           | Enable dynamic provisioning of persistent volumes                    | false 
 `appResourcesPVC.enabled`                      | Enable Application resource storage                                  | true 
@@ -446,7 +459,7 @@ Parameter                                      | Description                    
 `dataSetup.enabled`                            | Enable database setup job execution                                  | true
 `dataSetup.upgrade`                            | Upgrade an older release                                             | false
 `dataSetup.image.repository`                 | DB setup container image repository                                   | 
-`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.2.1.3`
+`dataSetup.image.tag`                         | DB setup container image tag                                          | `6.2.2.2`
 `dataSetup.image.digest'                      | Docker image digest. Takes precedence over tag                       |
 `dataSetup.image.pullPolicy`                 | Pull policy for repository                                           | `IfNotPresent`
 `dataSetup.image.pullSecret`         		  | Pull secret for repository access                                    |  `ibm-entitlement-key` 
@@ -486,6 +499,10 @@ Parameter                                      | Description                    
 `integrations.itxIntegration.log.includeHostInLogNames`            | Include hostname in log file name                               | true
 `integrations.itxIntegration.log.jniLog.level`                     | JNI log level                                                   | `none`
 `integrations.itxIntegration.log.cmgrLog.level`                    | Connections Manager log level                                   | `none`
+`integrations.itxIntegration.resources.requests.cpu`               | CPU request for the `itx-init` init container                   | `100m`
+`integrations.itxIntegration.resources.requests.memory`            | Memory request for the `itx-init` init container                | `128Mi`
+`integrations.itxIntegration.resources.limits.cpu`                 | CPU limit for the `itx-init` init container                      | `500m`
+`integrations.itxIntegration.resources.limits.memory`              | Memory limit for the `itx-init` init container                   | `256Mi`
 `integrations.itxaIntegration.enabled`          | Enable ITXA integration. For more information, please refer to the product documentation            | false
 `integrations.itxaIntegration.dataSetup.enabled`| Enable database setup job execution for itxa                         | true
 `integrations.itxaIntegration.image.repository` | Repository for ITXA docker images                                    | 
@@ -500,16 +517,25 @@ Parameter                                      | Description                    
 `integrations.itxaIntegration.sso.host`                                  | Host name for ITXA UI server                                         | 
 `integrations.itxaIntegration.sso.port`                                  | Port on which ITXA UI server is accessible                           | 
 `integrations.itxaIntegration.sso.ssl.enabled`                           | TLS for ITXA UI server                                               |  true
+`integrations.itxaIntegration.resources.requests.cpu`                    | CPU request for the `itxa-init` init container                       | `100m`
+`integrations.itxaIntegration.resources.requests.memory`                 | Memory request for the `itxa-init` init container                    | `128Mi`
+`integrations.itxaIntegration.resources.limits.cpu`                      | CPU limit for the `itxa-init` init container                         | `500m`
+`integrations.itxaIntegration.resources.limits.memory`                   | Memory limit for the `itxa-init` init container                      | `256Mi`
 `integrations.itxaIntegration.resourcesInit.enabled`                        | Enable resource init container for ITXA                              | true
 `integrations.itxaIntegration.resourcesInit.image.repository`               | Repository for resource init container images                        |
 `integrations.itxaIntegration.resourcesInit.image.tag`                      | Docker image tag                                                     |
 `integrations.itxaIntegration.resourcesInit.image.digest`                   | Docker image digest. Takes precedence over tag                       |
 `integrations.itxaIntegration.resourcesInit.image.pullPolicy`               | Pull policy for repository                                           | `IfNotPresent`
+`integrations.itxaIntegration.resourcesInit.resources.requests.cpu`         | CPU request for the `itxa-resources-init` init container             | `100m`
+`integrations.itxaIntegration.resourcesInit.resources.requests.memory`      | Memory request for the `itxa-resources-init` init container         | `128Mi`
+`integrations.itxaIntegration.resourcesInit.resources.limits.cpu`           | CPU limit for the `itxa-resources-init` init container               | `500m`
+`integrations.itxaIntegration.resourcesInit.resources.limits.memory`        | Memory limit for the `itxa-resources-init` init container            | `256Mi`
 `setupCfg.basePort`                            | Base/initial port for the application                                | 50000
 `setupCfg.licenseAcceptEnableSfg`              | Consent for accepting license for Sterling File Gateway module       | false
 `setupCfg.licenseAcceptEnableEbics`            | Consent for accepting license for EBICs module                       | false
 `setupCfg.licenseAcceptEnableFinancialServices`| Consent for accepting license for EBICs client module                | false
 `setupCfg.licenseAcceptEnableFileOperation`    | Consent for accepting license to enable File Operation               | false
+`setupCfg.enableSfg2`                           | Enable Sfg2 to access File Gateway 2.0 APIs.       | false
 `setupCfg.systemPassphraseSecret`              | System passphrase secret name                                        | 
 `setupCfg.enableFipsMode`                      | Enable FIPS mode                                                     | false
 `setupCfg.fipsCustomProfileName`               | FIPS custom Profile Name                                             |
@@ -555,6 +581,8 @@ Parameter                                      | Description                    
 `setupCfg.libertyProtocol`                     | Liberty API server SSL connection protocol                           | `TLSv1.2` 
 `setupCfg.libertySecret`                       | Liberty API server SSL connection secret name                        | 
 `setupCfg.libertyJvmOptions`                   | Liberty API server JVM option (will be deprecated in future release) |
+`setupCfg.clientSecret`                   | Client Secret which container client id and client secret                 | 
+`setupCfg.legacyApisAuthType`                   | The authentication type used for legacy B2BI/SFG APIs and Customization UI. Permitted values are basic (default) and oauth.                 | `basic`
 `setupCfg.defaultDocumentStorageType`        | Default document storage type                                        | `DB`
 `setupCfg.restartCluster`        | restartCluster can be set to true to restart the application cluster by cleaning up all previous node entries, locks and set the schedules to node1.                                        | false
 `setupCfg.useSslForRmi`                        | Enable SSL over RMI calls                                            | true
@@ -766,6 +794,11 @@ name	                                         |
 `api.frontendService.ports.https.targetPort`           | Service target port number or name on pod                            | `https`
 `api.frontendService.ports.https.nodePort`             | Service node port                                                    | 30003
 `api.frontendService.ports.https.protocol`             | Service port connection protocol                                     | `TCP`
+`api.frontendService.ports.fg2https.name`                 | Service http port name for fg2                                   | `fg2https`
+`api.frontendService.ports.fg2https.port`                 | Service http port number                                         | 35009
+`api.frontendService.ports.fg2https.targetPort`           | Service target port number or name on pod                        | `fg2https`
+`api.frontendService.ports.fg2https.nodePort`             | Service node port                                                | 30009
+`api.frontendService.ports.fg2https.protocol`             | Service port connection protocol                                 | `TCP`
 `api.frontendService.extraPorts`                       | Extra ports for service                                              | 
 `api.frontendService.loadBalancerIP`                   | LoadBalancer IP for service                                          |
 `api.frontendService.loadBalancerSourceRanges`        | LoadBalancer IP Ranges for service                                          |
@@ -813,14 +846,14 @@ name	                                         |
 `nameOverride`                                 | Chart resource short name override                                   | 
 `fullnameOverride`                             | Chart resource full name override                                    | 
 `test.image.repository`                        | Repository for docker image used for helm test and cleanup           | 'ibmcom/common-utils'
-`test.image.tag          `                     | helm test and cleanup docker image tag                               | `1.0.0.1`
+`test.image.tag          `                     | helm test and cleanup docker image tag                               | `1.0.0.2`
 `test.image.digest          `                  | helm test and cleanup docker image digest. Takes precedence over tag |
 `test.image.pullPolicy`                        | Pull policy for helm test image repository                           | `IfNotPresent`
 `test.extraLabels`                            | Extra labels                                                          |
 `test.extraAnnotations`                   | Extra or custom Annotations                                    |
 `purge.enabled`                                | Enable external purge job                                            | 'false'
 `purge.image.repository          `             | External purge docker image repository                               | `purge`
-`purge.image.tag          `                    | External purge image tag                                             | `6.2.1.3`
+`purge.image.tag          `                    | External purge image tag                                             | `6.2.2.2`
 `purge.image.digest          `                 | External purge image digest. Takes precedence over tag               |
 `purge.image.pullPolicy`                       | Pull policy for external purge docker image                          | `IfNotPresent`
 `purge.image.pullSecret`                       | Pull secret for repository access                                    | `ibm-entitlement-key`
@@ -879,10 +912,11 @@ name	                                         |
 `as4Service.license`                               | Accept AS4/SFG license                                               | `false`
 `as4Service.licenseType`                           | Specify the license edition as per license agreement.                | non-prod
 `as4Service.image.repository`                      | Repository for AS4 docker images                                     |
-`as4Service.image.tag          `                   | Docker image tag                                                     | `6.2.1.3`
+`as4Service.image.tag          `                   | Docker image tag                                                     | `6.2.2.2`
 `as4Service.image.digest          `                | Docker image digest. Takes precedence over tag                       |
 `as4Service.image.pullPolicy`                      | Pull policy for repository                                           | `IfNotPresent`
 `as4Service.image.pullSecret `                     | Pull secret for repository access                              | 
+`as4Service.serviceAccount.name`           | User wishes to use own/already created service account                  | default
 `as4Service.dataSetup.enabled`                           | Enable database setup job execution                                  | true
 `as4Service.dbSetup.dbVendor`                            | Database vendor - DB2/Oracle/MSSQL                                   |
 `as4Service.dbSetup.dbHost`                              | Database host                                                        |
@@ -896,7 +930,29 @@ name	                                         |
 `as4Service.mqSetup.mqSecret`                            | MQ Server user secret Name                                           |
 `as4Service.as4operational.ingress.internal.host`        | Internal Host name for ingress resource                              |
 `as4Service.as4informational.ingress.internal.host`      | Internal Host name for ingress resource                              |
-
+`identityService.enabled`                               | Enable integration with Identity Service                             |false  
+`identityService.license`                               | Accept Identity/SFG license                                          |false
+`identityService.replicaCount`                             | Identity Service deployment replica count         | 1
+`identityService.image.repository`                      | Repository for Identity docker images                                     |
+`identityService.image.tag          `                   | Docker image tag                                                     | `1.0.0.3`
+`identityService.image.digest          `                | Docker image digest. Takes precedence over tag                       |
+`identityService.image.pullPolicy`                      | Pull policy for repository                                      | `IfNotPresent`
+`identityService.image.pullSecret `                     | Pull secret for repository access                              |
+`identityService.serviceAccount.name`                          | Existing service account name                                        | `default`
+`identityService.service.type`            | Service type (`ClusterIP`, `NodePort`, `LoadBalancer`)       | `ClusterIP`
+`identityService.service.externalPort`    | External port exposed by the service      | `443` 
+`identityService.service.externalIP`      | External IP address to use when the service type is `NodePort` or `LoadBalancer`  
+`identityService.ingress.enabled`                       | Enable ingress for Identity Service                          | `true`   
+`identityService.ingress.host`                          | Ingress host name for the Identity server  		|
+`identityService.application.server.ssl.enabled`              |  Enabling SSL on the identity service                          | true
+`identityService.application.server.ssl.tlsSecretName`              | TLS secret name which contains certificate            | 
+`identityService.application.clientSecret`              | Client Secret             |  "identity-client-secret"
+`identityService.application.dbVendor`                            | Database vendor - DB2/Oracle/MSSQL                                   | 
+`identityService.application.dbHost`                              | Database host                                                        | 
+`identityService.application.dbPort`                              | Database port                                                        | 
+`identityService.application.dbData`                              | Database schema name                                                 | 
+`identityService.application.dbDrivers`                           | Database driver jar name                                             | 
+`identityService.application.dbSecret`                            | Database user secret name                                            | 
 
 
 ## Upgrading the Chart
