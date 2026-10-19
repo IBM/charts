@@ -21,9 +21,9 @@ IBM OpenContent Flink Operator resource requirements depend on several factors. 
 resource requirements, see the [documentation](https://ibm.biz/event-automation).
 
 ## Installing the Chart
-For information about installing the IBM OpenContent Flink Operator, see the [documentation](https://ibm.biz/ep-installing-flink).
+For information about installing the IBM OpenContent Flink Operator, see the [documentation](https://github.ibm.com/IBMPrivateCloud/BedrockServices/blob/master/AdopterGuides/ApacheFlinkOperator.md#flink-operator-installation-and-setting-up-flinkdeployment).
 To create an instance, read the [license agreement](https://ibm.biz/ea-license) and accept it by adding
-the license-related parameters to the `FlinkDeployment` custom resource as described in the [documentation](https://ibm.biz/ep-installing-flink).
+the license-related parameters to the `FlinkDeployment` custom resource as described in the [documentation](https://github.ibm.com/IBMPrivateCloud/BedrockServices/blob/master/AdopterGuides/ApacheFlinkOperator.md#flink-operator-installation-and-setting-up-flinkdeployment).
 If these parameters are not present, the deployment fails.
 
 ## Configuration

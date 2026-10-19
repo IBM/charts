@@ -41,7 +41,14 @@ For migration from OLM-based deployment, see [helm-migration/README.md](../helm-
 
 ### Cluster-Scoped Chart Parameters (ibm-usage-metering-cluster-scoped Helm chart)
 
-The cluster-scoped chart does not expose any configurable Helm values.
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `global.instanceNamespace` | Namespace where the IBM Usage Metering instance is created | `""` |
+| `ibmUsageMetering.executionMode` | Execution mode (`standard` or `processor_capacity_enabled`) | `standard` |
+| `ibmUsageMetering.createRBAC` | Create RBAC resources required by the chart | `true` |
+| `ibmUsageMetering.operand.serviceAccount.name` | Custom service account name for operand | `ibm-usage-metering-instance` |
+| `ibmUsageMetering.features.nodeCpuCappingEnabled` | Enable node CPU capping RBAC rules | `true` |
+| `ibmUsageMetering.features.kubeRBACAuthEnabled` | Enable Kubernetes RBAC authentication rules | `false` |
 
 ## Uninstalling
 

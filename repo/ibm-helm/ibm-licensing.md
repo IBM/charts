@@ -39,3 +39,36 @@ helm install ibm-licensing-cluster-scoped ./helm-cluster-scoped --namespace ibm-
 # Step 2 – namespace-scoped resources (install per tenant namespace)
 helm install ibm-licensing ./helm --namespace ibm-licensing
 ```
+
+## Configuration
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `global.imagePullPrefix` | Image registry prefix | `icr.io` |
+| `global.imagePullSecret` | Image pull secret name | `ibm-entitlement-key` |
+| `global.licenseAccept` | Accept IBM license agreement | `true` |
+| `ibmLicensing.namespace` | Namespace where the operator and operand are installed | `ibm-licensing` |
+| `ibmLicensing.watchNamespace` | Namespace the operator watches for IBMLicensing CRs | `ibm-licensing` |
+| `ibmLicensing.excludeNamespace` | Comma-separated list of namespaces to exclude from license collection | `""` |
+| `ibmLicensing.imageRegistryNamespaceOperator` | Operator image registry namespace | `cpopen` |
+| `ibmLicensing.imageRegistryNamespaceOperand` | Operand image registry namespace | `cpopen/cpfs` |
+| `ibmLicensing.createRBAC` | Create RBAC resources required by the chart | `true` |
+| `ibmLicensing.createRBACInWatchedNamespaces` | Create RBAC resources in each watched namespace | `true` |
+| `ibmLicensing.spec` | Custom IBMLicensing resource specification (merged into the CR) | `{}` |
+| `ibmLicensing.spec.features.nssEnabled` | Enable namespace-scope support | `false` |
+| `ibmLicensing.spec.features.nodeCpuCappingEnabled` | Enable node CPU capping | `true` |
+| `ibmLicensing.spec.features.kubeRBACAuthEnabled` | Enable kube RBAC authentication | `true` |
+| `ibmLicensing.spec.features.operandRequestsEnabled` | Enable operand requests | `true` |
+| `ibmLicensing.spec.features.customResourcesEnabled` | Enable custom resources | `true` |
+| `ibmLicensing.operator.podAnnotations` | Extra annotations added to the operator pod. IBM product annotations cannot be overridden | `{}` |
+| `ibmLicensing.operator.podLabels` | Extra labels added to the operator pod. IBM selector labels cannot be overridden | `{}` |
+| `ibmLicensing.operator.affinity` | Additional affinity rules merged with the IBM default `kubernetes.io/arch` node affinity | `{}` |
+| `ibmLicensing.operator.nodeSelector` | Node selector for the operator pod | `{}` |
+| `ibmLicensing.operator.serviceAccount.name` | Override the operator service account name. Use with `createRBAC: false` for pre-created service accounts | `""` |
+| `ibmLicensing.operator.annotations` | *(Legacy)* Extra annotations for the operator pod — use `operator.podAnnotations` instead | `{}` |
+| `ibmLicensing.operator.labels` | *(Legacy)* Extra labels for the operator pod — use `operator.podLabels` instead | `{}` |
+| `ibmLicensing.operand.serviceAccount.name` | Override the active operand service account name (`ibm-license-service` or `ibm-license-service-restricted` depending on `nssEnabled`) | `""` |
+| `ibmLicensing.operand.podAnnotations` | Extra annotations added to the operand pod. IBM product annotations cannot be overridden | `{}` |
+| `ibmLicensing.operand.podLabels` | Extra labels added to the operand pod. IBM selector labels cannot be overridden | `{}` |
+| `ibmLicensing.operand.affinity` | Additional affinity rules merged with the IBM default `kubernetes.io/arch` node affinity for the operand pod | `{}` |
+| `ibmLicensing.operand.nodeSelector` | Node selector for the operand pod | `{}` |
