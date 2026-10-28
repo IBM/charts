@@ -10,10 +10,17 @@ The following table details orchestration platforms suitable for deployment of t
 |Kubernetes|1.31|x86|
 |Kubernetes|1.32|x86|
 |Kubernetes|1.33|x86|
+|Kubernetes|1.34|x86|
+|Kubernetes|1.35|x86|
+|Kubernetes|1.36|x86|
+|Kubernetes|1.37|x86|
 |Red Hat OpenShift®|4.16|x86|
 |Red Hat OpenShift|4.17|x86|
 |Red Hat OpenShift®|4.18|x86|
 |Red Hat OpenShift|4.19|x86|
+|Red Hat OpenShift|4.20|x86|
+|Red Hat OpenShift|4.21|x86|
+|Red Hat OpenShift|4.22|x86|
 
 ## Introduction
 [IBM Cloud Object Storage](https://cloud.ibm.com/docs/services/cloud-object-storage?topic=cloud-object-storage-about-ibm-cloud-object-storage#about-ibm-cloud-object-storage) is persistent, highly available storage that you can mount to apps that run in a Kubernetes cluster by using the IBM Cloud Object Storage plug-in. The plug-in is a Kubernetes Flex-Volume plug-in that connects Cloud Object Storage buckets to pods in your cluster. Information that is stored with IBM Cloud Object Storage is encrypted in transit and at rest, dispersed across multiple geographic locations, and accessed over HTTP by using a REST API.
@@ -171,7 +178,7 @@ Install the IBM Cloud Object Storage plug-in with a Helm chart to set up pre-def
 4. Download the Helm chart and unpack the chart in your current directory. Then, navigate to the `ibm-object-storage-plugin` directory.
 
    ```
-   helm fetch --untar ibm-helm/ibm-object-storage-plugin && cd ibm-object-storage-plugin
+   helm pull --untar ibm-helm/ibm-object-storage-plugin && cd ibm-object-storage-plugin
    ```
 5. To limit the IBM Cloud Object Storage plug-in access to Kubernetes secrets, go to **Optional: Limit secret access** ; otherwise, if there is no limitation to be set, continue with next step.
 
@@ -846,6 +853,7 @@ Review the parameters that you can configure during the IBM Cloud Object Storage
 |`maxUnavailableNodeCount`|The number of worker nodes that can be unavailable during an update of the IBM Cloud Object Storage plug-in. |1|1|
 |`image.pluginImage`|The container registry to pull plug-in image from . For RHCOS image will be pulled from `ibmcom` namespace and from `icr.io/ibm/` namespace for IKS.| RHCOS: `ibmcom/ibmcloud-object-storage-plugin`, IKS: `icr.io/ibm/ibmcloud-object-storage-plugin` | RHCOS: `ibmcom/ibmcloud-object-storage-plugin`, IKS: `icr.io/ibm/ibmcloud-object-storage-plugin` |
 |`image.driverImage`|The container registry to pull driver image from . For RHCOS image will be pulled from `ibmcom` namespace and from `icr.io/ibm/` namespace for IKS.| RHCOS: `ibmcom/ibmcloud-object-storage-driver`, IKS: `icr.io/ibm/ibmcloud-object-storage-driver` | RHCOS: `ibmcom/ibmcloud-object-storage-driver`, IKS: `icr.io/ibm/ibmcloud-object-storage-driver` |
+|`image.pauseImage`|The container registry to pull pause image from. Image will be pulled from `icr.io/armada-master/` namespace for both RHCOS and IKS.| RHCOS: `icr.io/armada-master/pause:3.10.2`, IKS: `icr.io/armada-master/pause:3.10.2` | RHCOS: `icr.io/armada-master/pause:3.10.2`, IKS: `icr.io/armada-master/pause:3.10.2` |
 |`iamEndpoint`|The IBM Cloud Identity and Access Management API endpoint that you want to use. |`https://iam.cloud.ibm.com`|`https://iam.cloud.ibm.com`|
 |`cos.endpoint`|The s3 API endpoint for your Cloud Object Storage instance that you want to use. The API endpoint varies depending on the type of Cloud Object Storage that you use. |IBM Cloud Object Storage service: `https://s3.us.cloud-object-storage.appdomain.cloud`, Minio: `http://minio-service.default:9000`|`https://<Endpoint URL>`|
 |`cos.storageClass`|The name of the storage class which refers to `Location + Storage Class` / `LocationConstraint` as discussed [here](https://cloud.ibm.com/docs/services/cloud-object-storage/basics/classes.html#locationconstraint) |`standard`| `<StorageClass>`|
