@@ -1,17 +1,32 @@
-# CDC Replication Engine — Helm Chart
+# CDC Replication Engine - Helm Chart
 
 This chart deploys IBM CDC replication engine instances in Kubernetes and OpenShift clusters.
-One chart supports all CDC source engine types; the deployed engine is selected by setting
-`productType` in your values file.
+One Helm release corresponds to one CDC engine instance. The engine type is selected by
+setting `productType` in your values file.
 
-## Quick links
+**Supported engine types:**
 
-| What you need | Where to go |
+| `productType` value | Engine |
 |---|---|
-| Common setup (namespace, pull secret, registry, networking) | [docs/common-quickstart.md](docs/common-quickstart.md) |
-| Deploy CDC for IBM Db2 LUW | [docs/quickstart-udb.md](docs/quickstart-udb.md) |
-| Deploy CDC for PostgreSQL | [docs/quickstart-postgresql.md](docs/quickstart-postgresql.md) |
-| Air-gapped / private registry mirroring | [samples/mirror-images.sh](samples/mirror-images.sh) · [samples/mirror-images.txt](samples/mirror-images.txt) |
-| Deployment examples (upgrade, credential rotation, multiple instances) | [samples/](samples/) |
-| All configuration options | [values.yaml](values.yaml) |
-| Configuration schema and validation | [values.schema.json](values.schema.json) |
+| `udb` | CDC for IBM Db2 LUW |
+| `postgresql` | CDC for PostgreSQL |
+| `db2z` | CDC for IBM Db2 for z/OS Remote Source |
+| `kafka` | CDC for Kafka (target engine) |
+| `iceberg` | CDC for Iceberg (target engine) |
+
+**What the chart deploys:** a single StatefulSet with one pod, a ClusterIP Service, and a
+PersistentVolumeClaim. Instance state - subscriptions, bookmarks, replication metadata - is
+stored on the PVC and survives pod restarts and upgrades.
+
+**CLI tools:** The chart tarball includes `tools/cdc-container-cli-<version>.tgz` - a set
+of `dm*` command-line utilities that proxy CDC engine commands into the running pod using
+`kubectl exec`. Extract the tarball on Linux or macOS to use them.
+
+**Full documentation** is included in the `docs/` folder inside the chart tarball and in
+the [IBM CDC Knowledge Center](https://www.ibm.com/docs/en/idr/12.0.0).
+
+**System requirements and supported platform versions:**
+[IBM Data Replication System Requirements](https://www.ibm.com/support/pages/node/608111)
+
+**IBM Entitlement Key** (required for pulling images from the IBM entitled registry):
+[IBM Container Library](https://myibm.ibm.com/products-services/containerlibrary)
