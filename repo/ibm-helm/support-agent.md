@@ -138,9 +138,9 @@ spec:
         fileName: "support_agent_bootstrap_config.yaml"
   
   chart:
-    repository: oci://icr.io/wxa4z-dev-container-registry
+    repository: oci://cp.icr.io/cp/ibm-watsonx-assistant-for-z
     name: support-agent
-    version: "1.4.0"  # Update to the desired chart version
+    version: "1.5.0"  # Update to the desired chart version
     # Uncomment if using a private registry:
     # pullSecrets:
     #   - name: wxa4z-image-pull-secret

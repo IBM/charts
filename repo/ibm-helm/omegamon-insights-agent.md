@@ -123,16 +123,16 @@ spec:
   
   agentDetails:
     - agentName: omegamon-insights-agent
-      agentId: wxa4z:omegamon-insights-agent:agent
+      agentId: wxa4z:omegamon-agent-z:agent
       description: 'Enables system programmers to retrieve and analyze OMEGAMON system information'
       bootstrapConfig:
         name: "omegamon-insights-agent-bootstrap-config"
         fileName: "omegamon_insights_agent_bootstrap_config.yaml"
   
   chart:
-    repository: oci://icr.io/wxa4z-dev-container-registry
+    repository: oci://cp.icr.io/cp/ibm-watsonx-assistant-for-z
     name: omegamon-insights-agent
-    version: "1.4.0"  # Update to the desired chart version
+    version: "1.5.0"  # Update to the desired chart version
     # Uncomment if using a private registry:
     # pullSecrets:
     #   - name: wxa4z-image-pull-secret

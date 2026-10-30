@@ -13,8 +13,7 @@ The IBM Z Upgrade agent enables system programmers to perform z/OS upgrades thro
 Lists software instance details | Shows detailed metadata of a given software instance such as its Name, Description, Global Zone, Target Zone, and so on.
 Retrieves missing FIXCATs by software instance | Identifies missing FIXCAT Updates for specific software instances and systems.
 Retrieves missing FIXCATs by software product | Identifies missing FIXCAT updates for software instances associated with the specified products and systems.
-Retrieves missing CRITICAL updates by software instance | Identifies missing CRITICAL updates such as HIPERs and PEs for specific software instances and systems.
-Retrieves missing CRITICAL updates by HOLD class | Filters and retrieves missing critical fixes by specific HOLD class — HIPERs, PEs, or SECINT — for a given software instance or system.
+Retrieves missing CRITICAL updates by software instance | Identifies missing  CRITICAL Updates such as HIPERs and PEs for specific software instances and systems.
 Acquires missing FIXCAT and CRITICAL updates | Retrieves the required PTFs for the specified RESOLVERS or FIXCAT names.
 Monitors PTF acquisition job status| Tracks the progress and current status of background jobs initiated to acquire PTFs.
 Installs the acquired PTFs | Begins the installation or update process for the requested PTFs.
@@ -66,16 +65,24 @@ Create a secret with the following structure. **All values must be base64-encode
 apiVersion: v1
 kind: Secret
 metadata:
-  name: wxa4z-upgrade-agent-secrets
+  name: upgrade-agent-secrets
   namespace: ""  # REQUIRED: Must match the agent namespace
 type: Opaque
 data:
   # Agent Authentication (base64-encoded, REQUIRED)
   AGENT_AUTH_TOKEN: ""  # REQUIRED: Agent auth token for registration with WxO
+  
+  # z/OSMF Configuration (base64-encoded, REQUIRED)
+  ZOSMF_ENDPOINT: ""  # REQUIRED: z/OSMF endpoint URL
+  ZOSMF_USERNAME: ""  # REQUIRED: z/OSMF username (requires TSO logon permission)
+  ZOSMF_PASSWORD: ""  # REQUIRED: z/OSMF password
+  INIT_KEY: "" # REQUIRED: Authrization upgrade agent key
 ```
 
 > **Important:**
 > - **AGENT_AUTH_TOKEN is required** for agent registration with watsonx Orchestrate.
+> - z/OSMF credentials are required for upgrade operations.
+> - The z/OSMF user must have TSO logon permission.
 
 #### Creating the Secret
 
@@ -109,16 +116,27 @@ The following table outlines the key configuration parameters:
 | **spec.values.secrets.name** | Name of agent-specific secrets | Yes |
 | **spec.values.global.secrets.name** | Name of global shared secrets | Yes |
 | **spec.values.env.HOST_NAME** | Cluster endpoint where the image is deployed | Yes |
-| **spec.values.env.AUTHZ_SERVICE_URL** | URL for AuthZ service | Yes |
+| **spec.values.env.AGENT_ID** | Unique identifier for the agent (e.g., `wxa4z:upgrade-agent:agent`). Must match the Agent ID configured in the authorization service and `spec.agentDetails[].agentId`. | Yes |
+| **spec.values.env.PDS_NAME** | Partitioned Dataset Name for storing REXX script | Yes |
 
 #### Additional Configuration Parameters
 
-The following environment variables can be configured for ZRAG queries:
+The following environment variables can be configured for PTF job operations:
 
 | Parameter | Description |
 |-----------|-------------|
 | **WRAPPER_URL** | Endpoint for OpenSearch |
 | **INGESTION_URL** | URL for document ingestion service |
+| **SMPNTS** | Path for SMP/E target zone datasets |
+| **SMPWDIR_PATH** | SMP/E working directory path |
+| **SMPJHOME** | SMP/E Java-based interface root directory |
+| **SMPCPATH** | Path for SMP/E CSI datasets |
+| **ORDER_SERVER_URL** | IBM Shopz server URL |
+| **KEYRING** | RACF keyring name for certificate storage |
+| **CERT_NAME** | Keyring certificate label |
+| **DOWNLOAD_METHOD** | Download method (https, ftp, or sftp) |
+| **DOWNLOADKEYRING** | RACF keyring for outbound TLS connections |
+| **SIGNATUREKEYRING** | RACF keyring for PTF signature verification |
 
 #### CR Definition
 
@@ -147,9 +165,9 @@ spec:
         fileName: "upgrade_agent_bootstrap_config.yaml"
   
   chart:
-    repository: oci://icr.io/wxa4z-dev-container-registry
+    repository: oci://cp.icr.io/cp/ibm-watsonx-assistant-for-z
     name: upgrade-agent
-    version: "1.4.0"  # Update to the desired chart version
+    version: "1.5.0"  # Update to the desired chart version
     # Uncomment if using a private registry:
     # pullSecrets:
     #   - name: wxa4z-image-pull-secret
@@ -175,6 +193,10 @@ spec:
       
       # Cluster Configuration
       HOST_NAME: ""  # REQUIRED: Cluster endpoint
+      AGENT_ID: ""   # REQUIRED: Unique identifier for the agent (must match the Agent ID configured in the authorization service and spec.agentDetails[].agentId)
+      
+      # z/OS Configuration
+      PDS_NAME: ""  # REQUIRED: Partitioned Dataset Name (format: {USERNAME}.REXX)
       
       # Add additional PTF job configuration as needed
 ```
@@ -338,10 +360,6 @@ After deployment, the agent becomes active and is available for selection in the
 
       - Can you retrieve missing fixcat updates for software instance Watsonx-Testing on system S2?
 
-      - Can you retrieve missing HIPERs for software instance Watsonx-Testing on system S2?
-
-      - Can you show missing SECINTs for software instance Watsonx-Testing on system S2?
-
     Responses are displayed either in a tabular format or as a sentence, depending on the context.
 
 4. Verify that the responses returned by the AI Assistant are accurate.
@@ -372,7 +390,8 @@ If you run into any errors during installation, see [Troubleshooting](../../READ
 
 Follow these steps to troubleshoot agent runtime errors:
 
-1. _OpenSearch Connection Error_: Check that WRAPPER_URL, WRAPPER_USERNAME, and WRAPPER_PASSWORD are correct
+1. _z/OSMF Connection Error_: Verify that ZOSMF_ENDPOINT is correct and accessible, and that the user has TSO logon permission
+2. _OpenSearch Connection Error_: Check that WRAPPER_URL, WRAPPER_USERNAME, and WRAPPER_PASSWORD are correct
 3. _PTF Job Failures_: Verify all SMP/E configuration parameters (SMPNTS, SMPWDIR_PATH, SMPJHOME, SMPCPATH) are correct
 4. _Certificate Issues_: Ensure KEYRING, CERT_NAME, DOWNLOADKEYRING, and SIGNATUREKEYRING are properly configured in RACF
 5. _MCP Communication Issues_: Check that both MCP client and server pods are running and can communicate
