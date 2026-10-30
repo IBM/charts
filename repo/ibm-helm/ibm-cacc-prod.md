@@ -1,4 +1,4 @@
-# Cognos Analytics Certified Containers 12.1.3
+# Cognos Analytics Certified Containers 12.2.0
 
 
 ## Introduction
@@ -21,7 +21,7 @@ Services
 Statefulsets
 ```
 ## Prerequisites
-* Kubernetes Version - "1.27.0 and above"
+* Kubernetes Version - "1.31.0 and above"
 * OpenShift Version - "4.16 and above"
 
 * Helm Level:
@@ -111,23 +111,124 @@ $ kubectl create secret generic ca-openid-credentials-secret   --from-literal=us
 ```
 Note for the OpenId secret, use the ClientId for the Username, and the ClientSecret as the password.
 
-If you plan on plan have Agentic-AI service, create the following secret
+If you plan on using the Agentic-AI service, create the following secret for OpenSearch:
 
-```
-kubectl create secret generic ca-opensearch-credentials-secret --from-literal=username="admin" --from-literal=password="YourSecurePassword123!" --type=kubernetes.io/basic-auth -n ${NAMESPACE}
+```bash
+kubectl create secret generic ca-opensearch-credentials-secret \
+  --from-literal=username="admin" \
+  --from-literal=password="YourSecurePassword123!" \
+  --type=kubernetes.io/basic-auth -n ${NAMESPACE}
 ```
 
 Note for the OpenSearch secret: users can modify the password, but it must be sufficiently complex; otherwise, OpenSearch will report an error.
 
+#### Agentic AI PostgreSQL Database (Conversation History)
+
+The Agentic AI service uses a dedicated PostgreSQL database for long-term conversation history.
+This database must be provisioned **before** deploying CACC with `services.agenticAIService.enabled: true`.
+
+**Step 1 — Create the database and user in your PostgreSQL instance**
+
+Connect as a superuser and run the following SQL commands. You can choose any database name and user name — they are configurable parameters.
+
+> **Note:** `CREATE DATABASE` cannot be run inside a transaction block in PostgreSQL, so it must be executed as a separate statement.
+
+```sql
+-- Step 1a: Create or update the user
+-- Replace the values in angle brackets with your own choices
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '<DB_USER>') THEN
+    EXECUTE format('CREATE USER %I WITH PASSWORD %L', '<DB_USER>', '<DB_PASSWORD>');
+  ELSE
+    EXECUTE format('ALTER USER %I WITH PASSWORD %L', '<DB_USER>', '<DB_PASSWORD>');
+  END IF;
+END $$;
+```
+
+```sql
+-- Step 1b: Create the database (must be run outside a transaction block)
+CREATE DATABASE "<DB_NAME>" OWNER "<DB_USER>";
+```
+
+```sql
+-- Step 1c: Grant privileges on the database
+GRANT ALL PRIVILEGES ON DATABASE "<DB_NAME>" TO "<DB_USER>";
+```
+
+Then connect to the new database and apply schema-level grants:
+
+```sql
+-- Run this connected to <DB_NAME>
+GRANT ALL ON SCHEMA public TO <DB_USER>;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO <DB_USER>;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO <DB_USER>;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO <DB_USER>;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO <DB_USER>;
+```
+
+**Step 2 — Create the Kubernetes Secret**
+
+```bash
+kubectl create secret generic ca-agentic-db-credentials-secret \
+  --from-literal=password="<DB_PASSWORD>" \
+  -n ${NAMESPACE}
+```
+
+**Step 3 — Configure the Helm override file**
+
+All connection fields are configurable — use only what differs from the defaults:
+
+```yaml
+services:
+  agenticAIService:
+    agenticDb:
+      host: "<pg-hostname>"          # required — your PostgreSQL host
+      port: "5432"                   # default: 5432
+      user: "<DB_USER>"              # default: agentic
+      database: "<DB_NAME>"          # default: agentic_db
+      # password is read from Secret ca-agentic-db-credentials-secret (key: password)
+```
+
+Alternatively, provide a full DSN (takes precedence over individual fields):
+
+```yaml
+services:
+  agenticAIService:
+    agenticDb:
+      url: "postgresql://<DB_USER>:<DB_PASSWORD>@<pg-hostname>:5432/<DB_NAME>"
+```
+
+> **Note:** If `agenticDb.host` (or `agenticDb.url`) is left empty, the agentic service starts in degraded mode — all other agentic features work normally but conversation history is disabled.
+
 #### TLS Certificate Setup for HTTPS Deployment (Optional)
 
-If you plan to enable HTTPS and agentic serivce, you need to configure TLS certificates using your own certificate and key:
+If you plan to enable HTTPS and agentic service, you need to configure TLS certificates using your own certificate and key.
+
+> **Note on OpenShift Service CA:** By default, the `caproxy-frontdoor-service` Service carries an annotation that instructs OpenShift to automatically generate and rotate the frontdoor TLS certificate. When you supply your own certificate (e.g. an IBM-signed or enterprise CA cert), set `ingress.tlsManagedByOpenShift: false` in your override file to prevent OpenShift from overwriting your Secret.
+
+##### Certificate SAN Requirements
+
+Your certificate must include Subject Alternative Names (SANs) for every service that acts as a TLS server. The minimum required SANs for a full HTTPS deployment (frontdoor + embedding + MCP) are:
+
+```
+DNS: <your-external-hostname>          # e.g. ca-ingress-route-eca1.apps.example.com
+DNS: caproxy-frontdoor-service         # cluster-internal frontdoor name
+DNS: embedding-service                 # required when embeddingService.serviceTargetType=https
+DNS: ca-mcp-server                     # required when mcpServer.serviceTargetType=https
+```
+
+Generate or request a single certificate covering all four SANs, then use it for all TLS Secrets below.
+
+---
 
 Step 1: Export Certificate and Key Paths
 
 ```bash
-export TLS_CERT_PATH="<path_to_your_certificate_file>"
+export TLS_CERT_PATH="<path_to_your_certificate_file>"   # PEM, full chain preferred
 export TLS_KEY_PATH="<path_to_your_private_key_file>"
+export NAMESPACE="<your-namespace>"
+export RELEASE="<your-helm-release-name>"                # e.g. ibm-cacc
 ```
 
 Step 2: Create TLS Secret for caproxy-frontdoor Service
@@ -149,9 +250,10 @@ else
 fi
 ```
 
-Step 3: Create CA Bundle ConfigMap for Agentic AI Pod
+Step 3: Create CA Bundle ConfigMap for Agentic AI and MCP Server Pods
 
-This ConfigMap allows the ca-agentic-ai pod to trust the custom certificate chain when making HTTPS requests to CA services:
+This ConfigMap (key name must be `ca-bundle.crt`) is mounted by the `ca-agentic-ai` and `ca-mcp-server` pods so they can verify the Cognos HTTPS certificate chain on outbound calls:
+
 ```bash
 kubectl delete configmap ca-certificates -n ${NAMESPACE} 2>/dev/null || true
 kubectl create configmap ca-certificates \
@@ -160,17 +262,113 @@ kubectl create configmap ca-certificates \
 
 if [ $? -eq 0 ]; then
     echo "✓ ConfigMap 'ca-certificates' created successfully"
-    echo "Note: ca-agentic-ai pod will mount this to trust the custom certificate chain"
 else
     echo "Warning: Failed to create CA bundle ConfigMap"
+    exit 1
 fi
 ```
 
-Certificate Requirements:
-- Certificate must include all necessary SANs (Subject Alternative Names) for your services, including the caproxy-frontdoor-service hostname
-- Certificate should contain the full chain: server cert + intermediate CA + root CA
-- This works with any enterprise or customer-signed certificates (IBM, DigiCert, etc.)
-- Ensure the certificate is in PEM format
+Step 4: Create TLS Secret for Embedding Service *(required when `embeddingService.serviceTargetType: https`)*
+
+```bash
+kubectl delete secret ${RELEASE}-embedding-certs -n ${NAMESPACE} 2>/dev/null || true
+kubectl create secret tls ${RELEASE}-embedding-certs \
+    --cert="${TLS_CERT_PATH}" \
+    --key="${TLS_KEY_PATH}" \
+    -n ${NAMESPACE}
+
+echo "✓ TLS secret '${RELEASE}-embedding-certs' created successfully"
+```
+
+Step 5: Create TLS Secret for MCP Server *(required when `mcpServer.serviceTargetType: https`)*
+
+```bash
+kubectl delete secret ca-mcp-server-tls -n ${NAMESPACE} 2>/dev/null || true
+kubectl create secret tls ca-mcp-server-tls \
+    --cert="${TLS_CERT_PATH}" \
+    --key="${TLS_KEY_PATH}" \
+    -n ${NAMESPACE}
+
+echo "✓ TLS secret 'ca-mcp-server-tls' created successfully"
+```
+
+Step 6: Configure override values
+
+Add the following to your Helm override file to enable HTTPS for all services and suppress OpenShift certificate auto-generation:
+
+```yaml
+ingress:
+  routeEnableTLS: true
+  tlsSecret: frontdoor-tls-cert
+  # Prevent OpenShift from overwriting the frontdoor Secret with its own CA cert
+  tlsManagedByOpenShift: false
+
+spiffe:
+  protocol: https
+
+services:
+  embeddingService:
+    enabled: true
+    serviceTargetType: https        # enables inbound TLS on the embedding pod
+
+  mcpServer:
+    enabled: true
+    serviceTargetType: https        # enables inbound TLS on the MCP server pod
+    tlsSecret: ca-mcp-server-tls    # name of the Secret created in Step 5
+    cognosVerifySsl: true           # verify Cognos certificate on outbound calls
+    cognosSslCaBundle:
+      enabled: true                 # mount ca-certificates ConfigMap as COGNOS_SSL_CA_BUNDLE
+
+litellm:
+  enabled: true
+  sslVerify: true                   # verify embedding cert using combined CA bundle
+```
+
+Step 7: Verify after deployment
+
+```bash
+# Confirm MCP server is listening on HTTPS
+kubectl exec -n ${NAMESPACE} deployment/ca-mcp-server -- \
+  python3 -c "
+import urllib.request, ssl, json
+ctx = ssl.create_default_context()
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE
+resp = urllib.request.urlopen('https://localhost:8000/health', context=ctx)
+print(json.loads(resp.read()))
+"
+
+# Confirm frontdoor certificate is signed by your own CA (not OpenShift)
+kubectl exec -n ${NAMESPACE} deployment/ca-agentic-ai -c ca-agentic-ai -- \
+  python3 -c "
+import ssl, socket, subprocess, base64
+ctx = ssl.create_default_context()
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE
+with ctx.wrap_socket(socket.create_connection(('caproxy-frontdoor-service', 9300), timeout=5),
+                     server_hostname='caproxy-frontdoor-service') as s:
+    pem = b'-----BEGIN CERTIFICATE-----\n' + base64.encodebytes(s.getpeercert(binary_form=True)) + b'-----END CERTIFICATE-----\n'
+    r = subprocess.run(['openssl','x509','-noout','-subject','-issuer'], input=pem, capture_output=True)
+    print(r.stdout.decode())
+"
+```
+
+##### TLS Secret and ConfigMap Summary
+
+| Object | Type | Used by | Required when |
+|---|---|---|---|
+| `frontdoor-tls-cert` | TLS Secret | caproxy-frontdoor | `ingress.routeEnableTLS: true` |
+| `ca-certificates` | ConfigMap | ca-agentic-ai, ca-mcp-server | `ingress.routeEnableTLS: true` or `cognosSslCaBundle.enabled: true` |
+| `<release>-embedding-certs` | TLS Secret | embedding-service pod | `embeddingService.serviceTargetType: https` |
+| `ca-mcp-server-tls` | TLS Secret | ca-mcp-server pod | `mcpServer.serviceTargetType: https` |
+
+> **Note:** `frontdoor-tls-cert` is auto-generated by OpenShift when `tlsManagedByOpenShift: true` (default). Set `tlsManagedByOpenShift: false` to use your own certificate and prevent OpenShift from overwriting it.
+
+##### Certificate Requirements
+- Certificate must be in PEM format
+- Include the full chain: server certificate + intermediate CA + root CA
+- All four SANs listed above must be present when enabling both embedding and MCP HTTPS
+- Works with any enterprise CA (IBM Internal CA, DigiCert, Let's Encrypt, etc.)
 ### 2. Accessing IBM Container Registry
 You can pull Cognos Analytics Certified Container images from the IBM Cloud Container Registry. You need to setup the environment to be able to access IBM Cloud Registry for this deployment.
 
@@ -1260,7 +1458,6 @@ These configuration settings are optional to deploy CACC.
 |services.contentManagerService.xtsPropertiesTransformCacheSize|Configure the XTS Transform Cache size |45|
 |services.contentManagerService.enableExternalObjectStore|Enable External Object Storage. Requires associated PVC configs.pvcExternalObjectStorage to be provided|false|
 |services.contentManagerService.pdb.minAvailable|Minimum number of pods that must be available during voluntary disruptions (e.g., node drains, upgrades). Ensures high availability.|1|
-
 |services.contentManagerService.removeDeploymentSamples|If enabled, will removed the CA provided samples from deployment folder|false|
 
 ## Reporting Service configuration settings
@@ -1306,7 +1503,6 @@ These configuration settings can be enabled to modify the execution profile of t
 |services.reportingService.idleProcessCheckIntervalMs|Interval in milliseconds to check for idle processes|60000|
 |services.reportingService.idleProcessMaxIdleTicks|Maximum number of idle ticks before a process is considered idle|10|
 |services.reportingService.pdb.minAvailable|Minimum number of pods that must be available during voluntary disruptions (e.g., node drains, upgrades). Ensures high availability.|1|
-
 |services.reportingService.defaultProcessUseLimit|Default limit for process usage|100|
 |services.reportingService.doReportSpecUpgrade|Enable automatic report specification upgrade. When set to true, report specifications are automatically upgraded to the current version format|false|
 
@@ -1339,7 +1535,6 @@ These configuration settings can be enabled to modify the execution profile of t
 |services.restService.scaleUpStabilizationWindowSeconds|This helps prevent unnecessary scaling if metrics are fluctuating. For example, a stabilizationWindowSeconds of 300 means the HPA will wait 300 seconds before scaling down pods to the new, desired number of replicas.|0|
 |services.restService.scaleUpWindowPolicyValue|Refers to a scaling policy that allows you to configure how many pods can be removed based on a percentage of the total number of pods at each scaling iteration|80|
 |services.restService.pdb.minAvailable|Minimum number of pods that must be available during voluntary disruptions (e.g., node drains, upgrades). Ensures high availability.|1|
-
 |services.restService.scaleUpWindowPolicySeconds|This helps prevent unnecessary scaling if metrics are fluctuating. For example, a stabilizationWindowSeconds of 300 means the HPA will wait 300 seconds before scaling down pods to the new, desired number of replicas.|30|
 
 ## User Interface Service configuration settings
@@ -1371,7 +1566,6 @@ These configuration settings can be enabled to modify the execution profile of t
 |services.uiService.scaleUpStabilizationWindowSeconds|This helps prevent unnecessary scaling if metrics are fluctuating. For example, a stabilizationWindowSeconds of 300 means the HPA will wait 300 seconds before scaling down pods to the new, desired number of replicas.|0|
 |services.uiService.scaleUpWindowPolicyValue|Refers to a scaling policy that allows you to configure how many pods can be removed based on a percentage of the total number of pods at each scaling iteration|80|
 |services.uiService.pdb.minAvailable|Minimum number of pods that must be available during voluntary disruptions (e.g., node drains, upgrades). Ensures high availability.|1|
-
 |services.uiService.scaleUpWindowPolicySeconds|This helps prevent unnecessary scaling if metrics are fluctuating. For example, a stabilizationWindowSeconds of 300 means the HPA will wait 300 seconds before scaling down pods to the new, desired number of replicas.|30|
 
 ## Smarts Service configuration settings
@@ -1403,7 +1597,6 @@ These configuration settings can be enabled to modify the execution profile of t
 |services.smartsService.scaleUpStabilizationWindowSeconds|This helps prevent unnecessary scaling if metrics are fluctuating. For example, a stabilizationWindowSeconds of 300 means the HPA will wait 300 seconds before scaling down pods to the new, desired number of replicas.|0|
 |services.smartsService.scaleUpWindowPolicyValue|Refers to a scaling policy that allows you to configure how many pods can be removed based on a percentage of the total number of pods at each scaling iteration|80|
 |services.smartsService.pdb.minAvailable|Minimum number of pods that must be available during voluntary disruptions (e.g., node drains, upgrades). Ensures high availability.|1|
-
 |services.smartsService.scaleUpWindowPolicySeconds|This helps prevent unnecessary scaling if metrics are fluctuating. For example, a stabilizationWindowSeconds of 300 means the HPA will wait 300 seconds before scaling down pods to the new, desired number of replicas.|30|
 
 ## Agentic AI Service configuration settings
@@ -1416,7 +1609,7 @@ These configuration settings can be enabled to configure the BA Agentic AI Servi
 |services.agenticAIService.pullPolicy|Configure the update policy for the container images. Acceptable values are Always, Never, or IfNotPresents.|IfNotPresent|
 |services.agenticAIService.name|Name of the Agentic AI service container|ba-agentic-ai|
 |services.agenticAIService.digest|Modify only if asked to do so by Cognos Support person|Current image digest is included in the Helm chart|
-|services.agenticAIService.tag|Image tag for the Agentic AI service|12.1.2|
+|services.agenticAIService.tag|Image tag for the Agentic AI service|12.2.1|
 |services.agenticAIService.requestsCpu|Set the CPU request for the container|"500m"|
 |services.agenticAIService.requestsMemory|Set the memory request for the container|2Gi|
 |services.agenticAIService.requestsEphemeralStorage|Set the ephemeral storage request for the container|2Gi|
@@ -1545,7 +1738,6 @@ These configuration settings control the Redis sidecar container that provides c
 |services.agenticAIService.labels|Used to add any labels to agenticAIService deployment only|No default|
 |services.agenticAIService.annotations|Used to add any annotations to agenticAIService deployment only|No default|
 |services.agenticAIService.pdb.minAvailable|Minimum number of pods that must be available during voluntary disruptions (e.g., node drains, upgrades). Ensures high availability.|1|
-
 |services.agenticAIService.extraEnv|Used to add any extra environment variables to agenticAIService deployment|No default|
 ## Agentic AI Service - External Redis configuration settings
 
@@ -1818,12 +2010,121 @@ After successfully setting the AI agent connection, a new item **"LiteLLM Model 
 All model configurations are stored in the PostgreSQL database and managed through the UI.
 
 
+## MCP (Model Context Protocol) Server
+
+The MCP Server (`ca-mcp-server`) exposes Cognos Analytics capabilities as **MCP tools**, making them available to any MCP-compatible external client — such as Bob, Claude Desktop, or any MCP-aware LLM agent.
+
+```
+External MCP client  →  https://<ca-route>/bi/v1/mcp
+                      →  caproxy-frontdoor
+                      →  ca-rest  (McpFilter: authentication + proxy)
+                      →  ca-mcp-server pod
+                      →  Cognos Analytics
+```
+
+Requests arrive at the published Cognos route, pass through `caproxy-frontdoor`, and are authenticated and forwarded by `McpFilter` in `ca-rest` before reaching the `ca-mcp-server` pod.
 
 
+### Prerequisites
+
+- **LiteLLM must be deployed and running** (`litellm.enabled: true`) — the `caproxy` upstream and route rules for `/bi/v1/mcp` are generated as part of the LiteLLM + MCP server configuration. See the [BYO-LLM with LiteLLM](#agentic-ai-service---bring-your-own-llm-byo-llm-with-litellm) section above.
+
+
+### Configuration Parameters
+
+| Parameter | Description | Default |
+|---|---|---|
+| `services.mcpServer.enabled` | Enable or disable the MCP server | `false` |
+| `services.mcpServer.name` | Container image name | `cognos-analytics-mcp-server` |
+| `services.mcpServer.tag` | Image tag | `1.0.35` |
+| `services.mcpServer.digest` | Image digest (takes precedence over tag) | `sha256:17ce3b…` |
+| `services.mcpServer.replicas` | Number of replicas | `1` |
+| `services.mcpServer.port` | Container port | `8000` |
+| `services.mcpServer.servicePort` | Kubernetes Service port | `8000` |
+| `services.mcpServer.transportMode` | MCP transport mode (`http` or `stdio`) | `http` |
+| `services.mcpServer.logLevel` | Log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) | `INFO` |
+| `services.mcpServer.cognosUrl` | Cognos base URL passed to the MCP server. When empty, derived from `agenticAIService.caBaseUrl` | `""` |
+| `services.mcpServer.requestsCpu` | CPU request | `250m` |
+| `services.mcpServer.requestsMemory` | Memory request | `256Mi` |
+| `services.mcpServer.limitsCpu` | CPU limit | `1` |
+| `services.mcpServer.limitsMemory` | Memory limit | `512Mi` |
+
+
+### Setting cognosUrl
+
+The `services.mcpServer.cognosUrl` field sets the public-facing Cognos Analytics endpoint that the MCP server uses to make Cognos API calls. Because the chart cannot determine this hostname automatically, it must be set explicitly in your values override file when the public ingress hostname differs from `agenticAIService.caBaseUrl`.
+
+```yaml
+services:
+  mcpServer:
+    cognosUrl: "https://<your-public-ca-hostname>"
+```
+
+When `cognosUrl` is left empty (`""`), the chart falls back to `agenticAIService.caBaseUrl`.
+
+
+### Step 1: Enable the MCP Server
+
+Add the following to your values override file:
+
+```yaml
+litellm:
+  enabled: true
+
+services:
+  mcpServer:
+    enabled: true
+    cognosUrl: "https://<your-public-ca-hostname>"
+```
+
+When `mcpServer.enabled` is `true`, the chart automatically:
+- Deploys the `ca-mcp-server` pod and `ca-mcp-server` Kubernetes Service
+- Adds `caproxy` upstream and routing rules so `/bi/v1/mcp` requests are forwarded through `ca-rest` (McpFilter) to the MCP server pod
+
+
+### Step 2: Deploy or Upgrade CACC
+
+```bash
+helm upgrade ca-instance ./ibm-cacc-prod \
+  -f your-values.yaml \
+  -n ${NAMESPACE}
+```
+
+
+### Step 3: Configure LiteLLM as the MCP Gateway in the UI
+
+After deployment, register LiteLLM as the MCP endpoint so the Cognos UI can discover available MCP servers:
+
+1. Navigate to **Manage** → **Configuration** → **System** → **Advanced settings**
+2. Add the following key-value pair and click **Apply**:
+
+| Key | Value |
+|---|---|
+| `MCP.endpointUrl` | `http://litellm-service:4000/mcp` |
+
+
+### Step 4: Connect an External MCP Client
+
+Configure your external MCP client (e.g. Bob, Claude Desktop) with the following settings:
+
+```json
+"cognos-mcp": {
+  "type": "streamable-http",
+  "url": "https://<your-ca-route>/bi/v1/mcp",
+  "headers": {
+    "X-CA-API-Key": "<your-ca-api-key>"
+  },
+  "timeout": 30000
+}
+```
+
+> **Notes**:
+> - Replace `<your-ca-route>` with the OpenShift route hostname for your CACC instance.
+> - Replace `<your-ca-api-key>` with a valid Cognos Analytics API key — generate one from **Manage** → **API keys**.
+> - `timeout` is in milliseconds. `30000` (30 s) is a reasonable default; increase only if you have long-running tool calls.
 
 
 ## Embedding Service configuration settings
-
 The Embedding Service (`ba-embedding-service`) hosts HuggingFace embedding models in a dedicated pod so that the Agentic AI service no longer loads them in-process. Requests flow as:
 
 ```
@@ -1968,7 +2269,6 @@ These configuration settings can be enabled to modify the execution profile of t
 |services.dataService.scaleUpStabilizationWindowSeconds|This helps prevent unnecessary scaling if metrics are fluctuating. For example, a stabilizationWindowSeconds of 300 means the HPA will wait 300 seconds before scaling down pods to the new, desired number of replicas.|0|
 |services.dataService.scaleUpWindowPolicyValue|Refers to a scaling policy that allows you to configure how many pods can be removed based on a percentage of the total number of pods at each scaling iteration|80|
 |services.dataService.pdb.minAvailable|Minimum number of pods that must be available during voluntary disruptions (e.g., node drains, upgrades). Ensures high availability.|1|
-
 |services.dataService.scaleUpWindowPolicySeconds|This helps prevent unnecessary scaling if metrics are fluctuating. For example, a stabilizationWindowSeconds of 300 means the HPA will wait 300 seconds before scaling down pods to the new, desired number of replicas.|30|
 
 ## Data Service — PA/TM1/DSS additional configuration settings
