@@ -57,26 +57,26 @@ See IBM Rational License Key Server documentation for more details.
 
 ## Install
 
-Before you begin, follow requisite steps and configuration at Installation of DevOps Solution Workbench:  <https://docs-devops-solution-workbench.knowis.net/5.1/docs/installing-upgrading/>
+Before you begin, follow requisite steps and configuration at Installation of DevOps Solution Workbench:  <https://docs-devops-solution-workbench.knowis.net/5.2/docs/installing-upgrading/>
 
 Fetch chart for install:
 
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-solution-workbench --version 5.2.2+20261002
+helm pull --untar ibm-helm/ibm-devops-solution-workbench --version 5.2.3
 ```
 
 
 ```bash
 #Pull ibm helm charts
-CHART_VERSION=5.2.2+20261002
+CHART_VERSION=5.2.3
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
 helm pull --untar ibm-helm/ibm-devops-solution-workbench --version ${CHART_VERSION}
 #
 #Required
 #External fully qualified domain name of the cluster
 #See Installation of DevOps Solution Workbench documentation for more details:
-#https://docs-devops-solution-workbench.knowis.net/5.1/docs/installing-upgrading/
+#https://docs-devops-solution-workbench.knowis.net/5.2/docs/installing-upgrading/
 CLUSTER_DOMAIN=$(oc get -n openshift-ingress-operator ingresscontroller default -o jsonpath='{.status.domain}')
 #E.g.: DOMAIN="k5-designer.apps.openshift.cluster.cloud"
 DOMAIN="k5-designer.${CLUSTER_DOMAIN}"
@@ -233,7 +233,7 @@ The following table shows the required Routes:
 
 ### Solution Documentation
 
-[DevOps Solution Workbench](https://docs-devops-solution-workbench.knowis.net/5.1/docs/about/overview/)
+[DevOps Solution Workbench](https://docs-devops-solution-workbench.knowis.net/5.2/docs/about/overview/)
 
 
 # K8s Installation Instructions
@@ -273,26 +273,26 @@ See IBM Rational License Key Server documentation for more details.
 
 ## Install
 
-Before you begin, follow requisite steps and configuration at Installation of DevOps Solution Workbench:  <https://docs-devops-solution-workbench.knowis.net/5.1/docs/installing-upgrading/>
+Before you begin, follow requisite steps and configuration at Installation of DevOps Solution Workbench:  <https://docs-devops-solution-workbench.knowis.net/5.2/docs/installing-upgrading/>
 
 Fetch chart for install:
 
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-solution-model --version 5.2.2+20261002
+helm pull --untar ibm-helm/ibm-devops-solution-model --version 5.2.3
 ```
 
 
 ```bash
 #Pull ibm helm charts
-CHART_VERSION=5.2.2+20261002
+CHART_VERSION=5.2.3
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
 helm pull --untar ibm-helm/ibm-devops-solution-workbench --version ${CHART_VERSION}
 #
 #Required
 #External fully qualified domain name of the cluster
 #See Installation of DevOps Solution Workbench documentation for more details:
-#https://docs-devops-solution-workbench.knowis.net/5.1/docs/installing-upgrading/
+#https://docs-devops-solution-workbench.knowis.net/5.2/docs/installing-upgrading/
 #E.g.: DOMAIN="k5-designer.k8s.cluster.cloud"
 DOMAIN=
 

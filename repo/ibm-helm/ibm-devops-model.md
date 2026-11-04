@@ -23,7 +23,7 @@ logic while adhering to best practices, thus maximizing creativity and productiv
 
 ## Prerequisites
 
-1. OpenShift, Keycloak, OpenShift CLI (oc), and Helm 4.
+1. OpenShift, Keycloak, OpenShift CLI (oc), and Helm 3.
 
    * [RedHat OpenShift Container Platform](https://docs.openshift.com/container-platform/4.18/release_notes/ocp-4-18-release-notes.html) v4.16 or later (x86_64)
 
@@ -31,7 +31,7 @@ logic while adhering to best practices, thus maximizing creativity and productiv
 
    * [Install and setup OpenShift CLI](https://docs.openshift.com/container-platform/4.18/cli_reference/openshift_cli/getting-started-cli.html)
 
-   * [Install and setup the Helm 4 CLI](https://helm.sh/docs/intro/install/).
+   * [Install and setup the Helm 3 CLI](https://helm.sh/docs/intro/install/).
 
 2. Image and Helm Chart - The DevOps Solution Workbench images, and helm chart can be accessed via the Entitled Registry and public Helm repository.
 
@@ -57,26 +57,26 @@ See IBM Rational License Key Server documentation for more details.
 
 ## Install
 
-Before you begin, follow requisite steps and configuration at Installation of DevOps Solution Workbench:  <https://docs-devops-solution-workbench.knowis.net/5.1/docs/installing-upgrading/>
+Before you begin, follow requisite steps and configuration at Installation of DevOps Solution Workbench:  <https://docs-devops-solution-workbench.knowis.net/5.2/docs/installing-upgrading/>
 
 Fetch chart for install:
 
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-model --version 5.2.2+20261002
+helm pull --untar ibm-helm/ibm-devops-model --version 5.2.3
 ```
 
 
 ```bash
 #Pull ibm helm charts
-CHART_VERSION=5.2.2+20261002
+CHART_VERSION=5.2.3
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
 helm pull --untar ibm-helm/ibm-devops-model --version ${CHART_VERSION}
 #
 #Required
 #External fully qualified domain name of the cluster
 #See Installation of DevOps Solution Workbench documentation for more details:
-#https://docs-devops-solution-workbench.knowis.net/5.1/docs/installing-upgrading/
+#https://docs-devops-solution-workbench.knowis.net/5.2/docs/installing-upgrading/
 CLUSTER_DOMAIN=$(oc get -n openshift-ingress-operator ingresscontroller default -o jsonpath='{.status.domain}')
 #E.g.: DOMAIN="k5-designer.apps.openshift.cluster.cloud"
 DOMAIN="k5-designer.${CLUSTER_DOMAIN}"
@@ -230,7 +230,7 @@ The following table shows the required Routes:
 
 ### Solution Documentation
 
-[DevOps Solution Workbench](https://docs-devops-solution-workbench.knowis.net/5.1/docs/about/overview/)
+[DevOps Solution Workbench](https://docs-devops-solution-workbench.knowis.net/5.2/docs/about/overview/)
 
 
 # K8s Installation Instructions
@@ -241,7 +241,7 @@ The following table shows the required Routes:
 
 2. Keycloak in version 26.
 
-3. [Install and setup the Helm 4 CLI](https://helm.sh/docs/intro/install/).
+3. [Install and setup the Helm 3 CLI](https://helm.sh/docs/intro/install/).
 
 4. Installed and configured [Emissary Ingress Controller](https://emissary-ingress.dev/docs/3.9/topics/running/ingress-controller/)
 * See and execute install script ./lib/ingress-forwarding-emissary-install.sh
@@ -270,26 +270,26 @@ See IBM Rational License Key Server documentation for more details.
 
 ## Install
 
-Before you begin, follow requisite steps and configuration at Installation of DevOps Solution Workbench:  <https://docs-devops-solution-workbench.knowis.net/5.1/docs/installing-upgrading/>
+Before you begin, follow requisite steps and configuration at Installation of DevOps Solution Workbench:  <https://docs-devops-solution-workbench.knowis.net/5.2/docs/installing-upgrading/>
 
 Fetch chart for install:
 
 ```bash
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
-helm pull --untar ibm-helm/ibm-devops-model --version 5.2.2+20261002
+helm pull --untar ibm-helm/ibm-devops-model --version 5.2.3
 ```
 
 
 ```bash
 #Pull ibm helm charts
-CHART_VERSION=5.2.2+20261002
+CHART_VERSION=5.2.3
 helm repo add ibm-helm https://raw.githubusercontent.com/IBM/charts/master/repo/ibm-helm --force-update
 helm pull --untar ibm-helm/ibm-devops-model --version ${CHART_VERSION}
 #
 #Required
 #External fully qualified domain name of the cluster
 #See Installation of DevOps Solution Workbench documentation for more details:
-#https://docs-devops-solution-workbench.knowis.net/5.1/docs/installing-upgrading/
+#https://docs-devops-solution-workbench.knowis.net/5.2/docs/installing-upgrading/
 #E.g.: DOMAIN="k5-designer.k8s.cluster.cloud"
 DOMAIN=
 
