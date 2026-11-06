@@ -11,7 +11,7 @@ This chart deploys a App Connect Operator Deployment into a namespace. The App C
 ## Prerequisites
 
 - Helm v3
-- Kubernetes cluster '>=1.27.0 < 1.33.0'
+- Kubernetes cluster '>=1.27.0 < 1.36.0'
 
 ## Resources Required
 
@@ -79,14 +79,23 @@ kubectl delete crd/appconnect.ibm.com_traces.yaml
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| crdInstaller.image | string | `"acecc-binaries-prod"` |  |
+| crdInstaller.imagePullPolicy | string | `"IfNotPresent"` |  |
+| crdInstaller.repository | string | `"cp.icr.io/cp/appc"` | Contains the crd-installer binary built from the acecc-binaries repository. |
+| crdInstaller.sha | string | `"sha256:74abc149403bb6ad8aa385a2c6ac2e7e2aed37d08dec8ee8b6a8035ab9a44d9f"` | SHA value of the crd-installer image |
+| crdInstaller.tag | string | `"13.0.9.1-r1-20261030-001743"` | Tag for the crd-installer image (optional) ignored if you supply SHA value |
 | namespace | string | `"appconnect"` | Namespace where you wish to deploy the operator |
 | operator.deployment.image | string | `"appconnect-operator"` | Operator image name |
-| operator.deployment.pullPolicy | string | `"Always"` | PullPolicy for the operator image (Always, IfNotPresent, or Never) |
+| operator.deployment.nodeSelector | object | `{}` | Node selector to control what nodes the operator pod is scheduled on |
+| operator.deployment.pullPolicy | string | `"IfNotPresent"` | PullPolicy for the operator image (Always, IfNotPresent, or Never) |
 | operator.deployment.repository | string | `"icr.io/cpopen"` | Remote repository where you will pull the operator pod  |
-| operator.deployment.resources | object | `{"limits":{"ephemeral-storage":"512Mi","memory":"1Gi"},"requests":{"cpu":"100m","ephemeral-storage":"50Mi","memory":"128Mi"}}` | Resource limits to apply to the operator pod |
+| operator.deployment.resources | object | `{"limits":{"cpu":null,"ephemeral-storage":"512Mi","memory":"1Gi"},"requests":{"cpu":"100m","ephemeral-storage":"50Mi","memory":"128Mi"}}` | Resource limits to apply to the operator pod |
 | operator.deployment.sha | string | `nil` | SHA value of the operator image |
-| operator.deployment.tag | string | `nil` | Tag value for the operator image (optional) ignored if you supply SHA value |
+| operator.deployment.tag | string | `"main"` | Tag value for the operator image (optional) ignored if you supply SHA value |
+| operator.deployment.tolerations | list | `[]` | Tolerations to control what nodes the operator pod can be scheduled on |
+| operator.enableImagePreCache | bool | `false` | Enable automatic image pre-caching via DaemonSet (default: false, pre-caching disabled) |
 | operator.env | object | `{}` | Environment variables that you wish to pass to the operator pod e.g key: "value" |
+| operator.forceAmd64 | bool | `false` |  |
 | operator.imagePullSecrets | list | `[]` | Names of secrets which allow pulling from authenticated registries |
 | operator.installMode | string | `"OwnNamespace"` | installMode for the operator to determine at what scope it operates (OwnNamespace|AllNamespaces) |
 | operator.privateRegistry | string | `""` | Private registry override to allow users to pull from alternative private registries |
