@@ -1,25 +1,16 @@
-# IBM Cloud Pak for Integration operator Chart
+# IBM Integration operator chart
 
 ## Introduction
 
-This chart install the IBM Cloud Pak for Integration operator into a namespace. The Cloud Pak for Integration CustomResourceDefinitions (CRDs) will be deployed from this chart if and only if a version of the CRD does not already exist in the cluster.
+This chart installs the IBM Integration operator into a namespace. The CustomResourceDefinitions (CRDs) will be deployed from this chart if and only if a version of the CRD does not already exist in the cluster.
 
-Use the Cloud Pak for Integration operator to deploy the following components:
-- **Platform UI:** deploy and manage new instances of the Cloud Pak components and navigate between them in a simple, consistent manner. The Platform UI simplifies monitoring, maintenance, and upgrades.
-
-Use the Platform UI to manage the following components:
-- **IBM API Connect:** create, manage, secure, and socialize APIs.
-- **IBM App Connect:** build integration workflows to connect applications and data.
-- **IBM DataPower Gateway:** add security, control, integration, and optimized access to your workloads.
-- **IBM Event Streams:** build applications that can handle Kafka events.
-- **IBM Event Endpoint Management:** describe, catalog, and socialize Kafka event sources.
-- **IBM Event Processing:** transform event streaming data in real time, turning events into insights.
-
+Use the IBM Integration operator to deploy the following components:
+- **Platform UI:** deploy and manage new instances and integrations, and navigate between them in a simple, consistent manner. The Platform UI simplifies monitoring, maintenance, and upgrades.
 
 ## Prerequisites
 
 - Helm v3
-- Kubernetes cluster '>=1.30.0 <1.34.0'
+- Kubernetes cluster '>=1.30.0 <1.37.0'
 
 ## Resources Required
 
